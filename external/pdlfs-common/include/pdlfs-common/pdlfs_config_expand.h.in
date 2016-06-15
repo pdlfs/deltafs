@@ -1,0 +1,23 @@
+
+/*
+ * pdlfs_config_expand.h  base config and defns from cmake
+ * 02-Jun-2016  chuck@ece.cmu.edu
+ */
+
+/*
+ * this file is only included by pdlfs_config.h
+ */
+#cmakedefine PDLFS_PLATFORM_POSIX
+#cmakedefine PDLFS_OS_CYGWIN
+#cmakedefine PDLFS_OS_DARWIN
+#cmakedefine PDLFS_OS_MACOSX
+#cmakedefine PDLFS_OS_LINUX
+#cmakedefine PDLFS_OS_SUNOS
+#cmakedefine PDLFS_OS_FREEBSD
+#cmakedefine PDLFS_OS_NETBSD
+#cmakedefine PDLFS_OS_OPENBSD
+#cmakedefine PDLFS_OS_HPUX
+
+#define PDLFS_COMMON_VERSION_MAJOR @PDLFS_COMMON_VERSION_MAJOR@
+#define PDLFS_COMMON_VERSION_MINOR @PDLFS_COMMON_VERSION_MINOR@
+

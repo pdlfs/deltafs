@@ -1,0 +1,26 @@
+#!/bin/sh
+
+fmt=
+for fmt in clang-format \
+           clang-format-3.9 \
+           clang-format-3.8 \
+           clang-format-3.7 \
+           clang-format-3.6 \
+           clang-format-3.5 \
+           clang-format-3.4
+do
+  full_fmt=`which $fmt`
+  if test -n "$full_fmt"; then break; fi
+done
+
+if test -z "$full_fmt"; then
+  echo "No clang-format found!"
+  exit 1
+fi
+
+# Reformat all headers
+find | grep '\.h$' | xargs $full_fmt -style="{BasedOnStyle: Google, DerivePointerAlignment: false}" -i
+# Reformat all CXX sources
+find | grep '\.cc$' | xargs $full_fmt -style="{BasedOnStyle: Google, DerivePointerAlignment: false}" -i
+
+exit 0
