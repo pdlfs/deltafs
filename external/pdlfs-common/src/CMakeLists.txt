@@ -147,22 +147,22 @@ add_library (pdlfs-common STATIC ${pdlfs-all-srcs})
 target_include_directories (pdlfs-common PUBLIC "../include")
 target_include_directories (pdlfs-common PUBLIC 
                                     "${CMAKE_CURRENT_BINARY_DIR}/../include")
-if(CMAKE_THREAD_LIBS_INIT)
-  target_link_libraries(pdlfs-common "${CMAKE_THREAD_LIBS_INIT}")
-endif()
+if (CMAKE_THREAD_LIBS_INIT)
+  target_link_libraries (pdlfs-common "${CMAKE_THREAD_LIBS_INIT}")
+endif ()
 
 #
 # build static lib and arrange for targets to -I our include dir and
 # the dir we generated pdlfs_config_expand.h in
 #
-set(CMAKE_MACOSX_RPATH 1)
+set (CMAKE_MACOSX_RPATH 1)
 add_library (pdlfs-common-shared SHARED ${pdlfs-all-srcs})
 target_include_directories (pdlfs-common-shared PUBLIC "../include")
 target_include_directories (pdlfs-common-shared PUBLIC 
                                     "${CMAKE_CURRENT_BINARY_DIR}/../include")
-if(CMAKE_THREAD_LIBS_INIT)
-  target_link_libraries(pdlfs-common-shared "${CMAKE_THREAD_LIBS_INIT}")
-endif()
+if (CMAKE_THREAD_LIBS_INIT)
+  target_link_libraries (pdlfs-common-shared "${CMAKE_THREAD_LIBS_INIT}")
+endif ()
 set (pdlfs-common-shared-vers
     "${PDLFS_COMMON_VERSION_MAJOR}.${PDLFS_COMMON_VERSION_MINOR}")
 set (pdlfs-common-shared-vers
@@ -190,7 +190,9 @@ install (FILES
 # when requested.
 #
 enable_testing ()
-add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+if (NOT TARGET check)
+    add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+endif ()
 foreach (lcv ${pdlfs-all-tests})
 
     # need a test name... use regex to extract the file basename into ${id}
