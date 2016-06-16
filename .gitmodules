@@ -1,0 +1,9 @@
+[submodule "lib/bmi"]
+	path = lib/bmi
+	url = git://git.mcs.anl.gov/bmi
+[submodule "lib/openpa"]
+	path = lib/openpa
+	url = git://git.mcs.anl.gov/radix/openpa
+[submodule "lib/mercury"]
+	path = lib/mercury
+	url = https://github.com/mercury-hpc/mercury.git
