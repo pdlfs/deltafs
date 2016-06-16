@@ -259,7 +259,7 @@ struct DirIndex::Rep {
     size_t off = 7;
     assert(i < bitmap_capacity_);
     assert(bit(0));
-    for (; ((bitmap_[i]) == 0); --i)
+    for (; bitmap_[i] == 0; --i)
       ;
     for (; ((bitmap_[i] & kBits[off]) == 0); --off)
       ;
