@@ -79,7 +79,7 @@
 #define fflush_unlocked fflush
 #endif
 
-#if defined(PDLFS_OS_MACOSX) || defined(PDFS_OS_FREEBSD) || \
+#if defined(PDLFS_OS_MACOSX) || defined(PLDFS_OS_FREEBSD) || \
     defined(PDLFS_OS_OPENBSD)
 // Use fsync() on platforms without fdatasync()
 #define fdatasync fsync

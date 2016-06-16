@@ -12,7 +12,7 @@
 #cmakedefine PDLFS_OS_DARWIN
 #cmakedefine PDLFS_OS_MACOSX
 #cmakedefine PDLFS_OS_LINUX
-#cmakedefine PDLFS_OS_SUNOS
+#cmakedefine PDLFS_OS_SOLARIS
 #cmakedefine PDLFS_OS_FREEBSD
 #cmakedefine PDLFS_OS_NETBSD
 #cmakedefine PDLFS_OS_OPENBSD
