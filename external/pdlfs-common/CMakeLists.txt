@@ -35,4 +35,4 @@ set (PDLFS_OS "${CMAKE_SYSTEM_NAME}" CACHE
 add_subdirectory (src)
 
 
-#XXXCDC: install, testing hooks
+#XXXCDC: check install
