@@ -124,7 +124,6 @@ set (PDLFS_PLATFORM_${PDLFS_PLATFORM} 1)
 set (PDLFS_OS_${PDLFS_OS_EDITED} 1)
 configure_file ("../include/pdlfs-common/pdlfs_config_expand.h.in"
                 "../include/pdlfs-common/pdlfs_config_expand.h" @ONLY)
-include_directories ("${CMAKE_CURRENT_BINARY_DIR}/../include")
 
 #
 # prepend the subdir name to files that live in subdirs (e.g. leveldb/)
@@ -141,20 +140,26 @@ set (pdlfs-all-srcs ${pdlfs-common-srcs} ${pdlfs-leveldb-srcs})
 set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-leveldb-tests})
 
 #
-# build static lib and arrange for targets to -I our include dir
+# build static lib and arrange for targets to -I our include dir and
+# the dir we generated pdlfs_config_expand.h in
 #
 add_library (pdlfs-common STATIC ${pdlfs-all-srcs})
 target_include_directories (pdlfs-common PUBLIC "../include")
+target_include_directories (pdlfs-common PUBLIC 
+                                    "${CMAKE_CURRENT_BINARY_DIR}/../include")
 if(CMAKE_THREAD_LIBS_INIT)
   target_link_libraries(pdlfs-common "${CMAKE_THREAD_LIBS_INIT}")
 endif()
 
 #
-# build dynamic lib and arrange for targets to -I our include dir
+# build static lib and arrange for targets to -I our include dir and
+# the dir we generated pdlfs_config_expand.h in
 #
 set(CMAKE_MACOSX_RPATH 1)
 add_library (pdlfs-common-shared SHARED ${pdlfs-all-srcs})
 target_include_directories (pdlfs-common-shared PUBLIC "../include")
+target_include_directories (pdlfs-common-shared PUBLIC 
+                                    "${CMAKE_CURRENT_BINARY_DIR}/../include")
 if(CMAKE_THREAD_LIBS_INIT)
   target_link_libraries(pdlfs-common-shared "${CMAKE_THREAD_LIBS_INIT}")
 endif()
