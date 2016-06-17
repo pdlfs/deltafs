@@ -59,9 +59,9 @@ SHARED_LIBOBJECTS := $(addprefix $(SHARED_OUTDIR)/, $(SOURCES:.cc=.o))
 SHARED_ALLOBJS := $(SHARED_LIBOBJECTS) $(SHARED_EXT_LIBOBJECTS)
 
 ALL = \
-        $(STATIC_OUTDIR)/libpdlfs-common.a \
-        $(SHARED_OUTDIR)/libpdlfs-common.$(PLATFORM_SHARED_EXT) \
-	$(STATIC_OUTDIR)/libdeltafs.a \
+	$(STATIC_OUTDIR)/libpdlfs-common-static.a \
+	$(SHARED_OUTDIR)/libpdlfs-common.$(PLATFORM_SHARED_EXT) \
+	$(STATIC_OUTDIR)/libdeltafs-static.a \
 	$(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT)
 
 default: all
@@ -98,11 +98,11 @@ $(STATIC_OUTDIR)/src: | $(STATIC_OUTDIR)
 
 .PHONY: STATIC_OBJDIRS
 STATIC_OBJDIRS: \
-        $(STATIC_OUTDIR)/external/pdlfs-common/src \
+	$(STATIC_OUTDIR)/external/pdlfs-common/src \
 	$(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb \
 	$(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb/db \
 	$(STATIC_OUTDIR)/external/pdlfs-common/modules/rados \
-        $(STATIC_OUTDIR)/src
+	$(STATIC_OUTDIR)/src
 
 $(STATIC_ALLOBJS): | STATIC_OBJDIRS
 
@@ -126,29 +126,29 @@ $(SHARED_OUTDIR)/src: | $(SHARED_OUTDIR)
 
 .PHONY: STHARED_OBJDIRS
 SHARED_OBJDIRS: \
-        $(SHARED_OUTDIR)/external/pdlfs-common/src \
+	$(SHARED_OUTDIR)/external/pdlfs-common/src \
 	$(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb \
 	$(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb/db \
 	$(SHARED_OUTDIR)/external/pdlfs-common/modules/rados \
-        $(SHARED_OUTDIR)/src
+	$(SHARED_OUTDIR)/src
 
 $(SHARED_ALLOBJS): | SHARED_OBJDIRS
 
-$(STATIC_OUTDIR)/libpdlfs-common.a:$(STATIC_EXT_LIBOBJECTS)
+$(STATIC_OUTDIR)/libpdlfs-common-static.a:$(STATIC_EXT_LIBOBJECTS)
 	rm -f $@
 	$(AR) -rs $@ $(STATIC_EXT_LIBOBJECTS)
 
 $(SHARED_OUTDIR)/libpdlfs-common.$(PLATFORM_SHARED_EXT): $(SHARED_EXT_LIBOBJECTS)
 	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libpdlfs-common.$(PLATFORM_SHARED_EXT) $(SHARED_EXT_LIBOBJECTS) \
-	        -o $(SHARED_OUTDIR)/libpdlfs-common.$(PLATFORM_SHARED_EXT) $(LIBS)
+		-o $(SHARED_OUTDIR)/libpdlfs-common.$(PLATFORM_SHARED_EXT) $(LIBS)
 
-$(STATIC_OUTDIR)/libdeltafs.a:$(STATIC_LIBOBJECTS)
+$(STATIC_OUTDIR)/libdeltafs-static.a:$(STATIC_LIBOBJECTS)
 	rm -f $@
 	$(AR) -rs $@ $(STATIC_LIBOBJECTS)
 
 $(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT): $(SHARED_LIBOBJECTS)
 	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libdeltafs.$(PLATFORM_SHARED_EXT) $(SHARED_LIBOBJECTS) \
-	        -o $(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT) $(LIBS)
+		-o $(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT) $(LIBS)
 
 $(STATIC_OUTDIR)/gigaplus_test:src/gigaplus_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/gigaplus_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
