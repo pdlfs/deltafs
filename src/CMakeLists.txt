@@ -70,35 +70,35 @@ set (deltafs-all-tests ${deltafs-tests})
 #
 # build static lib and arrange for targets to -I our include dir 
 #
-add_library (deltafs STATIC ${deltafs-all-srcs})
-target_include_directories (deltafs PUBLIC "../include")
-target_link_libraries (deltafs pdlfs-common)
+add_library (deltafs-static STATIC ${deltafs-all-srcs})
+target_include_directories (deltafs-static PUBLIC "../include")
+target_link_libraries (deltafs-static pdlfs-common-static)
 if (CMAKE_THREAD_LIBS_INIT)
-  target_link_libraries (deltafs "${CMAKE_THREAD_LIBS_INIT}")
+  target_link_libraries (deltafs-static "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
 
 #
 # build shared lib and arrange for targets to -I our include dir 
 #
 set(CMAKE_MACOSX_RPATH 1)
-add_library (deltafs-shared SHARED ${deltafs-all-srcs})
- target_include_directories (deltafs-shared PUBLIC "../include")
-target_link_libraries (deltafs-shared pdlfs-common-shared)
+add_library (deltafs SHARED ${deltafs-all-srcs})
+ target_include_directories (deltafs PUBLIC "../include")
+target_link_libraries (deltafs pdlfs-common)
 if (CMAKE_THREAD_LIBS_INIT)
-  target_link_libraries (deltafs-shared "${CMAKE_THREAD_LIBS_INIT}")
+  target_link_libraries (deltafs "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
-set (deltafs-shared-vers
+set (deltafs-vers
     "${DELTAFS_VERSION_MAJOR}.${DELTAFS_VERSION_MINOR}")
-set (deltafs-shared-vers
-    "${deltafs-shared-vers}.${DELTAFS_VERSION_PATCH}")
-set_target_properties(deltafs-shared
-                      PROPERTIES VERSION ${deltafs-shared-vers}
+set (deltafs-vers
+    "${deltafs-vers}.${DELTAFS_VERSION_PATCH}")
+set_target_properties(deltafs
+                      PROPERTIES VERSION ${deltafs-vers}
                       SOVERSION ${DELTAFS_VERSION_MAJOR})
 
 #
 # "make install" rules
 #
-install (TARGETS deltafs deltafs-shared
+install (TARGETS deltafs-static deltafs
          ARCHIVE DESTINATION lib
          LIBRARY DESTINATION lib)
 install (DIRECTORY ../include/deltafs
@@ -111,8 +111,12 @@ install (DIRECTORY ../include/deltafs
 # when requested.
 #
 enable_testing ()
+if (NOT TARGET build-tests)
+    add_custom_target (build-tests)
+endif ()
 if (NOT TARGET check)
     add_custom_target (check COMMAND ${CMAKE_CTEST_COMMAND})
+    add_dependencies (check build-tests)
 endif ()
 foreach (lcv ${deltafs-all-tests})
 
@@ -121,9 +125,9 @@ foreach (lcv ${deltafs-all-tests})
     string (REGEX REPLACE "([A-Za-z0-9_]+)\\.c+$" "\\1" id ${id})
 
     add_executable (${id} EXCLUDE_FROM_ALL ${lcv})
-    target_link_libraries (${id} deltafs-shared)
+    target_link_libraries (${id} deltafs)
     add_test (${id} ${id})
-    add_dependencies (check ${id})
+    add_dependencies (build-tests ${id})
 
 endforeach ()
 
