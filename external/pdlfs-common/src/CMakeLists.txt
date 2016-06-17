@@ -188,15 +188,10 @@ install (FILES
 # "pdl-build-tests" to build tests (we prefix with "pdl-" since 
 # custom targets must be globally unique).   if the top-level
 # CMakeLists.txt calls enable_testing (), then you can "make pdl-build-tests"
-# and then "make test" (or run ctest directly).   "pdl-check" is 
-# custom target that does pdl-build-tests and runs ctest.
+# and then "make test" (or run ctest directly).
 #
 if (NOT TARGET pdl-build-tests)           # can only define it once
     add_custom_target (pdl-build-tests)
-endif ()
-if (NOT TARGET pdl-check)
-    add_custom_target (pdl-check COMMAND ${CMAKE_CTEST_COMMAND})
-    add_dependencies (pdl-check pdl-build-tests)
 endif ()
 foreach (lcv ${pdlfs-all-tests})
 
