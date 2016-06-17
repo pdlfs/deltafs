@@ -18,3 +18,8 @@ addons:
     - gcc-4.8
     - g++-4.8
     - clang
+git:
+  submodules: false
+branches:
+  only:
+    - master

@@ -137,7 +137,7 @@ class PosixMmapReadableFile : public RandomAccessFile {
 
 class PosixThreadPool : public ThreadPool {
  public:
-  PosixThreadPool(size_t size)
+  PosixThreadPool(int size)
       : bg_cv_(&mu_),
         started_threads_(0),
         max_threads_(size),
@@ -158,8 +158,8 @@ class PosixThreadPool : public ThreadPool {
 
   port::Mutex mu_;
   port::CondVar bg_cv_;
-  size_t started_threads_;
-  size_t max_threads_;
+  int started_threads_;
+  int max_threads_;
 
   port::AtomicPointer shutting_down_;
   // Entry per Schedule() call
@@ -487,6 +487,7 @@ void PosixThreadPool::Schedule(void (*function)(void*), void* arg) {
 
     // Start background threads if necessary
     while (started_threads_ < max_threads_) {
+      assert(started_threads_ >= 0);
       started_threads_++;
       PthreadCreate(BGThreadWrapper, this);
     }
@@ -494,7 +495,7 @@ void PosixThreadPool::Schedule(void (*function)(void*), void* arg) {
     // If the queue is currently empty, the background thread may currently be
     // waiting.
     if (queue_.empty()) {
-      bg_cv_.Signal();
+      bg_cv_.SignalAll();
     }
 
     // Add to priority queue
@@ -507,19 +508,32 @@ void PosixThreadPool::Schedule(void (*function)(void*), void* arg) {
 }
 
 void PosixThreadPool::BGThread() {
-  while (!shutting_down_.Acquire_Load()) {
-    // Wait until there is an item that is ready to run
-    mu_.Lock();
-    while (queue_.empty()) {
-      bg_cv_.Wait();
+  void (*function)(void*) = NULL;
+  void* arg;
+
+  while (true) {
+    {
+      MutexLock l(&mu_);
+      // Wait until there is an item that is ready to run
+      while (queue_.empty() && !shutting_down_.Acquire_Load()) {
+        bg_cv_.Wait();
+      }
+      if (shutting_down_.Acquire_Load()) {
+        started_threads_--;
+        assert(started_threads_ >= 0);
+        bg_cv_.SignalAll();
+        return;
+      }
+
+      assert(!queue_.empty());
+      function = queue_.front().function;
+      arg = queue_.front().arg;
+      queue_.pop_front();
     }
 
-    void (*function)(void*) = queue_.front().function;
-    void* arg = queue_.front().arg;
-    queue_.pop_front();
-
-    mu_.Unlock();
-    (*function)(arg);
+    assert(function != NULL);
+    function(arg);
+    function = NULL;
   }
 }
 
