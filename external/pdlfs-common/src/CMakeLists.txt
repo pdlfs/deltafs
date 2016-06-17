@@ -184,17 +184,19 @@ install (FILES
          DESTINATION include/pdlfs-common)
 
 #
-# tests... we add a custom "make check" target that builds all our tests
-# and runs them.   we EXCLUDE_FROM_ALL so that we only build the tests
-# when requested.
+# tests... we EXCLUDE_FROM_ALL the tests and add a custom target
+# "pdl-build-tests" to build tests (we prefix with "pdl-" since 
+# custom targets must be globally unique).   if the top-level
+# CMakeLists.txt calls enable_testing (), then you can "make pdl-build-tests"
+# and then "make test" (or run ctest directly).   "pdl-check" is 
+# custom target that does pdl-build-tests and runs ctest.
 #
-enable_testing ()
-if (NOT TARGET build-tests)
-    add_custom_target (build-tests)
+if (NOT TARGET pdl-build-tests)           # can only define it once
+    add_custom_target (pdl-build-tests)
 endif ()
-if (NOT TARGET check)
-    add_custom_target (check COMMAND ${CMAKE_CTEST_COMMAND})
-    add_dependencies (check build-tests)
+if (NOT TARGET pdl-check)
+    add_custom_target (pdl-check COMMAND ${CMAKE_CTEST_COMMAND})
+    add_dependencies (pdl-check pdl-build-tests)
 endif ()
 foreach (lcv ${pdlfs-all-tests})
 
@@ -205,7 +207,7 @@ foreach (lcv ${pdlfs-all-tests})
     add_executable (${id} EXCLUDE_FROM_ALL ${lcv})
     target_link_libraries (${id} pdlfs-common)
     add_test (${id} ${id})
-    add_dependencies (build-tests ${id})
+    add_dependencies (pdl-build-tests ${id})
 
 endforeach ()
 
