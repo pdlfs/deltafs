@@ -28,11 +28,11 @@ cmake_minimum_required (VERSION 2.8) # uses target_include_directories from 2.8
 
 project (PDLFS-COMMON)
 
+enable_testing ()
+
 set (PDLFS_PLATFORM "POSIX" CACHE STRING "Select platform (e.g. POSIX)")
 set (PDLFS_OS "${CMAKE_SYSTEM_NAME}" CACHE 
               STRING "Select operating system (uname -s)")
 
 add_subdirectory (src)
 
-
-#XXXCDC: check install

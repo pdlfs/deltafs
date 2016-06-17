@@ -117,8 +117,7 @@ endif ()
 #
 
 #
-# setup for and configure pldfs_config_expand.h.in, we have to add
-# BINARY_DIR/../include to include path so we can pick up the expanded file.
+# setup for and configure pldfs_config_expand.h.in
 #
 set (PDLFS_PLATFORM_${PDLFS_PLATFORM} 1)
 set (PDLFS_OS_${PDLFS_OS_EDITED} 1)
@@ -143,38 +142,38 @@ set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-leveldb-tests})
 # build static lib and arrange for targets to -I our include dir and
 # the dir we generated pdlfs_config_expand.h in
 #
-add_library (pdlfs-common STATIC ${pdlfs-all-srcs})
+add_library (pdlfs-common-static STATIC ${pdlfs-all-srcs})
+target_include_directories (pdlfs-common-static PUBLIC "../include")
+target_include_directories (pdlfs-common-static PUBLIC 
+                                    "${CMAKE_CURRENT_BINARY_DIR}/../include")
+if (CMAKE_THREAD_LIBS_INIT)
+  target_link_libraries (pdlfs-common-static "${CMAKE_THREAD_LIBS_INIT}")
+endif ()
+
+#
+# build shared lib and arrange for targets to -I our include dir and
+# the dir we generated pdlfs_config_expand.h in
+#
+set (CMAKE_MACOSX_RPATH 1)
+add_library (pdlfs-common SHARED ${pdlfs-all-srcs})
 target_include_directories (pdlfs-common PUBLIC "../include")
 target_include_directories (pdlfs-common PUBLIC 
                                     "${CMAKE_CURRENT_BINARY_DIR}/../include")
 if (CMAKE_THREAD_LIBS_INIT)
   target_link_libraries (pdlfs-common "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
-
-#
-# build static lib and arrange for targets to -I our include dir and
-# the dir we generated pdlfs_config_expand.h in
-#
-set (CMAKE_MACOSX_RPATH 1)
-add_library (pdlfs-common-shared SHARED ${pdlfs-all-srcs})
-target_include_directories (pdlfs-common-shared PUBLIC "../include")
-target_include_directories (pdlfs-common-shared PUBLIC 
-                                    "${CMAKE_CURRENT_BINARY_DIR}/../include")
-if (CMAKE_THREAD_LIBS_INIT)
-  target_link_libraries (pdlfs-common-shared "${CMAKE_THREAD_LIBS_INIT}")
-endif ()
-set (pdlfs-common-shared-vers
+set (pdlfs-common-vers
     "${PDLFS_COMMON_VERSION_MAJOR}.${PDLFS_COMMON_VERSION_MINOR}")
-set (pdlfs-common-shared-vers
-    "${pdlfs-common-shared-vers}.${PDLFS_COMMON_VERSION_PATCH}")
-set_target_properties(pdlfs-common-shared
-                      PROPERTIES VERSION ${pdlfs-common-shared-vers}
+set (pdlfs-common-vers
+    "${pdlfs-common-vers}.${PDLFS_COMMON_VERSION_PATCH}")
+set_target_properties(pdlfs-common
+                      PROPERTIES VERSION ${pdlfs-common-vers}
                       SOVERSION ${PDLFS_COMMON_VERSION_MAJOR})
 
 #
 # "make install" rules
 #
-install (TARGETS pdlfs-common pdlfs-common-shared
+install (TARGETS pdlfs-common-static pdlfs-common
          ARCHIVE DESTINATION lib
          LIBRARY DESTINATION lib)
 install (DIRECTORY ../include/pdlfs-common
@@ -190,8 +189,12 @@ install (FILES
 # when requested.
 #
 enable_testing ()
+if (NOT TARGET build-tests)
+    add_custom_target (build-tests)
+endif ()
 if (NOT TARGET check)
     add_custom_target (check COMMAND ${CMAKE_CTEST_COMMAND})
+    add_dependencies (check build-tests)
 endif ()
 foreach (lcv ${pdlfs-all-tests})
 
@@ -200,9 +203,9 @@ foreach (lcv ${pdlfs-all-tests})
     string (REGEX REPLACE "([A-Za-z0-9_]+)\\.c+$" "\\1" id ${id})
 
     add_executable (${id} EXCLUDE_FROM_ALL ${lcv})
-    target_link_libraries (${id} pdlfs-common-shared)
+    target_link_libraries (${id} pdlfs-common)
     add_test (${id} ${id})
-    add_dependencies (check ${id})
+    add_dependencies (build-tests ${id})
 
 endforeach ()
 
