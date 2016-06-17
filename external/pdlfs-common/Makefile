@@ -72,7 +72,7 @@ STATIC_ALLOBJS := $(STATIC_LIBOBJECTS) $(STATIC_TESTOBJS) $(TESTHARNESS)
 
 default: all
 
-all: $(STATIC_OUTDIR)/pdlfs-common.a
+all: $(STATIC_LIBOBJECTS)
 
 check: $(STATIC_PROGRAMS)
 	for t in $(notdir $(TESTS)); do echo "***** Running $$t"; $(STATIC_OUTDIR)/$$t || exit 1; done
@@ -104,10 +104,6 @@ STATIC_OBJDIRS: \
 	$(STATIC_OUTDIR)/modules/rados
 
 $(STATIC_ALLOBJS): | STATIC_OBJDIRS
-
-$(STATIC_OUTDIR)/pdlfs-common.a:$(STATIC_LIBOBJECTS)
-	rm -f $@
-	$(AR) -rs $@ $(STATIC_LIBOBJECTS)
 
 $(STATIC_OUTDIR)/arena_test:src/arena_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/arena_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)

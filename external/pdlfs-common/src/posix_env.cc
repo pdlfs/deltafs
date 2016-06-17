@@ -135,10 +135,57 @@ class PosixMmapReadableFile : public RandomAccessFile {
   }
 };
 
+class PosixThreadPool : public ThreadPool {
+ public:
+  PosixThreadPool(size_t size)
+      : bg_cv_(&mu_),
+        started_threads_(0),
+        max_threads_(size),
+        shutting_down_(NULL) {}
+
+  virtual ~PosixThreadPool();
+  virtual void Schedule(void (*function)(void* arg), void* arg);
+  void StartThread(void (*function)(void* arg), void* arg);
+
+ private:
+  // BGThread() is the body of the background thread
+  void BGThread();
+
+  static void* BGThreadWrapper(void* arg) {
+    reinterpret_cast<PosixThreadPool*>(arg)->BGThread();
+    return NULL;
+  }
+
+  port::Mutex mu_;
+  port::CondVar bg_cv_;
+  size_t started_threads_;
+  size_t max_threads_;
+
+  port::AtomicPointer shutting_down_;
+  // Entry per Schedule() call
+  struct BGItem {
+    void* arg;
+    void (*function)(void*);
+  };
+  typedef std::deque<BGItem> BGQueue;
+  BGQueue queue_;
+
+  struct StartThreadState {
+    void (*user_function)(void*);
+    void* arg;
+  };
+
+  static void* StartThreadWrapper(void* arg) {
+    StartThreadState* state = reinterpret_cast<StartThreadState*>(arg);
+    state->user_function(state->arg);
+    delete state;
+    return NULL;
+  }
+};
+
 class PosixEnv : public Env {
  public:
-  PosixEnv();
-
+  explicit PosixEnv() : pool_(1) {}
   virtual ~PosixEnv() { assert(false); }
 
   virtual Status NewSequentialFile(const Slice& fname,
@@ -339,9 +386,13 @@ class PosixEnv : public Env {
     return s;
   }
 
-  virtual void Schedule(void (*function)(void*), void* arg);
+  virtual void Schedule(void (*function)(void*), void* arg) {
+    pool_.Schedule(function, arg);
+  }
 
-  virtual void StartThread(void (*function)(void* arg), void* arg);
+  virtual void StartThread(void (*function)(void* arg), void* arg) {
+    pool_.StartThread(function, arg);
+  }
 
   virtual Status GetTestDirectory(std::string* result) {
     const char* env = getenv("TEST_TMPDIR");
@@ -408,98 +459,79 @@ class PosixEnv : public Env {
   }
 
  private:
-  // BGThread() is the body of the background thread
-  void BGThread();
-
-  static void* BGThreadWrapper(void* arg) {
-    reinterpret_cast<PosixEnv*>(arg)->BGThread();
-    return NULL;
-  }
-
-  pthread_mutex_t mu_;
-  pthread_cond_t bgsignal_;
-  pthread_t bgthread_;
-  bool started_bgthread_;
-
-  // Entry per Schedule() call
-  struct BGItem {
-    void* arg;
-    void (*function)(void*);
-  };
-  typedef std::deque<BGItem> BGQueue;
-  BGQueue queue_;
-
+  PosixThreadPool pool_;
   PosixLockTable locks_;
   MmapLimiter mmap_limit_;
 };
 
-PosixEnv::PosixEnv() : started_bgthread_(false) {
-  port::PthreadCall("pthread_mutex_init", pthread_mutex_init(&mu_, NULL));
-  port::PthreadCall("pthread_cond_init", pthread_cond_init(&bgsignal_, NULL));
+static pthread_t PthreadCreate(void* (*start_routine)(void*), void* arg) {
+  pthread_t new_th;
+  port::PthreadCall("pthread_create",
+                    pthread_create(&new_th, NULL, start_routine, arg));
+  port::PthreadCall("pthread_detach", pthread_detach(new_th));
+  return new_th;
 }
 
-void PosixEnv::Schedule(void (*function)(void*), void* arg) {
-  port::PthreadCall("pthread_mutex_lock", pthread_mutex_lock(&mu_));
-
-  // Start background thread if necessary
-  if (!started_bgthread_) {
-    started_bgthread_ = true;
-    port::PthreadCall(
-        "pthread_create",
-        pthread_create(&bgthread_, NULL, &PosixEnv::BGThreadWrapper, this));
+PosixThreadPool::~PosixThreadPool() {
+  mu_.Lock();
+  shutting_down_.Release_Store(this);
+  while (started_threads_ != 0) {
+    bg_cv_.Wait();
   }
-
-  // If the queue is currently empty, the background thread may currently be
-  // waiting.
-  if (queue_.empty()) {
-    port::PthreadCall("pthread_cond_signal", pthread_cond_signal(&bgsignal_));
-  }
-
-  // Add to priority queue
-  queue_.push_back(BGItem());
-  queue_.back().function = function;
-  queue_.back().arg = arg;
-
-  port::PthreadCall("pthread_mutex_unlock", pthread_mutex_unlock(&mu_));
+  mu_.Unlock();
 }
 
-void PosixEnv::BGThread() {
-  while (true) {
+void PosixThreadPool::Schedule(void (*function)(void*), void* arg) {
+  if (!shutting_down_.Acquire_Load()) {
+    mu_.Lock();
+
+    // Start background threads if necessary
+    while (started_threads_ < max_threads_) {
+      started_threads_++;
+      PthreadCreate(BGThreadWrapper, this);
+    }
+
+    // If the queue is currently empty, the background thread may currently be
+    // waiting.
+    if (queue_.empty()) {
+      bg_cv_.Signal();
+    }
+
+    // Add to priority queue
+    queue_.push_back(BGItem());
+    queue_.back().function = function;
+    queue_.back().arg = arg;
+
+    mu_.Unlock();
+  }
+}
+
+void PosixThreadPool::BGThread() {
+  while (!shutting_down_.Acquire_Load()) {
     // Wait until there is an item that is ready to run
-    port::PthreadCall("pthread_mutex_lock", pthread_mutex_lock(&mu_));
+    mu_.Lock();
     while (queue_.empty()) {
-      port::PthreadCall("pthread_cond_wait",
-                        pthread_cond_wait(&bgsignal_, &mu_));
+      bg_cv_.Wait();
     }
 
     void (*function)(void*) = queue_.front().function;
     void* arg = queue_.front().arg;
     queue_.pop_front();
 
-    port::PthreadCall("pthread_mutex_unlock", pthread_mutex_unlock(&mu_));
+    mu_.Unlock();
     (*function)(arg);
   }
 }
 
-struct StartThreadState {
-  void (*user_function)(void*);
-  void* arg;
-};
-
-static void* StartThreadWrapper(void* arg) {
-  StartThreadState* state = reinterpret_cast<StartThreadState*>(arg);
-  state->user_function(state->arg);
-  delete state;
-  return NULL;
-}
-
-void PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
-  pthread_t t;
+void PosixThreadPool::StartThread(void (*function)(void* arg), void* arg) {
   StartThreadState* state = new StartThreadState;
   state->user_function = function;
   state->arg = arg;
-  port::PthreadCall("pthread_create",
-                    pthread_create(&t, NULL, &StartThreadWrapper, state));
+  PthreadCreate(StartThreadWrapper, state);
+}
+
+ThreadPool* ThreadPool::NewFixed(int num_threads) {
+  return new PosixThreadPool(num_threads);
 }
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;

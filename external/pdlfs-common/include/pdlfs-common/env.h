@@ -282,6 +282,31 @@ extern Status WriteStringToFileSync(Env* env, const Slice& data,
 // A utility routine: read contents of named file into *data
 extern Status ReadFileToString(Env* env, const Slice& fname, std::string* data);
 
+// Background execution service.
+class ThreadPool {
+ public:
+  ThreadPool() {}
+  virtual ~ThreadPool();
+
+  // Instantiate a new thread pool with a fixed number of threads.
+  // The caller should delete the pool to free associated resources.
+  static ThreadPool* NewFixed(int num_threads);
+
+  // Arrange to run "(*function)(arg)" once in one of a pool of
+  // background threads.
+  //
+  // "function" may run in an unspecified thread.  Multiple functions
+  // added to the same pool may run concurrently in different threads.
+  // I.e., the caller may not assume that background work items are
+  // serialized.
+  virtual void Schedule(void (*function)(void* arg), void* arg) = 0;
+
+ private:
+  // No copying allowed
+  ThreadPool(const ThreadPool&);
+  void operator=(const ThreadPool&);
+};
+
 // An implementation of Env that forwards all calls to another Env.
 // May be useful to clients who wish to override just part of the
 // functionality of another Env.

@@ -26,6 +26,8 @@ Logger::~Logger() {}
 
 FileLock::~FileLock() {}
 
+ThreadPool::~ThreadPool() {}
+
 EnvWrapper::~EnvWrapper() {}
 
 void Log(Logger* info_log, const char* format, ...) {
