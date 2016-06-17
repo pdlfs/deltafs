@@ -25,12 +25,8 @@ cmake_minimum_required (VERSION 2.8) # uses target_include_directories from 2.8
 project (DELTAFS)
 
 enable_testing ()
-if (NOT TARGET check)
-    add_custom_target (check COMMAND ${CMAKE_CTEST_COMMAND})
-endif ()
 
 add_subdirectory (external/pdlfs-common/src)
 
 add_subdirectory (src)
 
-#XXXCDC: check install
