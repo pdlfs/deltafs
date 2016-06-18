@@ -110,6 +110,13 @@ void PutVarint64(std::string* dst, uint64_t v) {
   dst->append(buf, ptr - buf);
 }
 
+char* EncodeLengthPrefixedSlice(char* dst, const Slice& value) {
+  char* p = EncodeVarint32(dst, value.size());
+  memcpy(p, value.data(), value.size());
+  p += value.size();
+  return p;
+}
+
 void PutLengthPrefixedSlice(std::string* dst, const Slice& value) {
   PutVarint32(dst, value.size());
   dst->append(value.data(), value.size());

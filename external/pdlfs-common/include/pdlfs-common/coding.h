@@ -61,6 +61,11 @@ extern void EncodeFixed64(char* dst, uint64_t value);
 extern char* EncodeVarint32(char* dst, uint32_t value);
 extern char* EncodeVarint64(char* dst, uint64_t value);
 
+// Lower-level versions of Put... that write directly into a character buffer
+// and return a pointer just past the last byte written.
+// REQUIRES: dst has enough space for the value being written
+extern char* EncodeLengthPrefixedSlice(char* dst, const Slice& value);
+
 // Lower-level versions of Get... that read directly from a character buffer
 // without any bounds checking.
 inline uint16_t DecodeFixed16(const char* ptr) {
