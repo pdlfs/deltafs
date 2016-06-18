@@ -32,28 +32,33 @@ class MercuryTest {
   RPCOptions options_;
   IfImpl fs_;
   MercuryRPC* rpc_;
-
+  ThreadPool* pool_;
+  MercuryRPC::LocalLooper* looper_;
   MercuryRPC::Client* client_;
   Env* env_;
 
   MercuryTest() {
+    pool_ = ThreadPool::NewFixed(2);
     env_ = Env::Default();
+    options_.num_io_threads_ = 1;
     options_.env = env_;
     options_.fs = &fs_;
     options_.uri = "bmi+tcp://localhost:10101";
+    options_.extra_workers = pool_;
     bool listen = true;
     rpc_ = new MercuryRPC(listen, options_);
+    looper_ = new MercuryRPC::LocalLooper(rpc_, options_);
     client_ = new MercuryRPC::Client(rpc_, "tcp://localhost:10101");
+    looper_->Start();
     rpc_->Ref();
-    rpc_->TEST_Start();
   }
 
   ~MercuryTest() {
     delete client_;
-    if (rpc_ != NULL) {
-      rpc_->TEST_Stop();
-      rpc_->Unref();
-    }
+    looper_->Stop();
+    delete looper_;
+    rpc_->Unref();
+    delete pool_;
   }
 };
 

@@ -39,16 +39,23 @@ class MercuryRPC {
   class LocalLooper;
   class Client;
 
-#define REG_ARGS(OP) #OP, If_Message_cb, If_Message_cb, If_##OP##_cb
+#define REG_ARGS(OP) #OP, If_Message_cb, If_Message_cb, If_##OP##_decorator
   static hg_return_t If_Message_cb(hg_proc_t proc, void* data);
 
 #define REG_RPC(OP)                                            \
+  static hg_return_t If_##OP##_decorator(hg_handle_t handle);  \
   static hg_return_t If_##OP##_cb(hg_handle_t handle);         \
+  static void If_##OP##_wrapper(void* arg) {                   \
+    hg_handle_t handle = reinterpret_cast<hg_handle_t>(arg);   \
+    If_##OP##_cb(handle);                                      \
+  }                                                            \
+                                                               \
   hg_id_t hg_##OP##_id_;                                       \
+                                                               \
   void Register_##OP() {                                       \
     hg_##OP##_id_ = HG_Register_name(hg_class_, REG_ARGS(OP)); \
     if (NA_Is_listening(na_class_)) {                          \
-      HG_Register_data(hg_class_, hg_##OP##_id_, fs_, NULL);   \
+      HG_Register_data(hg_class_, hg_##OP##_id_, this, NULL);  \
     }                                                          \
   }
 
@@ -74,22 +81,25 @@ class MercuryRPC {
  private:
   ~MercuryRPC();
 
-  static inline If* fs_impl(hg_handle_t handle) {
+  static inline MercuryRPC* registered_data(hg_handle_t handle) {
     hg_info* info = HG_Get_info(handle);
     void* data = HG_Registered_data(info->hg_class, info->id);
-    If* fs = reinterpret_cast<If*>(data);
-    assert(fs != NULL);
-    return fs;
+    MercuryRPC* rpc = reinterpret_cast<MercuryRPC*>(data);
+    assert(rpc != NULL);
+    return rpc;
   }
 
   Env* env_;
   If* fs_;
   int refs_;
+  ThreadPool* pool_;
+
   port::Mutex mutex_;
   port::AtomicPointer shutting_down_;
   port::CondVar bg_cv_;
   bool bg_loop_running_;
   bool bg_error_;
+
   port::CondVar lookup_cv_;
   typedef std::map<std::string, na_addr_t> AddrTable;
   AddrTable addrs_;
@@ -111,8 +121,8 @@ class MercuryRPC::LocalLooper {
   port::AtomicPointer shutting_down_;
   port::Mutex mutex_;
   port::CondVar bg_cv_;
-  int bg_loops_;
   int max_bg_loops_;
+  int bg_loops_;
 
   void BGLoop();
   static void BGLoopWrapper(void* arg) {
@@ -125,8 +135,8 @@ class MercuryRPC::LocalLooper {
       : rpc_(rpc),
         shutting_down_(NULL),
         bg_cv_(&mutex_),
-        bg_loops_(0),
-        max_bg_loops_(options.num_io_threads_) {
+        max_bg_loops_(options.num_io_threads_),
+        bg_loops_(0) {
     rpc_->Ref();
   }
 
@@ -142,7 +152,7 @@ class MercuryRPC::LocalLooper {
     while (bg_loops_ < max_bg_loops_) {
       assert(bg_loops_ >= 0);
       bg_loops_++;
-      rpc_->env_->Schedule(BGLoopWrapper, this);
+      rpc_->env_->StartThread(BGLoopWrapper, this);
     }
     mutex_.Unlock();
     return Status::OK();

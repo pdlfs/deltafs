@@ -67,17 +67,27 @@ hg_return_t MercuryRPC::If_Message_cb(hg_proc_t proc, void* data) {
   return ret;
 }
 
-#define SRV_CB(OP)                                           \
-  hg_return_t MercuryRPC::If_##OP##_cb(hg_handle_t handle) { \
-    If::Message input;                                       \
-    If::Message output;                                      \
-    hg_return_t ret = HG_Get_input(handle, &input);          \
-    if (ret == HG_SUCCESS) {                                 \
-      fs_impl(handle)->OP(input, output);                    \
-      ret = HG_Respond(handle, NULL, NULL, &output);         \
-    }                                                        \
-    HG_Destroy(handle);                                      \
-    return ret;                                              \
+#define SRV_CB(OP)                                                  \
+  hg_return_t MercuryRPC::If_##OP##_decorator(hg_handle_t handle) { \
+    MercuryRPC* rpc = registered_data(handle);                      \
+    if (rpc->pool_ == NULL) {                                       \
+      return If_##OP##_cb(handle);                                  \
+    } else {                                                        \
+      rpc->pool_->Schedule(If_##OP##_wrapper, handle);              \
+      return HG_SUCCESS;                                            \
+    }                                                               \
+  }                                                                 \
+                                                                    \
+  hg_return_t MercuryRPC::If_##OP##_cb(hg_handle_t handle) {        \
+    If::Message input;                                              \
+    If::Message output;                                             \
+    hg_return_t ret = HG_Get_input(handle, &input);                 \
+    if (ret == HG_SUCCESS) {                                        \
+      registered_data(handle)->fs_->OP(input, output);              \
+      ret = HG_Respond(handle, NULL, NULL, &output);                \
+    }                                                               \
+    HG_Destroy(handle);                                             \
+    return ret;                                                     \
   }
 
 SRV_CB(NONOP)
@@ -188,6 +198,7 @@ MercuryRPC::MercuryRPC(bool listen, const RPCOptions& options)
     : env_(options.env),
       fs_(options.fs),
       refs_(0),
+      pool_(options.extra_workers),
       shutting_down_(NULL),
       bg_cv_(&mutex_),
       bg_loop_running_(false),
@@ -338,25 +349,25 @@ std::string MercuryRPC::ToString(na_addr_t addr) {
 
 void MercuryRPC::TEST_LoopForever(void* arg) {
   MercuryRPC* rpc = reinterpret_cast<MercuryRPC*>(arg);
+  port::AtomicPointer* shutting_down = &rpc->shutting_down_;
 
   hg_return_t ret;
   unsigned int actual_count;
   bool error = false;
 
-  while (!error && !rpc->shutting_down_.Acquire_Load()) {
+  while (!error && !shutting_down->Acquire_Load()) {
     do {
+      actual_count = 0;
       ret = HG_Trigger(rpc->hg_context_, 0, 1, &actual_count);
-      if (ret != HG_SUCCESS) {
+      if (ret != HG_SUCCESS && ret != HG_TIMEOUT) {
         error = true;
-        break;
       }
-    } while (actual_count != 0 && !rpc->shutting_down_.Acquire_Load());
+    } while (!error && actual_count != 0 && !shutting_down->Acquire_Load());
 
-    if (!error && !rpc->shutting_down_.Acquire_Load()) {
+    if (!error && !shutting_down->Acquire_Load()) {
       ret = HG_Progress(rpc->hg_context_, 1000);
       if (ret != HG_SUCCESS && ret != HG_TIMEOUT) {
         error = true;
-        break;
       }
     }
   }
@@ -366,6 +377,10 @@ void MercuryRPC::TEST_LoopForever(void* arg) {
   rpc->bg_error_ = error;
   rpc->bg_cv_.SignalAll();
   rpc->mutex_.Unlock();
+
+  if (error) {
+    fprintf(stderr, "!!! Error in local rpc bg loop [errno=%d]\n", ret);
+  }
 }
 
 void MercuryRPC::LocalLooper::BGLoop() {
@@ -379,6 +394,10 @@ void MercuryRPC::LocalLooper::BGLoop() {
       assert(bg_loops_ >= 0);
       bg_cv_.SignalAll();
       mutex_.Unlock();
+
+      if (ret != HG_SUCCESS) {
+        fprintf(stderr, "!!! Error in local rpc bg loop [errno=%d]\n", ret);
+      }
       return;
     }
 
@@ -387,7 +406,10 @@ void MercuryRPC::LocalLooper::BGLoop() {
       unsigned int actual_count = 1;
       while (actual_count != 0 && !shutting_down_.Acquire_Load()) {
         ret = HG_Trigger(ctx, 0, 1, &actual_count);
-        if (ret != HG_SUCCESS) {
+        if (ret == HG_TIMEOUT) {
+          ret = HG_SUCCESS;
+          break;
+        } else if (ret != HG_SUCCESS) {
           break;
         }
       }
