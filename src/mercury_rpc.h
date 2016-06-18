@@ -107,12 +107,10 @@ class MercuryRPC {
 
 class MercuryRPC::LocalLooper {
  private:
-  ThreadPool* pool_;
   MercuryRPC* const rpc_;
   port::AtomicPointer shutting_down_;
   port::Mutex mutex_;
   port::CondVar bg_cv_;
-  bool has_leader_;
   int bg_loops_;
   int max_bg_loops_;
 
@@ -122,19 +120,11 @@ class MercuryRPC::LocalLooper {
     looper->BGLoop();
   }
 
-  struct BGTask {
-    LocalLooper* ctrl;
-    hg_context_t* ctx;
-  };
-  static void RunBGTask(void* arg);
-
  public:
   LocalLooper(MercuryRPC* rpc, const RPCOptions& options)
-      : pool_(options.extra_workers),
-        rpc_(rpc),
+      : rpc_(rpc),
         shutting_down_(NULL),
         bg_cv_(&mutex_),
-        has_leader_(false),
         bg_loops_(0),
         max_bg_loops_(options.num_io_threads_) {
     rpc_->Ref();

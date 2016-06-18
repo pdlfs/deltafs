@@ -67,7 +67,7 @@ hg_return_t MercuryRPC::If_Message_cb(hg_proc_t proc, void* data) {
   return ret;
 }
 
-#define RPC_RES(OP)                                          \
+#define SRV_CB(OP)                                           \
   hg_return_t MercuryRPC::If_##OP##_cb(hg_handle_t handle) { \
     If::Message input;                                       \
     If::Message output;                                      \
@@ -80,19 +80,19 @@ hg_return_t MercuryRPC::If_Message_cb(hg_proc_t proc, void* data) {
     return ret;                                              \
   }
 
-RPC_RES(NONOP)
-RPC_RES(FSTAT)
-RPC_RES(MKDIR)
-RPC_RES(MKNOD)
-RPC_RES(CHMOD)
-RPC_RES(CHOWN)
-RPC_RES(UNLNK)
-RPC_RES(RMDIR)
-RPC_RES(RENME)
-RPC_RES(LOKUP)
-RPC_RES(LSDIR)
+SRV_CB(NONOP)
+SRV_CB(FSTAT)
+SRV_CB(MKDIR)
+SRV_CB(MKNOD)
+SRV_CB(CHMOD)
+SRV_CB(CHOWN)
+SRV_CB(UNLNK)
+SRV_CB(RMDIR)
+SRV_CB(RENME)
+SRV_CB(LOKUP)
+SRV_CB(LSDIR)
 
-#undef RPC_RES
+#undef SRV_CB
 
 namespace {
 struct OpState {
@@ -117,7 +117,7 @@ hg_return_t MercuryRPC::Client::SaveReply(const hg_cb_info* info) {
   return HG_SUCCESS;
 }
 
-#define RPC_REQ(OP)                                                          \
+#define CLI_STUB(OP)                                                         \
   void MercuryRPC::Client::OP(Message& in, Message& out) {                   \
     out.err = 0xff;                                                          \
     na_addr_t na_addr;                                                       \
@@ -142,19 +142,19 @@ hg_return_t MercuryRPC::Client::SaveReply(const hg_cb_info* info) {
     }                                                                        \
   }
 
-RPC_REQ(NONOP)
-RPC_REQ(FSTAT)
-RPC_REQ(MKDIR)
-RPC_REQ(MKNOD)
-RPC_REQ(CHMOD)
-RPC_REQ(CHOWN)
-RPC_REQ(UNLNK)
-RPC_REQ(RMDIR)
-RPC_REQ(RENME)
-RPC_REQ(LOKUP)
-RPC_REQ(LSDIR)
+CLI_STUB(NONOP)
+CLI_STUB(FSTAT)
+CLI_STUB(MKDIR)
+CLI_STUB(MKNOD)
+CLI_STUB(CHMOD)
+CLI_STUB(CHOWN)
+CLI_STUB(UNLNK)
+CLI_STUB(RMDIR)
+CLI_STUB(RENME)
+CLI_STUB(LOKUP)
+CLI_STUB(LSDIR)
 
-#undef RPC_REQ
+#undef CLI_STUB
 
 template <typename T>
 T* MercuryCall(const char* label, T* ptr) {
@@ -343,7 +343,7 @@ void MercuryRPC::TEST_LoopForever(void* arg) {
   unsigned int actual_count;
   bool error = false;
 
-  while (!rpc->shutting_down_.Acquire_Load()) {
+  while (!error && !rpc->shutting_down_.Acquire_Load()) {
     do {
       ret = HG_Trigger(rpc->hg_context_, 0, 1, &actual_count);
       if (ret != HG_SUCCESS) {
@@ -352,7 +352,7 @@ void MercuryRPC::TEST_LoopForever(void* arg) {
       }
     } while (actual_count != 0 && !rpc->shutting_down_.Acquire_Load());
 
-    if (!rpc->shutting_down_.Acquire_Load()) {
+    if (!error && !rpc->shutting_down_.Acquire_Load()) {
       ret = HG_Progress(rpc->hg_context_, 1000);
       if (ret != HG_SUCCESS && ret != HG_TIMEOUT) {
         error = true;
@@ -371,35 +371,19 @@ void MercuryRPC::TEST_LoopForever(void* arg) {
 void MercuryRPC::LocalLooper::BGLoop() {
   hg_context_t* ctx = rpc_->hg_context_;
   hg_return_t ret = HG_SUCCESS;
-  BGTask task;
-  task.ctrl = this;
-  task.ctx = ctx;
 
-  MutexLock l(&mutex_);
   while (true) {
-    mutex_.AssertHeld();
-    while (has_leader_ && !shutting_down_.Acquire_Load() && ret == HG_SUCCESS) {
-      bg_cv_.Wait();
-    }
     if (shutting_down_.Acquire_Load() || ret != HG_SUCCESS) {
+      mutex_.Lock();
       bg_loops_--;
       assert(bg_loops_ >= 0);
       bg_cv_.SignalAll();
+      mutex_.Unlock();
       return;
     }
 
-    has_leader_ = true;
-    mutex_.Unlock();
     ret = HG_Progress(ctx, 1000);
-    if (pool_ != NULL && ret == HG_SUCCESS) {
-      pool_->Schedule(RunBGTask, &task);
-    }
-    mutex_.Lock();
-
     if (ret == HG_SUCCESS) {
-      has_leader_ = false;
-      bg_cv_.SignalAll();
-      mutex_.Unlock();
       unsigned int actual_count = 1;
       while (actual_count != 0 && !shutting_down_.Acquire_Load()) {
         ret = HG_Trigger(ctx, 0, 1, &actual_count);
@@ -407,23 +391,8 @@ void MercuryRPC::LocalLooper::BGLoop() {
           break;
         }
       }
-
-      mutex_.Lock();
     } else if (ret == HG_TIMEOUT) {
-      has_leader_ = false;
       ret = HG_SUCCESS;
-    }
-  }
-}
-
-void MercuryRPC::LocalLooper::RunBGTask(void* arg) {
-  BGTask* t = reinterpret_cast<BGTask*>(arg);
-  hg_context_t* ctx = t->ctx;
-  unsigned int actual_count = 1;
-  while (actual_count != 0 && !t->ctrl->shutting_down_.Acquire_Load()) {
-    hg_return_t ret = HG_Trigger(ctx, 0, 1, &actual_count);
-    if (ret != HG_SUCCESS) {
-      break;
     }
   }
 }

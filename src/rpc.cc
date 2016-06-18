@@ -7,11 +7,11 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-#include "rpc.h"
 #include "mercury_rpc.h"
+#include "rpc.h"
 
 namespace pdlfs {
 
