@@ -475,6 +475,7 @@ static pthread_t PthreadCreate(void* (*start_routine)(void*), void* arg) {
 PosixThreadPool::~PosixThreadPool() {
   mu_.Lock();
   shutting_down_.Release_Store(this);
+  bg_cv_.SignalAll();
   while (started_threads_ != 0) {
     bg_cv_.Wait();
   }
