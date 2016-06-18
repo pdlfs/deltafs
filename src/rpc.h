@@ -26,8 +26,8 @@ enum RPCMode { kServerClient, kClientOnly };
 struct RPCOptions {
   RPCMode mode;
   std::string uri;
-  ThreadPool* io;
-  ThreadPool* workers;
+  int num_io_threads_;
+  ThreadPool* extra_workers;
   rpc::If* fs;
   Env* env;
 };

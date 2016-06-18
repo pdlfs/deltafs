@@ -7,6 +7,9 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include <stdlib.h>
+#include <stdio.h>
+
 #include "rpc.h"
 #include "mercury_rpc.h"
 
@@ -20,6 +23,7 @@ If::~If() {}
 
 IfWrapper::~IfWrapper() {}
 
+#if defined(MERCURY)
 class RPCImpl : public RPC {
   MercuryRPC::LocalLooper* looper_;
   MercuryRPC* rpc_;
@@ -43,11 +47,18 @@ class RPCImpl : public RPC {
     rpc_->Unref();
   }
 };
+#endif
+
 }  // namespace rpc
 
 RPC* RPC::Open(const RPCOptions& options) {
-  RPC* r = new rpc::RPCImpl(options);
-  return r;
+#if defined(MERCURY)
+  return new rpc::RPCImpl(options);
+#else
+  char msg[] = "Not possible: no rpc impl available\n";
+  fwrite(msg, 1, sizeof(msg), stderr);
+  abort();
+#endif
 }
 
 }  // namespace pdlfs

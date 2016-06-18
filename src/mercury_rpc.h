@@ -130,13 +130,13 @@ class MercuryRPC::LocalLooper {
 
  public:
   LocalLooper(MercuryRPC* rpc, const RPCOptions& options)
-      : pool_(NULL),
+      : pool_(options.extra_workers),
         rpc_(rpc),
         shutting_down_(NULL),
         bg_cv_(&mutex_),
         has_leader_(false),
         bg_loops_(0),
-        max_bg_loops_(4) {
+        max_bg_loops_(options.num_io_threads_) {
     rpc_->Ref();
   }
 
