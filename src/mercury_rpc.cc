@@ -93,7 +93,7 @@ hg_return_t MercuryRPC::If_Message_cb(hg_proc_t proc, void* data) {
 SRV_CB(NONOP)
 SRV_CB(FSTAT)
 SRV_CB(MKDIR)
-SRV_CB(MKNOD)
+SRV_CB(FCRET)
 SRV_CB(CHMOD)
 SRV_CB(CHOWN)
 SRV_CB(UNLNK)
@@ -155,7 +155,7 @@ hg_return_t MercuryRPC::Client::SaveReply(const hg_cb_info* info) {
 CLI_STUB(NONOP)
 CLI_STUB(FSTAT)
 CLI_STUB(MKDIR)
-CLI_STUB(MKNOD)
+CLI_STUB(FCRET)
 CLI_STUB(CHMOD)
 CLI_STUB(CHOWN)
 CLI_STUB(UNLNK)
@@ -212,7 +212,7 @@ MercuryRPC::MercuryRPC(bool listen, const RPCOptions& options)
   Register_NONOP();
   Register_FSTAT();
   Register_MKDIR();
-  Register_MKNOD();
+  Register_FCRET();
   Register_CHMOD();
   Register_CHOWN();
   Register_UNLNK();
