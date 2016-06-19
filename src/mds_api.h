@@ -98,7 +98,7 @@ class MDS::RPC::CLI : public MDS {
   typedef rpc::If::Message Msg;
 
  public:
-  CLI(rpc::If* stub);
+  CLI(rpc::If* stub) : stub_(stub) {}
   virtual ~CLI();
 
 #define DEC_OP(OP) virtual Status OP(const OP##Options&, OP##Ret*);
@@ -118,7 +118,7 @@ class MDS::RPC::SRV : public rpc::If {
   typedef rpc::If::Message Msg;
 
  public:
-  SRV(MDS* mds);
+  SRV(MDS* mds) : mds_(mds) {}
   virtual ~SRV();
 
 #define DEC_RPC(OP) virtual void OP(Msg& in, Msg& out);

@@ -26,6 +26,7 @@ include build_config.mk
 
 TESTS = \
 	gigaplus_test \
+	mds_api_test \
 	mercury_test
 
 # Put the object files in a subdirectory, but the application at the top of the object dir.
@@ -153,6 +154,9 @@ $(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT): $(SHARED_LIBOBJECTS)
 
 $(STATIC_OUTDIR)/gigaplus_test:src/gigaplus_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/gigaplus_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/mds_api_test:src/mds_api_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/mds_api_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/mercury_test:src/mercury_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/mercury_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)

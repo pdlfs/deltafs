@@ -11,6 +11,12 @@
 
 namespace pdlfs {
 
+MDS::~MDS() {}
+
+MDS::RPC::CLI::~CLI() {}
+
+MDS::RPC::SRV::~SRV() {}
+
 Status MDS::RPC::CLI::Fstat(const FstatOptions& opts, FstatRet* ret) {
   Status s;
   Msg in;
@@ -217,5 +223,13 @@ void MDS::RPC::SRV::LSDIR(Msg& in, Msg& out) {
     out.err = s.err_code();
   }
 }
+
+void MDS::RPC::SRV::NONOP(Msg& in, Msg& out) {}
+void MDS::RPC::SRV::MKDIR(Msg& in, Msg& out) {}
+void MDS::RPC::SRV::CHMOD(Msg& in, Msg& out) {}
+void MDS::RPC::SRV::CHOWN(Msg& in, Msg& out) {}
+void MDS::RPC::SRV::UNLNK(Msg& in, Msg& out) {}
+void MDS::RPC::SRV::RENME(Msg& in, Msg& out) {}
+void MDS::RPC::SRV::RMDIR(Msg& in, Msg& out) {}
 
 }  // namespace pdlfs
