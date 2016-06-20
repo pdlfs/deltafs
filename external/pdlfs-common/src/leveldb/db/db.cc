@@ -38,7 +38,7 @@ Status DB::Delete(const WriteOptions& opt, const Slice& key) {
   return Write(opt, &batch);
 }
 
-Status DestroyDB(const std::string& dbname, const Options& options) {
+Status DestroyDB(const std::string& dbname, const DBOptions& options) {
   Env* env = options.env;
   std::vector<std::string> filenames;
   // Ignore error in case directory does not exist

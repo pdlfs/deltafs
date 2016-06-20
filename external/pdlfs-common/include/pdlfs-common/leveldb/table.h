@@ -16,7 +16,7 @@
 
 namespace pdlfs {
 
-struct Options;
+struct DBOptions;
 struct ReadOptions;
 
 class Block;
@@ -31,6 +31,8 @@ class TableStats;
 // immutable and persistent.  A Table may be safely accessed from
 // multiple threads without external synchronization.
 class Table {
+  typedef DBOptions Options;
+
  public:
   // Attempt to open the table that is stored in bytes [0..file_size)
   // of "file", and read the metadata entries necessary to allow
@@ -85,8 +87,8 @@ class Table {
   void ReadStats(const Slice& stats_handle_value);
 
   // No copying allowed
-  Table(const Table&);
   void operator=(const Table&);
+  Table(const Table&);
 };
 
 }  // namespace pdlfs

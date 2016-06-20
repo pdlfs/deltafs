@@ -168,6 +168,8 @@ class Version {
 };
 
 class VersionSet {
+  typedef DBOptions Options;
+
  public:
   VersionSet(const std::string& dbname, const Options* options,
              TableCache* table_cache, const InternalKeyComparator*);
@@ -320,6 +322,8 @@ class VersionSet {
 
 // A Compaction encapsulates information about a compaction.
 class Compaction {
+  typedef DBOptions Options;
+
  public:
   ~Compaction();
 

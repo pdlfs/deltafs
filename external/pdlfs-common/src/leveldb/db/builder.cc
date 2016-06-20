@@ -23,6 +23,9 @@
 
 namespace pdlfs {
 
+namespace {
+typedef DBOptions Options;
+
 static Status CheckFirstKey(Table* table, const Options& options,
                             const InternalKey& key) {
   Slice reported = TableStats::FirstKey(table);
@@ -70,8 +73,9 @@ static Status LoadAndCheckTable(const Options& options, TableCache* table_cache,
   delete it;
   return s;
 }
+}  // namespace
 
-Status BuildTable(const std::string& dbname, Env* env, const Options& options,
+Status BuildTable(const std::string& dbname, Env* env, const DBOptions& options,
                   TableCache* table_cache, Iterator* iter, FileMetaData* meta) {
   Status s;
   assert(meta->number != 0);

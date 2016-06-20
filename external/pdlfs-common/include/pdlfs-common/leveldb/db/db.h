@@ -34,6 +34,9 @@ struct Range {
 // A DB is safe for concurrent access from multiple threads without
 // any external synchronization.
 class DB {
+ protected:
+  typedef DBOptions Options;
+
  public:
   // Open the database with the specified "name".
   // Stores a pointer to a heap-allocated database in *dbptr and returns
@@ -182,18 +185,18 @@ class DB {
 
  private:
   // No copying allowed
-  DB(const DB&);
   void operator=(const DB&);
+  DB(const DB&);
 };
 
 // Destroy the contents of the specified database.
 // Be very careful using this method.
-Status DestroyDB(const std::string& dbname, const Options& options);
+Status DestroyDB(const std::string& dbname, const DBOptions& options);
 
 // If a DB cannot be opened, you may attempt to call this method to
 // resurrect as much of the contents of the database as possible.
 // Some data may be lost, so be careful when calling this function
 // on a database that contains important information.
-Status RepairDB(const std::string& dbname, const Options& options);
+Status RepairDB(const std::string& dbname, const DBOptions& options);
 
 }  // namespace pdlfs

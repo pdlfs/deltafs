@@ -1488,6 +1488,9 @@ void DBImpl::GetApproximateSizes(const Range* range, int n, uint64_t* sizes) {
   }
 }
 
+namespace {
+typedef DBOptions Options;
+
 static Status FetchFirstKey(Table* table, Iterator* iter, InternalKey* result,
                             const Options& options) {
   Status s;
@@ -1545,6 +1548,7 @@ static Status FetchLastKey(Table* table, Iterator* iter, InternalKey* result,
   }
   return s;
 }
+}  // namespace
 
 Status DBImpl::LoadLevel0Table(InsertionState* insert) {
   Status s;

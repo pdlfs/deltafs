@@ -82,6 +82,8 @@ class StringSource : public RandomAccessFile {
 typedef std::map<std::string, std::string, STLLessThan> KVMap;
 
 class TableWriter {
+  typedef DBOptions Options;
+
  private:
   StringSink file_;
   TableBuilder builder_;
@@ -122,6 +124,8 @@ class TableWriter {
 };
 
 class TableReader {
+  typedef DBOptions Options;
+
  private:
   StringSource file_;
   Table* table_;
@@ -163,7 +167,10 @@ static const int kNumEntries = 1024;
 
 static const int kTableKeyLength = 16;
 
-class TableTest {};
+class TableTest {
+ protected:
+  typedef DBOptions Options;
+};
 
 static std::string RandomKey(Random* rnd) {
   return test::RandomKey(rnd, kTableKeyLength);

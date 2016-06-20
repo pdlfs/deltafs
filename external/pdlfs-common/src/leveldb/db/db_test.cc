@@ -194,6 +194,9 @@ class SpecialEnv : public EnvWrapper {
 };
 
 class DBTest {
+ protected:
+  typedef DBOptions Options;
+
  private:
   const FilterPolicy* filter_policy_;
 
@@ -2127,6 +2130,7 @@ std::string MakeKey(unsigned int num) {
 }
 
 void BM_LogAndApply(int iters, int num_base_files) {
+  typedef DBOptions Options;
   std::string dbname = test::TmpDir() + "/leveldb_test_benchmark";
   DestroyDB(dbname, Options());
 

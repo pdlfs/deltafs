@@ -35,7 +35,7 @@ enum CompressionType {
 };
 
 // Options to control the behavior of a database (passed to DB::Open)
-struct Options {
+struct DBOptions {
   // -------------------
   // Parameters that affect behavior
 
@@ -183,7 +183,7 @@ struct Options {
   // Default: 12
   int l0_hard_limit;
 
-  Options();
+  DBOptions();
 };
 
 // Options that control read operations

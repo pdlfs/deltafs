@@ -15,7 +15,7 @@
 /* clang-format off */
 namespace pdlfs {
 
-struct Options;
+struct DBOptions;
 struct FileMetaData;
 
 class Env;
@@ -31,7 +31,7 @@ class VersionEdit;
 extern Status BuildTable(
     const std::string& dbname,
     Env* env,
-    const Options& options,
+    const DBOptions& options,
     TableCache* table_cache,
     Iterator* iter,
     FileMetaData* meta

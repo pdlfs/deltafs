@@ -18,6 +18,9 @@
 namespace pdlfs {
 
 class AutoCompactTest {
+ protected:
+  typedef DBOptions Options;
+
  public:
   std::string dbname_;
   Cache* tiny_cache_;

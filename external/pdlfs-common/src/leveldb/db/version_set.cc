@@ -27,6 +27,9 @@
 
 namespace pdlfs {
 
+namespace {
+typedef DBOptions Options;
+
 // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
 // stop building a single file in a level->level+1 compaction.
 static int64_t MaxGrandParentOverlapBytes(const Options* options) {
@@ -65,6 +68,7 @@ static int64_t TotalFileSize(const std::vector<FileMetaData*>& files) {
   }
   return sum;
 }
+}  // namespace
 
 Version::~Version() {
   assert(refs_ == 0);

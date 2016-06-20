@@ -18,7 +18,7 @@
 
 namespace pdlfs {
 
-Options::Options()
+DBOptions::DBOptions()
     : comparator(BytewiseComparator()),
       create_if_missing(false),
       error_if_exists(false),
@@ -65,11 +65,11 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
   if (static_cast<V>(*ptr) > maxvalue) *ptr = maxvalue;
   if (static_cast<V>(*ptr) < minvalue) *ptr = minvalue;
 }
-Options SanitizeOptions(const std::string& dbname,
-                        const InternalKeyComparator* icmp,
-                        const InternalFilterPolicy* ipolicy,
-                        const Options& src) {
-  Options result = src;
+DBOptions SanitizeOptions(const std::string& dbname,
+                          const InternalKeyComparator* icmp,
+                          const InternalFilterPolicy* ipolicy,
+                          const DBOptions& src) {
+  DBOptions result = src;
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
   ClipToRange(&result.max_open_files, 64 + config::kNumNonTableCacheFiles,

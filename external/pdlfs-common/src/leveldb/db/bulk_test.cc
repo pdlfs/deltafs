@@ -23,6 +23,9 @@
 namespace pdlfs {
 
 class BulkTest {
+ protected:
+  typedef DBOptions Options;
+
  public:
   std::vector<const Snapshot*> snapshots_;
   std::string dbname_;

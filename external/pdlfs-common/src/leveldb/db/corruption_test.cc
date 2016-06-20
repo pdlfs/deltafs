@@ -55,6 +55,9 @@ class ErrorEnv : public EnvWrapper {
 }  // namespace
 
 class CorruptionTest {
+ protected:
+  typedef DBOptions Options;
+
  public:
   ErrorEnv env_;
   std::string dbname_;

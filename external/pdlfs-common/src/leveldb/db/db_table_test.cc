@@ -144,6 +144,9 @@ typedef std::map<std::string, std::string, STLLessThan> KVMap;
 // Helper class for tests to unify the interface between
 // BlockBuilder/TableBuilder and Block/Table.
 class Constructor {
+ protected:
+  typedef DBOptions Options;
+
  public:
   explicit Constructor(const Comparator* cmp) : data_(STLLessThan(cmp)) {}
   virtual ~Constructor() {}
@@ -410,6 +413,9 @@ static const TestArgs kTestArgList[] = {
 static const int kNumTestArgs = sizeof(kTestArgList) / sizeof(kTestArgList[0]);
 
 class Harness {
+ protected:
+  typedef DBOptions Options;
+
  public:
   Harness() : constructor_(NULL) {}
 
@@ -763,7 +769,10 @@ static bool Between(uint64_t val, uint64_t low, uint64_t high) {
   return result;
 }
 
-class TableTest {};
+class TableTest {
+ protected:
+  typedef DBOptions Options;
+};
 
 TEST(TableTest, ApproximateOffsetOfPlain) {
   TableConstructor c(BytewiseComparator());

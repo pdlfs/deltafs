@@ -17,10 +17,12 @@
 
 namespace pdlfs {
 
+struct DBOptions;
 class Comparator;
-struct Options;
 
 class BlockBuilder {
+  typedef DBOptions Options;
+
  public:
   explicit BlockBuilder(const Options* options, const Comparator* cmp = NULL);
 
@@ -53,8 +55,8 @@ class BlockBuilder {
   std::string last_key_;
 
   // No copying allowed
-  BlockBuilder(const BlockBuilder&);
   void operator=(const BlockBuilder&);
+  BlockBuilder(const BlockBuilder&);
 };
 
 }  // namespace pdlfs

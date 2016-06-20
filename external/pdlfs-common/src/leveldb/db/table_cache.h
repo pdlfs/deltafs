@@ -25,6 +25,8 @@ class Env;
 
 // Thread-safe (provides internal synchronization)
 class TableCache {
+  typedef DBOptions Options;
+
  public:
   TableCache(const std::string& dbname, const Options* options, size_t entries);
   ~TableCache();
