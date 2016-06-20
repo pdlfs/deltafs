@@ -244,6 +244,10 @@ class Logger {
   Logger() {}
   virtual ~Logger();
 
+  // Return the global logger that is shared by the entire process.
+  // The result of Default() belongs to the system and cannot be deleted.
+  static Logger* Default();
+
   // Write an entry to the log file with the specified format.
   virtual void Logv(const char* format, va_list ap) = 0;
 

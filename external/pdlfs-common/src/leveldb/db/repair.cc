@@ -62,6 +62,9 @@ class Repairer {
         next_file_number_(1) {
     // TableCache can be small since we expect each table to be opened once.
     table_cache_ = new TableCache(dbname_, &options_, 10);
+    if (options_.info_log == Logger::Default()) {
+      owns_info_log_ = false;
+    }
   }
 
   ~Repairer() {

@@ -50,8 +50,7 @@ int RunAllTests(int* argc, char*** argv) {
 #endif
   const char* matcher = getenv("TESTS");
 #if defined(GLOG)
-  FLAGS_logtostderr = true;
-  ::google::InitGoogleLogging("TEST");
+  ::google::InitGoogleLogging((*argv)[0]);
   ::google::InstallFailureSignalHandler();
 #endif
   int num = 0;

@@ -141,6 +141,9 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
   versions_ =
       new VersionSet(dbname_, &options_, table_cache_, &internal_comparator_);
 
+  if (options_.info_log == Logger::Default()) {
+    owns_info_log_ = false;
+  }
   if (!allow_compaction_) {
     allow_seek_compaction_ = false;
   }
