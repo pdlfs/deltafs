@@ -25,7 +25,6 @@ $(shell CC="$(CC)" CXX="$(CXX)" TARGET_OS="$(TARGET_OS)" \
 include build_config.mk
 
 TESTS = \
-	gigaplus_test \
 	mds_api_test \
 	mercury_test
 
@@ -151,9 +150,6 @@ $(STATIC_OUTDIR)/libdeltafs-static.a:$(STATIC_LIBOBJECTS)
 $(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT): $(SHARED_LIBOBJECTS)
 	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libdeltafs.$(PLATFORM_SHARED_EXT) $(SHARED_LIBOBJECTS) \
 		-o $(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT) $(LIBS)
-
-$(STATIC_OUTDIR)/gigaplus_test:src/gigaplus_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS)
-	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/gigaplus_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/mds_api_test:src/mds_api_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/mds_api_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
