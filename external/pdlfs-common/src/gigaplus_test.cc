@@ -472,6 +472,68 @@ TEST(DirIndexTest, Migration4) {
   ASSERT_TRUE(moved > 0 && moved < 10000);
 }
 
+static void PrintStates(const std::vector<int>& states) {
+  static int run = 0;
+  fprintf(stderr, "case %d:\n", ++run);
+  fprintf(stderr, "num_server: %d\n", int(states.size()));
+  int max = *std::max_element(states.begin(), states.end());
+  fprintf(stderr, "max: %d\n", max);
+  int min = *std::min_element(states.begin(), states.end());
+  fprintf(stderr, "min: %d\n", min);
+  fprintf(stderr, "max-min diff: %.2f%%\n",
+          (double(max) / double(min) - 1) * 100);
+#if 0
+  Random rnd(301);
+  fprintf(stderr, "samples: [");
+  for (int i = 0; i < 8; i++) {
+    int a = rnd.Uniform(states.size());
+    fprintf(stderr, " %d:%d ", a, states[a]);
+  }
+  fprintf(stderr, "]\n");
+#endif
+}
+
+TEST(DirIndexTest, RandomServer1) {
+  for (size_t num_servers = 2; num_servers <= 4096; num_servers *= 2) {
+    std::vector<int> states(num_servers);
+    int num_dirs = 10 * 1000 * 1000;
+    for (int i = 0; i < num_dirs; i++) {
+      states[DirIndex::RandomServer(File(i), 0) % num_servers]++;
+    }
+    PrintStates(states);
+  }
+}
+
+class Client {
+ public:
+  int PickupServer(const std::string& dir) {
+    std::pair<int, int> r = DirIndex::RandomServers(dir, 0);
+    int s1 = r.first % states_.size();
+    int s2 = r.second % states_.size();
+    if (states_[s1] < states_[s2]) {
+      states_[s1]++;
+      return s1;
+    } else {
+      states_[s2]++;
+      return s2;
+    }
+  }
+  Client(size_t num_servers) : states_(num_servers) {}
+  std::vector<int> states_;
+};
+
+TEST(DirIndexTest, RandomServer2) {
+  for (size_t num_servers = 2; num_servers <= 4096; num_servers *= 2) {
+    std::vector<int> states(num_servers);
+    Client client(num_servers);
+    int num_dirs = 10 * 1000 * 1000;
+    for (int i = 0; i < num_dirs; i++) {
+      states[client.PickupServer(File(i))]++;
+    }
+    PrintStates(states);
+  }
+}
+
 }  // namespace pdlfs
 
 int main(int argc, char** argv) {

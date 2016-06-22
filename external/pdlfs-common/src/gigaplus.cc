@@ -98,7 +98,7 @@ static inline int ToParentIndex(int index) {
 // Convert a variable-length string to a 8-byte hash.
 // Current implementation employs XXHash.
 // Alternatively, we could also use MurmurHash or CityHash.
-static inline void GIGAHash(const std::string& buffer, char* result) {
+static inline void GIGAHash(const Slice& buffer, char* result) {
   uint64_t h = XXH64(buffer.data(), buffer.size(), 0) - 17241709254077376921LLU;
   memcpy(result, &h, 8);
 }
@@ -492,7 +492,7 @@ int DirIndex::NewIndexForSplitting(int index) const {
 // Figure out the partition responsible for the given file,
 // according to the the current directory index states and the hash
 // value of the file name.
-int DirIndex::GetIndex(const std::string& name) const {
+int DirIndex::GetIndex(const Slice& name) const {
   char hash[8];
   DirIndex::Hash(name, hash);
 
@@ -509,7 +509,7 @@ int DirIndex::GetIndex(const std::string& name) const {
 // according to the current directory mapping status and the hash of
 // that file name. Only servers currently holding a partition can be
 // selected to accommodate new files.
-int DirIndex::SelectServer(const std::string& name) const {
+int DirIndex::SelectServer(const Slice& name) const {
   return GetServerForIndex(GetIndex(name));
 }
 
@@ -522,7 +522,7 @@ bool DirIndex::ToBeMigrated(int index, const char* hash) {
 }
 
 // Calculate the hash for a given string.
-Slice DirIndex::Hash(const std::string& name, char* scratch) {
+Slice DirIndex::Hash(const Slice& name, char* scratch) {
   GIGAHash(name, scratch);
   return Slice(scratch, 8);
 }
@@ -543,5 +543,22 @@ DirIndex::DirIndex(int64_t d, int16_t s, const DirIndexOptions* options) {
 }
 
 DirIndex::~DirIndex() { delete rep_; }
+
+// Return a random server for a specified directory.
+int DirIndex::RandomServer(const Slice& dir, int seed) {
+  return XXH32(dir.data(), dir.size(), seed);
+}
+
+// Return a pair of random servers for a specified directory.
+std::pair<int, int> DirIndex::RandomServers(const Slice& dir, int seed) {
+  uint64_t h = XXH64(dir.data(), dir.size(), seed);
+  char* tmp = reinterpret_cast<char*>(&h);
+  int s1;
+  int s2;
+  memcpy(&s1, tmp, 4);
+  memcpy(&s2, tmp + 4, 4);
+  std::pair<int, int> r = std::make_pair(s1, s2);
+  return r;
+}
 
 }  // namespace pdlfs

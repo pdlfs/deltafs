@@ -10,6 +10,7 @@
  */
 
 #include <stdint.h>
+#include <utility>
 
 #include "pdlfs-common/slice.h"
 
@@ -64,10 +65,10 @@ class DirIndex {
   int GetServerForIndex(int index) const;
 
   // Return the partition responsible for the given file.
-  int GetIndex(const std::string& name) const;
+  int GetIndex(const Slice& name) const;
 
   // Return the server responsible for the given file.
-  int SelectServer(const std::string& name) const;
+  int SelectServer(const Slice& name) const;
 
   // Return true iff the bit is set.
   bool GetBit(int index) const;
@@ -103,10 +104,16 @@ class DirIndex {
   static bool ToBeMigrated(int index, const char* hash);
 
   // Return the hash value of the specified name string.
-  static Slice Hash(const std::string& name, char* scratch);
+  static Slice Hash(const Slice& name, char* scratch);
 
   // Return the server responsible for a given index.
   static int MapIndexToServer(int index, int zeroth_server, int num_servers);
+
+  // Return a random server for a specified directory.
+  static int RandomServer(const Slice& dir, int seed);
+
+  // Return a pair of random servers for a specified directory.
+  static std::pair<int, int> RandomServers(const Slice& dir, int seed);
 
  private:
   struct Ref;
