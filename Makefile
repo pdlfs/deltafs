@@ -25,11 +25,8 @@ $(shell CC="$(CC)" CXX="$(CXX)" TARGET_OS="$(TARGET_OS)" \
 include build_config.mk
 
 TESTS = \
-	mds_api_test \
-	mercury_test
-
-# Put the object files in a subdirectory, but the application at the top of the object dir.
-PROGNAMES := $(notdir $(TESTS))
+	libdeltafs/mds_api_test \
+	libdeltafs/mercury_test
 
 CFLAGS += -I./external/pdlfs-common/include -I./include $(PLATFORM_CCFLAGS) $(OPT)
 CXXFLAGS += -I./external/pdlfs-common/include -I./include $(PLATFORM_CXXFLAGS) $(OPT)
@@ -41,16 +38,18 @@ OUTDIR=build
 
 STATIC_OUTDIR=out-static
 
-STATIC_PROGRAMS := $(addprefix $(STATIC_OUTDIR)/, $(PROGNAMES))
+# Put the object files in a subdirectory, but the application at the top of the object dir.
+TEST_PROGRAMS := $(addprefix $(STATIC_OUTDIR)/, $(notdir $(TESTS)))
 
 TESTUTIL := $(STATIC_OUTDIR)/external/pdlfs-common/src/testutil.o
 TESTHARNESS := $(STATIC_OUTDIR)/external/pdlfs-common/src/testharness.o $(TESTUTIL)
 
 STATIC_EXT_LIBOBJECTS := $(addprefix $(STATIC_OUTDIR)/, $(EXT_SOURCES:.cc=.o))
 STATIC_LIBOBJECTS := $(addprefix $(STATIC_OUTDIR)/, $(SOURCES:.cc=.o))
+STATIC_SRVOBJECTS := $(addprefix $(STATIC_OUTDIR)/, $(SRV_SOURCES:.cc=.o))
 
 STATIC_TESTOBJS := $(addprefix $(STATIC_OUTDIR)/, $(addsuffix .o, $(TESTS)))
-STATIC_ALLOBJS := $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(STATIC_TESTOBJS) $(TESTHARNESS)
+STATIC_ALLOBJS := $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(STATIC_SRVOBJECTS) $(STATIC_TESTOBJS) $(TESTHARNESS)
 
 SHARED_OUTDIR=out-shared
 
@@ -63,7 +62,8 @@ ALL = \
 	$(STATIC_OUTDIR)/libpdlfs-common-static.a \
 	$(SHARED_OUTDIR)/libpdlfs-common.$(PLATFORM_SHARED_EXT) \
 	$(STATIC_OUTDIR)/libdeltafs-static.a \
-	$(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT)
+	$(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT) \
+        $(STATIC_OUTDIR)/deltafs_server
 
 default: all
 
@@ -71,8 +71,11 @@ all: $(ALL)
 	mkdir -p $(OUTDIR)
 	cd $(OUTDIR) && ln -fs ../$(STATIC_OUTDIR)/*.a .
 	cd $(OUTDIR) && ln -fs ../$(SHARED_OUTDIR)/*.$(PLATFORM_SHARED_EXT) .
+	cd $(OUTDIR) && ln -fs ../$(STATIC_OUTDIR)/deltafs_server .
 
-check: $(STATIC_PROGRAMS)
+tests: $(TEST_PROGRAMS)
+
+check: tests
 	for t in $(notdir $(TESTS)); do echo "***** Running $$t"; $(STATIC_OUTDIR)/$$t || exit 1; done
 
 clean:
@@ -94,7 +97,10 @@ $(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb/db: | $(STATIC_OUTDIR)
 $(STATIC_OUTDIR)/external/pdlfs-common/modules/rados: | $(STATIC_OUTDIR)
 	mkdir -p $@
 
-$(STATIC_OUTDIR)/src: | $(STATIC_OUTDIR)
+$(STATIC_OUTDIR)/src/libdeltafs: | $(STATIC_OUTDIR)
+	mkdir -p $@
+
+$(STATIC_OUTDIR)/src/server: | $(STATIC_OUTDIR)
 	mkdir -p $@
 
 .PHONY: STATIC_OBJDIRS
@@ -103,7 +109,8 @@ STATIC_OBJDIRS: \
 	$(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb \
 	$(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb/db \
 	$(STATIC_OUTDIR)/external/pdlfs-common/modules/rados \
-	$(STATIC_OUTDIR)/src
+	$(STATIC_OUTDIR)/src/libdeltafs \
+	$(STATIC_OUTDIR)/src/server
 
 $(STATIC_ALLOBJS): | STATIC_OBJDIRS
 
@@ -122,7 +129,7 @@ $(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb/db: | $(SHARED_OUTDIR)
 $(SHARED_OUTDIR)/external/pdlfs-common/modules/rados: | $(SHARED_OUTDIR)
 	mkdir -p $@
 
-$(SHARED_OUTDIR)/src: | $(SHARED_OUTDIR)
+$(SHARED_OUTDIR)/src/libdeltafs: | $(SHARED_OUTDIR)
 	mkdir -p $@
 
 .PHONY: STHARED_OBJDIRS
@@ -131,7 +138,7 @@ SHARED_OBJDIRS: \
 	$(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb \
 	$(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb/db \
 	$(SHARED_OUTDIR)/external/pdlfs-common/modules/rados \
-	$(SHARED_OUTDIR)/src
+	$(SHARED_OUTDIR)/src/libdeltafs
 
 $(SHARED_ALLOBJS): | SHARED_OBJDIRS
 
@@ -151,11 +158,14 @@ $(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT): $(SHARED_LIBOBJECTS)
 	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libdeltafs.$(PLATFORM_SHARED_EXT) $(SHARED_LIBOBJECTS) \
 		-o $(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT) $(LIBS)
 
-$(STATIC_OUTDIR)/mds_api_test:src/mds_api_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS)
-	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/mds_api_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+$(STATIC_OUTDIR)/deltafs_server:$(STATIC_SRVOBJECTS) $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) $(STATIC_SRVOBJECTS) $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) -o $@ $(LIBS)
 
-$(STATIC_OUTDIR)/mercury_test:src/mercury_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS)
-	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/mercury_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+$(STATIC_OUTDIR)/mds_api_test:src/libdeltafs/mds_api_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/libdeltafs/mds_api_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/mercury_test:src/libdeltafs/mercury_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/libdeltafs/mercury_test.cc $(STATIC_LIBOBJECTS) $(STATIC_EXT_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/%.o: %.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@

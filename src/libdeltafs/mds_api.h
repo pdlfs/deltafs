@@ -66,6 +66,9 @@ class MDS {
   };
   virtual Status Listdir(const ListdirOptions& options, ListdirRet* ret) = 0;
 
+  class SRV;
+  class CLI;
+
  private:
   // No copying allowed
   void operator=(const MDS&);

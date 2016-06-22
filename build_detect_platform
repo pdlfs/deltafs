@@ -142,13 +142,15 @@ EXT_DIRS="$PREFIX/external/pdlfs-common/src $PREFIX/external/pdlfs-common/module
 set -f # temporarily disable globbing so that our patterns aren't expanded
 PRUNE_TEST="-name *test*.cc -prune"
 EXT_SOURCE_FILES=`find $EXT_DIRS $PRUNE_TEST -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
-SOURCE_FILES=`find $PREFIX/src $PRUNE_TEST -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
+SOURCE_FILES=`find $PREFIX/src/libdeltafs $PRUNE_TEST -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
+SRV_SOURCE_FILES=`find $PREFIX/src/server $PRUNE_TEST -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
 set +f # re-enable globbing
 
 # The sources consist of the portable files, plus the platform-specific
 # port file.
 echo "EXT_SOURCES=`echo $EXT_SOURCE_FILES`" >> $OUTPUT
 echo "SOURCES=`echo $SOURCE_FILES`" >> $OUTPUT
+echo "SRV_SOURCES=`echo $SRV_SOURCE_FILES`" >> $OUTPUT
 
 if [ "$CROSS_COMPILE" = "true" ]; then
     # Cross-compiling; do not try any compilation tests.
