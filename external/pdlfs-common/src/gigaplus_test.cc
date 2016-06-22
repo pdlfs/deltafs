@@ -474,12 +474,12 @@ TEST(DirIndexTest, Migration4) {
 
 static void PrintStates(const std::vector<int>& states) {
   static int run = 0;
-  fprintf(stderr, "case %d:\n", ++run);
-  fprintf(stderr, "num_server: %d\n", int(states.size()));
+  fprintf(stderr, "case %02d: ", ++run);
+  fprintf(stderr, "num_server: %4d\t", int(states.size()));
   int max = *std::max_element(states.begin(), states.end());
-  fprintf(stderr, "max: %d\n", max);
+  fprintf(stderr, "max: %d\t", max);
   int min = *std::min_element(states.begin(), states.end());
-  fprintf(stderr, "min: %d\n", min);
+  fprintf(stderr, "min: %d\t", min);
   fprintf(stderr, "max-min diff: %.2f%%\n",
           (double(max) / double(min) - 1) * 100);
 #if 0
