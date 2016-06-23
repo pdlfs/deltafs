@@ -18,10 +18,11 @@ namespace pdlfs {
 
 enum KeyType {
   kDirEntType = 1,      // File or directory entry with embedded inode
-  kDirIdxType = 2,      // Directory partition metadata (deltafs, indexfs only)
-  kSuperBlockType = 3,  // File system superblock
-  kDataBlockType = 4,   // Data block for files (tablefs only)
-  kInodeType = 5  // Dedicated inode entry that can be hard linked(tablefs only)
+  kDirIdxType = 2, // GIGA+ directory index (deltafs, indexfs only)
+  kDirMetaType = 3,      // Directory partition metadata (deltafs, indexfs only)
+  kSuperBlockType = 4,  // File system superblock
+  kDataBlockType = 5,   // Data block for files (tablefs only)
+  kInoType = 6  // Dedicated inode entry that can be hard linked (tablefs only)
 };
 
 class Key {
