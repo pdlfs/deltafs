@@ -27,12 +27,12 @@ set (PDLFS_COMMON_VERSION_PATCH 0)
 
 # main directory sources and tests
 set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c.cc dbfiles.cc
-     dbfiles.cc env.cc hash.cc histogram.cc log_reader.cc log_writer.cc
-     osd.cc osd_internal.cc port_posix.cc posix_env.cc slice.cc status.cc
-     strutil.cc testharness.cc testutil.cc)
+     dbfiles.cc env.cc gigaplus.cc hash.cc histogram.cc log_reader.cc
+     log_writer.cc osd.cc osd_internal.cc port_posix.cc posix_env.cc
+     slice.cc status.cc strutil.cc testharness.cc testutil.cc xxhash.cc)
 set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
-     crc32c_test.cc dbfiles_test.cc env_test.cc hash_test.cc log_test.cc
-     osd_test.cc)
+     crc32c_test.cc dbfiles_test.cc env_test.cc gigaplus_test.cc
+     hash_test.cc log_test.cc osd_test.cc)
 
 # leveldb directory sources and tests
 set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
