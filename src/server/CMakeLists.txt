@@ -1,5 +1,5 @@
 #
-# CMakeLists.txt  cmake file for libdeltafs directory
+# CMakeLists.txt  cmake file for server directory
 # 16-Jun-2016  chuck@ece.cmu.edu
 #
 
@@ -15,20 +15,12 @@ find_package (Threads REQUIRED)
 include (CheckCXXCompilerFlag)
 
 #
-# library version set here (e.g. for generating shared libs if we want
-#
-set (DELTAFS_VERSION_MAJOR 1)
-set (DELTAFS_VERSION_MINOR 0)
-set (DELTAFS_VERSION_PATCH 0)
-
-#
 # list of source files and tests
 #
 
 # main directory sources and tests
-set (deltafs-srcs deltafs_api.cc mds_api.cc mds_srv.cc mds_types.cc
-     mercury_rpc.cc rpc.cc)
-set (deltafs-tests mds_api_test.cc mercury_test.cc)
+set (deltafs-srvr-srcs server_proc.cc)
+set (deltafs-srvr-tests )
 
 #
 # here's the compiler/machine/os dependent stuff...
@@ -63,48 +55,19 @@ endif ()
 #
 
 #
-# generate complete list of files and tests from the parts
+# build server
 #
-set (deltafs-all-srcs ${deltafs-srcs})
-set (deltafs-all-tests ${deltafs-tests})
-
-#
-# build static lib and arrange for targets to -I our include dir 
-#
-add_library (deltafs-static STATIC ${deltafs-all-srcs})
-target_include_directories (deltafs-static PUBLIC "../../include")
-target_link_libraries (deltafs-static pdlfs-common-static)
+add_executable (deltafs-srvr ${deltafs-srvr-srcs})
+target_link_libraries (deltafs-srvr deltafs)
 if (CMAKE_THREAD_LIBS_INIT)
-  target_link_libraries (deltafs-static "${CMAKE_THREAD_LIBS_INIT}")
+  target_link_libraries (deltafs-srvr "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
-
-#
-# build shared lib and arrange for targets to -I our include dir 
-#
-set(CMAKE_MACOSX_RPATH 1)
-add_library (deltafs SHARED ${deltafs-all-srcs})
- target_include_directories (deltafs PUBLIC "../../include")
-target_link_libraries (deltafs pdlfs-common)
-if (CMAKE_THREAD_LIBS_INIT)
-  target_link_libraries (deltafs "${CMAKE_THREAD_LIBS_INIT}")
-endif ()
-set (deltafs-vers
-    "${DELTAFS_VERSION_MAJOR}.${DELTAFS_VERSION_MINOR}")
-set (deltafs-vers
-    "${deltafs-vers}.${DELTAFS_VERSION_PATCH}")
-set_target_properties(deltafs
-                      PROPERTIES VERSION ${deltafs-vers}
-                      SOVERSION ${DELTAFS_VERSION_MAJOR})
 
 #
 # "make install" rules
 #
-install (TARGETS deltafs-static deltafs
-         ARCHIVE DESTINATION lib
-         LIBRARY DESTINATION lib)
-install (DIRECTORY ../../include/deltafs
-         DESTINATION include
-         FILES_MATCHING PATTERN "*.h")
+install (TARGETS deltafs-srvr 
+         RUNTIME DESTINATION bin)
 
 #
 # tests... we EXCLUDE_FROM_ALL the tests and add a custom target
