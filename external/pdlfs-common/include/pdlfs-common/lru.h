@@ -12,6 +12,7 @@
 
 #include <stdlib.h>
 
+#include "pdlfs-common/atomic_pointer.h"
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/map.h"
 #include "pdlfs-common/mutexlock.h"
@@ -22,6 +23,7 @@ template <typename T = void>
 struct LRUEntry {
   T* value;
   void (*deleter)(const Slice&, T* value);
+  port::AtomicPointer pinned_;
   LRUEntry<T>* next_hash;
   LRUEntry<T>* next;
   LRUEntry<T>* prev;
@@ -110,6 +112,7 @@ class LRUCache {
     E* e = static_cast<E*>(malloc(sizeof(E) - 1 + key.size()));
     e->value = value;
     e->deleter = deleter;
+    e->pinned_.NoBarrier_Store(NULL);
     e->charge = charge;
     e->key_length = key.size();
     e->hash = hash;
@@ -124,14 +127,22 @@ class LRUCache {
       Unref(old);
     }
 
+    Compact();
+    return e;
+  }
+
+  void Compact() {
     while (usage_ > capacity_ && lru_.next != &lru_) {
       E* old = lru_.next;
       LRU_Remove(old);
-      table_.Remove(old->key(), old->hash);
-      Unref(old);
+      if (!old->pinned_.Acquire_Load()) {
+        table_.Remove(old->key(), old->hash);
+        Unref(old);
+      } else {
+        LRU_Append(old);
+        break;
+      }
     }
-
-    return e;
   }
 
   E* Lookup(const Slice& key, uint32_t hash) {
@@ -158,6 +169,9 @@ class LRUCache {
     for (E* e = lru_.next; e != &lru_;) {
       E* next = e->next;
       if (e->refs == 1) {
+        // Calls are required to keep active references to all entries pinned
+        // by it so that all entries here are eligible to be deleted.
+        assert(!e->pinned_.Acquire_Load());
         table_.Remove(e->key(), e->hash);
         LRU_Remove(e);
         Unref(e);
@@ -169,6 +183,10 @@ class LRUCache {
   void Erase(const Slice& key, uint32_t hash) {
     E* e = table_.Remove(key, hash);
     if (e != NULL) {
+      // We require our callers to never explicitly erase pinned entries.
+      // The caller will have to make sure an entry is not pinned before
+      // it removes that entry.
+      assert(!e->pinned_.Acquire_Load());
       LRU_Remove(e);
       Unref(e);
     }
