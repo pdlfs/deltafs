@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "mds_types.h"
+#include "pdlfs-common/fstypes.h"
 #include "rpc.h"
 
 namespace pdlfs {
@@ -54,7 +54,7 @@ class MDS {
     Slice name;
   };
   struct LookupRet {
-    DirEntry entry;
+    LookupEntry entry;
   };
   virtual Status Lookup(const LookupOptions& options, LookupRet* ret) = 0;
 
