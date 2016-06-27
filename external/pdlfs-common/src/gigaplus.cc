@@ -145,8 +145,8 @@ static int ComputeIndexFromHash(const char* hash, int n) {
 //     radix: int16_t
 static const size_t kHeadSize = 12;
 
-// Read-only reference to an existing directory index.
-struct DirIndex::Ref {
+// Read-only view to an existing directory index.
+struct DirIndex::View {
   int64_t dir_id() const { return DecodeFixed64(rep_); }
   int16_t zeroth_server() const { return DecodeFixed16(rep_ + 8); }
   int radix() const { return DecodeFixed16(rep_ + 10); }
@@ -198,19 +198,19 @@ struct DirIndex::Ref {
 };
 
 bool DirIndex::ParseDirIndex(const Slice& input, bool paranoid_checks,
-                             Ref* ref) {
+                             View* view) {
   if (input.size() < kHeadSize) {
     return false;
   } else {
-    ref->rep_ = input.data();
-    int r = ref->radix();
+    view->rep_ = input.data();
+    int r = view->radix();
     size_t bitmap_size = input.size() - kHeadSize;
-    ref->bitmap_ = Slice(ref->rep_ + kHeadSize, bitmap_size);
+    view->bitmap_ = Slice(view->rep_ + kHeadSize, bitmap_size);
     if (bitmap_size < ((1 << r) + 7) / 8) {
       return false;
-    } else if (!ref->bit(0)) {
+    } else if (!view->bit(0)) {
       return false;
-    } else if (paranoid_checks && r != ToRadix(ref->HighestBit())) {
+    } else if (paranoid_checks && r != ToRadix(view->HighestBit())) {
       return false;
     }
     return true;
@@ -312,7 +312,7 @@ struct DirIndex::Rep {
     }
   }
 
-  void Merge(const DirIndex::Ref& other) {
+  void Merge(const DirIndex::View& other) {
     DoMerge(other);
     assert(radix() == ToRadix(HighestBit()));
   }
@@ -416,35 +416,44 @@ int DirIndex::Radix() const {
 // Update the directory index by merging another directory index
 // for the same directory.
 bool DirIndex::Update(const Slice& other) {
-  assert(rep_ != NULL);
-  Ref ref;
-  bool checks = options_->paranoid_checks;
-  if (!ParseDirIndex(other, checks, &ref)) {
-    return false;
+  if (rep_ == NULL) {
+    return Reset(other);
   } else {
-    rep_->Merge(ref);
-    return true;
+    View view;
+    bool checks = options_->paranoid_checks;
+    if (!ParseDirIndex(other, checks, &view)) {
+      return false;
+    } else {
+      rep_->Merge(view);
+      return true;
+    }
   }
 }
 
 // Update the directory index by merging another directory index
 // for the same directory.
 bool DirIndex::Update(const DirIndex& other) {
-  assert(rep_ != NULL);
-  rep_->Merge(*other.rep_);
-  return true;
+  const Rep& other_rep = *other.rep_;
+  if (rep_ == NULL) {
+    Rep* new_rep = new Rep(other_rep.dir_id(), other_rep.zeroth_server());
+    new_rep->Merge(other_rep);
+    rep_ = new_rep;
+    return true;
+  } else {
+    rep_->Merge(other_rep);
+    return true;
+  }
 }
 
 // Reset index states.
 bool DirIndex::Reset(const Slice& other) {
-  assert(rep_ != NULL);
-  Ref ref;
+  View view;
   bool checks = options_->paranoid_checks;
-  if (!ParseDirIndex(other, checks, &ref)) {
+  if (!ParseDirIndex(other, checks, &view)) {
     return false;
   } else {
-    Rep* new_rep = new Rep(ref.dir_id(), ref.zeroth_server());
-    new_rep->Merge(ref);
+    Rep* new_rep = new Rep(view.dir_id(), view.zeroth_server());
+    new_rep->Merge(view);
     delete rep_;
     rep_ = new_rep;
     return true;
@@ -512,16 +521,20 @@ int DirIndex::NewIndexForSplitting(int index) const {
   return i;
 }
 
-// Figure out the partition responsible for the given file,
-// according to the the current directory index states and the hash
-// value of the file name.
+// Determine the partition responsible for the given name from the
+// current state of the directory index.
 int DirIndex::GetIndex(const Slice& name) const {
-  assert(rep_ != NULL);
-  char hash[8];
-  DirIndex::Hash(name, hash);
+  char tmp[8];
+  Slice hash = DirIndex::Hash(name, tmp);
+  return HashToIndex(hash);
+}
 
+// Determine the partition responsible for the given hash from the
+// current state of the directory index.
+int DirIndex::HashToIndex(const Slice& hash) const {
+  assert(rep_ != NULL);
   assert(rep_->bit(0));
-  int i = ComputeIndexFromHash(hash, rep_->radix());
+  int i = ComputeIndexFromHash(hash.data(), rep_->radix());
   assert(i < options_->num_virtual_servers);
   while (!rep_->bit(i)) {
     i = ToParentIndex(i);
@@ -529,12 +542,14 @@ int DirIndex::GetIndex(const Slice& name) const {
   return i;
 }
 
-// Pickup a member partition server to hold the given file,
-// according to the current directory mapping status and the hash of
-// that file name. Only servers currently holding a partition can be
-// selected to accommodate new files.
+// Pickup a server to take care of the given name.
 int DirIndex::SelectServer(const Slice& name) const {
   return GetServerForIndex(GetIndex(name));
+}
+
+// Pickup a server to take care of the give hash.
+int DirIndex::HashToServer(const Slice& hash) const {
+  return GetServerForIndex(HashToIndex(hash));
 }
 
 // Return true if a file represented by the specified hash will be

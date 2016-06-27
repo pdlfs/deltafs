@@ -65,11 +65,17 @@ class DirIndex {
   // Return the server responsible for the given partition.
   int GetServerForIndex(int index) const;
 
-  // Return the partition responsible for the given file.
+  // Return the partition responsible for the given file name
   int GetIndex(const Slice& name) const;
 
-  // Return the server responsible for the given file.
+  // Return the partition responsible for the given file name hash.
+  int HashToIndex(const Slice& hash) const;
+
+  // Return the server responsible for the given file name.
   int SelectServer(const Slice& name) const;
+
+  // Return the server responsible for the given file name hash.
+  int HashToServer(const Slice& hash) const;
 
   // Return true iff the bit is set.
   bool GetBit(int index) const;
@@ -119,8 +125,8 @@ class DirIndex {
   ~DirIndex();
 
  private:
-  struct Ref;
-  static bool ParseDirIndex(const Slice& input, bool checks, Ref* ref);
+  struct View;
+  static bool ParseDirIndex(const Slice& input, bool checks, View*);
   const DirIndexOptions* options_;
   struct Rep;
   Rep* rep_;

@@ -23,7 +23,7 @@
 #    -DPDLFS_PLATFORM=POSIX                -- currently only posix
 #    -DPDLFS_OS=Linux                      -- uname -s for target
 #
-
+#
 cmake_minimum_required (VERSION 2.8) # uses target_include_directories from 2.8
 
 project (PDLFS-COMMON)
