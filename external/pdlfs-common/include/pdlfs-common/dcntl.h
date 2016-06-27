@@ -93,8 +93,8 @@ class Dir::Tx {
   ~Tx() {}
 
  public:
-  explicit Tx(MDB* mdb) : tx(mdb->CreateTx()), refs(0) {}
-  MDB::Tx* tx;
+  explicit Tx(MDB* mdb) : rep(mdb->CreateTx()), refs(0) {}
+  MDB::Tx* rep;
 
   int refs;
   void Ref() { ++refs; }
@@ -109,7 +109,7 @@ class Dir::Tx {
   }
 
   void Dispose(MDB* mdb) {
-    mdb->Release(tx);
+    mdb->Release(rep);
     delete this;
   }
 };
