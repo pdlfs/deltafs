@@ -375,8 +375,8 @@ struct DirIndex::Rep {
   }
 
   // No copying allowed
-  Rep(const Rep&);
   void operator=(const Rep&);
+  Rep(const Rep&);
 };
 
 DirIndex::Rep::Rep(int64_t dir_id, int16_t zeroth_server) : rep_(NULL) {
@@ -388,19 +388,35 @@ DirIndex::Rep::Rep(int64_t dir_id, int16_t zeroth_server) : rep_(NULL) {
   TurnOnBit(0);
 }
 
-bool DirIndex::GetBit(int index) const { return rep_->bit(index); }
+bool DirIndex::GetBit(int index) const {
+  assert(rep_ != NULL);
+  return rep_->bit(index);
+}
 
-Slice DirIndex::Encode() const { return rep_->ToSlice(); }
+Slice DirIndex::Encode() const {
+  assert(rep_ != NULL);
+  return rep_->ToSlice();
+}
 
-int64_t DirIndex::DirId() const { return rep_->dir_id(); }
+int64_t DirIndex::DirId() const {
+  assert(rep_ != NULL);
+  return rep_->dir_id();
+}
 
-int16_t DirIndex::ZerothServer() const { return rep_->zeroth_server(); }
+int16_t DirIndex::ZerothServer() const {
+  assert(rep_ != NULL);
+  return rep_->zeroth_server();
+}
 
-int DirIndex::Radix() const { return rep_->radix(); }
+int DirIndex::Radix() const {
+  assert(rep_ != NULL);
+  return rep_->radix();
+}
 
 // Update the directory index by merging another directory index
 // for the same directory.
 bool DirIndex::Update(const Slice& other) {
+  assert(rep_ != NULL);
   Ref ref;
   bool checks = options_->paranoid_checks;
   if (!ParseDirIndex(other, checks, &ref)) {
@@ -414,12 +430,14 @@ bool DirIndex::Update(const Slice& other) {
 // Update the directory index by merging another directory index
 // for the same directory.
 bool DirIndex::Update(const DirIndex& other) {
+  assert(rep_ != NULL);
   rep_->Merge(*other.rep_);
   return true;
 }
 
 // Reset index states.
-bool DirIndex::TEST_Reset(const Slice& other) {
+bool DirIndex::Reset(const Slice& other) {
+  assert(rep_ != NULL);
   Ref ref;
   bool checks = options_->paranoid_checks;
   if (!ParseDirIndex(other, checks, &ref)) {
@@ -434,16 +452,19 @@ bool DirIndex::TEST_Reset(const Slice& other) {
 }
 
 void DirIndex::SetBit(int index) {
+  assert(rep_ != NULL);
   assert(index >= 0 && index < options_->num_virtual_servers);
   rep_->TurnOnBit(index);
 }
 
 void DirIndex::TEST_UnsetBit(int index) {
+  assert(rep_ != NULL);
   assert(index > 0 && index < options_->num_virtual_servers);
   rep_->TurnOffBit(index);
 }
 
 void DirIndex::TEST_RevertAll() {
+  assert(rep_ != NULL);
   for (int i = rep_->HighestBit(); i > 0; --i) {
     rep_->TurnOffBit(i);
   }
@@ -458,6 +479,7 @@ void DirIndex::TEST_RevertAll() {
 // servers. Only the constant max number of virtual servers are considered.
 // This, however, makes it flexible enough to facilitate virtual servers.
 bool DirIndex::IsSplittable(int index) const {
+  assert(rep_ != NULL);
   if (!rep_->bit(index)) {
     return false;
   } else {
@@ -479,6 +501,7 @@ bool DirIndex::IsSplittable(int index) const {
 // The parent index must mark an existing partition and must
 // be splittable in the first place.
 int DirIndex::NewIndexForSplitting(int index) const {
+  assert(rep_ != NULL);
   assert(IsSplittable(index));
   int i = index;
   int r = ToRadix(index);
@@ -493,6 +516,7 @@ int DirIndex::NewIndexForSplitting(int index) const {
 // according to the the current directory index states and the hash
 // value of the file name.
 int DirIndex::GetIndex(const Slice& name) const {
+  assert(rep_ != NULL);
   char hash[8];
   DirIndex::Hash(name, hash);
 
@@ -529,6 +553,7 @@ Slice DirIndex::Hash(const Slice& name, char* scratch) {
 
 // Return the server responsible for a specific partition.
 int DirIndex::GetServerForIndex(int index) const {
+  assert(rep_ != NULL);
   return MapIndexToServer(index, rep_->zeroth_server(), options_->num_servers);
 }
 
@@ -539,6 +564,11 @@ int DirIndex::MapIndexToServer(int index, int zeroth_server, int num_servers) {
 
 DirIndex::DirIndex(int64_t d, int16_t s, const DirIndexOptions* options) {
   rep_ = new Rep(d, s);
+  options_ = options;
+}
+
+DirIndex::DirIndex(const DirIndexOptions* options) {
+  rep_ = NULL;
   options_ = options;
 }
 

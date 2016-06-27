@@ -50,10 +50,11 @@ class DirIndex {
  public:
   // Create a new index using the specified settings.
   DirIndex(int64_t dir, int16_t server, const DirIndexOptions* options);
-  ~DirIndex();
+  // Create an empty index whose state is about to be reset.
+  DirIndex(const DirIndexOptions* options);
 
   // Discard the current index and override it with another index image.
-  bool TEST_Reset(const Slice& other);
+  bool Reset(const Slice& other);
 
   // Update the index by merging another index of the same directory.
   bool Update(const Slice& other);
@@ -114,6 +115,8 @@ class DirIndex {
 
   // Return a pair of random servers for a specified directory.
   static std::pair<int, int> RandomServers(const Slice& dir, int seed);
+
+  ~DirIndex();
 
  private:
   struct Ref;

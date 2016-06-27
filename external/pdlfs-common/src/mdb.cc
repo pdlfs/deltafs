@@ -25,7 +25,7 @@ Status MDB::Getidx(uint64_t ino, DirIndex* idx, Tx* tx) {
   }
   s = db_->Get(options, key.prefix(), &tmp);
   if (s.ok()) {
-    if (!idx->Update(tmp)) {
+    if (!idx->Reset(tmp)) {
       s = Status::Corruption(Slice());
     }
   }
