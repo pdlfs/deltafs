@@ -390,7 +390,7 @@ DirIndex::Rep::Rep(int64_t dir_id, int16_t zeroth_server) : rep_(NULL) {
 
 bool DirIndex::GetBit(int index) const { return rep_->bit(index); }
 
-Slice DirIndex::ToSlice() const { return rep_->ToSlice(); }
+Slice DirIndex::Encode() const { return rep_->ToSlice(); }
 
 int64_t DirIndex::DirId() const { return rep_->dir_id(); }
 

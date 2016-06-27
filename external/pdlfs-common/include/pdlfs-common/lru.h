@@ -12,10 +12,8 @@
 
 #include <stdlib.h>
 
-#include "pdlfs-common/atomic_pointer.h"
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/map.h"
-#include "pdlfs-common/mutexlock.h"
 
 namespace pdlfs {
 
@@ -23,7 +21,6 @@ template <typename T = void>
 struct LRUEntry {
   T* value;
   void (*deleter)(const Slice&, T* value);
-  port::AtomicPointer pinned_;
   LRUEntry<T>* next_hash;
   LRUEntry<T>* next;
   LRUEntry<T>* prev;
@@ -32,6 +29,8 @@ struct LRUEntry {
   uint32_t refs;
   uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
   char key_data[1];  // Beginning of key
+
+  bool is_pinned() const { return false; }
 
   Slice key() const {
     // For cheaper lookups, we allow a temporary Handle object
@@ -45,10 +44,8 @@ struct LRUEntry {
 };
 
 // A simple LRU cache implementation that requires external synchronization.
-template <typename T = void>
+template <typename E>
 class LRUCache {
-  typedef LRUEntry<T> E;
-
  private:
   // Max cache size.
   size_t capacity_;
@@ -62,8 +59,8 @@ class LRUCache {
   HashTable<E> table_;
 
   // No copying allowed
+  void operator=(const LRUCache&);
   LRUCache(const LRUCache&);
-  LRUCache& operator=(const LRUCache&);
 
   void Unref(E* e) {
     assert(e->refs > 0);
@@ -107,12 +104,12 @@ class LRUCache {
   // Separate from constructor so caller can easily make an array of LRUCache
   void SetCapacity(size_t c) { capacity_ = c; }
 
+  template <typename T>
   E* Insert(const Slice& key, uint32_t hash, T* value, size_t charge,
             void (*deleter)(const Slice& key, T* value)) {
     E* e = static_cast<E*>(malloc(sizeof(E) - 1 + key.size()));
     e->value = value;
     e->deleter = deleter;
-    e->pinned_.NoBarrier_Store(NULL);
     e->charge = charge;
     e->key_length = key.size();
     e->hash = hash;
@@ -131,11 +128,11 @@ class LRUCache {
     return e;
   }
 
-  void Compact() {
+  bool Compact() {
     while (usage_ > capacity_ && lru_.next != &lru_) {
       E* old = lru_.next;
       LRU_Remove(old);
-      if (!old->pinned_.Acquire_Load()) {
+      if (!old->is_pinned()) {
         table_.Remove(old->key(), old->hash);
         Unref(old);
       } else {
@@ -143,6 +140,8 @@ class LRUCache {
         break;
       }
     }
+
+    return usage_ <= capacity_;
   }
 
   E* Lookup(const Slice& key, uint32_t hash) {
@@ -155,23 +154,13 @@ class LRUCache {
     return e;
   }
 
-  E* InsertIfAbsent(const Slice& key, uint32_t hash, T* value, size_t charge,
-                    void (*deleter)(const Slice& key, T* value)) {
-    E* e = table_.Lookup(key, hash);
-    if (e != NULL) {
-      return NULL;
-    } else {
-      return Insert(key, hash, value, charge, deleter);
-    }
-  }
-
   void Prune() {
     for (E* e = lru_.next; e != &lru_;) {
       E* next = e->next;
       if (e->refs == 1) {
         // Calls are required to keep active references to all entries pinned
         // by it so that all entries here are eligible to be deleted.
-        assert(!e->pinned_.Acquire_Load());
+        assert(!e->is_pinned());
         table_.Remove(e->key(), e->hash);
         LRU_Remove(e);
         Unref(e);
@@ -186,13 +175,18 @@ class LRUCache {
       // We require our callers to never explicitly erase pinned entries.
       // The caller will have to make sure an entry is not pinned before
       // it removes that entry.
-      assert(!e->pinned_.Acquire_Load());
+      assert(!e->is_pinned());
       LRU_Remove(e);
       Unref(e);
     }
   }
 
-  bool Empty() { return (lru_.next == &lru_) && (lru_.prev == &lru_); }
+  bool Empty() const { return (lru_.next == &lru_) && (lru_.prev == &lru_); }
+
+  // Check entry existence without effecting its LRU order.
+  bool Exists(const Slice& key, uint32_t hash) const {
+    return table_.Lookup(key, hash) != NULL;
+  }
 
   void Release(E* entry) {
     Unref(entry);  // Do not use entry hereafter

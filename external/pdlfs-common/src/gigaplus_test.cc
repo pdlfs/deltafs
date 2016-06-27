@@ -45,7 +45,7 @@ class DirIndexTest {
 
   DirIndex* Recover() {
     DirIndex* result = NewIndex();
-    int b = result->Update(idx_->ToSlice());
+    int b = result->Update(idx_->Encode());
     ASSERT_TRUE(b);
     return result;
   }
@@ -126,7 +126,7 @@ TEST(DirIndexTest, Merge1) {
   DirIndex* another = NewIndex();
   another->SetBit(1);
   another->SetBit(3);
-  idx_->Update(another->ToSlice());
+  idx_->Update(another->Encode());
   ASSERT_TRUE(idx_->GetBit(0));
   ASSERT_TRUE(idx_->GetBit(1));
   ASSERT_TRUE(idx_->GetBit(2));
@@ -156,7 +156,7 @@ TEST(DirIndexTest, Merge2) {
   another->SetBit(127);
   another->SetBit(255);
   another->SetBit(511);
-  idx_->Update(another->ToSlice());
+  idx_->Update(another->Encode());
   ASSERT_TRUE(idx_->GetBit(0));
   ASSERT_TRUE(idx_->GetBit(1));
   ASSERT_TRUE(idx_->GetBit(3));

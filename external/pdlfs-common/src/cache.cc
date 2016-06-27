@@ -11,6 +11,7 @@
  */
 
 #include "pdlfs-common/lru.h"
+#include "pdlfs-common/mutexlock.h"
 
 namespace pdlfs {
 
@@ -20,10 +21,9 @@ static const int kNumShardBits = 4;
 static const int kNumShards = 1 << kNumShardBits;
 
 class ShardedLRUCache : public Cache {
-  typedef LRUEntry<> E;
-
  private:
-  LRUCache<> shard_[kNumShards];
+  typedef LRUEntry<> E;
+  LRUCache<E> shard_[kNumShards];
   port::Mutex mu_[kNumShards];
   port::Mutex id_mu_;
   uint64_t id_;  // The last allocated id number
@@ -76,7 +76,8 @@ class ShardedLRUCache : public Cache {
   }
 
   virtual void* Value(Handle* handle) {
-    return reinterpret_cast<E*>(handle)->value;
+    E* e = reinterpret_cast<E*>(handle);
+    return e->value;
   }
 
   virtual uint64_t NewId() {

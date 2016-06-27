@@ -12,6 +12,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/slice.h"
@@ -84,6 +85,8 @@ class HashTable {
     return e;
   }
 
+  bool Empty() const { return elems_ == 0; }
+
  private:
   // The table consists of an array of buckets where each bucket is
   // a linked list of cache entries that hash into the bucket.
@@ -92,8 +95,8 @@ class HashTable {
   E** list_;
 
   // No copying allowed
+  void operator=(const HashTable&);
   HashTable(const HashTable&);
-  HashTable& operator=(const HashTable&);
 
   /**
    * Return a pointer to slot that points to a cache entry that
@@ -159,8 +162,8 @@ class HashMap {
   HashTable<E> table_;
 
   // No copying allowed
+  void operator=(const HashMap&);
   HashMap(const HashMap&);
-  HashMap& operator=(const HashMap&);
 
   void Remove(E* e) {
     e->next->prev = e->prev;
@@ -263,8 +266,8 @@ class HashSet {
   Map map_;
 
   // No copying allowed
+  void operator=(const HashSet&);
   HashSet(const HashSet&);
-  HashSet& operator=(const HashSet&);
 
  public:
   // Initialize an empty set.

@@ -14,7 +14,7 @@ namespace pdlfs {
 
 class KeyTest {};
 
-TEST(KeyTest, EncodeDecode) {
+TEST(KeyTest, EncodeDecode1) {
   {
     Key k1(1, static_cast<KeyType>(1), Slice());
     Key k2(2, static_cast<KeyType>(1), Slice());
@@ -53,6 +53,48 @@ TEST(KeyTest, EncodeDecode) {
     k5.SetHash(k2.hash());
     ASSERT_EQ(k5.Encode(), k2.Encode());
   }
+}
+
+class StatTest {};
+
+TEST(StatTest, EncodeDecode2) {
+  Stat stat;
+  stat.SetInodeNo(12345);
+  stat.SetFileMode(678);
+  stat.SetFileSize(90);
+  stat.SetUserId(11);
+  stat.SetGroupId(22);
+  stat.SetChangeTime(11223344);
+  stat.SetModifyTime(44332211);
+  stat.SetZerothServer(777);
+  char tmp[sizeof(Stat)];
+  Slice encoding = stat.EncodeTo(tmp);
+  Stat stat2;
+  bool r = stat2.DecodeFrom(encoding);
+  ASSERT_TRUE(r);
+  char tmp2[sizeof(Stat)];
+  Slice encoding2 = stat2.EncodeTo(tmp2);
+  ASSERT_EQ(encoding, encoding2);
+}
+
+class LookupEntryTest {};
+
+TEST(LookupEntryTest, EncodeDecode3) {
+  LookupEntry ent;
+  ent.SetInodeNo(12345);
+  ent.SetDirMode(678);
+  ent.SetUserId(11);
+  ent.SetGroupId(22);
+  ent.SetZerothServer(777);
+  ent.SetLeaseDue(55667788);
+  char tmp[sizeof(LookupEntry)];
+  Slice encoding = ent.EncodeTo(tmp);
+  LookupEntry ent2;
+  bool r = ent2.DecodeFrom(encoding);
+  ASSERT_TRUE(r);
+  char tmp2[sizeof(LookupEntry)];
+  Slice encoding2 = ent2.EncodeTo(tmp2);
+  ASSERT_EQ(encoding, encoding2);
 }
 
 }  // namespace pdlfs

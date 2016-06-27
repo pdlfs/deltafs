@@ -98,7 +98,7 @@ class DirIndex {
   int Radix() const;
 
   // Return the in-memory representation of this index.
-  Slice ToSlice() const;
+  Slice Encode() const;
 
   // Return true if the given hash will belong to the given child partition.
   static bool ToBeMigrated(int index, const char* hash);
