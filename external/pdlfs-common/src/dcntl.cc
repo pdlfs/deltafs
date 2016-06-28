@@ -40,6 +40,8 @@ Slice DirInfo::EncodeTo(char* scratch) const {
 bool Dir::busy() const {
   if (tx != NULL) {
     return true;
+  } else if (locked) {
+    return true;
   } else {
     assert(num_leases >= 0);
     return num_leases != 0;

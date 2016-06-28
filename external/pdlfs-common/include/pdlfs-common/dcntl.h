@@ -9,6 +9,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/guard.h"
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/mdb.h"
 #include "pdlfs-common/port.h"
@@ -16,6 +17,7 @@
 namespace pdlfs {
 
 class DirIndex;
+class DirTable;
 
 struct Dir;
 struct DirEntry;
@@ -28,9 +30,10 @@ struct DirInfo {
 };
 
 struct Dir {
+  typedef DirEntry Ref;
+  typedef RefGuard<DirTable, Ref> Guard;
   Dir(port::Mutex* mu) : cv(mu) {}
   bool busy() const;
-  typedef DirEntry Ref;
   uint64_t ino;
   uint64_t mtime;  // Last modification time
   int size;
@@ -109,6 +112,7 @@ class Dir::Tx {
   }
 
   void Dispose(MDB* mdb) {
+    assert(refs == 0);
     mdb->Release(rep);
     delete this;
   }
@@ -136,6 +140,18 @@ class DirTable {
   // No copying allowed
   void operator=(const DirTable&);
   DirTable(const DirTable&);
+};
+
+class DirLock {
+ public:
+  explicit DirLock(Dir* d) : dir_(d) { dir_->Lock(); }
+  ~DirLock() { dir_->Unlock(); }
+
+ private:
+  Dir* dir_;
+  // No copying allowed
+  void operator=(const DirLock&);
+  DirLock(const DirLock&);
 };
 
 }  // namespace pdlfs
