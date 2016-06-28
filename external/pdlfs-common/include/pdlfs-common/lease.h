@@ -23,6 +23,8 @@ struct Lease;
 // a) If kFreeState, the lease is not being shared by any client;
 // b) If kReadState, the lease may be shared among multiple clients and
 // each incoming lookup request may extend the expiration time of the lease;
+// a lease in read state but with a due in the past is considered free
+// because all clients at the moment must have already discarded the lease;
 // c) If kWriteState, the lease may be shared among multiple clients and
 // there is an on-going write operation that modifies the contents of the lease;
 // the write operation must wait until the lease expires before applying and
@@ -41,8 +43,11 @@ struct Lease {
   Dir* parent;
   port::CondVar cv;
   LeaseState state;
+#if defined(DELTAFS)
+  uint64_t seq;
+#endif
+#if defined(INDEXFS)
   uint64_t ino;
-#ifndef NDEBUG
   uint32_t mode;
   uint32_t uid;
   uint32_t gid;
@@ -86,9 +91,9 @@ class LeaseTable {
   ~LeaseTable();
 
   void Release(Lease::Ref* ref);
-  Lease::Ref* Lookup(uint64_t parent, const Slice& name);
-  Lease::Ref* Insert(uint64_t parent, const Slice& name, Lease* lease);
-  void Erase(uint64_t parent, const Slice& name);
+  Lease::Ref* Lookup(uint64_t parent, const Slice& nhash);
+  Lease::Ref* Insert(uint64_t parent, const Slice& nhash, Lease* lease);
+  void Erase(uint64_t parent, const Slice& nhash);
 
  private:
   static Slice LRUKey(uint64_t, const Slice&, char* scratch);

@@ -16,7 +16,6 @@
 #include "pdlfs-common/lease.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/status.h"
-#include "xxhash.h"
 
 namespace pdlfs {
 
@@ -52,16 +51,16 @@ void LeaseTable::Release(Lease::Ref* ref) {
   }
 }
 
-Slice LeaseTable::LRUKey(uint64_t parent, const Slice& name, char* scratch) {
+Slice LeaseTable::LRUKey(uint64_t parent, const Slice& nhash, char* scratch) {
   EncodeFixed64(scratch, parent);
-  uint64_t nhash = XXH64(name.data(), name.size(), 0);
-  EncodeFixed64(scratch + 8, nhash);
+  assert(nhash.size() == 8);
+  memcpy(scratch + 8, nhash.data(), nhash.size());
   return Slice(scratch, 16);
 }
 
-Lease::Ref* LeaseTable::Lookup(uint64_t parent, const Slice& name) {
+Lease::Ref* LeaseTable::Lookup(uint64_t parent, const Slice& nhash) {
   char tmp[16];
-  Slice key = LRUKey(parent, name, tmp);
+  Slice key = LRUKey(parent, nhash, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {
@@ -89,10 +88,10 @@ static void DeleteLease(const Slice& key, Lease* lease) {
   delete lease;
 }
 
-Lease::Ref* LeaseTable::Insert(uint64_t parent, const Slice& name,
+Lease::Ref* LeaseTable::Insert(uint64_t parent, const Slice& nhash,
                                Lease* lease) {
   char tmp[16];
-  Slice key = LRUKey(parent, name, tmp);
+  Slice key = LRUKey(parent, nhash, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {
@@ -120,9 +119,9 @@ Lease::Ref* LeaseTable::Insert(uint64_t parent, const Slice& name,
   }
 }
 
-void LeaseTable::Erase(uint64_t parent, const Slice& name) {
+void LeaseTable::Erase(uint64_t parent, const Slice& nhash) {
   char tmp[16];
-  Slice key = LRUKey(parent, name, tmp);
+  Slice key = LRUKey(parent, nhash, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {

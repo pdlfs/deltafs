@@ -38,10 +38,13 @@ struct Dir {
   uint64_t mtime;  // Last modification time
   int size;
 
+#if defined(DELTAFS)
+  uint64_t seq;  // Incremented whenever a sub-directory's lookup state changes
+  class Tx;
+  Tx* tx;  // Either NULL or points to an on-going write transaction
+#endif
   int num_leases;   // Number of outstanding leases under this parent directory
   DirIndex* index;  // GIGA+ index
-  class Tx;
-  Tx* tx;  // Either NULL or points to an on-going write operation
   Status status;
   port::CondVar cv;
   bool locked;
@@ -90,6 +93,7 @@ struct DirEntry {
   }
 };
 
+#if defined(DELTAFS)
 class Dir::Tx {
   void operator=(const Tx&);
   Tx(const Tx&);
@@ -117,6 +121,7 @@ class Dir::Tx {
     delete this;
   }
 };
+#endif
 
 // An LRU-cache of directory states.
 class DirTable {
