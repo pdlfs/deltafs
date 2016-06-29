@@ -19,11 +19,11 @@ namespace pdlfs {
 
 class MDS {
  public:
-  struct RPC;
-  struct Redirect {};
+  typedef std::string Redirect;
 
   MDS() {}
   virtual ~MDS();
+  struct RPC;
 
   struct FstatOptions {
     uint64_t dir_ino;   // Parent directory id
@@ -41,12 +41,37 @@ class MDS {
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
-    Slice name;  // File name
+    Slice name;
   };
   struct FcreatRet {
     Stat stat;
   };
   virtual Status Fcreat(const FcreatOptions& options, FcreatRet* ret) = 0;
+
+  struct MkdirOptions {
+    uint64_t dir_ino;   // Parent directory id
+    char name_hash[8];  // Name hash
+    uint32_t mode;
+    uint32_t uid;
+    uint32_t gid;
+    uint32_t zserver;
+    Slice name;
+  };
+  struct MkdirRet {
+    Stat stat;
+  };
+  virtual Status Mkdir(const MkdirOptions& options, MkdirRet* ret) = 0;
+
+  struct ChmodOptions {
+    uint64_t dir_ino;   // Parent directory id
+    char name_hash[8];  // Name hash
+    uint32_t mode;
+    Slice name;
+  };
+  struct ChmodRet {
+    Stat stat;
+  };
+  virtual Status Chmod(const ChmodOptions& options, ChmodRet* ret) = 0;
 
   struct LookupOptions {
     uint64_t dir_ino;   // Parent directory id
@@ -108,6 +133,8 @@ class MDS::RPC::CLI : public MDS {
 
   DEC_OP(Fstat)
   DEC_OP(Fcreat)
+  DEC_OP(Mkdir)
+  DEC_OP(Chmod)
   DEC_OP(Lookup)
   DEC_OP(Listdir)
 
