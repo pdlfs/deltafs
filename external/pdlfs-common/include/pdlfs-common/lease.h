@@ -38,22 +38,23 @@ class LeaseTable;
 struct Lease {
   typedef LeaseEntry Ref;
   typedef RefGuard<LeaseTable, Ref> Guard;
-  Lease(port::Mutex* mu) : cv(mu) {}
   bool busy() const;
-  Dir* parent;
-  port::CondVar cv;
-  LeaseState state;
 #if defined(DELTAFS)
+  explicit Lease() {}
   uint64_t seq;
 #endif
 #if defined(INDEXFS)
+  Lease(port::Mutex* mu) : cv(mu) {}
+  port::CondVar cv;
   uint64_t ino;
   uint32_t mode;
   uint32_t uid;
   uint32_t gid;
   uint32_t zeroth_server;
 #endif
+  LeaseState state;
   uint64_t due;
+  Dir* parent;
 };
 
 struct LeaseEntry {

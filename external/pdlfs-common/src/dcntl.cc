@@ -38,9 +38,10 @@ Slice DirInfo::EncodeTo(char* scratch) const {
 }
 
 bool Dir::busy() const {
-  if (tx != NULL) {
-    return true;
-  } else if (locked) {
+#if defined(DELTAFS)
+  if (tx != NULL) return true;
+#endif
+  if (locked) {
     return true;
   } else {
     assert(num_leases >= 0);

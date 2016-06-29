@@ -147,16 +147,4 @@ class DirTable {
   DirTable(const DirTable&);
 };
 
-class DirLock {
- public:
-  explicit DirLock(Dir* d) : dir_(d) { dir_->Lock(); }
-  ~DirLock() { dir_->Unlock(); }
-
- private:
-  Dir* dir_;
-  // No copying allowed
-  void operator=(const DirLock&);
-  DirLock(const DirLock&);
-};
-
 }  // namespace pdlfs
