@@ -52,9 +52,9 @@ struct Lease {
   uint32_t gid;
   uint32_t zeroth_server;
 #endif
-  LeaseState state;
+  const Dir* parent;
   uint64_t due;
-  Dir* parent;
+  LeaseState state;
 };
 
 struct LeaseEntry {

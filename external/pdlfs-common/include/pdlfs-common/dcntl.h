@@ -9,6 +9,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/gigaplus.h"
 #include "pdlfs-common/guard.h"
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/mdb.h"
@@ -16,7 +17,6 @@
 
 namespace pdlfs {
 
-class DirIndex;
 class DirTable;
 
 struct Dir;
@@ -32,8 +32,9 @@ struct DirInfo {
 struct Dir {
   typedef DirEntry Ref;
   typedef RefGuard<DirTable, Ref> Guard;
-  Dir(port::Mutex* mu) : cv(mu) {}
   bool busy() const;
+  Dir(port::Mutex* mu, const DirIndexOptions* o) : cv(mu), index(o) {}
+  port::CondVar cv;
   uint64_t ino;
   uint64_t mtime;  // Last modification time
   int size;
@@ -43,10 +44,9 @@ struct Dir {
   class Tx;
   Tx* tx;  // Either NULL or points to an on-going write transaction
 #endif
-  mutable int num_leases;   // Total number of leases blow this directory
-  DirIndex* index;  // GIGA+ index
+  mutable int num_leases;  // Total number of leases blow this directory
+  DirIndex index;          // GIGA+ index
   Status status;
-  port::CondVar cv;
   bool locked;
 
   void Lock() {

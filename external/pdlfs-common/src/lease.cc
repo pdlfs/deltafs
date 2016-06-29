@@ -82,7 +82,7 @@ static void DeleteLease(const Slice& key, Lease* lease) {
     abort();
   }
 #endif
-  Dir* parent = lease->parent;
+  const Dir* parent = lease->parent;
   parent->num_leases--;
   assert(parent->num_leases >= 0);
   delete lease;
