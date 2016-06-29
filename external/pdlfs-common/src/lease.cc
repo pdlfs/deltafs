@@ -23,7 +23,7 @@ bool Lease::busy() const {
   if (state == kWriteState) {
     return true;
   } else {
-    return state == kReadState && Env::Default()->NowMicros() < due;
+    return Env::Default()->NowMicros() < due;
   }
 }
 

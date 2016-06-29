@@ -43,7 +43,7 @@ struct Dir {
   class Tx;
   Tx* tx;  // Either NULL or points to an on-going write transaction
 #endif
-  int num_leases;   // Number of outstanding leases under this parent directory
+  mutable int num_leases;   // Total number of leases blow this directory
   DirIndex* index;  // GIGA+ index
   Status status;
   port::CondVar cv;
