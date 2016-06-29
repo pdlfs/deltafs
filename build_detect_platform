@@ -128,7 +128,7 @@ case "$TARGET_OS" in
         exit 1
 esac
 
-COMMON_FLAGS="-pedantic -Wall -Wno-long-long -Wno-sign-compare $COMMON_FLAGS"
+COMMON_FLAGS="-pedantic -Wall -Wno-long-long -Wno-sign-compare -DDELTAFS $COMMON_FLAGS"
 
 COMMON_FLAGS="$COMMON_FLAGS -DPDLFS_PLATFORM_POSIX"
 COMMON_FLAGS="$COMMON_FLAGS -DPDLFS_MAKEFILE"
