@@ -220,6 +220,8 @@ bool DirIndex::ParseDirIndex(const Slice& input, bool paranoid_checks,
 struct DirIndex::Rep {
   Rep(int64_t dir_id, int16_t zeroth_server);
 
+  void Reserve(size_t size) { ScaleToSize(size); }
+
   size_t bitmap_size() const { return ((1 << radix()) + 7) / 8; }
 
   Slice ToSlice() const {
@@ -363,9 +365,13 @@ struct DirIndex::Rep {
 
   // Ensure bitmap has at least the specified capacity.
   void ScaleToSize(size_t capacity) {
-    while (bitmap_capacity_ < capacity) {
-      ScaleUp(2);
+    int factor = 1;
+    size_t current_capacity = bitmap_capacity_;
+    while (current_capacity < capacity) {
+      current_capacity <<= 1;
+      factor <<= 1;
     }
+    ScaleUp(factor);
   }
 
   void SetDirId(int64_t dir_id) { EncodeFixed64(rep_, dir_id); }
@@ -464,6 +470,14 @@ void DirIndex::SetBit(int index) {
   assert(rep_ != NULL);
   assert(index >= 0 && index < options_->num_virtual_servers);
   rep_->TurnOnBit(index);
+}
+
+void DirIndex::SetAll() {
+  assert(rep_ != NULL);
+  rep_->Reserve(options_->num_virtual_servers);
+  for (int i = 0; i < options_->num_virtual_servers; ++i) {
+    rep_->TurnOnBit(i);
+  }
 }
 
 void DirIndex::TEST_UnsetBit(int index) {

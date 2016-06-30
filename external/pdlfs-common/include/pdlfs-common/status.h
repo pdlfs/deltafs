@@ -10,6 +10,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include <assert.h>
 #include <string>
 
 #include "pdlfs-common/slice.h"
@@ -99,7 +100,10 @@ class Status {
     kDirMarkedDeleted = 21
   };
 
+  static const int kMaxCode = kDirMarkedDeleted;
+
   static Status FromCode(int err_code) {
+    assert(err_code > 0 && err_code <= kMaxCode);
     return Status(static_cast<Code>(err_code), Slice(), Slice());
   }
 

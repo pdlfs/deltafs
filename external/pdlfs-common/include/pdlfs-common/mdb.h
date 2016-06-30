@@ -18,8 +18,8 @@
 
 namespace pdlfs {
 
-class DirIndex;
-class DirInfo;
+struct DirInfo;
+class DirIndex;  // GIGA index
 
 // A helper class used by deltafs and indexfs to access file system
 // metadata stored as key-value pairs inside LevelDB.

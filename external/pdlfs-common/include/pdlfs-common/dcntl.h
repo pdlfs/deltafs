@@ -95,20 +95,21 @@ struct DirEntry {
 
 #if defined(DELTAFS)
 class Dir::Tx {
+  MDB::Tx* const rep_;
+  int refs_;
   void operator=(const Tx&);
   Tx(const Tx&);
   ~Tx() {}
 
  public:
-  explicit Tx(MDB* mdb) : rep(mdb->CreateTx()), refs(0) {}
-  MDB::Tx* rep;
+  explicit Tx(MDB* mdb) : rep_(mdb->CreateTx()), refs_(0) {}
+  MDB::Tx* rep() const { return rep_; }
 
-  int refs;
-  void Ref() { ++refs; }
+  void Ref() { ++refs_; }
   bool Unref() {
-    --refs;
-    assert(refs >= 0);
-    if (refs == 0) {
+    --refs_;
+    assert(refs_ >= 0);
+    if (refs_ == 0) {
       return true;  // Last reference
     } else {
       return false;
@@ -116,8 +117,8 @@ class Dir::Tx {
   }
 
   void Dispose(MDB* mdb) {
-    assert(refs == 0);
-    mdb->Release(rep);
+    assert(refs_ == 0);
+    mdb->Release(rep_);
     delete this;
   }
 };

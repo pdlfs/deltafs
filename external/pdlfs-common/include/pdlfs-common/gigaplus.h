@@ -83,6 +83,9 @@ class DirIndex {
   // Set the bit at the given index.
   void SetBit(int index);
 
+  // Set all bits.
+  void SetAll();
+
   // Clear the bit at the given index.
   void TEST_UnsetBit(int index);
 
