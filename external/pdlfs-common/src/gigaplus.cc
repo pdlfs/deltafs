@@ -560,6 +560,13 @@ bool DirIndex::ToBeMigrated(int index, const char* hash) {
   return ComputeIndexFromHash(hash, ToRadix(index)) == index;
 }
 
+// Insert the corresponding hash value into *dst.
+void DirIndex::PutHash(std::string* dst, const Slice& name) {
+  char tmp[8];
+  GIGAHash(name, tmp);
+  dst->append(tmp, 8);
+}
+
 // Calculate the hash for a given string.
 Slice DirIndex::Hash(const Slice& name, char* scratch) {
   GIGAHash(name, scratch);

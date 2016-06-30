@@ -110,6 +110,9 @@ class DirIndex {
   // Return true if the given hash will belong to the given child partition.
   static bool ToBeMigrated(int index, const char* hash);
 
+  // Put the corresponding hash value into *dst.
+  static void PutHash(std::string* dst, const Slice& name);
+
   // Return the hash value of the specified name string.
   static Slice Hash(const Slice& name, char* scratch);
 

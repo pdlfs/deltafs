@@ -6,6 +6,6 @@
 [subrepo]
 	remote = git@github.com:pdlfs/pdlfs-common.git
 	branch = master
-	commit = bff1991a0d99ad61867323cdaec3a1546f5348cf
-	parent = 6b876fbbd975fe640031d2e63c97cdc3f53020ae
+	commit = 3f3d8c5bebb1266e9bba66f2598db1197e6ecc8c
+	parent = 04becf98a28323b0ab0f45418f59b39af71a7303
 	cmdver = 0.3.0
