@@ -38,6 +38,7 @@ Status MDS::SRV::LoadDir(uint64_t ino, DirInfo* info, DirIndex* index) {
     if (s.IsNotFound()) {
       int zserver = PickupServer(ino) % idx_opts_.num_virtual_servers;
       DirIndex tmp(ino, zserver, &idx_opts_);
+      tmp.SetAll(); // Pre-split the directory to all servers
       if (mdb_tx == NULL) {
         mdb_tx = mdb_->CreateTx();
       }
