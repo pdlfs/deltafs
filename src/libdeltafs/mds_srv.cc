@@ -116,18 +116,6 @@ void MDS::SRV::TryReuseIno(uint64_t ino) {
   }
 }
 
-template <typename T>
-static Slice GetNameHash(const T& input) {
-  return Slice(input.name_hash, sizeof(input.name_hash));
-}
-
-template <typename T>
-static int GetTargetServer(const Dir* dir, const T& input) {
-  // TODO: paranoid checks
-  Slice hash = GetNameHash(input);
-  return dir->index.HashToServer(hash);
-}
-
 // Read file or directory stats. Return OK on success.
 // Multiple read threads may read from the same parent directory concurrently
 // and none of them will be blocked by each other or by any write thread.
@@ -143,9 +131,18 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
   uint64_t dir_ino = options.dir_ino;
-  Slice name_hash = GetNameHash(options);
+  Slice name_hash = options.name_hash;
+  if (name_hash.empty()) {
+    s = Status::InvalidArgument(Slice());
+  } else if (paranoid_checks_ && !options.name.empty()) {
+    std::string tmp;
+    DirIndex::PutHash(&tmp, options.name);
+    if (name_hash.compare(tmp) != 0) {
+      s = Status::Corruption(Slice());
+    }
+  }
 
-  {
+  if (s.ok()) {
     MutexLock ml(&mutex_);
     s = FetchDir(dir_ino, &ref);
     if (s.ok()) {
@@ -155,7 +152,7 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
       assert(d != NULL);
       s = ProbeDir(d);
       if (s.ok()) {
-        int srv_id = GetTargetServer(d, options);
+        int srv_id = d->index.HashToServer(name_hash);
         if (srv_id != srv_id_) {
           Slice encoding = d->index.Encode();
           Redirect re(encoding.data(), encoding.size());
@@ -208,9 +205,15 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
   uint64_t dir_ino = options.dir_ino;
-  Slice name_hash = GetNameHash(options);
-  if (options.name.empty()) {
+  Slice name_hash = options.name_hash;
+  if (name_hash.empty() || options.name.empty()) {
     s = Status::InvalidArgument(Slice());
+  } else if (paranoid_checks_) {
+    std::string tmp;
+    DirIndex::PutHash(&tmp, options.name);
+    if (name_hash.compare(tmp) != 0) {
+      s = Status::Corruption(Slice());
+    }
   }
 
   if (s.ok()) {
@@ -224,7 +227,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
       DirLock dl(d);
       s = ProbeDir(d);
       if (s.ok()) {
-        int srv_id = GetTargetServer(d, options);
+        int srv_id = d->index.HashToServer(name_hash);
         if (srv_id != srv_id_) {
           Slice encoding = d->index.Encode();
           Redirect re(encoding.data(), encoding.size());
@@ -310,11 +313,17 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
   uint64_t dir_ino = options.dir_ino;
-  Slice name_hash = GetNameHash(options);
-  if (options.name.empty()) {
+  Slice name_hash = options.name_hash;
+  if (options.zserver >= idx_opts_.num_virtual_servers) {
     s = Status::InvalidArgument(Slice());
-  } else if (options.zserver >= idx_opts_.num_virtual_servers) {
+  } else if (name_hash.empty() || options.name.empty()) {
     s = Status::InvalidArgument(Slice());
+  } else if (paranoid_checks_) {
+    std::string tmp;
+    DirIndex::PutHash(&tmp, options.name);
+    if (name_hash.compare(tmp) != 0) {
+      s = Status::Corruption(Slice());
+    }
   }
 
   if (s.ok()) {
@@ -327,7 +336,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
       assert(d != NULL);
       s = ProbeDir(d);
       if (s.ok()) {
-        int srv_id = GetTargetServer(d, options);
+        int srv_id = d->index.HashToServer(name_hash);
         if (srv_id != srv_id_) {
           Slice encoding = d->index.Encode();
           Redirect re(encoding.data(), encoding.size());
@@ -453,7 +462,16 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
   uint64_t dir_ino = options.dir_ino;
-  Slice name_hash = GetNameHash(options);
+  Slice name_hash = options.name_hash;
+  if (name_hash.empty()) {
+    s = Status::InvalidArgument(Slice());
+  } else if (paranoid_checks_ && !options.name.empty()) {
+    std::string tmp;
+    DirIndex::PutHash(&tmp, options.name);
+    if (name_hash.compare(tmp) != 0) {
+      s = Status::Corruption(Slice());
+    }
+  }
 
   {
     MutexLock ml(&mutex_);
@@ -465,7 +483,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
       assert(d != NULL);
       s = ProbeDir(d);
       if (s.ok()) {
-        int srv_id = GetTargetServer(d, options);
+        int srv_id = d->index.HashToServer(name_hash);
         if (srv_id != srv_id_) {
           Slice encoding = d->index.Encode();
           Redirect re(encoding.data(), encoding.size());
@@ -583,7 +601,16 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
   uint64_t dir_ino = options.dir_ino;
-  Slice name_hash = GetNameHash(options);
+  Slice name_hash = options.name_hash;
+  if (name_hash.empty()) {
+    s = Status::InvalidArgument(Slice());
+  } else if (paranoid_checks_ && !options.name.empty()) {
+    std::string tmp;
+    DirIndex::PutHash(&tmp, options.name);
+    if (name_hash.compare(tmp) != 0) {
+      s = Status::Corruption(Slice());
+    }
+  }
 
   {
     MutexLock ml(&mutex_);
@@ -596,7 +623,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
       DirLock dl(d);
       s = ProbeDir(d);
       if (s.ok()) {
-        int srv_id = GetTargetServer(d, options);
+        int srv_id = d->index.HashToServer(name_hash);
         if (srv_id != srv_id_) {
           Slice encoding = d->index.Encode();
           Redirect re(encoding.data(), encoding.size());

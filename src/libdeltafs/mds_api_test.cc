@@ -18,7 +18,6 @@ class MDSImpl : public MDS {
   FstatOptions fstat_options_;
   FstatRet fstat_ret_;
   virtual Status Fstat(const FstatOptions& options, FstatRet* ret) {
-    ASSERT_TRUE(strncmp(options.name_hash, fstat_options_.name_hash, 8) == 0);
     ASSERT_EQ(options.dir_ino, fstat_options_.dir_ino);
     ASSERT_EQ(options.name, fstat_options_.name);
     *ret = fstat_ret_;
@@ -28,13 +27,20 @@ class MDSImpl : public MDS {
   FcreatOptions fcreat_options_;
   FcreatRet fcreat_ret_;
   virtual Status Fcreat(const FcreatOptions& options, FcreatRet* ret) {
-    ASSERT_TRUE(strncmp(options.name_hash, fcreat_options_.name_hash, 8) == 0);
     ASSERT_EQ(options.dir_ino, fcreat_options_.dir_ino);
     ASSERT_EQ(options.name, fcreat_options_.name);
     ASSERT_EQ(options.mode, fcreat_options_.mode);
     ASSERT_EQ(options.uid, fcreat_options_.uid);
     ASSERT_EQ(options.gid, fcreat_options_.gid);
     *ret = fcreat_ret_;
+    return Status::OK();
+  }
+
+  virtual Status Mkdir(const MkdirOptions& options, MkdirRet* ret) {
+    return Status::OK();
+  }
+
+  virtual Status Chmod(const ChmodOptions& options, ChmodRet* ret) {
     return Status::OK();
   }
 

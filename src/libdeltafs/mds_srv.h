@@ -40,6 +40,7 @@ class MDS::SRV : public MDS {
   MDB* mdb_;
   DirIndexOptions idx_opts_;
   uint64_t lease_duration_;
+  bool paranoid_checks_;
   int srv_id_;
 
   port::Mutex mutex_;

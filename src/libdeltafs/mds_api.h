@@ -19,69 +19,70 @@ namespace pdlfs {
 
 class MDS {
  public:
-  typedef std::string Redirect;
-
   MDS() {}
   virtual ~MDS();
   struct RPC;
 
+  typedef std::string Redirect;
+#define MDS_OP(OP) virtual Status OP(const OP##Options&, OP##Ret*) = 0;
+
   struct FstatOptions {
-    uint64_t dir_ino;   // Parent directory id
-    char name_hash[8];  // Name hash
+    uint64_t dir_ino;  // Parent directory id
+    Slice name_hash;   // Name hash
     Slice name;
   };
   struct FstatRet {
     Stat stat;
   };
-  virtual Status Fstat(const FstatOptions& options, FstatRet* ret) = 0;
+  MDS_OP(Fstat)
 
   struct FcreatOptions {
-    uint64_t dir_ino;   // Parent directory id
-    char name_hash[8];  // Name hash
+    uint64_t dir_ino;  // Parent directory id
+    Slice name_hash;   // Name hash
+    Slice name;
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
-    Slice name;
   };
   struct FcreatRet {
     Stat stat;
   };
-  virtual Status Fcreat(const FcreatOptions& options, FcreatRet* ret) = 0;
+  MDS_OP(Fcreat)
 
   struct MkdirOptions {
-    uint64_t dir_ino;   // Parent directory id
-    char name_hash[8];  // Name hash
+    uint64_t dir_ino;  // Parent directory id
+    Slice name_hash;   // Name hash
+    Slice name;
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
     uint32_t zserver;
-    Slice name;
   };
   struct MkdirRet {
     Stat stat;
   };
-  virtual Status Mkdir(const MkdirOptions& options, MkdirRet* ret) = 0;
+  MDS_OP(Mkdir)
 
   struct ChmodOptions {
-    uint64_t dir_ino;   // Parent directory id
-    char name_hash[8];  // Name hash
-    uint32_t mode;
+    uint64_t dir_ino;  // Parent directory id
+    Slice name_hash;   // Name hash
     Slice name;
+    uint32_t mode;
   };
   struct ChmodRet {
     Stat stat;
   };
-  virtual Status Chmod(const ChmodOptions& options, ChmodRet* ret) = 0;
+  MDS_OP(Chmod)
 
   struct LookupOptions {
-    uint64_t dir_ino;   // Parent directory id
-    char name_hash[8];  // Name hash
+    uint64_t dir_ino;  // Parent directory id
+    Slice name_hash;   // Name hash
     Slice name;
   };
   struct LookupRet {
     LookupEntry entry;
   };
-  virtual Status Lookup(const LookupOptions& options, LookupRet* ret) = 0;
+  MDS_OP(Lookup)
 
   struct ListdirOptions {
     uint64_t dir_ino;  // Parent directory id
@@ -89,8 +90,9 @@ class MDS {
   struct ListdirRet {
     std::vector<std::string> names;
   };
-  virtual Status Listdir(const ListdirOptions& options, ListdirRet* ret) = 0;
+  MDS_OP(Listdir)
 
+#undef MDS_OP
   class SRV;
   class CLI;
 
@@ -104,22 +106,6 @@ class MDS {
 struct MDS::RPC {
   class CLI;  // MDS on top of RPC
   class SRV;  // RPC on top of MDS
-
-  static char* EncodeHash(char* dst, const char (&hash)[8]) {
-    memcpy(dst, hash, sizeof(hash));
-    dst += sizeof(hash);
-    return dst;
-  }
-
-  static bool GetHash(Slice* input, char (&hash)[8]) {
-    if (input->size() < sizeof(hash)) {
-      return false;
-    } else {
-      memcpy(hash, input->data(), sizeof(hash));
-      input->remove_prefix(sizeof(hash));
-      return true;
-    }
-  }
 };
 
 class MDS::RPC::CLI : public MDS {

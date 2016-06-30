@@ -17,15 +17,15 @@ MDS::RPC::CLI::~CLI() {}
 
 MDS::RPC::SRV::~SRV() {}
 
-Status MDS::RPC::CLI::Fstat(const FstatOptions& opts, FstatRet* ret) {
+Status MDS::RPC::CLI::Fstat(const FstatOptions& options, FstatRet* ret) {
   Status s;
   Msg in;
   Msg out;
   char* scratch = &in.buf[0];
   char* p = scratch;
-  p = EncodeVarint64(p, opts.dir_ino);
-  p = EncodeHash(p, opts.name_hash);
-  p = EncodeLengthPrefixedSlice(p, opts.name);
+  p = EncodeVarint64(p, options.dir_ino);
+  p = EncodeLengthPrefixedSlice(p, options.name_hash);
+  p = EncodeLengthPrefixedSlice(p, options.name);
   in.contents = Slice(scratch, p - scratch);
   try {
     stub_->FSTAT(in, out);
@@ -46,7 +46,7 @@ void MDS::RPC::SRV::FSTAT(Msg& in, Msg& out) {
   FstatRet ret;
   Slice input = in.contents;
   if (!GetVarint64(&input, &options.dir_ino) ||
-      !GetHash(&input, options.name_hash) ||
+      !GetLengthPrefixedSlice(&input, &options.name_hash) ||
       !GetLengthPrefixedSlice(&input, &options.name)) {
     s = Status::InvalidArgument(Slice());
   } else {
@@ -64,18 +64,18 @@ void MDS::RPC::SRV::FSTAT(Msg& in, Msg& out) {
   }
 }
 
-Status MDS::RPC::CLI::Fcreat(const FcreatOptions& opts, FcreatRet* ret) {
+Status MDS::RPC::CLI::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
   Status s;
   Msg in;
   Msg out;
   char* scratch = &in.buf[0];
   char* p = scratch;
-  p = EncodeVarint64(p, opts.dir_ino);
-  p = EncodeHash(p, opts.name_hash);
-  p = EncodeVarint32(p, opts.mode);
-  p = EncodeVarint32(p, opts.uid);
-  p = EncodeVarint32(p, opts.gid);
-  p = EncodeLengthPrefixedSlice(p, opts.name);
+  p = EncodeVarint64(p, options.dir_ino);
+  p = EncodeLengthPrefixedSlice(p, options.name_hash);
+  p = EncodeLengthPrefixedSlice(p, options.name);
+  p = EncodeVarint32(p, options.mode);
+  p = EncodeVarint32(p, options.uid);
+  p = EncodeVarint32(p, options.gid);
   in.contents = Slice(scratch, p - scratch);
   try {
     stub_->FCRET(in, out);
@@ -96,11 +96,11 @@ void MDS::RPC::SRV::FCRET(Msg& in, Msg& out) {
   FcreatRet ret;
   Slice input = in.contents;
   if (!GetVarint64(&input, &options.dir_ino) ||
-      !GetHash(&input, options.name_hash) ||
+      !GetLengthPrefixedSlice(&input, &options.name_hash) ||
+      !GetLengthPrefixedSlice(&input, &options.name) ||
       !GetVarint32(&input, &options.mode) ||
       !GetVarint32(&input, &options.uid) ||
-      !GetVarint32(&input, &options.gid) ||
-      !GetLengthPrefixedSlice(&input, &options.name)) {
+      !GetVarint32(&input, &options.gid)) {
     s = Status::InvalidArgument(Slice());
   } else {
     try {
@@ -124,12 +124,12 @@ Status MDS::RPC::CLI::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
   char* scratch = &in.buf[0];
   char* p = scratch;
   p = EncodeVarint64(p, options.dir_ino);
-  p = EncodeHash(p, options.name_hash);
+  p = EncodeLengthPrefixedSlice(p, options.name_hash);
+  p = EncodeLengthPrefixedSlice(p, options.name);
   p = EncodeVarint32(p, options.mode);
   p = EncodeVarint32(p, options.uid);
   p = EncodeVarint32(p, options.gid);
   p = EncodeVarint32(p, options.zserver);
-  p = EncodeLengthPrefixedSlice(p, options.name);
   in.contents = Slice(scratch, p - scratch);
   try {
     stub_->MKDIR(in, out);
@@ -150,12 +150,12 @@ void MDS::RPC::SRV::MKDIR(Msg& in, Msg& out) {
   MkdirRet ret;
   Slice input = in.contents;
   if (!GetVarint64(&input, &options.dir_ino) ||
-      !GetHash(&input, options.name_hash) ||
+      !GetLengthPrefixedSlice(&input, &options.name_hash) ||
+      !GetLengthPrefixedSlice(&input, &options.name) ||
       !GetVarint32(&input, &options.mode) ||
       !GetVarint32(&input, &options.uid) ||
       !GetVarint32(&input, &options.gid) ||
-      !GetVarint32(&input, &options.zserver) ||
-      !GetLengthPrefixedSlice(&input, &options.name)) {
+      !GetVarint32(&input, &options.zserver)) {
     s = Status::InvalidArgument(Slice());
   } else {
     try {
@@ -179,7 +179,7 @@ Status MDS::RPC::CLI::Lookup(const LookupOptions& options, LookupRet* ret) {
   char* scratch = &in.buf[0];
   char* p = scratch;
   p = EncodeVarint64(p, options.dir_ino);
-  p = EncodeHash(p, options.name_hash);
+  p = EncodeLengthPrefixedSlice(p, options.name_hash);
   p = EncodeLengthPrefixedSlice(p, options.name);
   in.contents = Slice(scratch, p - scratch);
   try {
@@ -201,7 +201,7 @@ void MDS::RPC::SRV::LOKUP(Msg& in, Msg& out) {
   LookupRet ret;
   Slice input = in.contents;
   if (!GetVarint64(&input, &options.dir_ino) ||
-      !GetHash(&input, options.name_hash) ||
+      !GetLengthPrefixedSlice(&input, &options.name_hash) ||
       !GetLengthPrefixedSlice(&input, &options.name)) {
     s = Status::InvalidArgument(Slice());
   } else {
@@ -226,9 +226,9 @@ Status MDS::RPC::CLI::Chmod(const ChmodOptions& options, ChmodRet* ret) {
   char* scratch = &in.buf[0];
   char* p = scratch;
   p = EncodeVarint64(p, options.dir_ino);
-  p = EncodeHash(p, options.name_hash);
-  p = EncodeVarint32(p, options.mode);
+  p = EncodeLengthPrefixedSlice(p, options.name_hash);
   p = EncodeLengthPrefixedSlice(p, options.name);
+  p = EncodeVarint32(p, options.mode);
   in.contents = Slice(scratch, p - scratch);
   try {
     stub_->CHMOD(in, out);
@@ -249,9 +249,9 @@ void MDS::RPC::SRV::CHMOD(Msg& in, Msg& out) {
   ChmodRet ret;
   Slice input = in.contents;
   if (!GetVarint64(&input, &options.dir_ino) ||
-      !GetHash(&input, options.name_hash) ||
-      !GetVarint32(&input, &options.mode) ||
-      !GetLengthPrefixedSlice(&input, &options.name)) {
+      !GetLengthPrefixedSlice(&input, &options.name_hash) ||
+      !GetLengthPrefixedSlice(&input, &options.name) ||
+      !GetVarint32(&input, &options.mode)) {
     s = Status::InvalidArgument(Slice());
   } else {
     try {
