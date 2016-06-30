@@ -438,16 +438,14 @@ bool DirIndex::Update(const Slice& other) {
 
 // Update the directory index by merging another directory index
 // for the same directory.
-bool DirIndex::Update(const DirIndex& other) {
+void DirIndex::Update(const DirIndex& other) {
   const Rep& other_rep = *other.rep_;
   if (rep_ == NULL) {
     Rep* new_rep = new Rep(other_rep.dir_id(), other_rep.zeroth_server());
     new_rep->Merge(other_rep);
     rep_ = new_rep;
-    return true;
   } else {
     rep_->Merge(other_rep);
-    return true;
   }
 }
 

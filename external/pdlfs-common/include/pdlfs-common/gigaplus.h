@@ -60,7 +60,7 @@ class DirIndex {
   bool Update(const Slice& other);
 
   // Update the index by merging another index of the same directory.
-  bool Update(const DirIndex& other);
+  void Update(const DirIndex& other);
 
   // Return the server responsible for the given partition.
   int GetServerForIndex(int index) const;
