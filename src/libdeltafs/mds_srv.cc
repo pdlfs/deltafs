@@ -473,7 +473,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
     }
   }
 
-  {
+  if (s.ok()) {
     MutexLock ml(&mutex_);
     s = FetchDir(dir_ino, &ref);
     if (s.ok()) {
@@ -612,7 +612,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
     }
   }
 
-  {
+  if (s.ok()) {
     MutexLock ml(&mutex_);
     s = FetchDir(dir_ino, &ref);
     if (s.ok()) {
