@@ -163,7 +163,7 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
         MDB::Tx* mdb_tx = NULL;
         tx = d->tx;
         if (tx != NULL) {
-          mdb_tx = tx->rep;
+          mdb_tx = tx->rep();
           tx->Ref();
         }
         mutex_.Unlock();
@@ -239,7 +239,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
         tx->Ref();
         assert(d->tx == NULL);
         d->tx = tx;
-        MDB::Tx* mdb_tx = tx->rep;
+        MDB::Tx* mdb_tx = tx->rep();
         uint64_t my_time = env_->NowMicros();
         uint64_t my_ino = NextIno();
         mutex_.Unlock();
@@ -348,7 +348,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         tx->Ref();
         assert(d->tx == NULL);
         d->tx = tx;
-        MDB::Tx* mdb_tx = tx->rep;
+        MDB::Tx* mdb_tx = tx->rep();
         uint64_t my_time = env_->NowMicros();
         uint64_t my_ino = NextIno();
         mutex_.Unlock();
@@ -494,7 +494,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
         MDB::Tx* mdb_tx = NULL;
         tx = d->tx;
         if (tx != NULL) {
-          mdb_tx = tx->rep;
+          mdb_tx = tx->rep();
           tx->Ref();
         }
         uint64_t my_start = env_->NowMicros();
@@ -635,7 +635,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
         tx->Ref();
         assert(d->tx == NULL);
         d->tx = tx;
-        MDB::Tx* mdb_tx = tx->rep;
+        MDB::Tx* mdb_tx = tx->rep();
         uint64_t my_start = env_->NowMicros();
         mutex_.Unlock();
 

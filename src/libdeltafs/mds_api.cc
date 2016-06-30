@@ -325,7 +325,7 @@ Status MDS::RPC::CLI::Chmod(const ChmodOptions& options, ChmodRet* ret) {
     PutVarint64(&in.extra_buf, options.dir_ino);
     PutLengthPrefixedSlice(&in.extra_buf, options.name_hash);
     PutLengthPrefixedSlice(&in.extra_buf, options.name);
-    PutVarint32((&in.extra_buf, options.mode));
+    PutVarint32(&in.extra_buf, options.mode);
     in.contents = Slice(in.extra_buf);
     if (in.contents.size() > 4000) {
       s = Status::BufferFull(Slice());
