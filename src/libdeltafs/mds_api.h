@@ -107,7 +107,7 @@ class MDS {
 // functionality of MDS.
 class MDSWrapper : public MDS {
  public:
-  explicit MDSWrapper(MDS* base) : base_(base) {}
+  explicit MDSWrapper(MDS* base = NULL) : base_(base) {}
   ~MDSWrapper();
 
 #define DEF_OP(OP)                                              \
