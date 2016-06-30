@@ -20,22 +20,40 @@ MDS::RPC::SRV::~SRV() {}
 Status MDS::RPC::CLI::Fstat(const FstatOptions& options, FstatRet* ret) {
   Status s;
   Msg in;
-  Msg out;
-  char* scratch = &in.buf[0];
-  char* p = scratch;
-  p = EncodeVarint64(p, options.dir_ino);
-  p = EncodeLengthPrefixedSlice(p, options.name_hash);
-  p = EncodeLengthPrefixedSlice(p, options.name);
-  in.contents = Slice(scratch, p - scratch);
-  try {
-    stub_->FSTAT(in, out);
-  } catch (int rpc_err) {
-    // FIXME
+  if (options.name.size() <= 1000) {
+    char* scratch = &in.buf[0];
+    char* p = scratch;
+    p = EncodeVarint64(p, options.dir_ino);
+    p = EncodeLengthPrefixedSlice(p, options.name_hash);
+    p = EncodeLengthPrefixedSlice(p, options.name);
+    in.contents = Slice(scratch, p - scratch);
+  } else {
+    PutVarint64(&in.extra_buf, options.dir_ino);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name_hash);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name);
+    in.contents = Slice(in.extra_buf);
+    if (in.contents.size() > 4000) {
+      s = Status::BufferFull(Slice());
+    }
   }
-  if (out.err != 0) {
-    s = Status::FromCode(out.err);
-  } else if (!ret->stat.DecodeFrom(out.contents)) {
-    s = Status::Corruption(Slice());
+
+  Msg out;
+  if (s.ok()) {
+    try {
+      stub_->FSTAT(in, out);
+    } catch (int rpc_err) {
+      s = Status::Disconnected(Slice());
+    }
+    if (s.ok()) {
+      if (out.err == -1) {
+        Redirect re(out.contents.data(), out.contents.size());
+        throw re;
+      } else if (out.err != 0) {
+        s = Status::FromCode(out.err);
+      } else if (!ret->stat.DecodeFrom(out.contents)) {
+        s = Status::Corruption(Slice());
+      }
+    }
   }
   return s;
 }
@@ -52,8 +70,11 @@ void MDS::RPC::SRV::FSTAT(Msg& in, Msg& out) {
   } else {
     try {
       s = mds_->Fstat(options, &ret);
-    } catch (Redirect& redirect) {
-      // FIXME
+    } catch (Redirect& re) {
+      out.extra_buf = re;
+      out.contents = Slice(out.extra_buf);
+      out.err = -1;
+      return;
     }
   }
   if (s.ok()) {
@@ -67,25 +88,46 @@ void MDS::RPC::SRV::FSTAT(Msg& in, Msg& out) {
 Status MDS::RPC::CLI::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
   Status s;
   Msg in;
-  Msg out;
-  char* scratch = &in.buf[0];
-  char* p = scratch;
-  p = EncodeVarint64(p, options.dir_ino);
-  p = EncodeLengthPrefixedSlice(p, options.name_hash);
-  p = EncodeLengthPrefixedSlice(p, options.name);
-  p = EncodeVarint32(p, options.mode);
-  p = EncodeVarint32(p, options.uid);
-  p = EncodeVarint32(p, options.gid);
-  in.contents = Slice(scratch, p - scratch);
-  try {
-    stub_->FCRET(in, out);
-  } catch (int rpc_err) {
-    // FIXME
+  if (options.name.size() <= 1000) {
+    char* scratch = &in.buf[0];
+    char* p = scratch;
+    p = EncodeVarint64(p, options.dir_ino);
+    p = EncodeLengthPrefixedSlice(p, options.name_hash);
+    p = EncodeLengthPrefixedSlice(p, options.name);
+    p = EncodeVarint32(p, options.mode);
+    p = EncodeVarint32(p, options.uid);
+    p = EncodeVarint32(p, options.gid);
+    in.contents = Slice(scratch, p - scratch);
+  } else {
+    PutVarint64(&in.extra_buf, options.dir_ino);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name_hash);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name);
+    PutVarint32(&in.extra_buf, options.mode);
+    PutVarint32(&in.extra_buf, options.uid);
+    PutVarint32(&in.extra_buf, options.gid);
+    in.contents = Slice(in.extra_buf);
+    if (in.contents.size() > 4000) {
+      s = Status::BufferFull(Slice());
+    }
   }
-  if (out.err != 0) {
-    s = Status::FromCode(out.err);
-  } else if (!ret->stat.DecodeFrom(out.contents)) {
-    s = Status::Corruption(Slice());
+
+  Msg out;
+  if (s.ok()) {
+    try {
+      stub_->FCRET(in, out);
+    } catch (int rpc_err) {
+      s = Status::Disconnected(Slice());
+    }
+    if (s.ok()) {
+      if (out.err == -1) {
+        Redirect re(out.contents.data(), out.contents.size());
+        throw re;
+      } else if (out.err != 0) {
+        s = Status::FromCode(out.err);
+      } else if (!ret->stat.DecodeFrom(out.contents)) {
+        s = Status::Corruption(Slice());
+      }
+    }
   }
   return s;
 }
@@ -105,8 +147,11 @@ void MDS::RPC::SRV::FCRET(Msg& in, Msg& out) {
   } else {
     try {
       s = mds_->Fcreat(options, &ret);
-    } catch (Redirect& redirect) {
-      // FIXME
+    } catch (Redirect& re) {
+      out.extra_buf = re;
+      out.contents = Slice(out.extra_buf);
+      out.err = -1;
+      return;
     }
   }
   if (s.ok()) {
@@ -120,26 +165,48 @@ void MDS::RPC::SRV::FCRET(Msg& in, Msg& out) {
 Status MDS::RPC::CLI::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
   Status s;
   Msg in;
-  Msg out;
-  char* scratch = &in.buf[0];
-  char* p = scratch;
-  p = EncodeVarint64(p, options.dir_ino);
-  p = EncodeLengthPrefixedSlice(p, options.name_hash);
-  p = EncodeLengthPrefixedSlice(p, options.name);
-  p = EncodeVarint32(p, options.mode);
-  p = EncodeVarint32(p, options.uid);
-  p = EncodeVarint32(p, options.gid);
-  p = EncodeVarint32(p, options.zserver);
-  in.contents = Slice(scratch, p - scratch);
-  try {
-    stub_->MKDIR(in, out);
-  } catch (int rpc_err) {
-    // FIXME
+  if (options.name.size() <= 1000) {
+    char* scratch = &in.buf[0];
+    char* p = scratch;
+    p = EncodeVarint64(p, options.dir_ino);
+    p = EncodeLengthPrefixedSlice(p, options.name_hash);
+    p = EncodeLengthPrefixedSlice(p, options.name);
+    p = EncodeVarint32(p, options.mode);
+    p = EncodeVarint32(p, options.uid);
+    p = EncodeVarint32(p, options.gid);
+    p = EncodeVarint32(p, options.zserver);
+    in.contents = Slice(scratch, p - scratch);
+  } else {
+    PutVarint64(&in.extra_buf, options.dir_ino);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name_hash);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name);
+    PutVarint32(&in.extra_buf, options.mode);
+    PutVarint32(&in.extra_buf, options.uid);
+    PutVarint32(&in.extra_buf, options.gid);
+    PutVarint32(&in.extra_buf, options.zserver);
+    in.contents = Slice(in.extra_buf);
+    if (in.contents.size() > 4000) {
+      s = Status::BufferFull(Slice());
+    }
   }
-  if (out.err != 0) {
-    s = Status::FromCode(out.err);
-  } else if (!ret->stat.DecodeFrom(out.contents)) {
-    s = Status::Corruption(Slice());
+
+  Msg out;
+  if (s.ok()) {
+    try {
+      stub_->MKDIR(in, out);
+    } catch (int rpc_err) {
+      s = Status::Disconnected(Slice());
+    }
+    if (s.ok()) {
+      if (out.err == -1) {
+        Redirect re(out.contents.data(), out.contents.size());
+        throw re;
+      } else if (out.err != 0) {
+        s = Status::FromCode(out.err);
+      } else if (!ret->stat.DecodeFrom(out.contents)) {
+        s = Status::Corruption(Slice());
+      }
+    }
   }
   return s;
 }
@@ -160,8 +227,11 @@ void MDS::RPC::SRV::MKDIR(Msg& in, Msg& out) {
   } else {
     try {
       mds_->Mkdir(options, &ret);
-    } catch (Redirect& redirect) {
-      // FIXME
+    } catch (Redirect& re) {
+      out.extra_buf = re;
+      out.contents = Slice(out.extra_buf);
+      out.err = -1;
+      return;
     }
   }
   if (s.ok()) {
@@ -175,22 +245,40 @@ void MDS::RPC::SRV::MKDIR(Msg& in, Msg& out) {
 Status MDS::RPC::CLI::Lookup(const LookupOptions& options, LookupRet* ret) {
   Status s;
   Msg in;
-  Msg out;
-  char* scratch = &in.buf[0];
-  char* p = scratch;
-  p = EncodeVarint64(p, options.dir_ino);
-  p = EncodeLengthPrefixedSlice(p, options.name_hash);
-  p = EncodeLengthPrefixedSlice(p, options.name);
-  in.contents = Slice(scratch, p - scratch);
-  try {
-    stub_->LOKUP(in, out);
-  } catch (int rpc_err) {
-    // FIXME
+  if (options.name.size() <= 1000) {
+    char* scratch = &in.buf[0];
+    char* p = scratch;
+    p = EncodeVarint64(p, options.dir_ino);
+    p = EncodeLengthPrefixedSlice(p, options.name_hash);
+    p = EncodeLengthPrefixedSlice(p, options.name);
+    in.contents = Slice(scratch, p - scratch);
+  } else {
+    PutVarint64(&in.extra_buf, options.dir_ino);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name_hash);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name);
+    in.contents = Slice(in.extra_buf);
+    if (in.contents.size() > 4000) {
+      s = Status::BufferFull(Slice());
+    }
   }
-  if (out.err != 0) {
-    s = Status::FromCode(out.err);
-  } else if (!ret->entry.DecodeFrom(out.contents)) {
-    s = Status::Corruption(Slice());
+
+  Msg out;
+  if (s.ok()) {
+    try {
+      stub_->LOKUP(in, out);
+    } catch (int rpc_err) {
+      s = Status::Disconnected(Slice());
+    }
+    if (s.ok()) {
+      if (out.err == -1) {
+        Redirect re(out.contents.data(), out.contents.size());
+        throw re;
+      } else if (out.err != 0) {
+        s = Status::FromCode(out.err);
+      } else if (!ret->entry.DecodeFrom(out.contents)) {
+        s = Status::Corruption(Slice());
+      }
+    }
   }
   return s;
 }
@@ -207,8 +295,11 @@ void MDS::RPC::SRV::LOKUP(Msg& in, Msg& out) {
   } else {
     try {
       s = mds_->Lookup(options, &ret);
-    } catch (Redirect& redirect) {
-      // FIXME
+    } catch (Redirect& re) {
+      out.extra_buf = re;
+      out.contents = Slice(out.extra_buf);
+      out.err = -1;
+      return;
     }
   }
   if (s.ok()) {
@@ -222,23 +313,42 @@ void MDS::RPC::SRV::LOKUP(Msg& in, Msg& out) {
 Status MDS::RPC::CLI::Chmod(const ChmodOptions& options, ChmodRet* ret) {
   Status s;
   Msg in;
-  Msg out;
-  char* scratch = &in.buf[0];
-  char* p = scratch;
-  p = EncodeVarint64(p, options.dir_ino);
-  p = EncodeLengthPrefixedSlice(p, options.name_hash);
-  p = EncodeLengthPrefixedSlice(p, options.name);
-  p = EncodeVarint32(p, options.mode);
-  in.contents = Slice(scratch, p - scratch);
-  try {
-    stub_->CHMOD(in, out);
-  } catch (int rpc_err) {
-    // FIXME
+  if (options.name.size() <= 1000) {
+    char* scratch = &in.buf[0];
+    char* p = scratch;
+    p = EncodeVarint64(p, options.dir_ino);
+    p = EncodeLengthPrefixedSlice(p, options.name_hash);
+    p = EncodeLengthPrefixedSlice(p, options.name);
+    p = EncodeVarint32(p, options.mode);
+    in.contents = Slice(scratch, p - scratch);
+  } else {
+    PutVarint64(&in.extra_buf, options.dir_ino);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name_hash);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name);
+    PutVarint32((&in.extra_buf, options.mode));
+    in.contents = Slice(in.extra_buf);
+    if (in.contents.size() > 4000) {
+      s = Status::BufferFull(Slice());
+    }
   }
-  if (out.err != 0) {
-    s = Status::FromCode(out.err);
-  } else if (!ret->stat.DecodeFrom(out.contents)) {
-    s = Status::Corruption(Slice());
+
+  Msg out;
+  if (s.ok()) {
+    try {
+      stub_->CHMOD(in, out);
+    } catch (int rpc_err) {
+      s = Status::Disconnected(Slice());
+    }
+    if (s.ok()) {
+      if (out.err == -1) {
+        Redirect re(out.contents.data(), out.contents.size());
+        throw re;
+      } else if (out.err != 0) {
+        s = Status::FromCode(out.err);
+      } else if (!ret->stat.DecodeFrom(out.contents)) {
+        s = Status::Corruption(Slice());
+      }
+    }
   }
   return s;
 }
@@ -256,8 +366,11 @@ void MDS::RPC::SRV::CHMOD(Msg& in, Msg& out) {
   } else {
     try {
       s = mds_->Chmod(options, &ret);
-    } catch (Redirect& redirect) {
-      // FIXME
+    } catch (Redirect& re) {
+      out.extra_buf = re;
+      out.contents = Slice(out.extra_buf);
+      out.err = -1;
+      return;
     }
   }
   if (s.ok()) {
@@ -271,29 +384,31 @@ void MDS::RPC::SRV::CHMOD(Msg& in, Msg& out) {
 Status MDS::RPC::CLI::Listdir(const ListdirOptions& options, ListdirRet* ret) {
   Status s;
   Msg in;
-  Msg out;
   char* scratch = &in.buf[0];
   char* p = scratch;
   p = EncodeVarint64(p, options.dir_ino);
   in.contents = Slice(scratch, p - scratch);
+  Msg out;
   try {
     stub_->LSDIR(in, out);
   } catch (int rpc_err) {
-    // FIXME
+    s = Status::Disconnected(Slice());
   }
-  std::vector<std::string>* names = &ret->names;
-  if (out.err != 0) {
-    s = Status::FromCode(out.err);
-  } else {
-    uint32_t num;
-    Slice name;
-    Slice encoding = out.contents;
-    if (GetVarint32(&encoding, &num)) {
-      while (num-- != 0) {
-        if (GetLengthPrefixedSlice(&encoding, &name)) {
-          names->push_back(name.ToString());
-        } else {
-          break;
+  if (s.ok()) {
+    std::vector<std::string>* names = &ret->names;
+    if (out.err != 0) {
+      s = Status::FromCode(out.err);
+    } else {
+      uint32_t num;
+      Slice name;
+      Slice encoding = out.contents;
+      if (GetVarint32(&encoding, &num)) {
+        while (num-- != 0) {
+          if (GetLengthPrefixedSlice(&encoding, &name)) {
+            names->push_back(name.ToString());
+          } else {
+            break;
+          }
         }
       }
     }
