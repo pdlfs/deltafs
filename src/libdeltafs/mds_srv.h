@@ -31,8 +31,10 @@ class MDS::SRV : public MDS {
   DEC_OP(Listdir)
 
 #undef DEC_OP
+  static int PickupServer(uint64_t dir_ino);
 
  private:
+  Status LoadDir(uint64_t ino, DirInfo* info, DirIndex* index);
   Status FetchDir(uint64_t ino, Dir::Ref** ref);
   Status ProbeDir(const Dir* dir);
 

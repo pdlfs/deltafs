@@ -18,6 +18,56 @@
 
 namespace pdlfs {
 
+// NOTE: can be called while mutex_ is NOT locked.
+Status MDS::SRV::LoadDir(uint64_t ino, DirInfo* info, DirIndex* index) {
+  Status s;
+  MDB::Tx* mdb_tx = NULL;
+
+  // Load directory info. Create if missing...
+  s = mdb_->Getdir(ino, info, mdb_tx);
+  if (s.IsNotFound()) {
+    mdb_tx = mdb_->CreateTx();
+    info->mtime = env_->NowMicros();
+    info->size = 0;
+    s = mdb_->Setdir(ino, *info, mdb_tx);
+  }
+
+  // Load directory index. Create if missing...
+  if (s.ok()) {
+    s = mdb_->Getidx(ino, index, mdb_tx);
+    if (s.IsNotFound()) {
+      int zserver = PickupServer(ino) % idx_opts_.num_virtual_servers;
+      DirIndex tmp(ino, zserver, &idx_opts_);
+      if (mdb_tx == NULL) {
+        mdb_tx = mdb_->CreateTx();
+      }
+      s = mdb_->Setidx(ino, tmp, mdb_tx);
+      if (s.ok()) {
+        index->Update(tmp);
+      }
+    }
+  }
+
+  if (s.ok() && mdb_tx != NULL) {
+    s = mdb_->Commit(mdb_tx);
+  }
+
+  if (mdb_tx != NULL) {
+    mdb_->Release(mdb_tx);
+  }
+
+  return s;
+}
+
+// Deterministically select a zeroth-server for a directory.
+int MDS::SRV::PickupServer(uint64_t dir_ino) {
+  char tmp[8];
+  EncodeFixed64(tmp, dir_ino);
+  Slice dir(tmp, 8);
+  int zserver = DirIndex::RandomServer(dir, 0);
+  return zserver;
+}
+
 // Load the states of a directory into an in-memory LRU-cache.
 // Return OK on success.
 // Errors might occur when the directory being searched does not exist, when
@@ -41,17 +91,9 @@ Status MDS::SRV::FetchDir(uint64_t ino, Dir::Ref** ref) {
         } while (loading_dirs_.count(ino) != 0);
       } else {
         mutex_.Unlock();
-
         DirInfo dir_info;
         DirIndex dir_index(&idx_opts_);
-        s = mdb_->Getdir(ino, &dir_info, NULL);
-        if (s.ok()) {
-          s = mdb_->Getidx(ino, &dir_index, NULL);
-        }
-        if (s.IsNotFound()) {
-          s = Status::DirNotAllocated(Slice());
-        }
-
+        s = LoadDir(ino, &dir_info, &dir_index);
         mutex_.Lock();
         if (s.ok()) {
           Dir* d = new Dir(&mutex_, &idx_opts_);
