@@ -39,7 +39,9 @@ Slice DirInfo::EncodeTo(char* scratch) const {
 
 bool Dir::busy() const {
 #if defined(DELTAFS)
-  if (tx != NULL) return true;
+  if (tx.NoBarrier_Load() != NULL) {
+    return true;
+  }
 #endif
   if (locked) {
     return true;
