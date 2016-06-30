@@ -105,7 +105,7 @@ Status MDS::SRV::FetchDir(uint64_t ino, Dir::Ref** ref) {
           d->num_leases = 0;
           assert(dir_index.DirId() == ino);
           d->index.Update(dir_index);
-          d->tx = NULL;
+          d->tx.NoBarrier_Store(NULL);
           d->seq = 0;
           d->locked = false;
           try {
@@ -203,13 +203,14 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
         }
       }
       if (s.ok()) {
+        mutex_.Unlock();
+
         MDB::Tx* mdb_tx = NULL;
-        tx = d->tx;
+        tx = reinterpret_cast<Dir::Tx*>(d->tx.Acquire_Load());
         if (tx != NULL) {
           mdb_tx = tx->rep();
           tx->Ref();
         }
-        mutex_.Unlock();
 
         Slice name;
         s = mdb_->Getattr(dir_ino, name_hash, &ret->stat, &name, mdb_tx);
@@ -278,15 +279,16 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
         }
       }
       if (s.ok()) {
-        tx = new Dir::Tx(mdb_);
-        tx->Ref();
-        assert(d->tx == NULL);
-        d->tx = tx;
-        MDB::Tx* mdb_tx = tx->rep();
         uint64_t my_time = env_->NowMicros();
         uint64_t my_ino = NextIno();
         mutex_.Unlock();
 
+        tx = new Dir::Tx(mdb_);
+        tx->Ref();
+        assert(d->tx.Acquire_Load() == NULL);
+        d->tx.Release_Store(tx);
+
+        MDB::Tx* mdb_tx = tx->rep();
         if (mdb_->Exists(dir_ino, name_hash, mdb_tx)) {
           s = Status::AlreadyExists(Slice());
         } else {
@@ -322,8 +324,8 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
         } else {
           TryReuseIno(my_ino);
         }
-        assert(d->tx == tx);
-        d->tx = NULL;
+        assert(d->tx.NoBarrier_Load() == tx);
+        d->tx.NoBarrier_Store(NULL);
         assert(tx != NULL);
         bool last_ref = tx->Unref();
         if (!last_ref) {
@@ -387,14 +389,15 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         }
       }
       if (s.ok()) {
-        tx = new Dir::Tx(mdb_);
-        tx->Ref();
-        assert(d->tx == NULL);
-        d->tx = tx;
-        MDB::Tx* mdb_tx = tx->rep();
         uint64_t my_time = env_->NowMicros();
         uint64_t my_ino = NextIno();
         mutex_.Unlock();
+
+        tx = new Dir::Tx(mdb_);
+        tx->Ref();
+        assert(d->tx.Acquire_Load() == NULL);
+        d->tx.Release_Store(tx);
+        MDB::Tx* mdb_tx = tx->rep();
 
         if (mdb_->Exists(dir_ino, name_hash, mdb_tx)) {
           s = Status::AlreadyExists(Slice());
@@ -431,8 +434,8 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         } else {
           TryReuseIno(my_ino);
         }
-        assert(d->tx == tx);
-        d->tx = NULL;
+        assert(d->tx.NoBarrier_Load() == tx);
+        d->tx.NoBarrier_Store(NULL);
         assert(tx != NULL);
         bool last_ref = tx->Unref();
         if (!last_ref) {
@@ -534,15 +537,16 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
         }
       }
       if (s.ok()) {
+        uint64_t my_start = env_->NowMicros();
+        uint64_t my_seq = d->seq;
+        mutex_.Unlock();
+
         MDB::Tx* mdb_tx = NULL;
-        tx = d->tx;
+        tx = reinterpret_cast<Dir::Tx*>(d->tx.Acquire_Load());
         if (tx != NULL) {
           mdb_tx = tx->rep();
           tx->Ref();
         }
-        uint64_t my_start = env_->NowMicros();
-        uint64_t my_seq = d->seq;
-        mutex_.Unlock();
 
         ret->entry.SetLeaseDue(0);
 
@@ -674,13 +678,14 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
         }
       }
       if (s.ok()) {
-        tx = new Dir::Tx(mdb_);
-        tx->Ref();
-        assert(d->tx == NULL);
-        d->tx = tx;
-        MDB::Tx* mdb_tx = tx->rep();
         uint64_t my_start = env_->NowMicros();
         mutex_.Unlock();
+
+        tx = new Dir::Tx(mdb_);
+        tx->Ref();
+        assert(d->tx.Acquire_Load() == NULL);
+        d->tx.Release_Store(tx);
+        MDB::Tx* mdb_tx = tx->rep();
 
         Stat* stat = &ret->stat;
         Slice name;
@@ -761,8 +766,8 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
           assert(my_start >= d->mtime);
           d->mtime = my_start;
         }
-        assert(d->tx == tx);
-        d->tx = NULL;
+        assert(d->tx.NoBarrier_Load() == tx);
+        d->tx.NoBarrier_Store(NULL);
         assert(tx != NULL);
         bool last_ref = tx->Unref();
         if (!last_ref) {

@@ -34,19 +34,19 @@ struct Dir {
   typedef RefGuard<DirTable, Ref> Guard;
   bool busy() const;
   Dir(port::Mutex* mu, const DirIndexOptions* o) : cv(mu), index(o) {}
-  port::CondVar cv;
   uint64_t ino;
   uint64_t mtime;  // Last modification time
-  int size;
 
 #if defined(DELTAFS)
   uint64_t seq;  // Incremented whenever a sub-directory's lookup state changes
+  port::AtomicPointer tx;  // Either NULL or an on-going write transaction
   class Tx;
-  Tx* tx;  // Either NULL or points to an on-going write transaction
 #endif
-  mutable int num_leases;  // Total number of leases blow this directory
+  port::CondVar cv;
   DirIndex index;          // GIGA+ index
   Status status;
+  mutable int num_leases;  // Total number of leases blow this directory
+  int size;
   bool locked;
 
   void Lock() {
