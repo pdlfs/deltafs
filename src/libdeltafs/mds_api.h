@@ -102,14 +102,21 @@ class MDS {
   MDS(const MDS&);
 };
 
+// Helper class that forwards all calls to another MDS if one exists.
+// May be useful to clients who wish to implement just part of the
+// functionality of MDS.
 class MDSWrapper : public MDS {
  public:
-  explicit MDSWrapper() {}
+  explicit MDSWrapper(MDS* base) : base_(base) {}
   ~MDSWrapper();
 
-#define DEF_OP(OP)                                  \
-  virtual Status OP(const OP##Options&, OP##Ret*) { \
-    return Status::NotSupported(Slice());           \
+#define DEF_OP(OP)                                              \
+  virtual Status OP(const OP##Options& options, OP##Ret* ret) { \
+    if (base_ != NULL) {                                        \
+      return base_->OP(options, ret);                           \
+    } else {                                                    \
+      return Status::NotSupported(Slice());                     \
+    }                                                           \
   }
 
   DEF_OP(Fstat)
@@ -120,6 +127,9 @@ class MDSWrapper : public MDS {
   DEF_OP(Listdir)
 
 #undef DEF_OP
+
+ private:
+  MDS* base_;
 };
 
 // RPC adaptors
