@@ -227,6 +227,7 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
     }
   }
 
+  ret->stat.AssertAllSet();
   if (tx != NULL) {
     tx->Dispose(mdb_);
   }
@@ -287,8 +288,8 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
         tx->Ref();
         assert(d->tx.Acquire_Load() == NULL);
         d->tx.Release_Store(tx);
-
         MDB::Tx* mdb_tx = tx->rep();
+
         if (mdb_->Exists(dir_ino, name_hash, mdb_tx)) {
           s = Status::AlreadyExists(Slice());
         } else {
@@ -777,6 +778,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
     }
   }
 
+  ret->stat.AssertAllSet();
   if (tx != NULL) {
     tx->Dispose(mdb_);
   }
