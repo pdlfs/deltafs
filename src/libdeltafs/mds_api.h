@@ -102,6 +102,26 @@ class MDS {
   MDS(const MDS&);
 };
 
+class MDSWrapper : public MDS {
+ public:
+  explicit MDSWrapper() {}
+  ~MDSWrapper();
+
+#define DEF_OP(OP)                                  \
+  virtual Status OP(const OP##Options&, OP##Ret*) { \
+    return Status::NotSupported(Slice());           \
+  }
+
+  DEF_OP(Fstat)
+  DEF_OP(Fcreat)
+  DEF_OP(Mkdir)
+  DEF_OP(Chmod)
+  DEF_OP(Lookup)
+  DEF_OP(Listdir)
+
+#undef DEF_OP
+};
+
 // RPC adaptors
 struct MDS::RPC {
   class CLI;  // MDS on top of RPC

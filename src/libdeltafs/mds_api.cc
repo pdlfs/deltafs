@@ -17,6 +17,8 @@ MDS::RPC::CLI::~CLI() {}
 
 MDS::RPC::SRV::~SRV() {}
 
+MDSWrapper::~MDSWrapper() {}
+
 Status MDS::RPC::CLI::Fstat(const FstatOptions& options, FstatRet* ret) {
   Status s;
   Msg in;
