@@ -30,6 +30,7 @@ class Key {
  public:
   Key() {}
   explicit Key(uint64_t dir, KeyType type);
+  explicit Key(uint64_t snap, uint64_t dir, KeyType type);
   explicit Key(uint64_t reg, uint64_t snap, uint64_t dir, KeyType type);
   void SetName(const Slice& name);
   void SetHash(const Slice& hash);
@@ -48,7 +49,7 @@ class Key {
 
  private:
   // Intentionally copyable
-  char rep_[32];
+  char rep_[40];
   size_t size_;
 };
 

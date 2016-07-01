@@ -54,6 +54,11 @@ Key::Key(uint64_t dir, KeyType type) {
   size_ = prefix.size() + 8;
 }
 
+Key::Key(uint64_t snap, uint64_t dir, KeyType type) {
+  Slice prefix = PackPrefix(rep_, 0, snap, dir, type);
+  size_ = prefix.size() + 8;
+}
+
 Key::Key(uint64_t reg, uint64_t snap, uint64_t dir, KeyType type) {
   Slice prefix = PackPrefix(rep_, reg, snap, dir, type);
   size_ = prefix.size() + 8;
@@ -109,7 +114,8 @@ KeyType Key::type() const {
   GetVarint64(&encoding, &ignored);
   GetVarint64(&encoding, &ignored);
   GetVarint64(&encoding, &ignored);
-  result = static_cast<KeyType>(encoding[0]);
+  unsigned char tmp = encoding[0];
+  result = static_cast<KeyType>(tmp);
 #endif
   return result;
 }
