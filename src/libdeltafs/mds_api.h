@@ -17,10 +17,29 @@
 
 namespace pdlfs {
 
+class Env;
+class MDB;
+
+struct MDSOptions {
+  MDSOptions();
+  Env* env;
+  MDB* mdb;
+  size_t dir_table_size;
+  size_t lease_table_size;
+  uint64_t lease_duration;
+  uint64_t snap_id;
+  uint64_t reg_id;
+  bool paranoid_checks;
+  int num_virtual_servers;
+  int num_servers;
+  int srv_id;
+};
+
 class MDS {
  public:
   MDS() {}
   virtual ~MDS();
+  static Status NewServer(const MDSOptions&, MDS** mdsptr);
   struct RPC;
 
   typedef std::string Redirect;

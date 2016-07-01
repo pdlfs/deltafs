@@ -21,6 +21,9 @@ namespace pdlfs {
 
 class MDS::SRV : public MDS {
  public:
+  SRV(const MDSOptions&);
+  virtual ~SRV();
+
 #define DEC_OP(OP) virtual Status OP(const OP##Options&, OP##Ret*);
 
   DEC_OP(Fstat)
@@ -38,22 +41,27 @@ class MDS::SRV : public MDS {
   Status FetchDir(uint64_t ino, Dir::Ref** ref);
   Status ProbeDir(const Dir* dir);
 
+  // Constant after construction
   Env* env_;
   MDB* mdb_;
   DirIndexOptions idx_opts_;
-  uint64_t lease_duration_;
   bool paranoid_checks_;
+  uint64_t lease_duration_;
+  uint64_t snap_id_;
+  uint64_t reg_id_;
   int srv_id_;
 
+  // State below is protected by mutex_
   port::Mutex mutex_;
-  uint64_t ino_;  // The largest we have allocated
-  uint64_t NextIno();
-  void TryReuseIno(uint64_t ino);
   LeaseTable* leases_;
-  DirTable* dirs_;
   std::set<uint64_t> loading_dirs_;  // Directories being loaded into cache
   port::CondVar loading_cv_;
+  DirTable* dirs_;
+  void TryReuseIno(uint64_t ino);
+  uint64_t NextIno();
+  uint64_t ino_;  // The largest we have allocated
 
+  friend class MDS;
   // No copying allowed
   void operator=(const SRV&);
   SRV(const SRV&);
