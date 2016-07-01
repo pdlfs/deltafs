@@ -16,50 +16,111 @@
 namespace pdlfs {
 
 void Key::SetName(const Slice& name) {
-  Slice r = DirIndex::Hash(name, rep_ + 8);
-  assert(r.size() == 8);
-  (void)r;
+#ifndef NDEBUG
+  std::string hash;
+  DirIndex::PutHash(&hash, name);
+  assert(hash.size() == 8);
+  memcpy(rep_ + size_ - 8, hash.data(), hash.size());
+#else
+  DirIndex::Hash(name, rep_ + size_ - 8);
+#endif
 }
 
 void Key::SetHash(const Slice& hash) {
   assert(hash.size() == 8);
-  memcpy(rep_ + 8, hash.data(), 8);
+  memcpy(rep_ + size_ - 8, hash.data(), hash.size());
 }
 
-Key::Key(uint64_t dir_id, KeyType type) {
-  uint64_t pack = (dir_id << 8) | (type & 0xff);
-  pack = htobe64(pack);
-  memcpy(rep_, &pack, 8);
+static Slice PackPrefix(char* dst, uint64_t R, uint64_t S, uint64_t D,
+                        KeyType T) {
+#if !defined(DELTAFS)
+  uint64_t composite = (D << 8) | (T & 0xff);
+  composite = htobe64(composite);
+  memcpy(dst, &composite, 8);
+  char* p = dst + 8;
+#else
+  char* p = dst;
+  p = EncodeVarint64(p, R);
+  p = EncodeVarint64(p, S);
+  p = EncodeVarint64(p, D);
+  p[0] = T;
+  p++;
+#endif
+  return Slice(dst, p - dst);
 }
 
-Key::Key(uint64_t dir_id, KeyType type, const Slice& name) {
-  uint64_t pack = (dir_id << 8) | (type & 0xff);
-  pack = htobe64(pack);
-  memcpy(rep_, &pack, 8);
-  SetName(name);
+Key::Key(uint64_t dir, KeyType type) {
+  Slice prefix = PackPrefix(rep_, 0, 0, dir, type);
+  size_ = prefix.size() + 8;
+}
+
+Key::Key(uint64_t reg, uint64_t snap, uint64_t dir, KeyType type) {
+  Slice prefix = PackPrefix(rep_, reg, snap, dir, type);
+  size_ = prefix.size() + 8;
+}
+
+uint64_t Key::reg_id() const {
+  uint64_t result;
+#if !defined(DELTAFS)
+  result = 0;
+#else
+  Slice encoding = Encode();
+  GetVarint64(&encoding, &result);
+#endif
+  return result;
+}
+
+uint64_t Key::snap_id() const {
+  uint64_t result;
+#if !defined(DELTAFS)
+  result = 0;
+#else
+  Slice encoding = Encode();
+  GetVarint64(&encoding, &result);  // ignored
+  GetVarint64(&encoding, &result);
+#endif
+  return result;
 }
 
 uint64_t Key::dir_id() const {
-  uint64_t pack;
-  memcpy(&pack, rep_, 8);
-  uint64_t r = be64toh(pack) >> 8;
-  return r;
+  uint64_t result;
+#if !defined(DELTAFS)
+  uint64_t composite;
+  memcpy(&composite, rep_, 8);
+  result = be64toh(composite) >> 8;
+#else
+  Slice encoding = Encode();
+  GetVarint64(&encoding, &result);  // ignored
+  GetVarint64(&encoding, &result);  // ignored
+  GetVarint64(&encoding, &result);
+#endif
+  return result;
 }
 
 KeyType Key::type() const {
-  uint64_t pack;
-  memcpy(&pack, rep_, 8);
-  KeyType type = static_cast<KeyType>(be64toh(pack) & 0xff);
-  return type;
+  KeyType result;
+#if !defined(DELTAFS)
+  uint64_t composite;
+  memcpy(&composite, rep_, 8);
+  result = static_cast<KeyType>(be64toh(composite) & 0xff);
+#else
+  uint64_t ignored;
+  Slice encoding = Encode();
+  GetVarint64(&encoding, &ignored);
+  GetVarint64(&encoding, &ignored);
+  GetVarint64(&encoding, &ignored);
+  result = static_cast<KeyType>(encoding[0]);
+#endif
+  return result;
 }
 
 Slice Key::hash() const {
-  Slice r = Slice(rep_ + 8, 8);
+  Slice r = Slice(rep_ + size_ - 8, 8);
   return r;
 }
 
 Slice Key::prefix() const {
-  Slice r = Slice(rep_, 8);
+  Slice r = Slice(rep_, size_ - 8);
   return r;
 }
 

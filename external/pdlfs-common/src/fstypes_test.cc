@@ -16,20 +16,9 @@ class KeyTest {};
 
 TEST(KeyTest, EncodeDecode1) {
   {
-    Key k1(1, static_cast<KeyType>(1), Slice());
-    Key k2(2, static_cast<KeyType>(1), Slice());
-    Key k3(2, static_cast<KeyType>(2), Slice());
-    Key k4(2, static_cast<KeyType>(2), Slice("X"));
-    Key k5(3, static_cast<KeyType>(1), Slice());
-    ASSERT_LT(k1.Encode(), k2.Encode());
-    ASSERT_LT(k2.Encode(), k3.Encode());
-    ASSERT_LT(k3.Encode(), k4.Encode());
-    ASSERT_LT(k4.Encode(), k5.Encode());
-  }
-  {
-    Key k1(0, static_cast<KeyType>(1), Slice());
-    Key k2(12345, static_cast<KeyType>(127), Slice());
-    Key k3(67890, static_cast<KeyType>(255), Slice());
+    Key k1(0, static_cast<KeyType>(1));
+    Key k2(12345, static_cast<KeyType>(127));
+    Key k3(67890, static_cast<KeyType>(255));
     ASSERT_EQ(k1.dir_id(), 0);
     ASSERT_EQ(int(k1.type()), 1);
     ASSERT_EQ(k2.dir_id(), 12345);
@@ -40,9 +29,11 @@ TEST(KeyTest, EncodeDecode1) {
   {
     char zero[50];
     memset(zero, 0, sizeof(zero));
-    Key k1(0, static_cast<KeyType>(0), Slice());
-    Key k2(0, static_cast<KeyType>(1), Slice("X"));
-    Key k3(0, static_cast<KeyType>(1), Slice("Y"));
+    Key k1(0, static_cast<KeyType>(0));
+    Key k2(0, static_cast<KeyType>(1));
+    k2.SetName(Slice("X"));
+    Key k3(0, static_cast<KeyType>(1));
+    k3.SetName(Slice("Y"));
     ASSERT_EQ(k1.Encode(), Slice(zero, k1.size()));
     ASSERT_EQ(k2.prefix(), k3.prefix());
     ASSERT_NE(k2.Encode(), k3.Encode());

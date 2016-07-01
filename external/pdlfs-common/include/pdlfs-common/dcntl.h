@@ -43,7 +43,7 @@ struct Dir {
   class Tx;
 #endif
   port::CondVar cv;
-  DirIndex index;          // GIGA+ index
+  DirIndex index;  // GIGA+ index
   Status status;
   mutable int num_leases;  // Total number of leases blow this directory
   int size;

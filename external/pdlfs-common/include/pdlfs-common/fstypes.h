@@ -29,24 +29,27 @@ enum KeyType {
 class Key {
  public:
   Key() {}
-  explicit Key(uint64_t dir_id, KeyType type);
-  explicit Key(uint64_t dir_id, KeyType type, const Slice& name);
+  explicit Key(uint64_t dir, KeyType type);
+  explicit Key(uint64_t reg, uint64_t snap, uint64_t dir, KeyType type);
   void SetName(const Slice& name);
   void SetHash(const Slice& hash);
 
+  uint64_t reg_id() const;
+  uint64_t snap_id() const;
   uint64_t dir_id() const;
   KeyType type() const;
   Slice hash() const;
   Slice prefix() const;
 
   Slice Encode() const { return Slice(data(), size()); }
-  size_t size() const { return sizeof(rep_); }
+  size_t size() const { return size_; }
   const char* data() const { return rep_; }
   char* data() { return rep_; }
 
  private:
   // Intentionally copyable
-  char rep_[16];
+  char rep_[32];
+  size_t size_;
 };
 
 // Common inode structure used in deltafs, indexfs, and tablefs.
