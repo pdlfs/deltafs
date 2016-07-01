@@ -46,9 +46,12 @@ class MDS {
 #define MDS_OP(OP) virtual Status OP(const OP##Options&, OP##Ret*) = 0;
 
   struct FstatOptions {
+    uint64_t reg_id;
+    uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
-    Slice name_hash;   // Name hash
+    Slice name_hash;
     Slice name;
+    uint32_t token;  // Transient client session id
   };
   struct FstatRet {
     Stat stat;
@@ -56,12 +59,15 @@ class MDS {
   MDS_OP(Fstat)
 
   struct FcreatOptions {
+    uint64_t reg_id;
+    uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
-    Slice name_hash;   // Name hash
+    Slice name_hash;
     Slice name;
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
+    uint32_t token;  // Transient client session id
   };
   struct FcreatRet {
     Stat stat;
@@ -69,13 +75,16 @@ class MDS {
   MDS_OP(Fcreat)
 
   struct MkdirOptions {
+    uint64_t reg_id;
+    uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
-    Slice name_hash;   // Name hash
+    Slice name_hash;
     Slice name;
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
     uint32_t zserver;
+    uint32_t token;  // Transient client session id
   };
   struct MkdirRet {
     Stat stat;
@@ -83,10 +92,13 @@ class MDS {
   MDS_OP(Mkdir)
 
   struct ChmodOptions {
+    uint64_t reg_id;
+    uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
-    Slice name_hash;   // Name hash
+    Slice name_hash;
     Slice name;
     uint32_t mode;
+    uint32_t token;  // Transient client session id
   };
   struct ChmodRet {
     Stat stat;
@@ -94,9 +106,12 @@ class MDS {
   MDS_OP(Chmod)
 
   struct LookupOptions {
+    uint64_t reg_id;
+    uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
-    Slice name_hash;   // Name hash
+    Slice name_hash;
     Slice name;
+    uint32_t token;  // Transient client session id
   };
   struct LookupRet {
     LookupEntry entry;
@@ -104,7 +119,10 @@ class MDS {
   MDS_OP(Lookup)
 
   struct ListdirOptions {
+    uint64_t reg_id;
+    uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
+    uint32_t token;    // Transient client session id
   };
   struct ListdirRet {
     std::vector<std::string> names;
