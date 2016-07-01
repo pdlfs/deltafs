@@ -15,9 +15,13 @@ namespace pdlfs {
 
 MDB::~MDB() {}
 
-Status MDB::Getidx(uint64_t ino, DirIndex* idx, Tx* tx) {
+Status MDB::Getidx(const DirId& id, DirIndex* idx, Tx* tx) {
   Status s;
-  Key key(ino, kDirIdxType);
+#if !defined(DELTAFS)
+  Key key(id.ino, kDirIdxType);
+#else
+  Key key(id.reg, id.snap, id.ino, kDirIdxType);
+#endif
   std::string tmp;
   ReadOptions options;
   if (tx != NULL) {
@@ -32,9 +36,13 @@ Status MDB::Getidx(uint64_t ino, DirIndex* idx, Tx* tx) {
   return s;
 }
 
-Status MDB::Getdir(uint64_t ino, DirInfo* dir, Tx* tx) {
+Status MDB::GetInfo(const DirId& id, DirInfo* info, Tx* tx) {
   Status s;
-  Key key(ino, kDirMetaType);
+#if !defined(DELTAFS)
+  Key key(id.ino, kDirMetaType);
+#else
+  Key key(id.reg, id.snap, id.ino, kDirMetaType);
+#endif
   char tmp[20];
   ReadOptions options;
   if (tx != NULL) {
@@ -43,17 +51,21 @@ Status MDB::Getdir(uint64_t ino, DirInfo* dir, Tx* tx) {
   Slice result;
   s = db_->Get(options, key.prefix(), &result, tmp, sizeof(tmp));
   if (s.ok()) {
-    if (!dir->DecodeFrom(&result)) {
+    if (!info->DecodeFrom(&result)) {
       s = Status::Corruption(Slice());
     }
   }
   return s;
 }
 
-Status MDB::Getattr(uint64_t ino, const Slice& hash, Stat* stat, Slice* name,
+Status MDB::Getattr(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
                     Tx* tx) {
   Status s;
-  Key key(ino, kDirEntType);
+#if !defined(DELTAFS)
+  Key key(id.ino, kDirEntType);
+#else
+  Key key(id.reg, id.snap, id.ino, kDirEntType);
+#endif
   key.SetHash(hash);
   std::string tmp;
   ReadOptions options;
@@ -72,9 +84,13 @@ Status MDB::Getattr(uint64_t ino, const Slice& hash, Stat* stat, Slice* name,
   return s;
 }
 
-Status MDB::Setidx(uint64_t ino, const DirIndex& idx, Tx* tx) {
+Status MDB::Setidx(const DirId& id, const DirIndex& idx, Tx* tx) {
   Status s;
-  Key key(ino, kDirIdxType);
+#if !defined(DELTAFS)
+  Key key(id.ino, kDirIdxType);
+#else
+  Key key(id.reg, id.snap, id.ino, kDirIdxType);
+#endif
   Slice encoding = idx.Encode();
   if (tx == NULL) {
     WriteOptions options;
@@ -85,11 +101,15 @@ Status MDB::Setidx(uint64_t ino, const DirIndex& idx, Tx* tx) {
   return s;
 }
 
-Status MDB::Setdir(uint64_t ino, const DirInfo& dir, Tx* tx) {
+Status MDB::SetInfo(const DirId& id, const DirInfo& info, Tx* tx) {
   Status s;
-  Key key(ino, kDirMetaType);
+#if !defined(DELTAFS)
+  Key key(id.ino, kDirMetaType);
+#else
+  Key key(id.reg, id.snap, id.ino, kDirMetaType);
+#endif
   char tmp[20];
-  Slice encoding = dir.EncodeTo(tmp);
+  Slice encoding = info.EncodeTo(tmp);
   if (tx == NULL) {
     WriteOptions options;
     s = db_->Put(options, key.prefix(), encoding);
@@ -99,10 +119,14 @@ Status MDB::Setdir(uint64_t ino, const DirInfo& dir, Tx* tx) {
   return s;
 }
 
-Status MDB::Setattr(uint64_t ino, const Slice& hash, const Stat& stat,
+Status MDB::Setattr(const DirId& id, const Slice& hash, const Stat& stat,
                     const Slice& name, Tx* tx) {
   Status s;
-  Key key(ino, kDirEntType);
+#if !defined(DELTAFS)
+  Key key(id.ino, kDirEntType);
+#else
+  Key key(id.reg, id.snap, id.ino, kDirEntType);
+#endif
   key.SetHash(hash);
   char tmp[4096 + sizeof(Stat)];
   Slice encoding = stat.EncodeTo(tmp);
@@ -119,9 +143,13 @@ Status MDB::Setattr(uint64_t ino, const Slice& hash, const Stat& stat,
   return s;
 }
 
-Status MDB::Delidx(uint64_t ino, Tx* tx) {
+Status MDB::Delidx(const DirId& id, Tx* tx) {
   Status s;
-  Key key(ino, kDirIdxType);
+#if !defined(DELTAFS)
+  Key key(id.ino, kDirIdxType);
+#else
+  Key key(id.reg, id.snap, id.ino, kDirIdxType);
+#endif
   if (tx == NULL) {
     WriteOptions options;
     s = db_->Delete(options, key.prefix());
@@ -131,9 +159,13 @@ Status MDB::Delidx(uint64_t ino, Tx* tx) {
   return s;
 }
 
-Status MDB::Deldir(uint64_t ino, Tx* tx) {
+Status MDB::DelInfo(const DirId& id, Tx* tx) {
   Status s;
-  Key key(ino, kDirMetaType);
+#if !defined(DELTAFS)
+  Key key(id.ino, kDirMetaType);
+#else
+  Key key(id.reg, id.snap, id.ino, kDirMetaType);
+#endif
   if (tx == NULL) {
     WriteOptions options;
     s = db_->Delete(options, key.prefix());
@@ -143,9 +175,13 @@ Status MDB::Deldir(uint64_t ino, Tx* tx) {
   return s;
 }
 
-Status MDB::Delattr(uint64_t ino, const Slice& hash, Tx* tx) {
+Status MDB::Delattr(const DirId& id, const Slice& hash, Tx* tx) {
   Status s;
-  Key key(ino, kDirEntType);
+#if !defined(DELTAFS)
+  Key key(id.ino, kDirEntType);
+#else
+  Key key(id.reg, id.snap, id.ino, kDirEntType);
+#endif
   key.SetHash(hash);
   if (tx == NULL) {
     WriteOptions options;
@@ -156,8 +192,12 @@ Status MDB::Delattr(uint64_t ino, const Slice& hash, Tx* tx) {
   return s;
 }
 
-int MDB::List(uint64_t ino, StatList* stats, NameList* names, Tx* tx) {
-  Key key(ino, kDirEntType);
+int MDB::List(const DirId& id, StatList* stats, NameList* names, Tx* tx) {
+#if !defined(DELTAFS)
+  Key key(id.ino, kDirEntType);
+#else
+  Key key(id.reg, id.snap, id.ino, kDirEntType);
+#endif
   ReadOptions options;
   options.fill_cache = false;
   if (tx != NULL) {
@@ -190,9 +230,13 @@ int MDB::List(uint64_t ino, StatList* stats, NameList* names, Tx* tx) {
   return num_entries;
 }
 
-bool MDB::Exists(uint64_t ino, const Slice& hash, Tx* tx) {
+bool MDB::Exists(const DirId& id, const Slice& hash, Tx* tx) {
   Status s;
-  Key key(ino, kDirEntType);
+#if !defined(DELTAFS)
+  Key key(id.ino, kDirEntType);
+#else
+  Key key(id.reg, id.snap, id.ino, kDirEntType);
+#endif
   key.SetHash(hash);
   ReadOptions options;
   options.limit = 0;

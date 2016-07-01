@@ -132,6 +132,10 @@ Slice Key::prefix() const {
 
 Slice Stat::EncodeTo(char* scratch) const {
   char* p = scratch;
+#if defined(DELTAFS)
+  p = EncodeVarint64(p, RegId());
+  p = EncodeVarint64(p, SnapId());
+#endif
 
   p = EncodeVarint64(p, InodeNo());
   p = EncodeVarint64(p, FileSize());
@@ -151,6 +155,17 @@ bool Stat::DecodeFrom(const Slice& encoding) {
 }
 
 bool Stat::DecodeFrom(Slice* input) {
+#if defined(DELTAFS)
+  uint64_t reg;
+  uint64_t snap;
+  if (!GetVarint64(input, &reg) || !GetVarint64(input, &snap)) {
+    return false;
+  } else {
+    SetRegId(reg);
+    SetSnapId(snap);
+  }
+#endif
+
   uint64_t ino;
   uint64_t size;
   uint32_t mode;
@@ -180,6 +195,10 @@ bool Stat::DecodeFrom(Slice* input) {
 
 Slice LookupEntry::EncodeTo(char* scratch) const {
   char* p = scratch;
+#if defined(DELTAFS)
+  p = EncodeVarint64(p, RegId());
+  p = EncodeVarint64(p, SnapId());
+#endif
 
   p = EncodeVarint64(p, InodeNo());
   p = EncodeVarint32(p, ZerothServer());
@@ -197,6 +216,17 @@ bool LookupEntry::DecodeFrom(const Slice& encoding) {
 }
 
 bool LookupEntry::DecodeFrom(Slice* input) {
+#if defined(DELTAFS)
+  uint64_t reg;
+  uint64_t snap;
+  if (!GetVarint64(input, &reg) || !GetVarint64(input, &snap)) {
+    return false;
+  } else {
+    SetRegId(reg);
+    SetSnapId(snap);
+  }
+#endif
+
   uint64_t ino;
   uint32_t zeroth_server;
   uint32_t mode;
@@ -220,6 +250,11 @@ bool LookupEntry::DecodeFrom(Slice* input) {
 }
 
 void LookupEntry::CopyFrom(const Stat& stat) {
+#if defined(DELTAFS)
+  SetRegId(stat.RegId());
+  SetSnapId(stat.SnapId());
+#endif
+
   SetInodeNo(stat.InodeNo());
   SetDirMode(stat.FileMode());
   SetZerothServer(stat.ZerothServer());

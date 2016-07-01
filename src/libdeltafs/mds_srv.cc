@@ -24,12 +24,12 @@ Status MDS::SRV::LoadDir(uint64_t ino, DirInfo* info, DirIndex* index) {
   MDB::Tx* mdb_tx = NULL;
 
   // Load directory info. Create if missing...
-  s = mdb_->Getdir(ino, info, mdb_tx);
+  s = mdb_->GetInfo(ino, info, mdb_tx);
   if (s.IsNotFound()) {
     mdb_tx = mdb_->CreateTx();
     info->mtime = env_->NowMicros();
     info->size = 0;
-    s = mdb_->Setdir(ino, *info, mdb_tx);
+    s = mdb_->SetInfo(ino, *info, mdb_tx);
   }
 
   // Load directory index. Create if missing...
@@ -310,7 +310,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
           DirInfo dir_info;
           dir_info.mtime = my_time;
           dir_info.size = 1 + d->size;
-          s = mdb_->Setdir(dir_ino, dir_info, mdb_tx);
+          s = mdb_->SetInfo(dir_ino, dir_info, mdb_tx);
         }
 
         if (s.ok()) {
@@ -420,7 +420,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
           DirInfo dir_info;
           dir_info.mtime = my_time;
           dir_info.size = 1 + d->size;
-          s = mdb_->Setdir(dir_ino, dir_info, mdb_tx);
+          s = mdb_->SetInfo(dir_ino, dir_info, mdb_tx);
         }
 
         if (s.ok()) {
@@ -703,7 +703,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
           DirInfo dir_info;
           dir_info.mtime = my_start;
           dir_info.size = d->size;
-          s = mdb_->Setdir(dir_ino, dir_info, mdb_tx);
+          s = mdb_->SetInfo(dir_ino, dir_info, mdb_tx);
         }
 
         if (s.ok()) {

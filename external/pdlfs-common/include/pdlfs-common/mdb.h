@@ -18,8 +18,19 @@
 
 namespace pdlfs {
 
-struct DirInfo;
 class DirIndex;  // GIGA index
+
+struct DirInfo;
+struct DirId {
+  DirId() {}
+  DirId(uint64_t ino) : ino(ino) {}
+  DirId(uint64_t reg, uint64_t snap, uint64_t ino)
+      : reg(reg), snap(snap), ino(ino) {}
+
+  uint64_t reg;
+  uint64_t snap;
+  uint64_t ino;
+};
 
 // A helper class used by deltafs and indexfs to access file system
 // metadata stored as key-value pairs inside LevelDB.
@@ -41,6 +52,26 @@ class MDB {
     }
     return tx;
   }
+
+  Status Getidx(const DirId& id, DirIndex* idx, Tx* tx);
+  Status Setidx(const DirId& id, const DirIndex& idx, Tx* tx);
+  Status Delidx(const DirId& id, Tx* tx);
+
+  Status Getattr(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
+                 Tx* tx);
+  Status Setattr(const DirId& id, const Slice& hash, const Stat& stat,
+                 const Slice& name, Tx* tx);
+  Status Delattr(const DirId& id, const Slice& hash, Tx* tx);
+
+  Status GetInfo(const DirId& id, DirInfo* info, Tx* tx);
+  Status SetInfo(const DirId& id, const DirInfo& info, Tx* tx);
+  Status DelInfo(const DirId& id, Tx* tx);
+
+  typedef std::vector<std::string> NameList;
+  typedef std::vector<Stat> StatList;
+  int List(const DirId& id, StatList* stats, NameList* names, Tx* tx);
+  bool Exists(const DirId& id, const Slice& hash, Tx* tx);
+
   Status Commit(Tx* tx) {
     if (tx != NULL) {
       return db_->Write(WriteOptions(), &tx->batch);
@@ -56,25 +87,6 @@ class MDB {
       delete tx;
     }
   }
-
-  Status Getidx(uint64_t ino, DirIndex* idx, Tx* tx);
-  Status Setidx(uint64_t ino, const DirIndex& idx, Tx* tx);
-  Status Delidx(uint64_t ino, Tx* tx);
-
-  Status Getattr(uint64_t ino, const Slice& hash, Stat* stat, Slice* name,
-                 Tx* tx);
-  Status Setattr(uint64_t ino, const Slice& hash, const Stat& stat,
-                 const Slice& name, Tx* tx);
-  Status Delattr(uint64_t ino, const Slice& hash, Tx* tx);
-
-  Status Getdir(uint64_t ino, DirInfo* dir, Tx* tx);
-  Status Setdir(uint64_t ino, const DirInfo& dir, Tx* tx);
-  Status Deldir(uint64_t ino, Tx* tx);
-
-  typedef std::vector<std::string> NameList;
-  typedef std::vector<Stat> StatList;
-  int List(uint64_t ino, StatList* stats, NameList* names, Tx* tx);
-  bool Exists(uint64_t ino, const Slice& hash, Tx* tx);
 
  private:
   DB* db_;

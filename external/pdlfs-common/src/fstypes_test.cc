@@ -58,6 +58,8 @@ class StatTest {};
 
 TEST(StatTest, StatEncoding) {
   Stat stat;
+  stat.SetRegId(13);
+  stat.SetSnapId(37);
   stat.SetInodeNo(12345);
   stat.SetFileMode(678);
   stat.SetFileSize(90);
@@ -66,6 +68,7 @@ TEST(StatTest, StatEncoding) {
   stat.SetChangeTime(11223344);
   stat.SetModifyTime(44332211);
   stat.SetZerothServer(777);
+  stat.AssertAllSet();
   char tmp[sizeof(Stat)];
   Slice encoding = stat.EncodeTo(tmp);
   Stat stat2;
@@ -80,12 +83,15 @@ class LookupEntryTest {};
 
 TEST(LookupEntryTest, EntryEncoding) {
   LookupEntry ent;
+  ent.SetRegId(13);
+  ent.SetSnapId(37);
   ent.SetInodeNo(12345);
   ent.SetDirMode(678);
   ent.SetUserId(11);
   ent.SetGroupId(22);
   ent.SetZerothServer(777);
   ent.SetLeaseDue(55667788);
+  ent.AssertAllSet();
   char tmp[sizeof(LookupEntry)];
   Slice encoding = ent.EncodeTo(tmp);
   LookupEntry ent2;
