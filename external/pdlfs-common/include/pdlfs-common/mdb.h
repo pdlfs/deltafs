@@ -53,15 +53,15 @@ class MDB {
     return tx;
   }
 
-  Status Getidx(const DirId& id, DirIndex* idx, Tx* tx);
-  Status Setidx(const DirId& id, const DirIndex& idx, Tx* tx);
-  Status Delidx(const DirId& id, Tx* tx);
+  Status GetIdx(const DirId& id, DirIndex* idx, Tx* tx);
+  Status SetIdx(const DirId& id, const DirIndex& idx, Tx* tx);
+  Status DelIdx(const DirId& id, Tx* tx);
 
-  Status Getattr(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
+  Status GetNode(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
                  Tx* tx);
-  Status Setattr(const DirId& id, const Slice& hash, const Stat& stat,
+  Status SetNode(const DirId& id, const Slice& hash, const Stat& stat,
                  const Slice& name, Tx* tx);
-  Status Delattr(const DirId& id, const Slice& hash, Tx* tx);
+  Status DelNode(const DirId& id, const Slice& hash, Tx* tx);
 
   Status GetInfo(const DirId& id, DirInfo* info, Tx* tx);
   Status SetInfo(const DirId& id, const DirInfo& info, Tx* tx);

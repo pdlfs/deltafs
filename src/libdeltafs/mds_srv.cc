@@ -34,7 +34,7 @@ Status MDS::SRV::LoadDir(uint64_t ino, DirInfo* info, DirIndex* index) {
 
   // Load directory index. Create if missing...
   if (s.ok()) {
-    s = mdb_->Getidx(ino, index, mdb_tx);
+    s = mdb_->GetIdx(ino, index, mdb_tx);
     if (s.IsNotFound()) {
       int zserver = PickupServer(ino) % idx_opts_.num_virtual_servers;
       DirIndex tmp(ino, zserver, &idx_opts_);
@@ -42,7 +42,7 @@ Status MDS::SRV::LoadDir(uint64_t ino, DirInfo* info, DirIndex* index) {
       if (mdb_tx == NULL) {
         mdb_tx = mdb_->CreateTx();
       }
-      s = mdb_->Setidx(ino, tmp, mdb_tx);
+      s = mdb_->SetIdx(ino, tmp, mdb_tx);
       if (s.ok()) {
         index->Update(tmp);
       }
@@ -213,7 +213,7 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
         }
 
         Slice name;
-        s = mdb_->Getattr(dir_ino, name_hash, &ret->stat, &name, mdb_tx);
+        s = mdb_->GetNode(dir_ino, name_hash, &ret->stat, &name, mdb_tx);
         // TODO: paranoid checks
 
         mutex_.Lock();
@@ -303,7 +303,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
           stat->SetZerothServer(0);
           stat->SetModifyTime(my_time);
           stat->SetChangeTime(my_time);
-          s = mdb_->Setattr(dir_ino, name_hash, *stat, options.name, mdb_tx);
+          s = mdb_->SetNode(dir_ino, name_hash, *stat, options.name, mdb_tx);
         }
 
         if (s.ok()) {
@@ -413,7 +413,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
           stat->SetZerothServer(options.zserver);
           stat->SetModifyTime(my_time);
           stat->SetChangeTime(my_time);
-          s = mdb_->Setattr(dir_ino, name_hash, *stat, options.name, mdb_tx);
+          s = mdb_->SetNode(dir_ino, name_hash, *stat, options.name, mdb_tx);
         }
 
         if (s.ok()) {
@@ -553,7 +553,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
 
         Slice name;
         Stat stat;
-        s = mdb_->Getattr(dir_ino, name_hash, &stat, &name, mdb_tx);
+        s = mdb_->GetNode(dir_ino, name_hash, &stat, &name, mdb_tx);
         // TODO: paranoid checks
         if (s.ok()) {
           if (!S_ISDIR(stat.FileMode())) {
@@ -690,13 +690,13 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
 
         Stat* stat = &ret->stat;
         Slice name;
-        s = mdb_->Getattr(dir_ino, name_hash, stat, &name, mdb_tx);
+        s = mdb_->GetNode(dir_ino, name_hash, stat, &name, mdb_tx);
         // TODO: paranoid checks
         if (s.ok()) {
           uint32_t non_access = ~ACCESSPERMS & stat->FileMode();
           stat->SetFileMode(non_access | (ACCESSPERMS & options.mode));
           stat->SetChangeTime(my_start);
-          s = mdb_->Setattr(dir_ino, name_hash, *stat, name, mdb_tx);
+          s = mdb_->SetNode(dir_ino, name_hash, *stat, name, mdb_tx);
         }
 
         if (s.ok()) {

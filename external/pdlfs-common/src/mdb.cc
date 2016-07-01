@@ -15,7 +15,7 @@ namespace pdlfs {
 
 MDB::~MDB() {}
 
-Status MDB::Getidx(const DirId& id, DirIndex* idx, Tx* tx) {
+Status MDB::GetIdx(const DirId& id, DirIndex* idx, Tx* tx) {
   Status s;
 #if !defined(DELTAFS)
   Key key(id.ino, kDirIdxType);
@@ -58,7 +58,7 @@ Status MDB::GetInfo(const DirId& id, DirInfo* info, Tx* tx) {
   return s;
 }
 
-Status MDB::Getattr(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
+Status MDB::GetNode(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
                     Tx* tx) {
   Status s;
 #if !defined(DELTAFS)
@@ -84,7 +84,7 @@ Status MDB::Getattr(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
   return s;
 }
 
-Status MDB::Setidx(const DirId& id, const DirIndex& idx, Tx* tx) {
+Status MDB::SetIdx(const DirId& id, const DirIndex& idx, Tx* tx) {
   Status s;
 #if !defined(DELTAFS)
   Key key(id.ino, kDirIdxType);
@@ -119,7 +119,7 @@ Status MDB::SetInfo(const DirId& id, const DirInfo& info, Tx* tx) {
   return s;
 }
 
-Status MDB::Setattr(const DirId& id, const Slice& hash, const Stat& stat,
+Status MDB::SetNode(const DirId& id, const Slice& hash, const Stat& stat,
                     const Slice& name, Tx* tx) {
   Status s;
 #if !defined(DELTAFS)
@@ -143,7 +143,7 @@ Status MDB::Setattr(const DirId& id, const Slice& hash, const Stat& stat,
   return s;
 }
 
-Status MDB::Delidx(const DirId& id, Tx* tx) {
+Status MDB::DelIdx(const DirId& id, Tx* tx) {
   Status s;
 #if !defined(DELTAFS)
   Key key(id.ino, kDirIdxType);
@@ -175,7 +175,7 @@ Status MDB::DelInfo(const DirId& id, Tx* tx) {
   return s;
 }
 
-Status MDB::Delattr(const DirId& id, const Slice& hash, Tx* tx) {
+Status MDB::DelNode(const DirId& id, const Slice& hash, Tx* tx) {
   Status s;
 #if !defined(DELTAFS)
   Key key(id.ino, kDirEntType);
