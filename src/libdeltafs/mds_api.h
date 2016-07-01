@@ -49,9 +49,9 @@ class MDS {
     uint64_t reg_id;
     uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
+    uint32_t token;    // Transient client session id
     Slice name_hash;
     Slice name;
-    uint32_t token;  // Transient client session id
   };
   struct FstatRet {
     Stat stat;
@@ -62,12 +62,12 @@ class MDS {
     uint64_t reg_id;
     uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
-    Slice name_hash;
-    Slice name;
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
     uint32_t token;  // Transient client session id
+    Slice name_hash;
+    Slice name;
   };
   struct FcreatRet {
     Stat stat;
@@ -78,13 +78,13 @@ class MDS {
     uint64_t reg_id;
     uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
-    Slice name_hash;
-    Slice name;
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
     uint32_t zserver;
     uint32_t token;  // Transient client session id
+    Slice name_hash;
+    Slice name;
   };
   struct MkdirRet {
     Stat stat;
@@ -95,10 +95,10 @@ class MDS {
     uint64_t reg_id;
     uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
-    Slice name_hash;
-    Slice name;
     uint32_t mode;
     uint32_t token;  // Transient client session id
+    Slice name_hash;
+    Slice name;
   };
   struct ChmodRet {
     Stat stat;
@@ -109,9 +109,9 @@ class MDS {
     uint64_t reg_id;
     uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
+    uint32_t token;    // Transient client session id
     Slice name_hash;
     Slice name;
-    uint32_t token;  // Transient client session id
   };
   struct LookupRet {
     LookupEntry entry;
@@ -123,6 +123,8 @@ class MDS {
     uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
     uint32_t token;    // Transient client session id
+    Slice name_hash;
+    Slice name;
   };
   struct ListdirRet {
     std::vector<std::string> names;
