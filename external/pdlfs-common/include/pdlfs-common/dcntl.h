@@ -134,12 +134,12 @@ class DirTable {
   ~DirTable();
 
   void Release(Dir::Ref* ref);
-  Dir::Ref* Lookup(uint64_t ino);
-  Dir::Ref* Insert(uint64_t ino, Dir* dir);
-  void Erase(uint64_t ino);
+  Dir::Ref* Lookup(const DirId& id);
+  Dir::Ref* Insert(const DirId& id, Dir* dir);
+  void Erase(const DirId& id);
 
  private:
-  static Slice LRUKey(uint64_t, char* scratch);
+  static Slice LRUKey(const DirId&, char* scratch);
   LRUCache<Dir::Ref> lru_;
   port::Mutex* mu_;
 

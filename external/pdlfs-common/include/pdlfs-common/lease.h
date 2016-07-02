@@ -15,8 +15,11 @@
 
 namespace pdlfs {
 
-struct LeaseEntry;
 struct Lease;
+struct LeaseEntry;
+struct LeaseOptions {
+  // TODO
+};
 
 // Lease states
 // ------------
@@ -92,12 +95,12 @@ class LeaseTable {
   ~LeaseTable();
 
   void Release(Lease::Ref* ref);
-  Lease::Ref* Lookup(uint64_t parent, const Slice& nhash);
-  Lease::Ref* Insert(uint64_t parent, const Slice& nhash, Lease* lease);
-  void Erase(uint64_t parent, const Slice& nhash);
+  Lease::Ref* Lookup(const DirId& pid, const Slice& nhash);
+  Lease::Ref* Insert(const DirId& pid, const Slice& nhash, Lease* lease);
+  void Erase(const DirId& pid, const Slice& nhash);
 
  private:
-  static Slice LRUKey(uint64_t, const Slice&, char* scratch);
+  static Slice LRUKey(const DirId&, const Slice&, char* scratch);
   LRUCache<Lease::Ref> lru_;
   port::Mutex* mu_;
 

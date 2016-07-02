@@ -32,7 +32,8 @@ bool LeaseEntry::is_pinned() const { return value->busy(); }
 LeaseTable::~LeaseTable() {
 #ifndef NDEBUG
   // Wait for all leases to expire
-  Env::Default()->SleepForMicroseconds(1000);
+  // FIXME: make the following configurable through options
+  Env::Default()->SleepForMicroseconds(1000 + 10);
   lru_.Prune();
   assert(lru_.Empty());
 #endif
@@ -51,16 +52,23 @@ void LeaseTable::Release(Lease::Ref* ref) {
   }
 }
 
-Slice LeaseTable::LRUKey(uint64_t parent, const Slice& nhash, char* scratch) {
-  EncodeFixed64(scratch, parent);
-  assert(nhash.size() == 8);
-  memcpy(scratch + 8, nhash.data(), nhash.size());
-  return Slice(scratch, 16);
+Slice LeaseTable::LRUKey(const DirId& pid, const Slice& nhash, char* scratch) {
+  char* p = scratch;
+#if !defined(DELTAFS)
+  EncodeFixed64(p, pid.ino);
+  p += 8;
+#else
+  p = EncodeVarint64(p, pid.reg);
+  p = EncodeVarint64(p, pid.snap);
+  p = EncodeVarint64(p, pid.ino);
+#endif
+  memcpy(p, nhash.data(), nhash.size());
+  return Slice(scratch, p - scratch + nhash.size());
 }
 
-Lease::Ref* LeaseTable::Lookup(uint64_t parent, const Slice& nhash) {
-  char tmp[16];
-  Slice key = LRUKey(parent, nhash, tmp);
+Lease::Ref* LeaseTable::Lookup(const DirId& pid, const Slice& nhash) {
+  char tmp[50];
+  Slice key = LRUKey(pid, nhash, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {
@@ -88,10 +96,10 @@ static void DeleteLease(const Slice& key, Lease* lease) {
   delete lease;
 }
 
-Lease::Ref* LeaseTable::Insert(uint64_t parent, const Slice& nhash,
+Lease::Ref* LeaseTable::Insert(const DirId& pid, const Slice& nhash,
                                Lease* lease) {
-  char tmp[16];
-  Slice key = LRUKey(parent, nhash, tmp);
+  char tmp[50];
+  Slice key = LRUKey(pid, nhash, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {
@@ -119,9 +127,9 @@ Lease::Ref* LeaseTable::Insert(uint64_t parent, const Slice& nhash,
   }
 }
 
-void LeaseTable::Erase(uint64_t parent, const Slice& nhash) {
-  char tmp[16];
-  Slice key = LRUKey(parent, nhash, tmp);
+void LeaseTable::Erase(const DirId& pid, const Slice& nhash) {
+  char tmp[50];
+  Slice key = LRUKey(pid, nhash, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {

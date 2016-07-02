@@ -73,14 +73,22 @@ void DirTable::Release(Dir::Ref* ref) {
   }
 }
 
-Slice DirTable::LRUKey(uint64_t ino, char* scratch) {
-  EncodeFixed64(scratch, ino);
-  return Slice(scratch, 8);
+Slice DirTable::LRUKey(const DirId& id, char* scratch) {
+  char* p = scratch;
+#if !defined(DELTAFS)
+  EncodeFixed64(p, id.ino);
+  p += 8;
+#else
+  p = EncodeVarint64(p, id.reg);
+  p = EncodeVarint64(p, id.snap);
+  p = EncodeVarint64(p, id.ino);
+#endif
+  return Slice(scratch, p - scratch);
 }
 
-Dir::Ref* DirTable::Lookup(uint64_t ino) {
-  char tmp[8];
-  Slice key = LRUKey(ino, tmp);
+Dir::Ref* DirTable::Lookup(const DirId& id) {
+  char tmp[24];
+  Slice key = LRUKey(id, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {
@@ -105,9 +113,9 @@ static void DeleteDir(const Slice& key, Dir* dir) {
   delete dir;
 }
 
-Dir::Ref* DirTable::Insert(uint64_t ino, Dir* dir) {
-  char tmp[8];
-  Slice key = LRUKey(ino, tmp);
+Dir::Ref* DirTable::Insert(const DirId& id, Dir* dir) {
+  char tmp[24];
+  Slice key = LRUKey(id, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {
@@ -135,9 +143,9 @@ Dir::Ref* DirTable::Insert(uint64_t ino, Dir* dir) {
   }
 }
 
-void DirTable::Erase(uint64_t ino) {
-  char tmp[8];
-  Slice key = LRUKey(ino, tmp);
+void DirTable::Erase(const DirId& id) {
+  char tmp[24];
+  Slice key = LRUKey(id, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {
