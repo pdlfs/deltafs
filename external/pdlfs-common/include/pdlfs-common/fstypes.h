@@ -49,7 +49,7 @@ class Key {
 
  private:
   // Intentionally copyable
-  char rep_[40];
+  char rep_[50];
   size_t size_;
 };
 
