@@ -87,7 +87,7 @@ Slice DirTable::LRUKey(const DirId& id, char* scratch) {
 }
 
 Dir::Ref* DirTable::Lookup(const DirId& id) {
-  char tmp[24];
+  char tmp[30];
   Slice key = LRUKey(id, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
@@ -114,7 +114,7 @@ static void DeleteDir(const Slice& key, Dir* dir) {
 }
 
 Dir::Ref* DirTable::Insert(const DirId& id, Dir* dir) {
-  char tmp[24];
+  char tmp[30];
   Slice key = LRUKey(id, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
@@ -144,7 +144,7 @@ Dir::Ref* DirTable::Insert(const DirId& id, Dir* dir) {
 }
 
 void DirTable::Erase(const DirId& id) {
-  char tmp[24];
+  char tmp[30];
   Slice key = LRUKey(id, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
