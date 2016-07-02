@@ -23,7 +23,9 @@ class DirIndex;  // GIGA index
 struct DirInfo;
 struct DirId {
   DirId() {}
+#if !defined(DELTAFS)
   DirId(uint64_t ino) : ino(ino) {}
+#endif
   DirId(uint64_t reg, uint64_t snap, uint64_t ino)
       : reg(reg), snap(snap), ino(ino) {}
 
