@@ -9,11 +9,10 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <set>
-
 #include "mds_api.h"
 #include "pdlfs-common/dcntl.h"
 #include "pdlfs-common/lease.h"
+#include "pdlfs-common/map.h"
 #include "pdlfs-common/mdb.h"
 #include "pdlfs-common/port.h"
 
@@ -34,11 +33,12 @@ class MDS::SRV : public MDS {
   DEC_OP(Listdir)
 
 #undef DEC_OP
-  static int PickupServer(uint64_t dir_ino);
+  static Slice EncodeId(const DirId& id, char* scratch);
+  static int PickupServer(const DirId& id);
 
  private:
-  Status LoadDir(uint64_t ino, DirInfo* info, DirIndex* index);
-  Status FetchDir(uint64_t ino, Dir::Ref** ref);
+  Status LoadDir(const DirId& id, DirInfo* info, DirIndex* index);
+  Status FetchDir(const DirId& id, Dir::Ref** ref);
   Status ProbeDir(const Dir* dir);
 
   // Constant after construction
@@ -54,7 +54,7 @@ class MDS::SRV : public MDS {
   // State below is protected by mutex_
   port::Mutex mutex_;
   LeaseTable* leases_;
-  std::set<uint64_t> loading_dirs_;  // Directories being loaded into cache
+  HashSet loading_dirs_;  // A set of dirs being loaded into a memory cache
   port::CondVar loading_cv_;
   DirTable* dirs_;
   void TryReuseIno(uint64_t ino);

@@ -19,30 +19,30 @@
 namespace pdlfs {
 
 // NOTE: can be called while mutex_ is NOT locked.
-Status MDS::SRV::LoadDir(uint64_t ino, DirInfo* info, DirIndex* index) {
+Status MDS::SRV::LoadDir(const DirId& id, DirInfo* info, DirIndex* index) {
   Status s;
   MDB::Tx* mdb_tx = NULL;
 
   // Load directory info. Create if missing...
-  s = mdb_->GetInfo(ino, info, mdb_tx);
+  s = mdb_->GetInfo(id, info, mdb_tx);
   if (s.IsNotFound()) {
     mdb_tx = mdb_->CreateTx();
     info->mtime = env_->NowMicros();
     info->size = 0;
-    s = mdb_->SetInfo(ino, *info, mdb_tx);
+    s = mdb_->SetInfo(id, *info, mdb_tx);
   }
 
   // Load directory index. Create if missing...
   if (s.ok()) {
-    s = mdb_->GetIdx(ino, index, mdb_tx);
+    s = mdb_->GetIdx(id, index, mdb_tx);
     if (s.IsNotFound()) {
-      int zserver = PickupServer(ino) % idx_opts_.num_virtual_servers;
-      DirIndex tmp(ino, zserver, &idx_opts_);
+      int zserver = PickupServer(id) % idx_opts_.num_virtual_servers;
+      DirIndex tmp(id.ino, zserver, &idx_opts_);
       tmp.SetAll();  // Pre-split to all servers
       if (mdb_tx == NULL) {
         mdb_tx = mdb_->CreateTx();
       }
-      s = mdb_->SetIdx(ino, tmp, mdb_tx);
+      s = mdb_->SetIdx(id, tmp, mdb_tx);
       if (s.ok()) {
         index->Update(tmp);
       }
@@ -60,12 +60,19 @@ Status MDS::SRV::LoadDir(uint64_t ino, DirInfo* info, DirIndex* index) {
   return s;
 }
 
-// Deterministically select a zeroth-server for a directory.
-int MDS::SRV::PickupServer(uint64_t dir_ino) {
-  char tmp[8];
-  EncodeFixed64(tmp, dir_ino);
-  Slice dir(tmp, 8);
-  int zserver = DirIndex::RandomServer(dir, 0);
+Slice MDS::SRV::EncodeId(const DirId& id, char* scratch) {
+  char* p = scratch;
+  p = EncodeVarint64(p, id.reg);
+  p = EncodeVarint64(p, id.snap);
+  p = EncodeVarint64(p, id.ino);
+  return Slice(scratch, p - scratch);
+}
+
+// Deterministically map directories to their zeroth servers.
+int MDS::SRV::PickupServer(const DirId& id) {
+  char tmp[30];
+  Slice encoding = EncodeId(id, tmp);
+  int zserver = DirIndex::RandomServer(encoding, 0);
   return zserver;
 }
 
@@ -75,41 +82,41 @@ int MDS::SRV::PickupServer(uint64_t dir_ino) {
 // the LRU-cache is full, when the data read from DB is corrupted, and
 // when there are bugs somewhere in the codebase :-|
 // REQUIRES: mutex_ has been locked.
-Status MDS::SRV::FetchDir(uint64_t ino, Dir::Ref** ref) {
+Status MDS::SRV::FetchDir(const DirId& id, Dir::Ref** ref) {
+  char tmp[30];
+  Slice id_encoding = EncodeId(id, tmp);
   mutex_.AssertHeld();
   *ref = NULL;
   Status s;
 
   while (s.ok() && (*ref) == NULL) {
-    Dir::Ref* r = dirs_->Lookup(ino);
+    Dir::Ref* r = dirs_->Lookup(id);
     if (r != NULL) {
       *ref = r;
     } else {
       // Prevent multiple threads from loading a same directory at the same time
-      if (loading_dirs_.count(ino) != 0) {
+      if (loading_dirs_.Contains(id_encoding)) {
         do {
           loading_cv_.Wait();
-        } while (loading_dirs_.count(ino) != 0);
+        } while (loading_dirs_.Contains(id_encoding));
       } else {
         mutex_.Unlock();
         DirInfo dir_info;
         DirIndex dir_index(&idx_opts_);
-        s = LoadDir(ino, &dir_info, &dir_index);
+        s = LoadDir(id, &dir_info, &dir_index);
         mutex_.Lock();
         if (s.ok()) {
           Dir* d = new Dir(&mutex_, &idx_opts_);
-          d->ino = ino;
           d->mtime = dir_info.mtime;
           assert(dir_info.size >= 0);
           d->size = dir_info.size;
           d->num_leases = 0;
-          assert(dir_index.DirId() == ino);
           d->index.Update(dir_index);
           d->tx.NoBarrier_Store(NULL);
           d->seq = 0;
           d->locked = false;
           try {
-            r = dirs_->Insert(ino, d);
+            r = dirs_->Insert(id, d);
           } catch (int err) {
             // Not expecting errors other than "buffer-full", which happens
             // when the directory cache is full and no entries can be evicted
@@ -124,8 +131,8 @@ Status MDS::SRV::FetchDir(uint64_t ino, Dir::Ref** ref) {
           }
         }
 
-        assert(loading_dirs_.count(ino) == 1);
-        loading_dirs_.erase(ino);
+        assert(loading_dirs_.Contains(id_encoding));
+        loading_dirs_.Erase(id_encoding);
         loading_cv_.SignalAll();
       }
     }
@@ -173,7 +180,7 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
   Status s;
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
-  uint64_t dir_ino = options.dir_ino;
+  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
   Slice name_hash = options.name_hash;
   if (name_hash.empty()) {
     s = Status::InvalidArgument(Slice());
@@ -187,7 +194,7 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
 
   if (s.ok()) {
     MutexLock ml(&mutex_);
-    s = FetchDir(dir_ino, &ref);
+    s = FetchDir(dir_id, &ref);
     if (s.ok()) {
       assert(ref != NULL);
       Dir::Guard guard(dirs_, ref);
@@ -213,7 +220,7 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
         }
 
         Slice name;
-        s = mdb_->GetNode(dir_ino, name_hash, &ret->stat, &name, mdb_tx);
+        s = mdb_->GetNode(dir_id, name_hash, &ret->stat, &name, mdb_tx);
         // TODO: paranoid checks
 
         mutex_.Lock();
@@ -249,7 +256,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
   Status s;
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
-  uint64_t dir_ino = options.dir_ino;
+  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
   Slice name_hash = options.name_hash;
   if (name_hash.empty() || options.name.empty()) {
     s = Status::InvalidArgument(Slice());
@@ -263,7 +270,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
 
   if (s.ok()) {
     MutexLock ml(&mutex_);
-    s = FetchDir(dir_ino, &ref);
+    s = FetchDir(dir_id, &ref);
     if (s.ok()) {
       assert(ref != NULL);
       Dir::Guard guard(dirs_, ref);
@@ -290,7 +297,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
         d->tx.Release_Store(tx);
         MDB::Tx* mdb_tx = tx->rep();
 
-        if (mdb_->Exists(dir_ino, name_hash, mdb_tx)) {
+        if (mdb_->Exists(dir_id, name_hash, mdb_tx)) {
           s = Status::AlreadyExists(Slice());
         } else {
           Stat* stat = &ret->stat;
@@ -303,14 +310,14 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
           stat->SetZerothServer(0);
           stat->SetModifyTime(my_time);
           stat->SetChangeTime(my_time);
-          s = mdb_->SetNode(dir_ino, name_hash, *stat, options.name, mdb_tx);
+          s = mdb_->SetNode(dir_id, name_hash, *stat, options.name, mdb_tx);
         }
 
         if (s.ok()) {
           DirInfo dir_info;
           dir_info.mtime = my_time;
           dir_info.size = 1 + d->size;
-          s = mdb_->SetInfo(dir_ino, dir_info, mdb_tx);
+          s = mdb_->SetInfo(dir_id, dir_info, mdb_tx);
         }
 
         if (s.ok()) {
@@ -358,7 +365,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
   Status s;
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
-  uint64_t dir_ino = options.dir_ino;
+  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
   Slice name_hash = options.name_hash;
   if (options.zserver >= idx_opts_.num_virtual_servers) {
     s = Status::InvalidArgument(Slice());
@@ -374,7 +381,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
 
   if (s.ok()) {
     MutexLock ml(&mutex_);
-    s = FetchDir(dir_ino, &ref);
+    s = FetchDir(dir_id, &ref);
     if (s.ok()) {
       assert(ref != NULL);
       Dir::Guard guard(dirs_, ref);
@@ -400,7 +407,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         d->tx.Release_Store(tx);
         MDB::Tx* mdb_tx = tx->rep();
 
-        if (mdb_->Exists(dir_ino, name_hash, mdb_tx)) {
+        if (mdb_->Exists(dir_id, name_hash, mdb_tx)) {
           s = Status::AlreadyExists(Slice());
         } else {
           Stat* stat = &ret->stat;
@@ -413,14 +420,14 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
           stat->SetZerothServer(options.zserver);
           stat->SetModifyTime(my_time);
           stat->SetChangeTime(my_time);
-          s = mdb_->SetNode(dir_ino, name_hash, *stat, options.name, mdb_tx);
+          s = mdb_->SetNode(dir_id, name_hash, *stat, options.name, mdb_tx);
         }
 
         if (s.ok()) {
           DirInfo dir_info;
           dir_info.mtime = my_time;
           dir_info.size = 1 + d->size;
-          s = mdb_->SetInfo(dir_ino, dir_info, mdb_tx);
+          s = mdb_->SetInfo(dir_id, dir_info, mdb_tx);
         }
 
         if (s.ok()) {
@@ -508,7 +515,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
   Status s;
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
-  uint64_t dir_ino = options.dir_ino;
+  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
   Slice name_hash = options.name_hash;
   if (name_hash.empty()) {
     s = Status::InvalidArgument(Slice());
@@ -522,7 +529,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
 
   if (s.ok()) {
     MutexLock ml(&mutex_);
-    s = FetchDir(dir_ino, &ref);
+    s = FetchDir(dir_id, &ref);
     if (s.ok()) {
       assert(ref != NULL);
       Dir::Guard guard(dirs_, ref);
@@ -553,7 +560,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
 
         Slice name;
         Stat stat;
-        s = mdb_->GetNode(dir_ino, name_hash, &stat, &name, mdb_tx);
+        s = mdb_->GetNode(dir_id, name_hash, &stat, &name, mdb_tx);
         // TODO: paranoid checks
         if (s.ok()) {
           if (!S_ISDIR(stat.FileMode())) {
@@ -569,7 +576,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
         uint64_t my_end = env_->NowMicros();
         // No lease either we timeout or have a negative result, otherwise...
         if (s.ok() && (my_end - my_start) < (lease_duration_ - 10)) {
-          Lease::Ref* lref = leases_->Lookup(dir_ino, name_hash);
+          Lease::Ref* lref = leases_->Lookup(dir_id, name_hash);
           if (lref == NULL) {
             Lease* l = new Lease;
             l->state = kFreeState;
@@ -577,7 +584,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
             l->due = 0;
             l->seq = 0;
             try {
-              lref = leases_->Insert(dir_ino, name_hash, l);
+              lref = leases_->Insert(dir_id, name_hash, l);
             } catch (int err) {
               // Not expecting errors other than "buffer-full"
               assert(err == ENOBUFS);
@@ -648,7 +655,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
   Status s;
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
-  uint64_t dir_ino = options.dir_ino;
+  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
   Slice name_hash = options.name_hash;
   if (name_hash.empty()) {
     s = Status::InvalidArgument(Slice());
@@ -662,7 +669,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
 
   if (s.ok()) {
     MutexLock ml(&mutex_);
-    s = FetchDir(dir_ino, &ref);
+    s = FetchDir(dir_id, &ref);
     if (s.ok()) {
       assert(ref != NULL);
       Dir::Guard guard(dirs_, ref);
@@ -690,20 +697,20 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
 
         Stat* stat = &ret->stat;
         Slice name;
-        s = mdb_->GetNode(dir_ino, name_hash, stat, &name, mdb_tx);
+        s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
         // TODO: paranoid checks
         if (s.ok()) {
           uint32_t non_access = ~ACCESSPERMS & stat->FileMode();
           stat->SetFileMode(non_access | (ACCESSPERMS & options.mode));
           stat->SetChangeTime(my_start);
-          s = mdb_->SetNode(dir_ino, name_hash, *stat, name, mdb_tx);
+          s = mdb_->SetNode(dir_id, name_hash, *stat, name, mdb_tx);
         }
 
         if (s.ok()) {
           DirInfo dir_info;
           dir_info.mtime = my_start;
           dir_info.size = d->size;
-          s = mdb_->SetInfo(dir_ino, dir_info, mdb_tx);
+          s = mdb_->SetInfo(dir_id, dir_info, mdb_tx);
         }
 
         if (s.ok()) {
@@ -714,7 +721,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
         uint64_t my_end = env_->NowMicros();
         // May need to wait for lease due if the target is a directory
         if (s.ok() && S_ISDIR(stat->FileMode())) {
-          Lease::Ref* lref = leases_->Lookup(dir_ino, name_hash);
+          Lease::Ref* lref = leases_->Lookup(dir_id, name_hash);
           if (lref == NULL) {
             Lease* l = new Lease;
             l->state = kFreeState;
@@ -723,7 +730,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
             l->seq = 0;
             while (lref == NULL) {
               try {
-                lref = leases_->Insert(dir_ino, name_hash, l);
+                lref = leases_->Insert(dir_id, name_hash, l);
               } catch (int err) {
                 // Not expecting errors other than "buffer-full"
                 assert(err == ENOBUFS);
@@ -792,7 +799,8 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
 //
 // Errors are mostly masked so an empty list is returned in worst case.
 Status MDS::SRV::Listdir(const ListdirOptions& options, ListdirRet* ret) {
-  mdb_->List(options.dir_ino, NULL, &ret->names, NULL);
+  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
+  mdb_->List(dir_id, NULL, &ret->names, NULL);
   return Status::OK();
 }
 
