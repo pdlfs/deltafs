@@ -128,12 +128,20 @@ Status MDB::SetNode(const DirId& id, const Slice& hash, const Stat& stat,
   Key key(id.reg, id.snap, id.ino, kDirEntType);
 #endif
   key.SetHash(hash);
-  char tmp[4096 + sizeof(Stat)];
+  Slice value;
+  char tmp[200];
+  std::string buf;
   Slice encoding = stat.EncodeTo(tmp);
-  char* start = tmp;
-  char* p = start + encoding.size();
-  p = EncodeLengthPrefixedSlice(p, name);
-  Slice value(start, p - start);
+  if (name.size() < sizeof(tmp) - encoding.size() - 5) {
+    char* begin = tmp;
+    char* end = begin + encoding.size();
+    end = EncodeLengthPrefixedSlice(end, name);
+    value = Slice(begin, end - begin);
+  } else {
+    buf.append(encoding.data(), encoding.size());
+    PutLengthPrefixedSlice(&buf, name);
+    value = Slice(buf);
+  }
   if (tx == NULL) {
     WriteOptions options;
     s = db_->Put(options, key.Encode(), value);
