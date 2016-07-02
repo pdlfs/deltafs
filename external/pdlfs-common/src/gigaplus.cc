@@ -140,16 +140,14 @@ static int ComputeIndexFromHash(const char* hash, int n) {
 // ====================
 
 // The header for each directory index has the form
-//     dir_id: int64_t
-//     zeroth_server: int16_t
-//     radix: int16_t
-static const size_t kHeadSize = 12;
+//     zeroth_server: uint16_t
+//     radix: uint16_t
+static const size_t kHeadSize = 4;
 
 // Read-only view to an existing directory index.
 struct DirIndex::View {
-  int64_t dir_id() const { return DecodeFixed64(rep_); }
-  int16_t zeroth_server() const { return DecodeFixed16(rep_ + 8); }
-  int radix() const { return DecodeFixed16(rep_ + 10); }
+  uint16_t zeroth_server() const { return DecodeFixed16(rep_); }
+  uint16_t radix() const { return DecodeFixed16(rep_ + 2); }
   size_t bitmap_size() const { return bitmap_.size(); }
 
   bool bit(size_t index) const {
@@ -218,7 +216,7 @@ bool DirIndex::ParseDirIndex(const Slice& input, bool paranoid_checks,
 }
 
 struct DirIndex::Rep {
-  Rep(int64_t dir_id, int16_t zeroth_server);
+  Rep(uint16_t zeroth_server);
 
   void Reserve(size_t size) { ScaleToSize(size); }
 
@@ -303,7 +301,6 @@ struct DirIndex::Rep {
 
   template <class T>
   void DoMerge(const T& other) {
-    assert(dir_id() == other.dir_id());
     assert(zeroth_server() == other.zeroth_server());
     size_t new_capacity = std::max(bitmap_size(), other.bitmap_size());
     ScaleToSize(new_capacity);
@@ -324,12 +321,11 @@ struct DirIndex::Rep {
     assert(radix() == ToRadix(HighestBit()));
   }
 
-  int64_t dir_id() const { return DecodeFixed64(rep_); }
-  int16_t zeroth_server() const { return DecodeFixed16(rep_ + 8); }
-  int radix() const { return DecodeFixed16(rep_ + 10); }
+  uint16_t zeroth_server() const { return DecodeFixed16(rep_); }
+  uint16_t radix() const { return DecodeFixed16(rep_ + 2); }
 
  private:
-  enum { kInitBitmapCapacity = (1 << 5) / 8 };
+  enum { kInitBitmapCapacity = (1 << 7) / 8 };
 
   char* rep_;
   char* bitmap_;
@@ -374,21 +370,18 @@ struct DirIndex::Rep {
     ScaleUp(factor);
   }
 
-  void SetDirId(int64_t dir_id) { EncodeFixed64(rep_, dir_id); }
-  void SetRadix(int radix) { EncodeFixed16(rep_ + 10, radix); }
-  void SetZerothServer(int16_t server_id) {
-    EncodeFixed16(rep_ + 8, server_id);
-  }
+  void SetZerothServer(uint16_t server_id) { EncodeFixed16(rep_, server_id); }
+  void SetRadix(uint16_t radix) { EncodeFixed16(rep_ + 2, radix); }
 
   // No copying allowed
   void operator=(const Rep&);
   Rep(const Rep&);
 };
 
-DirIndex::Rep::Rep(int64_t dir_id, int16_t zeroth_server) : rep_(NULL) {
+DirIndex::Rep::Rep(uint16_t zeroth_server) {
   memset(static_buf_, 0, sizeof(static_buf_));
+  rep_ = NULL;
   Reset(static_buf_, sizeof(static_buf_) - kHeadSize);
-  SetDirId(dir_id);
   SetZerothServer(zeroth_server);
   SetRadix(0);
   TurnOnBit(0);
@@ -404,12 +397,7 @@ Slice DirIndex::Encode() const {
   return rep_->ToSlice();
 }
 
-int64_t DirIndex::DirId() const {
-  assert(rep_ != NULL);
-  return rep_->dir_id();
-}
-
-int16_t DirIndex::ZerothServer() const {
+int DirIndex::ZerothServer() const {
   assert(rep_ != NULL);
   return rep_->zeroth_server();
 }
@@ -419,11 +407,19 @@ int DirIndex::Radix() const {
   return rep_->radix();
 }
 
+// Exchange the contents of two DirIndex objects.
+void DirIndex::Swap(DirIndex& other) {
+  assert(options_ == other.options_);
+  Rep* my_rep = rep_;
+  rep_ = other.rep_;
+  other.rep_ = my_rep;
+}
+
 // Update the directory index by merging another directory index
 // for the same directory.
 bool DirIndex::Update(const Slice& other) {
   if (rep_ == NULL) {
-    return Reset(other);
+    return TEST_Reset(other);
   } else {
     View view;
     bool checks = options_->paranoid_checks;
@@ -441,7 +437,7 @@ bool DirIndex::Update(const Slice& other) {
 void DirIndex::Update(const DirIndex& other) {
   const Rep& other_rep = *other.rep_;
   if (rep_ == NULL) {
-    Rep* new_rep = new Rep(other_rep.dir_id(), other_rep.zeroth_server());
+    Rep* new_rep = new Rep(other_rep.zeroth_server());
     new_rep->Merge(other_rep);
     rep_ = new_rep;
   } else {
@@ -450,13 +446,13 @@ void DirIndex::Update(const DirIndex& other) {
 }
 
 // Reset index states.
-bool DirIndex::Reset(const Slice& other) {
+bool DirIndex::TEST_Reset(const Slice& other) {
   View view;
   bool checks = options_->paranoid_checks;
   if (!ParseDirIndex(other, checks, &view)) {
     return false;
   } else {
-    Rep* new_rep = new Rep(view.dir_id(), view.zeroth_server());
+    Rep* new_rep = new Rep(view.zeroth_server());
     new_rep->Merge(view);
     delete rep_;
     rep_ = new_rep;
@@ -596,8 +592,8 @@ int DirIndex::MapIndexToServer(int index, int zeroth_server, int num_servers) {
   return (index + zeroth_server) % num_servers;
 }
 
-DirIndex::DirIndex(int64_t d, int16_t s, const DirIndexOptions* options) {
-  rep_ = new Rep(d, s);
+DirIndex::DirIndex(int zserver, const DirIndexOptions* options) {
+  rep_ = new Rep(zserver);
   options_ = options;
 }
 

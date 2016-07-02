@@ -49,12 +49,15 @@ struct DirIndexOptions {
 class DirIndex {
  public:
   // Create a new index using the specified settings.
-  DirIndex(int64_t dir, int16_t server, const DirIndexOptions* options);
+  DirIndex(int zserver, const DirIndexOptions* options);
   // Create an empty index whose state is about to be reset.
   DirIndex(const DirIndexOptions* options);
 
+  // Swap the states of two DirIndex instances.
+  void Swap(DirIndex& other);
+
   // Discard the current index and override it with another index image.
-  bool Reset(const Slice& other);
+  bool TEST_Reset(const Slice& other);
 
   // Update the index by merging another index of the same directory.
   bool Update(const Slice& other);
@@ -98,11 +101,8 @@ class DirIndex {
   // Return the next child partition for the given parent partition.
   int NewIndexForSplitting(int index) const;
 
-  // Return the id of the directory being indexed.
-  int64_t DirId() const;
-
   // Return the zeroth server of the directory being indexed.
-  int16_t ZerothServer() const;
+  int ZerothServer() const;
 
   // Return the internal bitmap radix of the index.
   int Radix() const;

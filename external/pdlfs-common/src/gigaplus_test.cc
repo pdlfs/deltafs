@@ -22,7 +22,6 @@ class DirIndexTest {
   enum { kNumRadix = 14, kNumServers = 1 << kNumRadix };
 
   DirIndexTest() {
-    dir_id_ = 511;
     zeroth_server_ = 253;
     options_.num_servers = kNumServers;
     options_.num_virtual_servers = kNumServers;
@@ -39,9 +38,7 @@ class DirIndexTest {
     return DirIndex::ToBeMigrated(index, hash);
   }
 
-  DirIndex* NewIndex() {
-    return new DirIndex(dir_id_, zeroth_server_, &options_);
-  }
+  DirIndex* NewIndex() { return new DirIndex(zeroth_server_, &options_); }
 
   DirIndex* Recover() {
     DirIndex* result = NewIndex();
@@ -55,8 +52,7 @@ class DirIndexTest {
     idx_ = NewIndex();
   }
 
-  int64_t dir_id_;
-  int16_t zeroth_server_;
+  int zeroth_server_;
   DirIndexOptions options_;
   DirIndex* idx_;
 };
@@ -67,7 +63,6 @@ class DirIndexTest {
 
 TEST(DirIndexTest, Empty) {
   ASSERT_EQ(idx_->Radix(), 0);
-  ASSERT_EQ(idx_->DirId(), dir_id_);
   ASSERT_EQ(idx_->ZerothServer(), zeroth_server_);
   ASSERT_TRUE(idx_->GetBit(0));
 }
@@ -132,7 +127,6 @@ TEST(DirIndexTest, Merge1) {
   ASSERT_TRUE(idx_->GetBit(2));
   ASSERT_TRUE(idx_->GetBit(3));
   ASSERT_EQ(idx_->Radix(), 2);
-  ASSERT_EQ(idx_->DirId(), dir_id_);
   ASSERT_EQ(idx_->ZerothServer(), zeroth_server_);
   delete another;
 }
@@ -175,7 +169,6 @@ TEST(DirIndexTest, Merge2) {
   ASSERT_TRUE(idx_->GetBit(64));
   ASSERT_TRUE(idx_->GetBit(128));
   ASSERT_EQ(idx_->Radix(), 9);
-  ASSERT_EQ(idx_->DirId(), dir_id_);
   ASSERT_EQ(idx_->ZerothServer(), zeroth_server_);
   delete another;
 }
@@ -189,7 +182,6 @@ TEST(DirIndexTest, Recover1) {
   ASSERT_TRUE(recovered->GetBit(3));
   ASSERT_TRUE(recovered->GetBit(7));
   ASSERT_EQ(recovered->Radix(), 3);
-  ASSERT_EQ(recovered->DirId(), dir_id_);
   ASSERT_EQ(recovered->ZerothServer(), zeroth_server_);
   delete recovered;
 }
@@ -215,7 +207,6 @@ TEST(DirIndexTest, Recover2) {
   ASSERT_TRUE(recovered->GetBit(255));
   ASSERT_TRUE(recovered->GetBit(511));
   ASSERT_EQ(recovered->Radix(), 9);
-  ASSERT_EQ(recovered->DirId(), dir_id_);
   ASSERT_EQ(recovered->ZerothServer(), zeroth_server_);
   delete recovered;
 }

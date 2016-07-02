@@ -37,14 +37,14 @@ Status MDS::SRV::LoadDir(const DirId& id, DirInfo* info, DirIndex* index) {
     s = mdb_->GetIdx(id, index, mdb_tx);
     if (s.IsNotFound()) {
       int zserver = PickupServer(id) % idx_opts_.num_virtual_servers;
-      DirIndex tmp(id.ino, zserver, &idx_opts_);
+      DirIndex tmp(zserver, &idx_opts_);
       tmp.SetAll();  // Pre-split to all servers
       if (mdb_tx == NULL) {
         mdb_tx = mdb_->CreateTx();
       }
       s = mdb_->SetIdx(id, tmp, mdb_tx);
       if (s.ok()) {
-        index->Update(tmp);
+        index->Swap(tmp);
       }
     }
   }
@@ -111,7 +111,7 @@ Status MDS::SRV::FetchDir(const DirId& id, Dir::Ref** ref) {
           assert(dir_info.size >= 0);
           d->size = dir_info.size;
           d->num_leases = 0;
-          d->index.Update(dir_index);
+          d->index.Swap(dir_index);
           d->tx.NoBarrier_Store(NULL);
           d->seq = 0;
           d->locked = false;
