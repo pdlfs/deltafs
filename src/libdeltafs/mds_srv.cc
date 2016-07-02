@@ -302,6 +302,8 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
         } else {
           Stat* stat = &ret->stat;
           uint32_t mode = S_IFREG | (options.mode & ACCESSPERMS);
+          stat->SetRegId(reg_id_);
+          stat->SetSnapId(snap_id_);
           stat->SetInodeNo(my_ino);
           stat->SetFileSize(0);
           stat->SetFileMode(mode);
@@ -412,6 +414,8 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         } else {
           Stat* stat = &ret->stat;
           uint32_t mode = S_IFDIR | (options.mode & ACCESSPERMS);
+          stat->SetRegId(reg_id_);
+          stat->SetSnapId(snap_id_);
           stat->SetInodeNo(my_ino);
           stat->SetFileSize(0);
           stat->SetFileMode(mode);
