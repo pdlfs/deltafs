@@ -34,7 +34,6 @@ struct Dir {
   typedef RefGuard<DirTable, Ref> Guard;
   bool busy() const;
   Dir(port::Mutex* mu, const DirIndexOptions* o) : cv(mu), index(o) {}
-  uint64_t ino;
   uint64_t mtime;  // Last modification time
 
 #if defined(DELTAFS)
@@ -59,13 +58,6 @@ struct Dir {
     locked = false;
     cv.SignalAll();
   }
-
-  struct stl_comparator {
-    bool operator()(Dir* a, Dir* b) {
-      assert(a != NULL && b != NULL);
-      return (a->ino < b->ino);
-    }
-  };
 };
 
 struct DirEntry {
