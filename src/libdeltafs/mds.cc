@@ -1,16 +1,28 @@
 /*
- * Copyright (c) 2014-2016 Carnegie Mellon University.
- *
- * All rights reserved.
- *
- * Use of this source code is governed by a BSD-style license that can be
- * found in the LICENSE file. See the AUTHORS file for names of contributors.
- */
+* Copyright (c) 2014-2016 Carnegie Mellon University.
+*
+* All rights reserved.
+*
+* Use of this source code is governed by a BSD-style license that can be
+* found in the LICENSE file. See the AUTHORS file for names of contributors.
+*/
 
 #include "mds_api.h"
 #include "mds_srv.h"
 
 namespace pdlfs {
+
+MDSOptions::MDSOptions()
+    : env(NULL),
+      mdb(NULL),
+      dir_table_size(1 << 16),
+      lease_table_size(1 << 18),
+      snap_id(0),
+      reg_id(0),
+      paranoid_checks(false),
+      num_virtual_servers(1),
+      num_servers(1),
+      srv_id(0) {}
 
 MDS::SRV::SRV(const MDSOptions& options)
     : env_(options.env),
