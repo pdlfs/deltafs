@@ -123,8 +123,6 @@ class MDS {
     uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
     uint32_t token;    // Transient client session id
-    Slice name_hash;
-    Slice name;
   };
   struct ListdirRet {
     std::vector<std::string> names;

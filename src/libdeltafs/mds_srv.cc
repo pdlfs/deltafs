@@ -100,6 +100,7 @@ Status MDS::SRV::FetchDir(const DirId& id, Dir::Ref** ref) {
           loading_cv_.Wait();
         } while (loading_dirs_.Contains(id_encoding));
       } else {
+        loading_dirs_.Insert(id_encoding);
         mutex_.Unlock();
         DirInfo dir_info;
         DirIndex dir_index(&idx_opts_);
@@ -234,7 +235,9 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
     }
   }
 
-  ret->stat.AssertAllSet();
+  if (s.ok()) {
+    ret->stat.AssertAllSet();
+  }
   if (tx != NULL) {
     tx->Dispose(mdb_);
   }
@@ -345,7 +348,9 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
     }
   }
 
-  ret->stat.AssertAllSet();
+  if (s.ok()) {
+    ret->stat.AssertAllSet();
+  }
   if (tx != NULL) {
     tx->Dispose(mdb_);
   }
@@ -457,7 +462,9 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
     }
   }
 
-  ret->stat.AssertAllSet();
+  if (s.ok()) {
+    ret->stat.AssertAllSet();
+  }
   if (tx != NULL) {
     tx->Dispose(mdb_);
   }
@@ -632,7 +639,9 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
     }
   }
 
-  ret->entry.AssertAllSet();
+  if (s.ok()) {
+    ret->entry.AssertAllSet();
+  }
   if (tx != NULL) {
     tx->Dispose(mdb_);
   }
@@ -789,7 +798,9 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
     }
   }
 
-  ret->stat.AssertAllSet();
+  if (s.ok()) {
+    ret->stat.AssertAllSet();
+  }
   if (tx != NULL) {
     tx->Dispose(mdb_);
   }
