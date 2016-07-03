@@ -18,7 +18,9 @@ namespace pdlfs {
 struct Lease;
 struct LeaseEntry;
 struct LeaseOptions {
-  // TODO
+  LeaseOptions();
+  uint64_t max_lease_duration;
+  size_t max_num_leases;
 };
 
 // Lease states
@@ -91,7 +93,7 @@ class LeaseTable {
   // If mu is NULL, this LeaseTable requires external synchronization.
   // If mu is not NULL, this LeaseTable is implicitly synchronized via this
   // mutex and is thread-safe.
-  explicit LeaseTable(size_t capacity = 4096, port::Mutex* mu = NULL);
+  explicit LeaseTable(const LeaseOptions&, port::Mutex* mu = NULL);
   ~LeaseTable();
 
   void Release(Lease::Ref* ref);
@@ -101,6 +103,7 @@ class LeaseTable {
 
  private:
   static Slice LRUKey(const DirId&, const Slice&, char* scratch);
+  LeaseOptions options_;
   LRUCache<Lease::Ref> lru_;
   port::Mutex* mu_;
 

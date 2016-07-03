@@ -19,6 +19,9 @@
 
 namespace pdlfs {
 
+LeaseOptions::LeaseOptions()
+    : max_lease_duration(1000 * 1000), max_num_leases(4096) {}
+
 bool Lease::busy() const {
   if (state == kWriteState) {
     return true;
@@ -32,15 +35,14 @@ bool LeaseEntry::is_pinned() const { return value->busy(); }
 LeaseTable::~LeaseTable() {
 #ifndef NDEBUG
   // Wait for all leases to expire
-  // FIXME: make the following configurable through options
-  Env::Default()->SleepForMicroseconds(1000 + 10);
+  Env::Default()->SleepForMicroseconds(10 + options_.max_lease_duration);
   lru_.Prune();
   assert(lru_.Empty());
 #endif
 }
 
-LeaseTable::LeaseTable(size_t capacity, port::Mutex* mu)
-    : lru_(capacity), mu_(mu) {}
+LeaseTable::LeaseTable(const LeaseOptions& options, port::Mutex* mu)
+    : options_(options), lru_(options_.max_num_leases), mu_(mu) {}
 
 void LeaseTable::Release(Lease::Ref* ref) {
   if (mu_ != NULL) {

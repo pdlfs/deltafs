@@ -38,9 +38,12 @@ MDS::SRV::SRV(const MDSOptions& options)
   idx_opts_.num_virtual_servers = options.num_virtual_servers;
   idx_opts_.paranoid_checks = options.paranoid_checks;
 
-  leases_ = new LeaseTable(options.lease_table_size);
-  dirs_ = new DirTable(options.dir_table_size);
+  LeaseOptions lease_options;
+  lease_options.max_lease_duration = options.lease_duration;
+  lease_options.max_num_leases = options.lease_table_size;
+  leases_ = new LeaseTable(lease_options);
 
+  dirs_ = new DirTable(options.dir_table_size);
   ino_ = srv_id_;
 }
 
