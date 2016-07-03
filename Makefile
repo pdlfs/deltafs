@@ -67,7 +67,7 @@ ALL = \
 	$(SHARED_OUTDIR)/libpdlfs-common.$(PLATFORM_SHARED_EXT) \
 	$(STATIC_OUTDIR)/libdeltafs-static.a \
 	$(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT) \
-        $(BIN_PROGRAMS)
+	$(BIN_PROGRAMS)
 
 default: all
 
