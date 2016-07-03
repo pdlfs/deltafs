@@ -17,6 +17,7 @@ MDSOptions::MDSOptions()
       mdb(NULL),
       dir_table_size(1 << 16),
       lease_table_size(1 << 18),
+      lease_duration(1000 * 1000),
       snap_id(0),
       reg_id(0),
       paranoid_checks(false),
