@@ -36,8 +36,8 @@ Status MDS::SRV::LoadDir(const DirId& id, DirInfo* info, DirIndex* index) {
   if (s.ok()) {
     s = mdb_->GetIdx(id, index, mdb_tx);
     if (s.IsNotFound()) {
-      int zserver = PickupServer(id) % idx_opts_.num_virtual_servers;
-      DirIndex tmp(zserver, &idx_opts_);
+      int zserver = PickupServer(id) % giga_.num_virtual_servers;
+      DirIndex tmp(zserver, &giga_);
       tmp.SetAll();  // Pre-split to all servers
       if (mdb_tx == NULL) {
         mdb_tx = mdb_->CreateTx();
@@ -103,11 +103,11 @@ Status MDS::SRV::FetchDir(const DirId& id, Dir::Ref** ref) {
         loading_dirs_.Insert(id_encoding);
         mutex_.Unlock();
         DirInfo dir_info;
-        DirIndex dir_index(&idx_opts_);
+        DirIndex dir_index(&giga_);
         s = LoadDir(id, &dir_info, &dir_index);
         mutex_.Lock();
         if (s.ok()) {
-          Dir* d = new Dir(&mutex_, &idx_opts_);
+          Dir* d = new Dir(&mutex_, &giga_);
           d->mtime = dir_info.mtime;
           assert(dir_info.size >= 0);
           d->size = dir_info.size;
@@ -374,7 +374,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
   Dir::Ref* ref;
   DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
   Slice name_hash = options.name_hash;
-  if (options.zserver >= idx_opts_.num_virtual_servers) {
+  if (options.zserver >= giga_.num_virtual_servers) {
     s = Status::InvalidArgument(Slice());
   } else if (name_hash.empty() || options.name.empty()) {
     s = Status::InvalidArgument(Slice());

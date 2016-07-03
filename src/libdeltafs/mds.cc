@@ -34,9 +34,9 @@ MDS::SRV::SRV(const MDSOptions& options)
       srv_id_(options.srv_id),
       loading_cv_(&mutex_),
       ino_(0) {
-  idx_opts_.num_servers = options.num_servers;
-  idx_opts_.num_virtual_servers = options.num_virtual_servers;
-  idx_opts_.paranoid_checks = options.paranoid_checks;
+  giga_.num_servers = options.num_servers;
+  giga_.num_virtual_servers = options.num_virtual_servers;
+  giga_.paranoid_checks = options.paranoid_checks;
 
   LeaseOptions lease_options;
   lease_options.max_lease_duration = options.lease_duration;

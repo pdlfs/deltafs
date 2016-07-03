@@ -44,7 +44,8 @@ class MDS::SRV : public MDS {
   // Constant after construction
   Env* env_;
   MDB* mdb_;
-  DirIndexOptions idx_opts_;
+  typedef DirIndexOptions GIGA;
+  GIGA giga_;
   bool paranoid_checks_;
   uint64_t lease_duration_;
   uint64_t snap_id_;
