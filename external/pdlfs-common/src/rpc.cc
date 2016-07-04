@@ -10,14 +10,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "pdlfs-common/rpc.h"
 #include "mercury_rpc.h"
-#include "rpc.h"
 
 namespace pdlfs {
 
 RPCOptions::RPCOptions()
     : mode(kServerClient),
-      num_io_threads_(1), // TODO: can we really use multiple I/O threads?
+      num_io_threads_(1),  // TODO: can we really use multiple I/O threads?
       extra_workers(NULL),
       fs(NULL),
       env(NULL) {}

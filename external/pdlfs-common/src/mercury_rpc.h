@@ -17,7 +17,7 @@
 
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
-#include "rpc.h"
+#include "pdlfs-common/rpc.h"
 
 namespace pdlfs {
 namespace rpc {
