@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "pdlfs-common/fstypes.h"
-#include "rpc.h"
+#include "pdlfs-common/rpc.h"
 
 namespace pdlfs {
 

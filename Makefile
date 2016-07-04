@@ -26,8 +26,7 @@ include build_config.mk
 
 TESTS = \
 	src/libdeltafs/mds_api_test \
-	src/libdeltafs/mds_srv_test \
-	src/libdeltafs/mercury_test
+	src/libdeltafs/mds_srv_test
 
 BINS = \
 	src/server/deltafs_server
@@ -170,9 +169,6 @@ $(STATIC_OUTDIR)/mds_api_test:src/libdeltafs/mds_api_test.cc $(STATIC_LIBOBJECTS
 
 $(STATIC_OUTDIR)/mds_srv_test:src/libdeltafs/mds_srv_test.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/libdeltafs/mds_srv_test.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
-
-$(STATIC_OUTDIR)/mercury_test:src/libdeltafs/mercury_test.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
-	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/libdeltafs/mercury_test.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/%.o: %.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@
