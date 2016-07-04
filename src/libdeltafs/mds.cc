@@ -53,18 +53,15 @@ MDS::SRV::~SRV() {
   delete dirs_;
 }
 
-Status MDS::NewServer(const MDSOptions& options, MDS** mdsptr) {
-  *mdsptr = NULL;
-
-  Status s;
+MDS* MDS::Open(const MDSOptions& raw_options) {
+  assert(raw_options.mdb != NULL);
+  MDSOptions options(raw_options);
   if (options.env == NULL) {
-    s = Status::InvalidArgument(Slice());
-  } else if (options.mdb == NULL) {
-    s = Status::InvalidArgument(Slice());
+    options.env = Env::Default();
   }
 
-  *mdsptr = new SRV(options);
-  return s;
+  MDS* mds = new SRV(options);
+  return mds;
 }
 
 }  // namespace pdlfs

@@ -34,11 +34,20 @@ struct DirId {
   uint64_t ino;
 };
 
+struct MDBOptions {
+  MDBOptions();
+  bool verify_checksums;  // Default: false
+  bool sync;              // Default: false
+  DB* db;
+};
+
 // A helper class used by deltafs and indexfs to access file system
 // metadata stored as key-value pairs inside LevelDB.
 class MDB {
  public:
-  explicit MDB(DB* db) : db_(db) {}
+  MDB(const MDBOptions& opts) : options_(opts), db_(opts.db) {
+    assert(db_ != NULL);
+  }
   ~MDB();
 
   struct Tx {
@@ -76,7 +85,9 @@ class MDB {
 
   Status Commit(Tx* tx) {
     if (tx != NULL) {
-      return db_->Write(WriteOptions(), &tx->batch);
+      WriteOptions options;
+      options.sync = options_.sync;
+      return db_->Write(options, &tx->batch);
     } else {
       return Status::OK();
     }
@@ -91,6 +102,7 @@ class MDB {
   }
 
  private:
+  MDBOptions options_;
   DB* db_;
 };
 

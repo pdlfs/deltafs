@@ -13,6 +13,8 @@
 
 namespace pdlfs {
 
+MDBOptions::MDBOptions() : verify_checksums(false), sync(false), db(NULL) {}
+
 MDB::~MDB() {}
 
 Status MDB::GetIdx(const DirId& id, DirIndex* idx, Tx* tx) {
@@ -24,6 +26,7 @@ Status MDB::GetIdx(const DirId& id, DirIndex* idx, Tx* tx) {
 #endif
   std::string tmp;
   ReadOptions options;
+  options.verify_checksums = options_.verify_checksums;
   if (tx != NULL) {
     options.snapshot = tx->snap;
   }
@@ -45,6 +48,7 @@ Status MDB::GetInfo(const DirId& id, DirInfo* info, Tx* tx) {
 #endif
   char tmp[20];
   ReadOptions options;
+  options.verify_checksums = options_.verify_checksums;
   if (tx != NULL) {
     options.snapshot = tx->snap;
   }
@@ -69,6 +73,7 @@ Status MDB::GetNode(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
   key.SetHash(hash);
   std::string tmp;
   ReadOptions options;
+  options.verify_checksums = options_.verify_checksums;
   if (tx != NULL) {
     options.snapshot = tx->snap;
   }
@@ -94,6 +99,7 @@ Status MDB::SetIdx(const DirId& id, const DirIndex& idx, Tx* tx) {
   Slice encoding = idx.Encode();
   if (tx == NULL) {
     WriteOptions options;
+    options.sync = options_.sync;
     s = db_->Put(options, key.prefix(), encoding);
   } else {
     tx->batch.Put(key.prefix(), encoding);
@@ -112,6 +118,7 @@ Status MDB::SetInfo(const DirId& id, const DirInfo& info, Tx* tx) {
   Slice encoding = info.EncodeTo(tmp);
   if (tx == NULL) {
     WriteOptions options;
+    options.sync = options_.sync;
     s = db_->Put(options, key.prefix(), encoding);
   } else {
     tx->batch.Put(key.prefix(), encoding);
@@ -144,6 +151,7 @@ Status MDB::SetNode(const DirId& id, const Slice& hash, const Stat& stat,
   }
   if (tx == NULL) {
     WriteOptions options;
+    options.sync = options_.sync;
     s = db_->Put(options, key.Encode(), value);
   } else {
     tx->batch.Put(key.Encode(), value);
@@ -160,6 +168,7 @@ Status MDB::DelIdx(const DirId& id, Tx* tx) {
 #endif
   if (tx == NULL) {
     WriteOptions options;
+    options.sync = options_.sync;
     s = db_->Delete(options, key.prefix());
   } else {
     tx->batch.Delete(key.prefix());
@@ -176,6 +185,7 @@ Status MDB::DelInfo(const DirId& id, Tx* tx) {
 #endif
   if (tx == NULL) {
     WriteOptions options;
+    options.sync = options_.sync;
     s = db_->Delete(options, key.prefix());
   } else {
     tx->batch.Delete(key.prefix());
@@ -193,6 +203,7 @@ Status MDB::DelNode(const DirId& id, const Slice& hash, Tx* tx) {
   key.SetHash(hash);
   if (tx == NULL) {
     WriteOptions options;
+    options.sync = options_.sync;
     s = db_->Delete(options, key.Encode());
   } else {
     tx->batch.Delete(key.Encode());
@@ -207,6 +218,7 @@ int MDB::List(const DirId& id, StatList* stats, NameList* names, Tx* tx) {
   Key key(id.reg, id.snap, id.ino, kDirEntType);
 #endif
   ReadOptions options;
+  options.verify_checksums = options_.verify_checksums;
   options.fill_cache = false;
   if (tx != NULL) {
     options.snapshot = tx->snap;
@@ -247,6 +259,7 @@ bool MDB::Exists(const DirId& id, const Slice& hash, Tx* tx) {
 #endif
   key.SetHash(hash);
   ReadOptions options;
+  options.verify_checksums = options_.verify_checksums;
   options.limit = 0;
   if (tx != NULL) {
     options.snapshot = tx->snap;

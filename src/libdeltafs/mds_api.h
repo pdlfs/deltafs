@@ -39,7 +39,7 @@ class MDS {
  public:
   MDS() {}
   virtual ~MDS();
-  static Status NewServer(const MDSOptions&, MDS** mdsptr);
+  static MDS* Open(const MDSOptions&);
   struct RPC;
 
   typedef std::string Redirect;
