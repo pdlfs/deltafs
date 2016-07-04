@@ -36,6 +36,7 @@ TESTS = \
 	src/osd_test \
 	src/gigaplus_test \
 	src/fstypes_test \
+	src/mercury_test \
 	src/leveldb/bloom_test \
 	src/leveldb/filter_block_test \
 	src/leveldb/skiplist_test \
@@ -141,6 +142,9 @@ $(STATIC_OUTDIR)/gigaplus_test:src/gigaplus_test.cc $(STATIC_LIBOBJECTS) $(TESTH
 
 $(STATIC_OUTDIR)/fstypes_test:src/fstypes_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/fstypes_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/mercury_test:src/mercury_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/mercury_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/bloom_test:src/leveldb/bloom_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/leveldb/bloom_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
