@@ -24,10 +24,11 @@ class IfWrapper;
 enum RPCMode { kServerClient, kClientOnly };
 
 struct RPCOptions {
-  RPCMode mode;
+  RPCOptions();
+  RPCMode mode;  // Default: kServerClient
   std::string uri;
-  int num_io_threads_;
-  ThreadPool* extra_workers;
+  int num_io_threads_;        // Default: 1
+  ThreadPool* extra_workers;  // Default: NULL
   rpc::If* fs;
   Env* env;
 };

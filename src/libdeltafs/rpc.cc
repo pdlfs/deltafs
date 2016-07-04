@@ -15,6 +15,13 @@
 
 namespace pdlfs {
 
+RPCOptions::RPCOptions()
+    : mode(kServerClient),
+      num_io_threads_(1), // TODO: can we really use multiple I/O threads?
+      extra_workers(NULL),
+      fs(NULL),
+      env(NULL) {}
+
 RPC::~RPC() {}
 
 namespace rpc {
@@ -51,7 +58,12 @@ class RPCImpl : public RPC {
 
 }  // namespace rpc
 
-RPC* RPC::Open(const RPCOptions& options) {
+RPC* RPC::Open(const RPCOptions& raw_options) {
+  assert(raw_options.fs != NULL && !raw_options.uri.empty());
+  RPCOptions options(raw_options);
+  if (options.env == NULL) {
+    options.env = Env::Default();
+  }
 #if defined(MERCURY)
   return new rpc::RPCImpl(options);
 #else
