@@ -135,7 +135,7 @@ class MercuryRPC::LocalLooper {
       : rpc_(rpc),
         shutting_down_(NULL),
         bg_cv_(&mutex_),
-        max_bg_loops_(options.num_io_threads_),
+        max_bg_loops_(options.num_io_threads),
         bg_loops_(0) {
     rpc_->Ref();
   }

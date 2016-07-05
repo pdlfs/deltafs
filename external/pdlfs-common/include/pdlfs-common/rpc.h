@@ -16,18 +16,22 @@
 #include "pdlfs-common/status.h"
 
 namespace pdlfs {
+// Internal RPC interface
 namespace rpc {
-class If;
 class IfWrapper;
+class If;
 }
 
-enum RPCMode { kServerClient, kClientOnly };
+enum RPCMode {
+  kServerClient,  // Will also need to listen client requests
+  kClientOnly
+};
 
 struct RPCOptions {
   RPCOptions();
   RPCMode mode;  // Default: kServerClient
   std::string uri;
-  int num_io_threads_;        // Default: 1
+  int num_io_threads;         // Default: 1
   ThreadPool* extra_workers;  // Default: NULL
   rpc::If* fs;
   Env* env;
@@ -38,9 +42,11 @@ class RPC {
   RPC() {}
   virtual ~RPC();
 
+  // RPC implementation should ensure the results of the following calls
+  // are thread-safe so no external synchronization is needed.
   static RPC* Open(const RPCOptions&);
-
   virtual rpc::If* NewClient(const std::string& addr) = 0;
+
   virtual Status Start() = 0;
   virtual Status Stop() = 0;
 
@@ -48,6 +54,30 @@ class RPC {
   // No copying allowed
   void operator=(const RPC&);
   RPC(const RPC&);
+};
+
+class RPCServer {
+  struct RPCInfo {
+    ThreadPool* pool;
+    RPC* rpc;
+  };
+
+ public:
+  Status Start();
+  Status Stop();
+  void AddAddr(const std::string& uri, int workers);
+
+  RPCServer(rpc::If* fs, Env* env = NULL) : fs_(fs), env_(env) {}
+  ~RPCServer();
+
+ private:
+  // No copying allowed
+  void operator=(const RPCServer&);
+  RPCServer(const RPCServer&);
+
+  std::vector<RPCInfo> rpcs_;
+  rpc::If* fs_;
+  Env* env_;
 };
 
 namespace rpc {

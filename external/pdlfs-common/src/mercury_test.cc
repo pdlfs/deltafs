@@ -40,7 +40,7 @@ class MercuryTest {
   MercuryTest() {
     pool_ = ThreadPool::NewFixed(2);
     env_ = Env::Default();
-    options_.num_io_threads_ = 1;
+    options_.num_io_threads = 1;
     options_.env = env_;
     options_.fs = &fs_;
     options_.uri = "bmi+tcp://localhost:10101";

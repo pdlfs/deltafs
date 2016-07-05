@@ -9,20 +9,67 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 
-#include "mercury_rpc.h"
 #include "pdlfs-common/rpc.h"
+#if defined(MERCURY)
+#include "mercury_rpc.h"
+#endif
 
 namespace pdlfs {
 
 RPCOptions::RPCOptions()
     : mode(kServerClient),
-      num_io_threads_(1),  // TODO: can we really use multiple I/O threads?
+      num_io_threads(1),  // TODO: can we really use multiple I/O threads?
       extra_workers(NULL),
       fs(NULL),
       env(NULL) {}
 
 RPC::~RPC() {}
+
+RPCServer::~RPCServer() {
+  std::vector<RPCInfo>::iterator it;
+  for (it = rpcs_.begin(); it != rpcs_.end(); ++it) {
+    delete it->rpc;
+    delete it->pool;
+  }
+}
+
+void RPCServer::AddAddr(const std::string& uri, int workers) {
+  RPCInfo info;
+  RPCOptions options;
+  options.env = env_;
+  info.pool = ThreadPool::NewFixed(workers);
+  options.extra_workers = info.pool;
+  options.fs = fs_;
+  options.uri = uri;
+  info.rpc = RPC::Open(options);
+  rpcs_.push_back(info);
+}
+
+Status RPCServer::Start() {
+  Status s;
+  std::vector<RPCInfo>::iterator it;
+  for (it = rpcs_.begin(); it != rpcs_.end(); ++it) {
+    s = it->rpc->Start();
+    if (!s.ok()) {
+      break;
+    }
+  }
+  return s;
+}
+
+Status RPCServer::Stop() {
+  Status s;
+  std::vector<RPCInfo>::iterator it;
+  for (it = rpcs_.begin(); it != rpcs_.end(); ++it) {
+    s = it->rpc->Stop();
+    if (!s.ok()) {
+      break;
+    }
+  }
+  return s;
+}
 
 namespace rpc {
 
