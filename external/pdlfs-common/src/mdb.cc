@@ -13,17 +13,19 @@
 
 namespace pdlfs {
 
+#if defined(DELTAFS)
+#define KEY_INITIALIZER(id, tp) id.reg, id.snap, id.ino, tp
+#else
+#define KEY_INITIALIZER(id, tp) id.ino, tp
+#endif
+
 MDBOptions::MDBOptions() : verify_checksums(false), sync(false), db(NULL) {}
 
 MDB::~MDB() {}
 
 Status MDB::GetIdx(const DirId& id, DirIndex* idx, Tx* tx) {
   Status s;
-#if !defined(DELTAFS)
-  Key key(id.ino, kDirIdxType);
-#else
-  Key key(id.reg, id.snap, id.ino, kDirIdxType);
-#endif
+  Key key(KEY_INITIALIZER(id, kDirIdxType));
   std::string tmp;
   ReadOptions options;
   options.verify_checksums = options_.verify_checksums;
@@ -41,11 +43,7 @@ Status MDB::GetIdx(const DirId& id, DirIndex* idx, Tx* tx) {
 
 Status MDB::GetInfo(const DirId& id, DirInfo* info, Tx* tx) {
   Status s;
-#if !defined(DELTAFS)
-  Key key(id.ino, kDirMetaType);
-#else
-  Key key(id.reg, id.snap, id.ino, kDirMetaType);
-#endif
+  Key key(KEY_INITIALIZER(id, kDirMetaType));
   char tmp[20];
   ReadOptions options;
   options.verify_checksums = options_.verify_checksums;
@@ -65,11 +63,7 @@ Status MDB::GetInfo(const DirId& id, DirInfo* info, Tx* tx) {
 Status MDB::GetNode(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
                     Tx* tx) {
   Status s;
-#if !defined(DELTAFS)
-  Key key(id.ino, kDirEntType);
-#else
-  Key key(id.reg, id.snap, id.ino, kDirEntType);
-#endif
+  Key key(KEY_INITIALIZER(id, kDirEntType));
   key.SetHash(hash);
   std::string tmp;
   ReadOptions options;
@@ -91,11 +85,7 @@ Status MDB::GetNode(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
 
 Status MDB::SetIdx(const DirId& id, const DirIndex& idx, Tx* tx) {
   Status s;
-#if !defined(DELTAFS)
-  Key key(id.ino, kDirIdxType);
-#else
-  Key key(id.reg, id.snap, id.ino, kDirIdxType);
-#endif
+  Key key(KEY_INITIALIZER(id, kDirIdxType));
   Slice encoding = idx.Encode();
   if (tx == NULL) {
     WriteOptions options;
@@ -109,11 +99,7 @@ Status MDB::SetIdx(const DirId& id, const DirIndex& idx, Tx* tx) {
 
 Status MDB::SetInfo(const DirId& id, const DirInfo& info, Tx* tx) {
   Status s;
-#if !defined(DELTAFS)
-  Key key(id.ino, kDirMetaType);
-#else
-  Key key(id.reg, id.snap, id.ino, kDirMetaType);
-#endif
+  Key key(KEY_INITIALIZER(id, kDirMetaType));
   char tmp[20];
   Slice encoding = info.EncodeTo(tmp);
   if (tx == NULL) {
@@ -129,11 +115,7 @@ Status MDB::SetInfo(const DirId& id, const DirInfo& info, Tx* tx) {
 Status MDB::SetNode(const DirId& id, const Slice& hash, const Stat& stat,
                     const Slice& name, Tx* tx) {
   Status s;
-#if !defined(DELTAFS)
-  Key key(id.ino, kDirEntType);
-#else
-  Key key(id.reg, id.snap, id.ino, kDirEntType);
-#endif
+  Key key(KEY_INITIALIZER(id, kDirEntType));
   key.SetHash(hash);
   Slice value;
   char tmp[200];
@@ -161,11 +143,7 @@ Status MDB::SetNode(const DirId& id, const Slice& hash, const Stat& stat,
 
 Status MDB::DelIdx(const DirId& id, Tx* tx) {
   Status s;
-#if !defined(DELTAFS)
-  Key key(id.ino, kDirIdxType);
-#else
-  Key key(id.reg, id.snap, id.ino, kDirIdxType);
-#endif
+  Key key(KEY_INITIALIZER(id, kDirIdxType));
   if (tx == NULL) {
     WriteOptions options;
     options.sync = options_.sync;
@@ -178,11 +156,7 @@ Status MDB::DelIdx(const DirId& id, Tx* tx) {
 
 Status MDB::DelInfo(const DirId& id, Tx* tx) {
   Status s;
-#if !defined(DELTAFS)
-  Key key(id.ino, kDirMetaType);
-#else
-  Key key(id.reg, id.snap, id.ino, kDirMetaType);
-#endif
+  Key key(KEY_INITIALIZER(id, kDirMetaType));
   if (tx == NULL) {
     WriteOptions options;
     options.sync = options_.sync;
@@ -195,11 +169,7 @@ Status MDB::DelInfo(const DirId& id, Tx* tx) {
 
 Status MDB::DelNode(const DirId& id, const Slice& hash, Tx* tx) {
   Status s;
-#if !defined(DELTAFS)
-  Key key(id.ino, kDirEntType);
-#else
-  Key key(id.reg, id.snap, id.ino, kDirEntType);
-#endif
+  Key key(KEY_INITIALIZER(id, kDirEntType));
   key.SetHash(hash);
   if (tx == NULL) {
     WriteOptions options;
@@ -212,11 +182,7 @@ Status MDB::DelNode(const DirId& id, const Slice& hash, Tx* tx) {
 }
 
 int MDB::List(const DirId& id, StatList* stats, NameList* names, Tx* tx) {
-#if !defined(DELTAFS)
-  Key key(id.ino, kDirEntType);
-#else
-  Key key(id.reg, id.snap, id.ino, kDirEntType);
-#endif
+  Key key(KEY_INITIALIZER(id, kDirEntType));
   ReadOptions options;
   options.verify_checksums = options_.verify_checksums;
   options.fill_cache = false;
@@ -252,11 +218,7 @@ int MDB::List(const DirId& id, StatList* stats, NameList* names, Tx* tx) {
 
 bool MDB::Exists(const DirId& id, const Slice& hash, Tx* tx) {
   Status s;
-#if !defined(DELTAFS)
-  Key key(id.ino, kDirEntType);
-#else
-  Key key(id.reg, id.snap, id.ino, kDirEntType);
-#endif
+  Key key(KEY_INITIALIZER(id, kDirEntType));
   key.SetHash(hash);
   ReadOptions options;
   options.verify_checksums = options_.verify_checksums;
