@@ -9,6 +9,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include <errno.h>
 #include <string>
 #include <vector>
 
@@ -65,8 +66,8 @@ class RPCServer {
  public:
   Status Start();
   Status Stop();
-  void AddAddr(const std::string& uri, int workers);
 
+  void AddChannel(const std::string& uri, int workers);
   RPCServer(rpc::If* fs, Env* env = NULL) : fs_(fs), env_(env) {}
   ~RPCServer();
 
@@ -125,7 +126,7 @@ class IfWrapper : public If {
     if (base_ != NULL) {                       \
       base_->OP(in, out);                      \
     } else {                                   \
-      out.err = 0xff;                          \
+      throw ENODEV;                            \
     }                                          \
   }
 

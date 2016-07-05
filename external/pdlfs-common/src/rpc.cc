@@ -35,7 +35,7 @@ RPCServer::~RPCServer() {
   }
 }
 
-void RPCServer::AddAddr(const std::string& uri, int workers) {
+void RPCServer::AddChannel(const std::string& uri, int workers) {
   RPCInfo info;
   RPCOptions options;
   options.env = env_;
