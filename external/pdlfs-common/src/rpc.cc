@@ -10,8 +10,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "pdlfs-common/rpc.h"
 #include "mercury_rpc.h"
+#include "pdlfs-common/rpc.h"
 
 namespace pdlfs {
 
