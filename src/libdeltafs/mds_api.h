@@ -49,7 +49,8 @@ class MDS {
     uint64_t reg_id;
     uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
-    uint32_t token;    // Transient client session id
+    uint32_t session_id;
+    uint64_t op_due;
     Slice name_hash;
     Slice name;
   };
@@ -65,7 +66,8 @@ class MDS {
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
-    uint32_t token;  // Transient client session id
+    uint32_t session_id;
+    uint64_t op_due;
     Slice name_hash;
     Slice name;
   };
@@ -82,7 +84,8 @@ class MDS {
     uint32_t uid;
     uint32_t gid;
     uint32_t zserver;
-    uint32_t token;  // Transient client session id
+    uint32_t session_id;
+    uint64_t op_due;
     Slice name_hash;
     Slice name;
   };
@@ -96,7 +99,8 @@ class MDS {
     uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
     uint32_t mode;
-    uint32_t token;  // Transient client session id
+    uint32_t session_id;
+    uint64_t op_due;
     Slice name_hash;
     Slice name;
   };
@@ -109,12 +113,13 @@ class MDS {
     uint64_t reg_id;
     uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
-    uint32_t token;    // Transient client session id
+    uint32_t session_id;
+    uint64_t op_due;
     Slice name_hash;
     Slice name;
   };
   struct LookupRet {
-    LookupEntry entry;
+    LookupStat stat;
   };
   MDS_OP(Lookup)
 
@@ -122,7 +127,8 @@ class MDS {
     uint64_t reg_id;
     uint64_t snap_id;
     uint64_t dir_ino;  // Parent directory id
-    uint32_t token;    // Transient client session id
+    uint32_t session_id;
+    uint64_t op_due;
   };
   struct ListdirRet {
     std::vector<std::string> names;

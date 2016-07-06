@@ -193,7 +193,7 @@ bool Stat::DecodeFrom(Slice* input) {
   }
 }
 
-Slice LookupEntry::EncodeTo(char* scratch) const {
+Slice LookupStat::EncodeTo(char* scratch) const {
   char* p = scratch;
 #if defined(DELTAFS)
   p = EncodeVarint64(p, RegId());
@@ -210,12 +210,12 @@ Slice LookupEntry::EncodeTo(char* scratch) const {
   return Slice(scratch, p - scratch);
 }
 
-bool LookupEntry::DecodeFrom(const Slice& encoding) {
+bool LookupStat::DecodeFrom(const Slice& encoding) {
   Slice input = encoding;
   return DecodeFrom(&input);
 }
 
-bool LookupEntry::DecodeFrom(Slice* input) {
+bool LookupStat::DecodeFrom(Slice* input) {
 #if defined(DELTAFS)
   uint64_t reg;
   uint64_t snap;
@@ -249,7 +249,7 @@ bool LookupEntry::DecodeFrom(Slice* input) {
   }
 }
 
-void LookupEntry::CopyFrom(const Stat& stat) {
+void LookupStat::CopyFrom(const Stat& stat) {
 #if defined(DELTAFS)
   SetRegId(stat.RegId());
   SetSnapId(stat.SnapId());

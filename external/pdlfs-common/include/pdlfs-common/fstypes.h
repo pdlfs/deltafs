@@ -197,7 +197,7 @@ class Stat {
 // The result of lookup requests sent to clients during pathname resolution.
 // If the lease due date is not zero, the client may cache
 // and reuse the result until the specified due. Not used in tablefs.
-class LookupEntry {
+class LookupStat {
   char lease_due_[8];  // Absolute time in microseconds
   char zeroth_server_[4];
   char dir_mode_[4];
@@ -226,7 +226,7 @@ class LookupEntry {
   bool DecodeFrom(const Slice& encoding);
   bool DecodeFrom(Slice* input);
 
-  LookupEntry() {
+  LookupStat() {
 #ifndef NDEBUG
     memset(this, 0, sizeof(Stat));
 #ifndef DELTAFS

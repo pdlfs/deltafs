@@ -567,7 +567,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
           tx->Ref();
         }
 
-        ret->entry.SetLeaseDue(0);
+        ret->stat.SetLeaseDue(0);
 
         Slice name;
         Stat stat;
@@ -580,7 +580,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
         }
 
         if (s.ok()) {
-          ret->entry.CopyFrom(stat);
+          ret->stat.CopyFrom(stat);
         }
 
         mutex_.Lock();
@@ -625,7 +625,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
                 // A concurrent write operation is in-progress, I am not
                 // allowed to extend the lease nor change its state
               }
-              ret->entry.SetLeaseDue(l->due);
+              ret->stat.SetLeaseDue(l->due);
             }
           }
         }
@@ -640,7 +640,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
   }
 
   if (s.ok()) {
-    ret->entry.AssertAllSet();
+    ret->stat.AssertAllSet();
   }
   if (tx != NULL) {
     tx->Dispose(mdb_);
