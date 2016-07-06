@@ -193,4 +193,9 @@ class LRUCache {
   }
 };
 
+template <typename T>
+void LRUValueDeleter(const Slice& key, T* value) {
+  delete value;  // T is not of void type
+}
+
 }  // namespace pdlfs
