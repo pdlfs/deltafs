@@ -8,16 +8,15 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/env.h"
-#include <stdio.h>
-#include "pdlfs-common/port.h"
+#include "logging.h"
 
-#if defined(GLOG)
-#include <glog/logging.h>
-#endif
+#include "pdlfs-common/env.h"
+#include "pdlfs-common/port.h"
 #if defined(PDLFS_PLATFORM_POSIX)
 #include "posix_logger.h"
 #endif
+
+#include <stdio.h>
 
 namespace pdlfs {
 
