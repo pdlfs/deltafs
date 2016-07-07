@@ -107,12 +107,12 @@ SRV_CB(RDIDX)
 
 namespace {
 struct OpState {
+  bool reply_received;
   port::Mutex* mutex;
   port::CondVar* cv;
   hg_handle_t handle;
   hg_return_t ret;
   void* out;
-  bool ok;
 };
 }  // namespace
 
@@ -123,17 +123,16 @@ hg_return_t MercuryRPC::Client::SaveReply(const hg_cb_info* info) {
   if (state->ret == HG_SUCCESS) {
     state->ret = HG_Get_output(state->handle, state->out);
   }
-  state->ok = true;
+  state->reply_received = true;
   state->cv->SignalAll();
   return HG_SUCCESS;
 }
 
 #define CLI_STUB(OP)                                                         \
   void MercuryRPC::Client::OP(Message& in, Message& out) {                   \
-    out.err = 0xff;                                                          \
     na_addr_t na_addr;                                                       \
     na_return_t r = rpc_->Lookup(addr_, &na_addr);                           \
-    if (r != NA_SUCCESS) return;                                             \
+    if (r != NA_SUCCESS) throw EHOSTUNREACH;                                 \
     hg_handle_t handle;                                                      \
     hg_return_t ret =                                                        \
         HG_Create(rpc_->hg_context_, na_addr, rpc_->hg_##OP##_id_, &handle); \
@@ -142,14 +141,17 @@ hg_return_t MercuryRPC::Client::SaveReply(const hg_cb_info* info) {
       state.out = &out;                                                      \
       state.mutex = &mu_;                                                    \
       state.cv = &cv_;                                                       \
-      state.ok = false;                                                      \
+      state.reply_received = false;                                          \
       state.handle = handle;                                                 \
       MutexLock l(state.mutex);                                              \
       ret = HG_Forward(handle, SaveReply, &state, &in);                      \
       if (ret == HG_SUCCESS) {                                               \
-        while (!state.ok) state.cv->Wait();                                  \
+        while (!state.reply_received) state.cv->Wait();                      \
       }                                                                      \
       HG_Destroy(handle);                                                    \
+    }                                                                        \
+    if (ret != HG_SUCCESS) {                                                 \
+      throw ENETUNREACH;                                                     \
     }                                                                        \
   }
 
