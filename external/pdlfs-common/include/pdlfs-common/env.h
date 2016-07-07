@@ -249,12 +249,13 @@ class Logger {
   static Logger* Default();
 
   // Write an entry to the log file with the specified format.
-  virtual void Logv(const char* format, va_list ap) = 0;
+  virtual void Logv(const char* file, int line, int severity, int verbose,
+                    const char* format, va_list ap) = 0;
 
  private:
   // No copying allowed
-  Logger(const Logger&);
   void operator=(const Logger&);
+  Logger(const Logger&);
 };
 
 // Identifies a locked file.

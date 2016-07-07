@@ -42,7 +42,8 @@ void Log(Logger* info_log, const char* fmt, ...) {
   if (info_log != NULL) {
     va_list ap;
     va_start(ap, fmt);
-    info_log->Logv(fmt, ap);
+    info_log->Logv("pdlfs-common*.cc", 0, 0 /* severity */, 3 /* verbose */,
+                   fmt, ap);
     va_end(ap);
   }
 }
@@ -152,11 +153,12 @@ class PosixGoogleLogger : public Logger {
     return base;
   }
 
-  virtual void Logv(const char* fmt, va_list ap) {
-    if (VLOG_IS_ON(1)) {
+  virtual void Logv(const char* file, int line, int severity, int verbose,
+                    const char* format, va_list ap) {
+    if (severity > 0 || VLOG_IS_ON(verbose)) {
       char buffer[500];
-      char* msg = VsnprintfWrapper(buffer, fmt, ap);
-      ::google::LogMessage("pdlfs-common*.cc", 0).stream() << msg;
+      char* msg = VsnprintfWrapper(buffer, format, ap);
+      ::google::LogMessage(file, line, severity).stream() << msg;
       if (msg != buffer) {
         delete[] msg;
       }
@@ -168,7 +170,8 @@ class PosixGoogleLogger : public Logger {
 class NoOpLogger : public Logger {
  public:
   NoOpLogger() {}
-  virtual void Logv(const char* fmt, va_list ap) {
+  virtual void Logv(const char* file, int line, int severity, int verbose,
+                    const char* format, va_list ap) {
     // empty
   }
 };

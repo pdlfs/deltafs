@@ -31,7 +31,8 @@ class PosixLogger : public Logger {
 
   virtual ~PosixLogger() { fclose(file_); }
 
-  virtual void Logv(const char* format, va_list ap) {
+  virtual void Logv(const char* file, int line, int severity, int verbose,
+                    const char* format, va_list ap) {
     const uint64_t thread_id = (*gettid_)();
 
     // We try twice: the first time with a fixed-size stack allocated buffer,
