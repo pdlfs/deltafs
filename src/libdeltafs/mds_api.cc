@@ -512,33 +512,54 @@ void MDS::RPC::SRV::LSDIR(Msg& in, Msg& out) {
   }
 }
 
+Status MDS::RPC::CLI::Readidx(const ReadidxOptions& options, ReadidxRet* ret) {
+  Status s;
+  Msg in;
+  char* scratch = &in.buf[0];
+  char* p = scratch;
+  p = EncodeDirId(p, options);
+  p = EncodeVarint32(p, options.session_id);
+  p = EncodeVarint64(p, options.op_due);
+  in.contents = Slice(scratch, p - scratch);
+  Msg out;
+  try {
+    stub_->RDIDX(in, out);
+  } catch (int rpc_err) {
+    s = Status::Disconnected(Slice());
+  }
+  if (s.ok()) {
+    if (out.err != 0) {
+      s = Status::FromCode(out.err);
+    } else {
+      ret->idx.assign(out.contents.data(), out.contents.size());
+    }
+  }
+  return s;
+}
+
+void MDS::RPC::SRV::RDIDX(Msg& in, Msg& out) {
+  Status s;
+  ReadidxOptions options;
+  ReadidxRet ret;
+  Slice input = in.contents;
+  if (!GetDirId(&input, &options) ||
+      !GetVarint32(&input, &options.session_id) ||
+      !GetVarint64(&input, &options.op_due)) {
+    s = Status::InvalidArgument(Slice());
+  } else {
+    s = mds_->Readidx(options, &ret);
+  }
+  if (s.ok()) {
+    out.extra_buf.swap(ret.idx);
+    out.err = 0;
+  } else {
+    out.err = s.err_code();
+  }
+}
+
 void MDS::RPC::SRV::NONOP(Msg& in, Msg& out) {
   // Do nothing
   out.err = 0;
-}
-
-void MDS::RPC::SRV::CHOWN(Msg& in, Msg& out) {
-  // FIXME
-  Status s = Status::NotSupported(Slice());
-  out.err = s.err_code();
-}
-
-void MDS::RPC::SRV::UNLNK(Msg& in, Msg& out) {
-  // FIXME
-  Status s = Status::NotSupported(Slice());
-  out.err = s.err_code();
-}
-
-void MDS::RPC::SRV::RENME(Msg& in, Msg& out) {
-  // FIXME
-  Status s = Status::NotSupported(Slice());
-  out.err = s.err_code();
-}
-
-void MDS::RPC::SRV::RMDIR(Msg& in, Msg& out) {
-  // FIXME
-  Status s = Status::NotSupported(Slice());
-  out.err = s.err_code();
 }
 
 }  // namespace pdlfs

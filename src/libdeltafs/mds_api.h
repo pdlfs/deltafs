@@ -126,7 +126,7 @@ class MDS {
   struct ListdirOptions {
     uint64_t reg_id;
     uint64_t snap_id;
-    uint64_t dir_ino;  // Parent directory id
+    uint64_t dir_ino;  // Directory id
     uint32_t session_id;
     uint64_t op_due;
   };
@@ -134,6 +134,18 @@ class MDS {
     std::vector<std::string> names;
   };
   MDS_OP(Listdir)
+
+  struct ReadidxOptions {
+    uint64_t reg_id;
+    uint64_t snap_id;
+    uint64_t dir_ino;  // Directory id
+    uint32_t session_id;
+    uint64_t op_due;
+  };
+  struct ReadidxRet {
+    std::string idx;
+  };
+  MDS_OP(Readidx)
 
 #undef MDS_OP
   class SRV;
@@ -168,6 +180,7 @@ class MDSWrapper : public MDS {
   DEF_OP(Chmod)
   DEF_OP(Lookup)
   DEF_OP(Listdir)
+  DEF_OP(Readidx)
 
 #undef DEF_OP
 
@@ -196,6 +209,7 @@ class MDS::RPC::CLI : public MDS {
   DEC_OP(Chmod)
   DEC_OP(Lookup)
   DEC_OP(Listdir)
+  DEC_OP(Readidx)
 
 #undef DEC_OP
 
@@ -217,12 +231,9 @@ class MDS::RPC::SRV : public rpc::IfWrapper {
   DEC_RPC(MKDIR)
   DEC_RPC(FCRET)
   DEC_RPC(CHMOD)
-  DEC_RPC(CHOWN)
-  DEC_RPC(UNLNK)
-  DEC_RPC(RMDIR)
-  DEC_RPC(RENME)
   DEC_RPC(LOKUP)
   DEC_RPC(LSDIR)
+  DEC_RPC(RDIDX)
 
 #undef DEC_RPC
 

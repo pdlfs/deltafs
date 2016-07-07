@@ -31,6 +31,7 @@ class MDS::SRV : public MDS {
   DEC_OP(Chmod)
   DEC_OP(Lookup)
   DEC_OP(Listdir)
+  DEC_OP(Readidx)
 
 #undef DEC_OP
   static Slice EncodeId(const DirId& id, char* scratch);

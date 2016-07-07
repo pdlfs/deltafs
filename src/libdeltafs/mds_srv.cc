@@ -819,4 +819,9 @@ Status MDS::SRV::Listdir(const ListdirOptions& options, ListdirRet* ret) {
   return Status::OK();
 }
 
+Status MDS::SRV::Readidx(const ReadidxOptions& options, ReadidxRet* ret) {
+  // FIXME
+  return Status::NotSupported(Slice());
+}
+
 }  // namespace pdlfs
