@@ -203,7 +203,7 @@ class MDS::RPC::CLI : public MDS {
   rpc::If* stub_;
 };
 
-class MDS::RPC::SRV : public rpc::If {
+class MDS::RPC::SRV : public rpc::IfWrapper {
   typedef rpc::If::Message Msg;
 
  public:
