@@ -82,7 +82,7 @@ TEST(StatTest, StatEncoding) {
 class LookupEntryTest {};
 
 TEST(LookupEntryTest, EntryEncoding) {
-  LookupEntry ent;
+  LookupStat ent;
   ent.SetRegId(13);
   ent.SetSnapId(37);
   ent.SetInodeNo(12345);
@@ -92,12 +92,12 @@ TEST(LookupEntryTest, EntryEncoding) {
   ent.SetZerothServer(777);
   ent.SetLeaseDue(55667788);
   ent.AssertAllSet();
-  char tmp[sizeof(LookupEntry)];
+  char tmp[sizeof(LookupStat)];
   Slice encoding = ent.EncodeTo(tmp);
-  LookupEntry ent2;
+  LookupStat ent2;
   bool r = ent2.DecodeFrom(encoding);
   ASSERT_TRUE(r);
-  char tmp2[sizeof(LookupEntry)];
+  char tmp2[sizeof(LookupStat)];
   Slice encoding2 = ent2.EncodeTo(tmp2);
   ASSERT_EQ(encoding, encoding2);
 }

@@ -97,50 +97,85 @@ Status ReadFileToString(Env* env, const Slice& fname, std::string* data) {
   return s;
 }
 
-/* clang-format off */
 namespace {
-#if defined(GLOG)
+/* clang-format off */
+#if defined(PDLFS_PLATFORM_POSIX) && defined(GLOG)
 class GoogleLogger : public Logger {
  public:
   GoogleLogger() {}
-  static const char* VsnprintfWrapper(char* dst, size_t n, const char* fmt,
-                               va_list ap) {
-    vsnprintf(dst, n, fmt, ap);
-    return dst;
+  // We try twice: the first time with a fixed-size stack allocated buffer
+  // and the second time with a much larger heap allocated buffer.
+  static char* VsnprintfWrapper(char (&buffer)[500], const char* fmt,
+                                va_list ap) {
+    char* base;
+    int bufsize;
+    for (int iter = 0; iter < 2; iter++) {
+      if (iter == 0) {
+        bufsize = sizeof(buffer);
+        base = buffer;
+      } else {
+        bufsize = 30000;
+        base = new char[bufsize];
+      }
+      char* p = base;
+      char* limit = base + bufsize - 1;
+
+      // Print the message
+      if (p < limit) {
+        va_list backup_ap;
+        va_copy(backup_ap, ap);
+        p += vsnprintf(p, limit - p, fmt, backup_ap);
+        va_end(backup_ap);
+      }
+
+      // Truncate to available space
+      if (p >= limit) {
+        if (iter == 0) {
+          continue;  // Try again with larger buffer
+        } else {
+          p = limit - 1;
+        }
+      }
+
+      // Add newline if necessary
+      if (p == base || p[-1] != '\n') {
+        *p++ = '\n';
+      }
+
+      p[0] = 0;
+      break;
+    }
+
+    return base;
   }
+
   virtual void Logv(const char* fmt, va_list ap) {
-    char buffer[5000];
+    char buffer[500];
+    char* msg = VsnprintfWrapper(buffer, fmt, ap);
     !(VLOG_IS_ON(1)) ? (void)0 : google::LogMessageVoidify() &
-            ::google::LogMessage("???", 0).stream()
-            << VsnprintfWrapper(buffer, 5000, fmt, ap);
+        ::google::LogMessage("db_???.cc", 0).stream() << msg;
+    if (msg != buffer) {
+      delete[] msg;
+    }
   }
 };
 #endif
-
-class SyserrLogger : public Logger {
+/* clang-format on */
+class NoOpLogger : public Logger {
  public:
-  SyserrLogger() {}
+  NoOpLogger() {}
   virtual void Logv(const char* fmt, va_list ap) {
-    char buffer[5000];
-    char* p = buffer;
-    p += vsnprintf(p, sizeof(buffer), fmt, ap);
-    // Add newline if necessary
-    if (p == buffer || p[-1] != '\n') {
-      *p++ = '\n';
-      *p = 0;
-    }
-    fprintf(stderr, "%s", buffer);
+    // empty
   }
 };
 }  // namespace
-/* clang-format on */
 
 Logger* Logger::Default() {
-#if defined(GLOG)
+#if defined(PDLFS_PLATFORM_POSIX) && defined(GLOG)
   static GoogleLogger logger;
   return &logger;
 #else
-  static SyserrLogger logger;
+  static NoOpLogger logger;
   return &logger;
 #endif
 }
