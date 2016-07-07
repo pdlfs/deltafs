@@ -9,10 +9,14 @@
  */
 
 #include "pdlfs-common/env.h"
-
 #include <stdio.h>
+#include "pdlfs-common/port.h"
+
 #if defined(GLOG)
 #include <glog/logging.h>
+#endif
+#if defined(PDLFS_PLATFORM_POSIX)
+#include "posix_logger.h"
 #endif
 
 namespace pdlfs {
@@ -153,7 +157,7 @@ class GoogleLogger : public Logger {
     char buffer[500];
     char* msg = VsnprintfWrapper(buffer, fmt, ap);
     !(VLOG_IS_ON(1)) ? (void)0 : google::LogMessageVoidify() &
-        ::google::LogMessage("db_???.cc", 0).stream() << msg;
+        ::google::LogMessage("pdlfs-common*.cc", 0).stream() << msg;
     if (msg != buffer) {
       delete[] msg;
     }
@@ -173,6 +177,9 @@ class NoOpLogger : public Logger {
 Logger* Logger::Default() {
 #if defined(PDLFS_PLATFORM_POSIX) && defined(GLOG)
   static GoogleLogger logger;
+  return &logger;
+#elif defined(PDLFS_PLATFORM_POSIX)
+  static PosixLogger logger(stderr, port::PthreadId);
   return &logger;
 #else
   static NoOpLogger logger;

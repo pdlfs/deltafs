@@ -12,6 +12,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <sys/time.h>
 #include <algorithm>
 
 #include "pdlfs-common/env.h"

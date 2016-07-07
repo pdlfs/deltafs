@@ -53,5 +53,12 @@ void InitOnce(OnceType* once, void (*initializer)()) {
   PthreadCall("pthread_once", pthread_once(once, initializer));
 }
 
+uint64_t PthreadId() {
+  pthread_t tid = pthread_self();
+  uint64_t thread_id = 0;
+  memcpy(&thread_id, &tid, std::min(sizeof(thread_id), sizeof(tid)));
+  return thread_id;
+}
+
 }  // namespace port
 }  // namespace pdlfs

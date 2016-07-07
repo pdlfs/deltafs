@@ -127,6 +127,7 @@ class CondVar {
 typedef pthread_once_t OnceType;
 #define PDLFS_ONCE_INIT PTHREAD_ONCE_INIT
 extern void InitOnce(OnceType* once, void (*initializer)());
+extern uint64_t PthreadId();
 
 inline bool Snappy_Compress(const char* input, size_t length,
                             ::std::string* output) {
