@@ -77,9 +77,6 @@ DBOptions SanitizeOptions(const std::string& dbname,
   ClipToRange(&result.write_buffer_size, 64 << 10, 1 << 30);
   ClipToRange(&result.block_size, 1 << 10, 4 << 20);
   if (result.info_log == NULL) {
-#if defined(PDLFS_PLATFORM_POSIX) && defined(GLOG)
-    result.info_log = Logger::Default();
-#else
     // Open a log file in the same directory as the db
     src.env->CreateDir(dbname);  // In case it does not exist
     src.env->RenameFile(InfoLogFileName(dbname), OldInfoLogFileName(dbname));
@@ -88,7 +85,6 @@ DBOptions SanitizeOptions(const std::string& dbname,
       // No place suitable for logging
       result.info_log = NULL;
     }
-#endif
   }
   if (result.block_cache == NULL) {
     result.block_cache = NewLRUCache(8 << 20);
