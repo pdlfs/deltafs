@@ -101,6 +101,7 @@ SRV_CB(RMDIR)
 SRV_CB(RENME)
 SRV_CB(LOKUP)
 SRV_CB(LSDIR)
+SRV_CB(RDIDX)
 
 #undef SRV_CB
 
@@ -163,6 +164,7 @@ CLI_STUB(RMDIR)
 CLI_STUB(RENME)
 CLI_STUB(LOKUP)
 CLI_STUB(LSDIR)
+CLI_STUB(RDIDX)
 
 #undef CLI_STUB
 
@@ -220,6 +222,7 @@ MercuryRPC::MercuryRPC(bool listen, const RPCOptions& options)
   Register_RENME();
   Register_LOKUP();
   Register_LSDIR();
+  Register_RDIDX();
 }
 
 Status MercuryRPC::TEST_Start() {

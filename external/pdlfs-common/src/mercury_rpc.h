@@ -70,6 +70,7 @@ class MercuryRPC {
   REG_RPC(RENME)
   REG_RPC(LOKUP)
   REG_RPC(LSDIR)
+  REG_RPC(RDIDX)
 
 #undef REG_RPC
 #undef REG_ARGS
@@ -199,6 +200,7 @@ class MercuryRPC::Client : public If {
   DEC_RPC(RENME)
   DEC_RPC(LOKUP)
   DEC_RPC(LSDIR)
+  DEC_RPC(RDIDX)
 
 #undef DEC_RPC
 
