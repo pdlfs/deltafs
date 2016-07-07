@@ -88,7 +88,7 @@ static void DeleteLease(const Slice& key, Lease* lease) {
   LOG_ASSERT(!lease->busy()) << "deleting active lease state!";
 #else
   if (lease->busy()) {
-    fprintf(stderr, "Error: deleting active lease state!");
+    Log(Logger::Default(), "Fatal: deleting active lease state!");
     abort();
   }
 #endif

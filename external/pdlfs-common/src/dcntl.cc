@@ -106,7 +106,7 @@ static void DeleteDir(const Slice& key, Dir* dir) {
   LOG_ASSERT(!dir->busy()) << "deleting active directory state!";
 #else
   if (dir->busy()) {
-    fprintf(stderr, "Error: deleting active directory state!");
+    Log(Logger::Default(), "Fatal: deleting active directory state!");
     abort();
   }
 #endif

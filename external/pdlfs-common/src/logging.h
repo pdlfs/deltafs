@@ -9,6 +9,8 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/env.h"  // Log(...)
+
 #if defined(GLOG)
 #include <glog/logging.h>
 #endif

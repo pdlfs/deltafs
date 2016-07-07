@@ -9,6 +9,7 @@
 
 #if defined(MERCURY)
 #include "mercury_rpc.h"
+#include "logging.h"
 
 namespace pdlfs {
 namespace rpc {
@@ -384,7 +385,11 @@ void MercuryRPC::TEST_LoopForever(void* arg) {
   rpc->mutex_.Unlock();
 
   if (error) {
-    fprintf(stderr, "!!! Error in local rpc bg loop [errno=%d]\n", ret);
+#if defined(GLOG)
+    LOG(ERROR) << "Error in local RPC bg_loop [errno=" << ret << "]";
+#else
+    Log(Logger->Default(), "Error in local RPC bg_loop [errno=%d]", ret);
+#endif
   }
 }
 
@@ -401,12 +406,16 @@ void MercuryRPC::LocalLooper::BGLoop() {
       mutex_.Unlock();
 
       if (ret != HG_SUCCESS) {
-        fprintf(stderr, "!!! Error in local rpc bg loop [errno=%d]\n", ret);
+#if defined(GLOG)
+        LOG(ERROR) << "Error in local RPC bg_loop [errno=" << ret << "]";
+#else
+        Log(Logger->Default(), "Error in local RPC bg_loop [errno=%d]", ret);
+#endif
       }
       return;
     }
 
-    ret = HG_Progress(ctx, 1000);
+    ret = HG_Progress(ctx, 1000);  // Timeouts in 1000 ms
     if (ret == HG_SUCCESS) {
       unsigned int actual_count = 1;
       while (actual_count != 0 && !shutting_down_.Acquire_Load()) {
