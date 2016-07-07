@@ -103,9 +103,9 @@ Status ReadFileToString(Env* env, const Slice& fname, std::string* data) {
 namespace {
 /* clang-format off */
 #if defined(PDLFS_PLATFORM_POSIX) && defined(GLOG)
-class GoogleLogger : public Logger {
+class PosixGoogleLogger : public Logger {
  public:
-  GoogleLogger() {}
+  PosixGoogleLogger() {}
   // We try twice: the first time with a fixed-size stack allocated buffer
   // and the second time with a much larger heap allocated buffer.
   static char* VsnprintfWrapper(char (&buffer)[500], const char* fmt,
@@ -153,12 +153,13 @@ class GoogleLogger : public Logger {
   }
 
   virtual void Logv(const char* fmt, va_list ap) {
-    char buffer[500];
-    char* msg = VsnprintfWrapper(buffer, fmt, ap);
-    !(VLOG_IS_ON(1)) ? (void)0 : google::LogMessageVoidify() &
-        ::google::LogMessage("pdlfs-common*.cc", 0).stream() << msg;
-    if (msg != buffer) {
-      delete[] msg;
+    if (VLOG_IS_ON(1)) {
+      char buffer[500];
+      char* msg = VsnprintfWrapper(buffer, fmt, ap);
+      ::google::LogMessage("pdlfs-common*.cc", 0).stream() << msg;
+      if (msg != buffer) {
+        delete[] msg;
+      }
     }
   }
 };
@@ -175,7 +176,7 @@ class NoOpLogger : public Logger {
 
 Logger* Logger::Default() {
 #if defined(PDLFS_PLATFORM_POSIX) && defined(GLOG)
-  static GoogleLogger logger;
+  static PosixGoogleLogger logger;
   return &logger;
 #elif defined(PDLFS_PLATFORM_POSIX)
   static PosixLogger logger(stderr, port::PthreadId);
