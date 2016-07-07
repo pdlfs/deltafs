@@ -811,7 +811,6 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
 // Directory listing does not have to return a serializable view of
 // the file system. So all list operations will go without synchronizing
 // with other concurrent read or write operations.
-//
 // Errors are mostly masked so an empty list is returned in worst case.
 Status MDS::SRV::Listdir(const ListdirOptions& options, ListdirRet* ret) {
   DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
@@ -819,9 +818,27 @@ Status MDS::SRV::Listdir(const ListdirOptions& options, ListdirRet* ret) {
   return Status::OK();
 }
 
+// Return the index encoding of a parent directory. Return OK on success
 Status MDS::SRV::Readidx(const ReadidxOptions& options, ReadidxRet* ret) {
-  // FIXME
-  return Status::NotSupported(Slice());
+  Status s;
+  Dir::Ref* ref;
+  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
+
+  MutexLock ml(&mutex_);
+  s = FetchDir(dir_id, &ref);
+  if (s.ok()) {
+    assert(ref != NULL);
+    Dir::Guard guard(dirs_, ref);
+    const Dir* const d = ref->value;
+    assert(d != NULL);
+    s = ProbeDir(d);
+    if (s.ok()) {
+      Slice encoding = d->index.Encode();
+      ret->idx.assign(encoding.data(), encoding.size());
+    }
+  }
+
+  return s;
 }
 
 }  // namespace pdlfs

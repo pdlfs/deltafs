@@ -551,6 +551,7 @@ void MDS::RPC::SRV::RDIDX(Msg& in, Msg& out) {
   }
   if (s.ok()) {
     out.extra_buf.swap(ret.idx);
+    out.contents = Slice(out.extra_buf);
     out.err = 0;
   } else {
     out.err = s.err_code();
