@@ -45,10 +45,20 @@ static bool GetDirId(Slice* input, T* options) {
   }
 }
 
+#ifndef NDEBUG
+#define MDS_RPC_DEBUG 1
+#else
+#define MDS_RPC_DEBUG 0
+#endif
+
+static const bool kDebugRPC = MDS_RPC_DEBUG;
+
+#undef MDS_RPC_DEBUG
+
 Status MDS::RPC::CLI::Fstat(const FstatOptions& options, FstatRet* ret) {
   Status s;
   Msg in;
-  if (options.name.size() <= 1000) {
+  if (!kDebugRPC) {
     char* scratch = &in.buf[0];
     char* p = scratch;
     p = EncodeDirId(p, options);
@@ -64,7 +74,7 @@ Status MDS::RPC::CLI::Fstat(const FstatOptions& options, FstatRet* ret) {
     PutVarint32(&in.extra_buf, options.session_id);
     PutVarint64(&in.extra_buf, options.op_due);
     in.contents = Slice(in.extra_buf);
-    if (in.contents.size() > 4000) {
+    if (in.contents.size() > sizeof(in.buf)) {
       s = Status::BufferFull(Slice());
     }
   }
@@ -122,7 +132,7 @@ void MDS::RPC::SRV::FSTAT(Msg& in, Msg& out) {
 Status MDS::RPC::CLI::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
   Status s;
   Msg in;
-  if (options.name.size() <= 1000) {
+  if (!kDebugRPC) {
     char* scratch = &in.buf[0];
     char* p = scratch;
     p = EncodeDirId(p, options);
@@ -144,7 +154,7 @@ Status MDS::RPC::CLI::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
     PutVarint32(&in.extra_buf, options.session_id);
     PutVarint64(&in.extra_buf, options.op_due);
     in.contents = Slice(in.extra_buf);
-    if (in.contents.size() > 4000) {
+    if (in.contents.size() > sizeof(in.buf)) {
       s = Status::BufferFull(Slice());
     }
   }
@@ -205,7 +215,7 @@ void MDS::RPC::SRV::FCRET(Msg& in, Msg& out) {
 Status MDS::RPC::CLI::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
   Status s;
   Msg in;
-  if (options.name.size() <= 1000) {
+  if (!kDebugRPC) {
     char* scratch = &in.buf[0];
     char* p = scratch;
     p = EncodeDirId(p, options);
@@ -229,7 +239,7 @@ Status MDS::RPC::CLI::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
     PutVarint32(&in.extra_buf, options.session_id);
     PutVarint64(&in.extra_buf, options.op_due);
     in.contents = Slice(in.extra_buf);
-    if (in.contents.size() > 4000) {
+    if (in.contents.size() > sizeof(in.buf)) {
       s = Status::BufferFull(Slice());
     }
   }
@@ -291,7 +301,7 @@ void MDS::RPC::SRV::MKDIR(Msg& in, Msg& out) {
 Status MDS::RPC::CLI::Lookup(const LookupOptions& options, LookupRet* ret) {
   Status s;
   Msg in;
-  if (options.name.size() <= 1000) {
+  if (!kDebugRPC) {
     char* scratch = &in.buf[0];
     char* p = scratch;
     p = EncodeDirId(p, options);
@@ -307,7 +317,7 @@ Status MDS::RPC::CLI::Lookup(const LookupOptions& options, LookupRet* ret) {
     PutVarint32(&in.extra_buf, options.session_id);
     PutVarint64(&in.extra_buf, options.op_due);
     in.contents = Slice(in.extra_buf);
-    if (in.contents.size() > 4000) {
+    if (in.contents.size() > sizeof(in.buf)) {
       s = Status::BufferFull(Slice());
     }
   }
@@ -365,7 +375,7 @@ void MDS::RPC::SRV::LOKUP(Msg& in, Msg& out) {
 Status MDS::RPC::CLI::Chmod(const ChmodOptions& options, ChmodRet* ret) {
   Status s;
   Msg in;
-  if (options.name.size() <= 1000) {
+  if (!kDebugRPC) {
     char* scratch = &in.buf[0];
     char* p = scratch;
     p = EncodeDirId(p, options);
@@ -383,7 +393,7 @@ Status MDS::RPC::CLI::Chmod(const ChmodOptions& options, ChmodRet* ret) {
     PutVarint32(&in.extra_buf, options.session_id);
     PutVarint64(&in.extra_buf, options.op_due);
     in.contents = Slice(in.extra_buf);
-    if (in.contents.size() > 4000) {
+    if (in.contents.size() > sizeof(in.buf)) {
       s = Status::BufferFull(Slice());
     }
   }

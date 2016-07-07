@@ -87,7 +87,7 @@ class If {
   struct Message {
     int err;
     Slice contents;
-    char buf[2048];
+    char buf[500];
     std::string extra_buf;
   };
 
