@@ -115,7 +115,7 @@ void MDS::RPC::SRV::FSTAT(Msg& in, Msg& out) {
     try {
       s = mds_->Fstat(options, &ret);
     } catch (Redirect& re) {
-      out.extra_buf = re;
+      out.extra_buf.swap(re);
       out.contents = Slice(out.extra_buf);
       out.err = -1;
       return;
@@ -198,7 +198,7 @@ void MDS::RPC::SRV::FCRET(Msg& in, Msg& out) {
     try {
       s = mds_->Fcreat(options, &ret);
     } catch (Redirect& re) {
-      out.extra_buf = re;
+      out.extra_buf.swap(re);
       out.contents = Slice(out.extra_buf);
       out.err = -1;
       return;
@@ -284,7 +284,7 @@ void MDS::RPC::SRV::MKDIR(Msg& in, Msg& out) {
     try {
       mds_->Mkdir(options, &ret);
     } catch (Redirect& re) {
-      out.extra_buf = re;
+      out.extra_buf.swap(re);
       out.contents = Slice(out.extra_buf);
       out.err = -1;
       return;
@@ -358,7 +358,7 @@ void MDS::RPC::SRV::LOKUP(Msg& in, Msg& out) {
     try {
       s = mds_->Lookup(options, &ret);
     } catch (Redirect& re) {
-      out.extra_buf = re;
+      out.extra_buf.swap(re);
       out.contents = Slice(out.extra_buf);
       out.err = -1;
       return;
@@ -435,7 +435,7 @@ void MDS::RPC::SRV::CHMOD(Msg& in, Msg& out) {
     try {
       s = mds_->Chmod(options, &ret);
     } catch (Redirect& re) {
-      out.extra_buf = re;
+      out.extra_buf.swap(re);
       out.contents = Slice(out.extra_buf);
       out.err = -1;
       return;
