@@ -58,6 +58,7 @@
 #ifndef HOST_NAME_MAX
 #define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
 #endif
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
