@@ -42,8 +42,15 @@ struct DirId {
 
 inline bool operator==(const DirId& x, const DirId& y) {
 #if defined(DELTAFS)
-  if ((x.reg != y.reg) || (x.snap != y.snap)) return false;
+  if (x.reg != y.reg) {
+    return false;
+  } else {
+    if (x.snap != y.snap) {
+      return false;
+    }
+  }
 #endif
+
   return (x.ino == y.ino);
 }
 
@@ -63,7 +70,8 @@ inline int DirId::compare(const DirId& other) const {
     }
   }
 #endif
-  return ino - other.ino;
+
+  return (ino - other.ino);
 }
 
 struct MDBOptions {
