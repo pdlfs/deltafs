@@ -297,4 +297,70 @@ Status MDS::CLI::Fcreat(const Slice& path, int mode, Stat* stat) {
   return s;
 }
 
+Status MDS::CLI::Mkdir(const Slice& path, int mode, Stat* stat) {
+  Status s;
+  char tmp[20];
+  PathInfo info;
+  MutexLock ml(&mutex_);
+  s = ResolvePath(path, &info);
+  if (s.ok()) {
+    IndexHandle* idxh = NULL;
+    s = FetchIndex(info.pid, info.zserver, &idxh);
+    if (s.ok()) {
+      mutex_.Unlock();
+
+      assert(idxh != NULL);
+      DirIndex* idx = index_cache_->Value(idxh);
+      assert(idx != NULL);
+      MkdirOptions options;
+      options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
+      options.session_id = cli_id_;
+      options.reg_id = info.pid.reg;
+      options.snap_id = info.pid.snap;
+      options.dir_ino = info.pid.ino;
+      options.zserver = PickupServer(info.pid);
+      options.mode = mode;
+      options.uid = uid_;
+      options.gid = gid_;
+      options.name_hash = DirIndex::Hash(info.name, tmp);
+      options.name = info.name;
+      MkdirRet ret;
+
+      DirIndex* latest_idx = idx;
+      DirIndex tmp_idx(&giga_);
+      int redirects_allowed = max_redirects_allowed_;
+      do {
+        try {
+          size_t server = latest_idx->HashToServer(options.name_hash);
+          assert(server < servers_.size());
+          s = servers_[server]->Mkdir(options, &ret);
+        } catch (Redirect& re) {
+          latest_idx = &tmp_idx;
+          if (--redirects_allowed == 0 || !tmp_idx.Update(re)) {
+            s = Status::Corruption(Slice());
+          } else {
+            s = Status::TryAgain(Slice());
+          }
+        }
+      } while (s.IsTryAgain());
+      if (s.ok()) {
+        if (paranoid_checks_ && !S_ISDIR(ret.stat.FileMode())) {
+          s = Status::Corruption(Slice());
+        }
+      }
+
+      mutex_.Lock();
+      if (s.ok() && latest_idx == &tmp_idx) {
+        idx->Update(tmp_idx);
+      }
+      index_cache_->Release(idxh);
+      if (s.ok()) {
+        *stat = ret.stat;
+      }
+    }
+  }
+
+  return s;
+}
+
 }  // namespace pdlfs

@@ -37,6 +37,7 @@ class MDS::CLI {
 
   Status Fstat(const Slice& path, Stat* stat);
   Status Fcreat(const Slice& path, int mode, Stat* stat);
+  Status Mkdir(const Slice& path, int mode, Stat* stat);
 
  private:
   struct PathInfo {
