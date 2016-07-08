@@ -83,7 +83,7 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
       }
       LookupRet ret;
 
-      DirIndex* latest_idx = idx;
+      const DirIndex* latest_idx = idx;
       DirIndex tmp_idx(&giga_);
       int redirects_allowed = max_redirects_allowed_;
       do {
@@ -200,7 +200,7 @@ Status MDS::CLI::Fstat(const Slice& path, Stat* stat) {
       }
       FstatRet ret;
 
-      DirIndex* latest_idx = idx;
+      const DirIndex* latest_idx = idx;
       DirIndex tmp_idx(&giga_);
       int redirects_allowed = max_redirects_allowed_;
       do {
@@ -260,7 +260,7 @@ Status MDS::CLI::Fcreat(const Slice& path, int mode, Stat* stat) {
       options.name = info.name;
       FcreatRet ret;
 
-      DirIndex* latest_idx = idx;
+      const DirIndex* latest_idx = idx;
       DirIndex tmp_idx(&giga_);
       int redirects_allowed = max_redirects_allowed_;
       do {
@@ -326,7 +326,7 @@ Status MDS::CLI::Mkdir(const Slice& path, int mode, Stat* stat) {
       options.name = info.name;
       MkdirRet ret;
 
-      DirIndex* latest_idx = idx;
+      const DirIndex* latest_idx = idx;
       DirIndex tmp_idx(&giga_);
       int redirects_allowed = max_redirects_allowed_;
       do {
