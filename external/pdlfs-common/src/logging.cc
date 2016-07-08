@@ -12,7 +12,7 @@
 
 namespace pdlfs {
 
-void Verbose(Logger* info_log, int level, const char* file, int line,
+void Verbose(Logger* info_log, const char* file, int line, int level,
              const char* fmt, ...) {
   if (info_log != NULL) {
     va_list ap;

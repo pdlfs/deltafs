@@ -11,10 +11,20 @@
 
 #include "pdlfs-common/env.h"
 
+// Common logging interface that could be used like:
+//
+//   Verbose(__LOG_ARGS__, verbose_level, "msg_fmt", va_args)
+//   Info(__LOG_ARGS__, "msg_fmt", va_args)
+//   Error(__LOG_ARGS__, "msg_fmt", va_args)
+//
+// If glog is present, all the logging is completed by it, otherwise
+// these log entries will go to stderr.
 namespace pdlfs {
 
+#define __LOG_ARGS__ Logger::Default(), __FILE__, __LINE__
+
 // Emit a verbose log entry to *info_log if info_log is non-NULL.
-extern void Verbose(Logger* info_log, int level, const char* file, int line,
+extern void Verbose(Logger* info_log, const char* file, int line, int level,
                     const char* format, ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((__format__(__printf__, 5, 6)))

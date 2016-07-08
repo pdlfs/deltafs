@@ -14,9 +14,6 @@
 namespace pdlfs {
 namespace rpc {
 
-#define LOG_ERROR(msg, ret) \
-  Error(Logger::Default(), __FILE__, __LINE__, msg, ret)
-
 hg_return_t MercuryRPC::If_Message_cb(hg_proc_t proc, void* data) {
   hg_return_t ret;
   If::Message* msg = reinterpret_cast<If::Message*>(data);
@@ -388,7 +385,7 @@ void MercuryRPC::TEST_LoopForever(void* arg) {
   rpc->mutex_.Unlock();
 
   if (error) {
-    LOG_ERROR("Error in local RPC bg_loop [errno=%d]", ret);
+    Error(__LOG__ARGS__, "Error in local RPC bg_loop [errno=%d]", ret);
   }
 }
 
@@ -405,7 +402,7 @@ void MercuryRPC::LocalLooper::BGLoop() {
       mutex_.Unlock();
 
       if (ret != HG_SUCCESS) {
-        LOG_ERROR("Error in local RPC bg_loop [errno=%d]", ret);
+        Error(__LOG_ARGS__, "Error in local RPC bg_loop [errno=%d]", ret);
       }
       return;
     }
