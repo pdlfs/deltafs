@@ -80,13 +80,16 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
       }
       LookupRet ret;
 
+      DirIndex* latest_idx = idx;
+      DirIndex tmp_idx(&giga_);
       int redirects_allowed = max_redirects_allowed_;
       do {
         try {
-          int server = idx->HashToServer(nhash);
+          int server = latest_idx->HashToServer(nhash);
           s = servers_[server]->Lookup(options, &ret);
         } catch (Redirect& re) {
-          if (--redirects_allowed == 0 || !idx->Update(re)) {
+          latest_idx = &tmp_idx;
+          if (--redirects_allowed == 0 || !tmp_idx.Update(re)) {
             s = Status::Corruption(Slice());
           } else {
             s = Status::TryAgain(Slice());
@@ -95,6 +98,9 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
       } while (s.IsTryAgain());
 
       mutex_.Lock();
+      if (s.ok() && latest_idx == &tmp_idx) {
+        idx->Swap(tmp_idx);
+      }
       index_cache_->Release(idxh);
       if (s.ok()) {
         LookupStat* stat = new LookupStat(ret.stat);
