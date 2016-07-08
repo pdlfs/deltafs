@@ -385,7 +385,7 @@ void MercuryRPC::TEST_LoopForever(void* arg) {
   rpc->mutex_.Unlock();
 
   if (error) {
-    Error(__LOG__ARGS__, "Error in local RPC bg_loop [errno=%d]", ret);
+    Error(__LOG_ARGS__, "Error in local RPC bg_loop [errno=%d]", ret);
   }
 }
 
