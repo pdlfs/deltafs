@@ -22,6 +22,8 @@ struct MDSCliOptions {
   std::vector<MDS*> servers;
   size_t lease_table_size;
   bool paranoid_checks;
+  bool atomic_pathname_resolution;
+  int max_redirects_allowed;
   int num_virtual_servers;
   int cli_id;
   int uid;
@@ -47,7 +49,8 @@ class MDS::CLI {
   Status ResolvePath(const Slice& path, PathInfo*);
 
   typedef LookupCache::Handle LookupHandle;
-  Status Lookup(const DirId&, const Slice& name, int zserver, LookupHandle**);
+  Status Lookup(const DirId&, const Slice& name, int zserver, uint64_t op_due,
+                LookupHandle**);
   typedef IndexCache::Handle IndexHandle;
   Status FetchIndex(const DirId&, int zserver, IndexHandle**);
 
@@ -56,6 +59,7 @@ class MDS::CLI {
   typedef DirIndexOptions GIGA;
   GIGA giga_;
   bool paranoid_checks_;
+  bool atomic_path_resolution_;
   int max_redirects_allowed_;
   int cli_id_;
   int uid_;

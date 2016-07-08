@@ -55,14 +55,14 @@ Status MDS::CLI::FetchIndex(const DirId& id, int zserver,
 }
 
 Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
-                        LookupHandle** result) {
+                        uint64_t op_due, LookupHandle** result) {
   char tmp[20];
   Slice nhash = DirIndex::Hash(name, tmp);
   mutex_.AssertHeld();
   Status s;
   LookupHandle* h = lookup_cache_->Lookup(pid, nhash);
   if (h == NULL ||
-      (env_->NowMicros() - 10) > lookup_cache_->Value(h)->LeaseDue()) {
+      (env_->NowMicros() + 10) > lookup_cache_->Value(h)->LeaseDue()) {
     IndexHandle* idxh = NULL;
     s = FetchIndex(pid, zserver, &idxh);
     if (s.ok()) {
@@ -72,7 +72,7 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
       DirIndex* idx = index_cache_->Value(idxh);
       assert(idx != NULL);
       LookupOptions options;
-      options.op_due = kMaxMicros;
+      options.op_due = atomic_path_resolution_ ? op_due : kMaxMicros;
       options.session_id = cli_id_;
       options.reg_id = pid.reg;
       options.snap_id = pid.snap;
@@ -150,7 +150,8 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
     input.remove_prefix(p - q + 1);
     result->depth++;
     LookupHandle* lh = NULL;
-    s = Lookup(result->pid, Slice(q, p - q), result->zserver, &lh);
+    Slice name = Slice(q, p - q);
+    s = Lookup(result->pid, name, result->zserver, result->lease_due, &lh);
     if (s.ok()) {
       assert(lh != NULL);
       LookupStat* stat = lookup_cache_->Value(lh);
@@ -188,7 +189,7 @@ Status MDS::CLI::Fstat(const Slice& path, Stat* stat) {
       DirIndex* idx = index_cache_->Value(idxh);
       assert(idx != NULL);
       FstatOptions options;
-      options.op_due = info.lease_due;
+      options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
       options.session_id = cli_id_;
       options.reg_id = info.pid.reg;
       options.snap_id = info.pid.snap;
@@ -247,7 +248,7 @@ Status MDS::CLI::Fcreat(const Slice& path, int mode, Stat* stat) {
       DirIndex* idx = index_cache_->Value(idxh);
       assert(idx != NULL);
       FcreatOptions options;
-      options.op_due = info.lease_due;
+      options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
       options.session_id = cli_id_;
       options.reg_id = info.pid.reg;
       options.snap_id = info.pid.snap;
