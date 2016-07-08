@@ -165,8 +165,8 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
   Status s;
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
-  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
-  Slice name_hash = options.name_hash;
+  const DirId& dir_id = options.dir_id;
+  const Slice& name_hash = options.name_hash;
   if (name_hash.empty()) {
     s = Status::InvalidArgument(Slice());
   } else if (paranoid_checks_ && !options.name.empty()) {
@@ -243,8 +243,8 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
   Status s;
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
-  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
-  Slice name_hash = options.name_hash;
+  const DirId& dir_id = options.dir_id;
+  const Slice& name_hash = options.name_hash;
   if (name_hash.empty() || options.name.empty()) {
     s = Status::InvalidArgument(Slice());
   } else if (paranoid_checks_) {
@@ -356,8 +356,8 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
   Status s;
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
-  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
-  Slice name_hash = options.name_hash;
+  const DirId& dir_id = options.dir_id;
+  const Slice& name_hash = options.name_hash;
   if (options.zserver >= giga_.num_virtual_servers) {
     s = Status::InvalidArgument(Slice());
   } else if (name_hash.empty() || options.name.empty()) {
@@ -510,8 +510,8 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
   Status s;
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
-  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
-  Slice name_hash = options.name_hash;
+  const DirId& dir_id = options.dir_id;
+  const Slice& name_hash = options.name_hash;
   if (name_hash.empty()) {
     s = Status::InvalidArgument(Slice());
   } else if (paranoid_checks_ && !options.name.empty()) {
@@ -652,8 +652,8 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
   Status s;
   Dir::Tx* tx = NULL;
   Dir::Ref* ref;
-  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
-  Slice name_hash = options.name_hash;
+  const DirId& dir_id = options.dir_id;
+  const Slice& name_hash = options.name_hash;
   if (name_hash.empty()) {
     s = Status::InvalidArgument(Slice());
   } else if (paranoid_checks_ && !options.name.empty()) {
@@ -797,8 +797,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
 // with other concurrent read or write operations.
 // Errors are mostly masked so an empty list is returned in worst case.
 Status MDS::SRV::Listdir(const ListdirOptions& options, ListdirRet* ret) {
-  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
-  mdb_->List(dir_id, NULL, &ret->names, NULL);
+  mdb_->List(options.dir_id, NULL, &ret->names, NULL);
   return Status::OK();
 }
 
@@ -806,10 +805,8 @@ Status MDS::SRV::Listdir(const ListdirOptions& options, ListdirRet* ret) {
 Status MDS::SRV::Readidx(const ReadidxOptions& options, ReadidxRet* ret) {
   Status s;
   Dir::Ref* ref;
-  DirId dir_id(options.reg_id, options.snap_id, options.dir_ino);
-
   MutexLock ml(&mutex_);
-  s = FetchDir(dir_id, &ref);
+  s = FetchDir(options.dir_id, &ref);
   if (s.ok()) {
     assert(ref != NULL);
     Dir::Guard guard(dirs_, ref);

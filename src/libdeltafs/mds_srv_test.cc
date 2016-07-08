@@ -59,9 +59,7 @@ class ServerTest {
   // Return the ino of the node being searched, or "-err_code" on errors.
   int Fstat(int dir_ino, int nod_no) {
     MDS::FstatOptions options;
-    options.reg_id = 0;
-    options.snap_id = 0;
-    options.dir_ino = dir_ino;
+    options.dir_id = DirId(0, 0, dir_ino);
     std::string name = NodeName(nod_no);
     options.name = name;
     std::string name_hash;
@@ -79,9 +77,7 @@ class ServerTest {
   // Return the ino of the newly created file, or "-err_code" on errors.
   int Mknod(int dir_ino, int nod_no) {
     MDS::FcreatOptions options;
-    options.reg_id = 0;
-    options.snap_id = 0;
-    options.dir_ino = dir_ino;
+    options.dir_id = DirId(0, 0, dir_ino);
     options.mode = ACCESSPERMS;
     options.uid = 0;
     options.gid = 0;
@@ -101,9 +97,7 @@ class ServerTest {
 
   int Mkdir(int dir_ino, int nod_no) {
     MDS::MkdirOptions options;
-    options.reg_id = 0;
-    options.snap_id = 0;
-    options.dir_ino = dir_ino;
+    options.dir_id = DirId(0, 0, dir_ino);
     options.mode = ACCESSPERMS;
     options.zserver = 0;
     options.uid = 0;
@@ -124,9 +118,7 @@ class ServerTest {
 
   int Listdir(int dir_ino) {
     MDS::ListdirOptions options;
-    options.reg_id = 0;
-    options.snap_id = 0;
-    options.dir_ino = dir_ino;
+    options.dir_id = DirId(0, 0, dir_ino);
     MDS::ListdirRet ret;
     Status s = mds_->Listdir(options, &ret);
     if (s.ok()) {

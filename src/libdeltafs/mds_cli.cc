@@ -29,9 +29,7 @@ Status MDS::CLI::FetchIndex(const DirId& id, int zserver,
     ReadidxOptions options;
     options.op_due = kMaxMicros;
     options.session_id = cli_id_;
-    options.reg_id = id.reg;
-    options.snap_id = id.snap;
-    options.dir_ino = id.ino;
+    options.dir_id = id;
     ReadidxRet ret;
     assert(zserver > 0);
     size_t server = zserver % giga_.num_servers;
@@ -74,9 +72,7 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
       LookupOptions options;
       options.op_due = atomic_path_resolution_ ? op_due : kMaxMicros;
       options.session_id = cli_id_;
-      options.reg_id = pid.reg;
-      options.snap_id = pid.snap;
-      options.dir_ino = pid.ino;
+      options.dir_id = pid;
       options.name_hash = nhash;
       if (paranoid_checks_) {
         options.name = name;
@@ -191,9 +187,7 @@ Status MDS::CLI::Fstat(const Slice& path, Stat* stat) {
       FstatOptions options;
       options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
       options.session_id = cli_id_;
-      options.reg_id = info.pid.reg;
-      options.snap_id = info.pid.snap;
-      options.dir_ino = info.pid.ino;
+      options.dir_id = info.pid;
       options.name_hash = DirIndex::Hash(info.name, tmp);
       if (paranoid_checks_) {
         options.name = info.name;
@@ -250,9 +244,7 @@ Status MDS::CLI::Fcreat(const Slice& path, int mode, Stat* stat) {
       FcreatOptions options;
       options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
       options.session_id = cli_id_;
-      options.reg_id = info.pid.reg;
-      options.snap_id = info.pid.snap;
-      options.dir_ino = info.pid.ino;
+      options.dir_id = info.pid;
       options.mode = mode;
       options.uid = uid_;
       options.gid = gid_;
@@ -315,9 +307,7 @@ Status MDS::CLI::Mkdir(const Slice& path, int mode, Stat* stat) {
       MkdirOptions options;
       options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
       options.session_id = cli_id_;
-      options.reg_id = info.pid.reg;
-      options.snap_id = info.pid.snap;
-      options.dir_ino = info.pid.ino;
+      options.dir_id = info.pid;
       options.zserver = PickupServer(info.pid);
       options.mode = mode;
       options.uid = uid_;

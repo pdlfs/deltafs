@@ -42,7 +42,7 @@ class FstatWrapper : public MDSWrapper {
   FstatRet ret_;
   Status status_;
   virtual Status Fstat(const FstatOptions& options, FstatRet* ret) {
-    ASSERT_EQ(options.dir_ino, options_.dir_ino);
+    ASSERT_TRUE(options.dir_id.compare(options_.dir_id) == 0);
     ASSERT_EQ(options.name_hash, options_.name_hash);
     ASSERT_EQ(options.name, options_.name);
     if (!re_.empty()) {
@@ -55,7 +55,7 @@ class FstatWrapper : public MDSWrapper {
 };
 
 TEST(APITest<FstatWrapper>, Fstat) {
-  t_opts_.dir_ino = 301;
+  t_opts_.dir_id = DirId(31, 13, 301);
   t_opts_.name_hash = "aabbccdd";
   t_opts_.name = "X";
   t_ret_.stat.SetZerothServer(23);

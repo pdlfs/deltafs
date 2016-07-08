@@ -50,9 +50,7 @@ class MDS {
 #define MDS_OP(OP) virtual Status OP(const OP##Options&, OP##Ret*) = 0;
 
   struct FstatOptions {
-    uint64_t reg_id;
-    uint64_t snap_id;
-    uint64_t dir_ino;  // Parent directory id
+    DirId dir_id;  // Parent directory id
     uint32_t session_id;
     uint64_t op_due;
     Slice name_hash;
@@ -64,9 +62,7 @@ class MDS {
   MDS_OP(Fstat)
 
   struct FcreatOptions {
-    uint64_t reg_id;
-    uint64_t snap_id;
-    uint64_t dir_ino;  // Parent directory id
+    DirId dir_id;  // Parent directory id
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
@@ -81,9 +77,7 @@ class MDS {
   MDS_OP(Fcreat)
 
   struct MkdirOptions {
-    uint64_t reg_id;
-    uint64_t snap_id;
-    uint64_t dir_ino;  // Parent directory id
+    DirId dir_id;  // Parent directory id
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
@@ -99,9 +93,7 @@ class MDS {
   MDS_OP(Mkdir)
 
   struct ChmodOptions {
-    uint64_t reg_id;
-    uint64_t snap_id;
-    uint64_t dir_ino;  // Parent directory id
+    DirId dir_id;  // Parent directory id
     uint32_t mode;
     uint32_t session_id;
     uint64_t op_due;
@@ -114,9 +106,7 @@ class MDS {
   MDS_OP(Chmod)
 
   struct LookupOptions {
-    uint64_t reg_id;
-    uint64_t snap_id;
-    uint64_t dir_ino;  // Parent directory id
+    DirId dir_id;  // Parent directory id
     uint32_t session_id;
     uint64_t op_due;
     Slice name_hash;
@@ -128,9 +118,7 @@ class MDS {
   MDS_OP(Lookup)
 
   struct ListdirOptions {
-    uint64_t reg_id;
-    uint64_t snap_id;
-    uint64_t dir_ino;  // Directory id
+    DirId dir_id;  // Parent directory id
     uint32_t session_id;
     uint64_t op_due;
   };
@@ -140,9 +128,7 @@ class MDS {
   MDS_OP(Listdir)
 
   struct ReadidxOptions {
-    uint64_t reg_id;
-    uint64_t snap_id;
-    uint64_t dir_ino;  // Directory id
+    DirId dir_id;  // Parent directory id
     uint32_t session_id;
     uint64_t op_due;
   };
