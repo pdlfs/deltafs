@@ -13,9 +13,13 @@
 #include <vector>
 
 #include "pdlfs-common/fstypes.h"
+#include "pdlfs-common/mdb.h"
 #include "pdlfs-common/rpc.h"
 
 namespace pdlfs {
+
+// The farthest time in future.
+static const uint64_t kMaxMicros = ((0x1ull << 63) - 1);
 
 class Env;
 class MDB;
@@ -148,6 +152,8 @@ class MDS {
   MDS_OP(Readidx)
 
 #undef MDS_OP
+  static Slice EncodeId(const DirId& id, char* scratch);
+  static int PickupServer(const DirId& id);
   class SRV;
   class CLI;
 

@@ -13,7 +13,6 @@
 #include "pdlfs-common/dcntl.h"
 #include "pdlfs-common/lease.h"
 #include "pdlfs-common/map.h"
-#include "pdlfs-common/mdb.h"
 #include "pdlfs-common/port.h"
 
 namespace pdlfs {
@@ -34,8 +33,6 @@ class MDS::SRV : public MDS {
   DEC_OP(Readidx)
 
 #undef DEC_OP
-  static Slice EncodeId(const DirId& id, char* scratch);
-  static int PickupServer(const DirId& id);
 
  private:
   Status LoadDir(const DirId& id, DirInfo* info, DirIndex* index);

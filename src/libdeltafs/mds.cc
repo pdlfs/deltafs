@@ -8,9 +8,26 @@
 */
 
 #include "mds_api.h"
+#include "mds_cli.h"
 #include "mds_srv.h"
 
 namespace pdlfs {
+
+Slice MDS::EncodeId(const DirId& id, char* scratch) {
+  char* p = scratch;
+  p = EncodeVarint64(p, id.reg);
+  p = EncodeVarint64(p, id.snap);
+  p = EncodeVarint64(p, id.ino);
+  return Slice(scratch, p - scratch);
+}
+
+// Deterministically map directories to their zeroth servers.
+int MDS::PickupServer(const DirId& id) {
+  char tmp[30];
+  Slice encoding = EncodeId(id, tmp);
+  int zserver = DirIndex::RandomServer(encoding, 0);
+  return zserver;
+}
 
 MDSOptions::MDSOptions()
     : env(NULL),

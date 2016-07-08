@@ -60,22 +60,6 @@ Status MDS::SRV::LoadDir(const DirId& id, DirInfo* info, DirIndex* index) {
   return s;
 }
 
-Slice MDS::SRV::EncodeId(const DirId& id, char* scratch) {
-  char* p = scratch;
-  p = EncodeVarint64(p, id.reg);
-  p = EncodeVarint64(p, id.snap);
-  p = EncodeVarint64(p, id.ino);
-  return Slice(scratch, p - scratch);
-}
-
-// Deterministically map directories to their zeroth servers.
-int MDS::SRV::PickupServer(const DirId& id) {
-  char tmp[30];
-  Slice encoding = EncodeId(id, tmp);
-  int zserver = DirIndex::RandomServer(encoding, 0);
-  return zserver;
-}
-
 // Load the states of a directory into an in-memory LRU-cache.
 // Return OK on success.
 // Errors might occur when the directory being searched does not exist, when
