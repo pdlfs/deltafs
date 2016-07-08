@@ -10,7 +10,6 @@
 #include <assert.h>
 #include <errno.h>
 
-#include "logging.h"
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/dcntl.h"
 
@@ -102,14 +101,7 @@ Dir::Ref* DirTable::Lookup(const DirId& id) {
 }
 
 static void DeleteDir(const Slice& key, Dir* dir) {
-#if defined(DLOG)
-  LOG_ASSERT(!dir->busy()) << "deleting active directory state!";
-#else
-  if (dir->busy()) {
-    Log(Logger::Default(), "Fatal: deleting active directory state!");
-    abort();
-  }
-#endif
+  assert(!dir->busy());
   delete dir;
 }
 

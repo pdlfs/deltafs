@@ -7,12 +7,15 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/logging.h"
 #if defined(MERCURY)
 #include "mercury_rpc.h"
-#include "logging.h"
 
 namespace pdlfs {
 namespace rpc {
+
+#define LOG_ERROR(msg, ret) \
+  Error(Logger::Default(), __FILE__, __LINE__, msg, ret)
 
 hg_return_t MercuryRPC::If_Message_cb(hg_proc_t proc, void* data) {
   hg_return_t ret;
@@ -385,11 +388,7 @@ void MercuryRPC::TEST_LoopForever(void* arg) {
   rpc->mutex_.Unlock();
 
   if (error) {
-#if defined(GLOG)
-    LOG(ERROR) << "Error in local RPC bg_loop [errno=" << ret << "]";
-#else
-    Log(Logger->Default(), "Error in local RPC bg_loop [errno=%d]", ret);
-#endif
+    LOG_ERROR("Error in local RPC bg_loop [errno=%d]", ret);
   }
 }
 
@@ -406,11 +405,7 @@ void MercuryRPC::LocalLooper::BGLoop() {
       mutex_.Unlock();
 
       if (ret != HG_SUCCESS) {
-#if defined(GLOG)
-        LOG(ERROR) << "Error in local RPC bg_loop [errno=" << ret << "]";
-#else
-        Log(Logger->Default(), "Error in local RPC bg_loop [errno=%d]", ret);
-#endif
+        LOG_ERROR("Error in local RPC bg_loop [errno=%d]", ret);
       }
       return;
     }

@@ -10,7 +10,6 @@
 #include <assert.h>
 #include <errno.h>
 
-#include "logging.h"
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/lease.h"
@@ -84,14 +83,7 @@ Lease::Ref* LeaseTable::Lookup(const DirId& pid, const Slice& nhash) {
 }
 
 static void DeleteLease(const Slice& key, Lease* lease) {
-#if defined(GLOG)
-  LOG_ASSERT(!lease->busy()) << "deleting active lease state!";
-#else
-  if (lease->busy()) {
-    Log(Logger::Default(), "Fatal: deleting active lease state!");
-    abort();
-  }
-#endif
+  assert(!lease->busy());
   const Dir* parent = lease->parent;
   parent->num_leases--;
   assert(parent->num_leases >= 0);

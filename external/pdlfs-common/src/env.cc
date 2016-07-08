@@ -8,15 +8,16 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "logging.h"
+#if defined(GLOG)
+#include <glog/logging.h>
+#endif
+#include <stdio.h>
 
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/port.h"
 #if defined(PDLFS_PLATFORM_POSIX)
 #include "posix_logger.h"
 #endif
-
-#include <stdio.h>
 
 namespace pdlfs {
 
@@ -38,12 +39,15 @@ ThreadPool::~ThreadPool() {}
 
 EnvWrapper::~EnvWrapper() {}
 
+static void EmitLog(Logger* info_log, const char* fmt, va_list ap) {
+  info_log->Logv("pdlfs-common*.cc", 0, 0, 3, fmt, ap);
+}
+
 void Log(Logger* info_log, const char* fmt, ...) {
   if (info_log != NULL) {
     va_list ap;
     va_start(ap, fmt);
-    info_log->Logv("pdlfs-common*.cc", 0, 0 /* severity */, 3 /* verbose */,
-                   fmt, ap);
+    EmitLog(info_log, fmt, ap);
     va_end(ap);
   }
 }
