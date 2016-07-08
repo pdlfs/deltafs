@@ -29,10 +29,42 @@ struct DirId {
   DirId(uint64_t reg, uint64_t snap, uint64_t ino)
       : reg(reg), snap(snap), ino(ino) {}
 
+  // Three-way comparison.  Returns value:
+  //   <  0 iff "*this" <  "other",
+  //   == 0 iff "*this" == "other",
+  //   >  0 iff "*this" >  "other"
+  int compare(const DirId& other) const;
+
   uint64_t reg;
   uint64_t snap;
   uint64_t ino;
 };
+
+inline bool operator==(const DirId& x, const DirId& y) {
+#if defined(DELTAFS)
+  if ((x.reg != y.reg) || (x.snap != y.snap)) return false;
+#endif
+  return (x.ino == y.ino);
+}
+
+inline bool operator!=(const DirId& x, const DirId& y) {
+  return !(x == y);  // Works for all file system ports
+}
+
+inline int DirId::compare(const DirId& other) const {
+#if defined(DELTAFS)
+  int r = reg - other.reg;
+  if (r != 0) {
+    return r;
+  } else {
+    r = snap - other.snap;
+    if (r != 0) {
+      return r;
+    }
+  }
+#endif
+  return ino - other.ino;
+}
 
 struct MDBOptions {
   MDBOptions();
