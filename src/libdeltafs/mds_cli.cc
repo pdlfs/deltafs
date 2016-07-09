@@ -34,7 +34,6 @@ Status MDS::CLI::FetchIndex(const DirId& id, int zserver,
     ReadidxRet ret;
     assert(zserver > 0);
     size_t server = zserver % giga_.num_servers;
-    assert(server < servers_.size());
     s = factory_->Get(server)->Readidx(options, &ret);
     if (s.ok()) {
       if (!idx->Update(ret.idx) || idx->ZerothServer() != zserver) {
@@ -86,7 +85,7 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
       do {
         try {
           size_t server = latest_idx->HashToServer(nhash);
-          assert(server < servers_.size());
+          assert(server < giga_.num_servers);
           s = factory_->Get(server)->Lookup(options, &ret);
         } catch (Redirect& re) {
           if (tmp_idx == NULL) {
@@ -209,7 +208,7 @@ Status MDS::CLI::Fstat(const Slice& path, Stat* stat) {
       do {
         try {
           size_t server = latest_idx->HashToServer(options.name_hash);
-          assert(server < servers_.size());
+          assert(server < giga_.num_servers);
           s = factory_->Get(server)->Fstat(options, &ret);
         } catch (Redirect& re) {
           if (tmp_idx == NULL) {
@@ -275,7 +274,7 @@ Status MDS::CLI::Fcreat(const Slice& path, int mode, Stat* stat) {
       do {
         try {
           size_t server = latest_idx->HashToServer(options.name_hash);
-          assert(server < servers_.size());
+          assert(server < giga_.num_servers);
           s = factory_->Get(server)->Fcreat(options, &ret);
         } catch (Redirect& re) {
           if (tmp_idx == NULL) {
@@ -347,7 +346,7 @@ Status MDS::CLI::Mkdir(const Slice& path, int mode, Stat* stat) {
       do {
         try {
           size_t server = latest_idx->HashToServer(options.name_hash);
-          assert(server < servers_.size());
+          assert(server < giga_.num_servers);
           s = factory_->Get(server)->Mkdir(options, &ret);
         } catch (Redirect& re) {
           if (tmp_idx == NULL) {
@@ -414,7 +413,7 @@ Status MDS::CLI::Listdir(const Slice& path, std::vector<std::string>* names) {
       for (int i = 0; i < num_parts; i++) {
         if (idx->IsSet(i)) {
           size_t server = idx->GetServerForIndex(i);
-          assert(server < servers_.size());
+          assert(server < giga_.num_servers);
           if (visited.count(server) == 0) {
             factory_->Get(server)->Listdir(options, &ret);
             visited.insert(server);
