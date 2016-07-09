@@ -387,7 +387,7 @@ DirIndex::Rep::Rep(uint16_t zeroth_server) {
   TurnOnBit(0);
 }
 
-bool DirIndex::GetBit(int index) const {
+bool DirIndex::IsSet(int index) const {
   assert(rep_ != NULL);
   return rep_->bit(index);
 }
@@ -460,7 +460,7 @@ bool DirIndex::TEST_Reset(const Slice& other) {
   }
 }
 
-void DirIndex::SetBit(int index) {
+void DirIndex::Set(int index) {
   assert(rep_ != NULL);
   assert(index >= 0 && index < options_->num_virtual_servers);
   rep_->TurnOnBit(index);
@@ -474,7 +474,7 @@ void DirIndex::SetAll() {
   }
 }
 
-void DirIndex::TEST_UnsetBit(int index) {
+void DirIndex::TEST_Unset(int index) {
   assert(rep_ != NULL);
   assert(index > 0 && index < options_->num_virtual_servers);
   rep_->TurnOffBit(index);

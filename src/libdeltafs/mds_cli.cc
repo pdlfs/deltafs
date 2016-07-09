@@ -380,7 +380,7 @@ Status MDS::CLI::Listdir(const Slice& path, std::vector<std::string>* names) {
       std::set<size_t> visited;
       int num_parts = 1 << idx->Radix();
       for (int i = 0; i < num_parts; i++) {
-        if (idx->GetBit(i)) {
+        if (idx->IsSet(i)) {
           size_t server = idx->GetServerForIndex(i);
           assert(server < servers_.size());
           if (visited.count(server) == 0) {

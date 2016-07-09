@@ -64,7 +64,7 @@ class DirIndexTest {
 TEST(DirIndexTest, Empty) {
   ASSERT_EQ(idx_->Radix(), 0);
   ASSERT_EQ(idx_->ZerothServer(), zeroth_server_);
-  ASSERT_TRUE(idx_->GetBit(0));
+  ASSERT_TRUE(idx_->IsSet(0));
 }
 
 TEST(DirIndexTest, ScaleUp1) {
@@ -85,8 +85,8 @@ TEST(DirIndexTest, ScaleUp1) {
   b[0xe] = 8192;
 
   for (int r = 1; r <= kNumRadix; r++) {
-    idx_->SetBit(b[r]);
-    ASSERT_TRUE(idx_->GetBit(b[r]));
+    idx_->Set(b[r]);
+    ASSERT_TRUE(idx_->IsSet(b[r]));
     ASSERT_EQ(idx_->Radix(), r);
   }
 }
@@ -109,103 +109,103 @@ TEST(DirIndexTest, ScaleUp2) {
   b[0xe] = 16383;
 
   for (int r = 1; r <= kNumRadix; r++) {
-    idx_->SetBit(b[r]);
-    ASSERT_TRUE(idx_->GetBit(b[r]));
+    idx_->Set(b[r]);
+    ASSERT_TRUE(idx_->IsSet(b[r]));
     ASSERT_EQ(idx_->Radix(), r);
   }
 }
 
 TEST(DirIndexTest, Merge1) {
-  idx_->SetBit(1);
-  idx_->SetBit(2);
+  idx_->Set(1);
+  idx_->Set(2);
   DirIndex* another = NewIndex();
-  another->SetBit(1);
-  another->SetBit(3);
+  another->Set(1);
+  another->Set(3);
   idx_->Update(another->Encode());
-  ASSERT_TRUE(idx_->GetBit(0));
-  ASSERT_TRUE(idx_->GetBit(1));
-  ASSERT_TRUE(idx_->GetBit(2));
-  ASSERT_TRUE(idx_->GetBit(3));
+  ASSERT_TRUE(idx_->IsSet(0));
+  ASSERT_TRUE(idx_->IsSet(1));
+  ASSERT_TRUE(idx_->IsSet(2));
+  ASSERT_TRUE(idx_->IsSet(3));
   ASSERT_EQ(idx_->Radix(), 2);
   ASSERT_EQ(idx_->ZerothServer(), zeroth_server_);
   delete another;
 }
 
 TEST(DirIndexTest, Merge2) {
-  idx_->SetBit(1);
-  idx_->SetBit(2);
-  idx_->SetBit(4);
-  idx_->SetBit(8);
-  idx_->SetBit(16);
-  idx_->SetBit(32);
-  idx_->SetBit(64);
-  idx_->SetBit(128);
+  idx_->Set(1);
+  idx_->Set(2);
+  idx_->Set(4);
+  idx_->Set(8);
+  idx_->Set(16);
+  idx_->Set(32);
+  idx_->Set(64);
+  idx_->Set(128);
   DirIndex* another = NewIndex();
-  another->SetBit(1);
-  another->SetBit(3);
-  another->SetBit(7);
-  another->SetBit(15);
-  another->SetBit(31);
-  another->SetBit(63);
-  another->SetBit(127);
-  another->SetBit(255);
-  another->SetBit(511);
+  another->Set(1);
+  another->Set(3);
+  another->Set(7);
+  another->Set(15);
+  another->Set(31);
+  another->Set(63);
+  another->Set(127);
+  another->Set(255);
+  another->Set(511);
   idx_->Update(another->Encode());
-  ASSERT_TRUE(idx_->GetBit(0));
-  ASSERT_TRUE(idx_->GetBit(1));
-  ASSERT_TRUE(idx_->GetBit(3));
-  ASSERT_TRUE(idx_->GetBit(7));
-  ASSERT_TRUE(idx_->GetBit(15));
-  ASSERT_TRUE(idx_->GetBit(31));
-  ASSERT_TRUE(idx_->GetBit(63));
-  ASSERT_TRUE(idx_->GetBit(127));
-  ASSERT_TRUE(idx_->GetBit(255));
-  ASSERT_TRUE(idx_->GetBit(511));
-  ASSERT_TRUE(idx_->GetBit(2));
-  ASSERT_TRUE(idx_->GetBit(4));
-  ASSERT_TRUE(idx_->GetBit(8));
-  ASSERT_TRUE(idx_->GetBit(16));
-  ASSERT_TRUE(idx_->GetBit(32));
-  ASSERT_TRUE(idx_->GetBit(64));
-  ASSERT_TRUE(idx_->GetBit(128));
+  ASSERT_TRUE(idx_->IsSet(0));
+  ASSERT_TRUE(idx_->IsSet(1));
+  ASSERT_TRUE(idx_->IsSet(3));
+  ASSERT_TRUE(idx_->IsSet(7));
+  ASSERT_TRUE(idx_->IsSet(15));
+  ASSERT_TRUE(idx_->IsSet(31));
+  ASSERT_TRUE(idx_->IsSet(63));
+  ASSERT_TRUE(idx_->IsSet(127));
+  ASSERT_TRUE(idx_->IsSet(255));
+  ASSERT_TRUE(idx_->IsSet(511));
+  ASSERT_TRUE(idx_->IsSet(2));
+  ASSERT_TRUE(idx_->IsSet(4));
+  ASSERT_TRUE(idx_->IsSet(8));
+  ASSERT_TRUE(idx_->IsSet(16));
+  ASSERT_TRUE(idx_->IsSet(32));
+  ASSERT_TRUE(idx_->IsSet(64));
+  ASSERT_TRUE(idx_->IsSet(128));
   ASSERT_EQ(idx_->Radix(), 9);
   ASSERT_EQ(idx_->ZerothServer(), zeroth_server_);
   delete another;
 }
 
 TEST(DirIndexTest, Recover1) {
-  idx_->SetBit(1);
-  idx_->SetBit(3);
-  idx_->SetBit(7);
+  idx_->Set(1);
+  idx_->Set(3);
+  idx_->Set(7);
   DirIndex* recovered = Recover();
-  ASSERT_TRUE(recovered->GetBit(1));
-  ASSERT_TRUE(recovered->GetBit(3));
-  ASSERT_TRUE(recovered->GetBit(7));
+  ASSERT_TRUE(recovered->IsSet(1));
+  ASSERT_TRUE(recovered->IsSet(3));
+  ASSERT_TRUE(recovered->IsSet(7));
   ASSERT_EQ(recovered->Radix(), 3);
   ASSERT_EQ(recovered->ZerothServer(), zeroth_server_);
   delete recovered;
 }
 
 TEST(DirIndexTest, Recover2) {
-  idx_->SetBit(1);
-  idx_->SetBit(3);
-  idx_->SetBit(7);
-  idx_->SetBit(15);
-  idx_->SetBit(31);
-  idx_->SetBit(63);
-  idx_->SetBit(127);
-  idx_->SetBit(255);
-  idx_->SetBit(511);
+  idx_->Set(1);
+  idx_->Set(3);
+  idx_->Set(7);
+  idx_->Set(15);
+  idx_->Set(31);
+  idx_->Set(63);
+  idx_->Set(127);
+  idx_->Set(255);
+  idx_->Set(511);
   DirIndex* recovered = Recover();
-  ASSERT_TRUE(recovered->GetBit(1));
-  ASSERT_TRUE(recovered->GetBit(3));
-  ASSERT_TRUE(recovered->GetBit(7));
-  ASSERT_TRUE(recovered->GetBit(15));
-  ASSERT_TRUE(recovered->GetBit(31));
-  ASSERT_TRUE(recovered->GetBit(63));
-  ASSERT_TRUE(recovered->GetBit(127));
-  ASSERT_TRUE(recovered->GetBit(255));
-  ASSERT_TRUE(recovered->GetBit(511));
+  ASSERT_TRUE(recovered->IsSet(1));
+  ASSERT_TRUE(recovered->IsSet(3));
+  ASSERT_TRUE(recovered->IsSet(7));
+  ASSERT_TRUE(recovered->IsSet(15));
+  ASSERT_TRUE(recovered->IsSet(31));
+  ASSERT_TRUE(recovered->IsSet(63));
+  ASSERT_TRUE(recovered->IsSet(127));
+  ASSERT_TRUE(recovered->IsSet(255));
+  ASSERT_TRUE(recovered->IsSet(511));
   ASSERT_EQ(recovered->Radix(), 9);
   ASSERT_EQ(recovered->ZerothServer(), zeroth_server_);
   delete recovered;
@@ -272,10 +272,10 @@ TEST(DirIndexTest, Split1) {
   b[0xe] = 8192;
 
   for (int r = 1; r <= kNumRadix; r++) {
-    ASSERT_TRUE(!idx_->GetBit(b[r]));
+    ASSERT_TRUE(!idx_->IsSet(b[r]));
     ASSERT_TRUE(idx_->IsSplittable(b[0]));
     ASSERT_TRUE(idx_->NewIndexForSplitting(b[0]) == b[r]);
-    idx_->SetBit(b[r]);
+    idx_->Set(b[r]);
   }
 
   ASSERT_TRUE(!idx_->IsSplittable(b[0]));
@@ -299,10 +299,10 @@ TEST(DirIndexTest, Split2) {
   b[0xe] = 16383;
 
   for (int r = 1; r <= kNumRadix; r++) {
-    ASSERT_TRUE(!idx_->GetBit(b[r]));
+    ASSERT_TRUE(!idx_->IsSet(b[r]));
     ASSERT_TRUE(idx_->IsSplittable(b[r - 1]));
     ASSERT_TRUE(idx_->NewIndexForSplitting(b[r - 1]) == b[r]);
-    idx_->SetBit(b[r]);
+    idx_->Set(b[r]);
   }
 
   ASSERT_TRUE(!idx_->IsSplittable(b[kNumRadix]));
@@ -339,8 +339,8 @@ TEST(DirIndexTest, SelectServer1) {
 }
 
 TEST(DirIndexTest, SelectServer2) {
-  idx_->SetBit(0);
-  idx_->SetBit(1);
+  idx_->Set(0);
+  idx_->Set(1);
   int info[kNumServers] = {0};
   for (int i = 0; i < 10000; i++) {
     int s = idx_->SelectServer(File(i));
@@ -353,9 +353,9 @@ TEST(DirIndexTest, SelectServer2) {
 }
 
 TEST(DirIndexTest, SelectServer3) {
-  idx_->SetBit(0);
-  idx_->SetBit(1);
-  idx_->SetBit(2);
+  idx_->Set(0);
+  idx_->Set(1);
+  idx_->Set(2);
   int info[kNumServers] = {0};
   for (int i = 0; i < 10000; i++) {
     int s = idx_->SelectServer(File(i));
@@ -370,10 +370,10 @@ TEST(DirIndexTest, SelectServer3) {
 }
 
 TEST(DirIndexTest, SelectServer4) {
-  idx_->SetBit(0);
-  idx_->SetBit(1);
-  idx_->SetBit(2);
-  idx_->SetBit(4);
+  idx_->Set(0);
+  idx_->Set(1);
+  idx_->Set(2);
+  idx_->Set(4);
   int info[kNumServers] = {0};
   for (int i = 0; i < 10000; i++) {
     int s = idx_->SelectServer(File(i));

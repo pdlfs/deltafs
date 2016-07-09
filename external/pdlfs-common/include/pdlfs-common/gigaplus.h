@@ -80,17 +80,17 @@ class DirIndex {
   // Return the server responsible for the given file name hash.
   int HashToServer(const Slice& hash) const;
 
-  // Return true iff the bit is set.
-  bool GetBit(int index) const;
+  // Return true iff the bit of a partition is set.
+  bool IsSet(int index) const;
 
-  // Set the bit at the given index.
-  void SetBit(int index);
+  // Set the bit for the partition at the given index.
+  void Set(int index);
 
-  // Set all bits.
+  // Set the bits for all partitions.
   void SetAll();
 
-  // Clear the bit at the given index.
-  void TEST_UnsetBit(int index);
+  // Clear the bit for the partition at the given index.
+  void TEST_Unset(int index);
 
   // Revert all bits and roll back to the initial state.
   void TEST_RevertAll();
