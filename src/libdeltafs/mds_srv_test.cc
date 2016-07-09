@@ -119,10 +119,12 @@ class ServerTest {
   int Listdir(int dir_ino) {
     MDS::ListdirOptions options;
     options.dir_id = DirId(0, 0, dir_ino);
+    std::vector<std::string> names;
     MDS::ListdirRet ret;
+    ret.names = &names;
     Status s = mds_->Listdir(options, &ret);
     if (s.ok()) {
-      return ret.names.size();
+      return names.size();
     } else {
       return -1 * s.err_code();
     }
