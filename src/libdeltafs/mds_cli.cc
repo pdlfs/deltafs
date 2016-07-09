@@ -32,7 +32,7 @@ Status MDS::CLI::FetchIndex(const DirId& id, int zserver,
     options.session_id = cli_id_;
     options.dir_id = id;
     ReadidxRet ret;
-    assert(zserver > 0);
+    assert(zserver >= 0);
     size_t server = zserver % giga_.num_servers;
     s = factory_->Get(server)->Readidx(options, &ret);
     if (s.ok()) {
