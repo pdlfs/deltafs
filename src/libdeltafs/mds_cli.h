@@ -18,7 +18,7 @@ namespace pdlfs {
 
 class MDSFactory {
  public:
-  virtual MDS* Get(int srv_id) = 0;
+  virtual MDS* Get(size_t srv_id) = 0;
 
  protected:
   virtual ~MDSFactory();
