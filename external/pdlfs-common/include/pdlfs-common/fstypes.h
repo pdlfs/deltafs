@@ -89,7 +89,7 @@ class Stat {
 
   Stat() {
 #ifndef NDEBUG
-    memset(this, 0, sizeof(Stat));
+    memset(this, 0, sizeof(*this));
 #ifndef DELTAFS
     SetRegId(0);
     SetSnapId(0);
@@ -228,7 +228,7 @@ class LookupStat {
 
   LookupStat() {
 #ifndef NDEBUG
-    memset(this, 0, sizeof(Stat));
+    memset(this, 0, sizeof(*this));
 #ifndef DELTAFS
     SetRegId(0);
     SetSnapId(0);
