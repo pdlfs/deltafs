@@ -37,7 +37,7 @@ void IndexCache::Release(Handle* handle) {
   }
 }
 
-DirIndex* IndexCache::Value(Handle* handle) {
+const DirIndex* IndexCache::Value(Handle* handle) {
   return reinterpret_cast<IndexEntry*>(handle)->value;
 }
 

@@ -29,7 +29,7 @@ class IndexCache {
 
   struct Handle {};
   void Release(Handle* handle);
-  DirIndex* Value(Handle* handle);
+  const DirIndex* Value(Handle* handle);
 
   Handle* Lookup(const DirId& id);
   Handle* Insert(const DirId& id, DirIndex* index);
