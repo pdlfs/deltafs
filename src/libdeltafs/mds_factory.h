@@ -21,12 +21,12 @@ class RPCMDSFactory : public MDSFactory {
 
  public:
   virtual MDS* Get(size_t srv_id);
-  Status Init();
+  Status Init(const std::string& base_uri);
   Status Start();
   Status Stop();
 
   void AddRPCStub(const std::string& srv_uri);
-  RPCMDSFactory(Env* env = NULL) : env_(env) {}
+  explicit RPCMDSFactory(Env* env = NULL) : env_(env) {}
   virtual ~RPCMDSFactory();
 
  private:

@@ -106,7 +106,8 @@ class RPCImpl : public RPC {
 }  // namespace rpc
 
 RPC* RPC::Open(const RPCOptions& raw_options) {
-  assert(raw_options.fs != NULL && !raw_options.uri.empty());
+  assert(raw_options.mode != kServerClient || raw_options.fs != NULL);
+  assert(!raw_options.uri.empty());
   RPCOptions options(raw_options);
   if (options.env == NULL) {
     options.env = Env::Default();

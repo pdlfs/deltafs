@@ -11,11 +11,12 @@
 
 namespace pdlfs {
 
-Status RPCMDSFactory::Init() {
+Status RPCMDSFactory::Init(const std::string& base_uri) {
   Status s;
   RPCOptions options;
   options.env = env_;  // okay to be NULL
   options.mode = kClientOnly;
+  options.uri = base_uri;
   rpc_ = RPC::Open(options);
   return s;
 }
