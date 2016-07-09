@@ -81,4 +81,53 @@ MDS* MDS::Open(const MDSOptions& raw_options) {
   return mds;
 }
 
+MDSFactory::~MDSFactory() {}
+
+MDSCliOptions::MDSCliOptions()
+    : env(NULL),
+      factory(NULL),
+      index_cache_size(1 << 12),
+      lookup_cache_size(1 << 14),
+      paranoid_checks(false),
+      atomic_path_resolution(false),
+      max_redirects_allowed(20),
+      num_virtual_servers(1),
+      num_servers(1),
+      cli_id(0),
+      uid(0),
+      gid(0) {}
+
+MDS::CLI::CLI(const MDSCliOptions& options)
+    : env_(options.env),
+      factory_(options.factory),
+      paranoid_checks_(options.paranoid_checks),
+      atomic_path_resolution_(options.atomic_path_resolution),
+      max_redirects_allowed_(options.max_redirects_allowed),
+      cli_id_(options.cli_id),
+      uid_(options.uid),
+      gid_(options.gid) {
+  giga_.num_servers = options.num_servers;
+  giga_.num_virtual_servers = options.num_virtual_servers;
+  giga_.paranoid_checks = options.paranoid_checks;
+
+  lookup_cache_ = new LookupCache(options.lookup_cache_size);
+  index_cache_ = new IndexCache(options.index_cache_size);
+}
+
+MDS::CLI::~CLI() {
+  delete index_cache_;
+  delete lookup_cache_;
+}
+
+MDS::CLI* MDS::CLI::Open(const MDSCliOptions& raw_options) {
+  assert(raw_options.factory != NULL);
+  MDSCliOptions options(raw_options);
+  if (options.env == NULL) {
+    options.env = Env::Default();
+  }
+
+  MDS::CLI* cli = new MDS::CLI(options);
+  return cli;
+}
+
 }  // namespace pdlfs

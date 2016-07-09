@@ -16,15 +16,25 @@
 
 namespace pdlfs {
 
+class MDSFactory {
+ public:
+  virtual MDS* Get(int srv_id) = 0;
+
+ protected:
+  virtual ~MDSFactory();
+};
+
 struct MDSCliOptions {
   MDSCliOptions();
   Env* env;
-  std::vector<MDS*> servers;
-  size_t lease_table_size;
+  MDSFactory* factory;
+  size_t index_cache_size;
+  size_t lookup_cache_size;
   bool paranoid_checks;
-  bool atomic_pathname_resolution;
+  bool atomic_path_resolution;
   int max_redirects_allowed;
   int num_virtual_servers;
+  int num_servers;
   int cli_id;
   int uid;
   int gid;
@@ -32,7 +42,7 @@ struct MDSCliOptions {
 
 class MDS::CLI {
  public:
-  CLI(const MDSCliOptions&);
+  static CLI* Open(const MDSCliOptions&);
   ~CLI();
 
   Status Fstat(const Slice& path, Stat* stat);
@@ -41,6 +51,8 @@ class MDS::CLI {
   Status Listdir(const Slice& path, std::vector<std::string>* names);
 
  private:
+  CLI(const MDSCliOptions&);
+
   struct PathInfo {
     uint64_t lease_due;
     DirId pid;
@@ -57,7 +69,7 @@ class MDS::CLI {
   Status FetchIndex(const DirId&, int zserver, IndexHandle**);
 
   Env* env_;
-  std::vector<MDS*> servers_;
+  MDSFactory* factory_;
   typedef DirIndexOptions GIGA;
   GIGA giga_;
   bool paranoid_checks_;

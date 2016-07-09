@@ -35,7 +35,7 @@ Status MDS::CLI::FetchIndex(const DirId& id, int zserver,
     assert(zserver > 0);
     size_t server = zserver % giga_.num_servers;
     assert(server < servers_.size());
-    s = servers_[server]->Readidx(options, &ret);
+    s = factory_->Get(server)->Readidx(options, &ret);
     if (s.ok()) {
       if (!idx->Update(ret.idx) || idx->ZerothServer() != zserver) {
         s = Status::Corruption(Slice());
@@ -87,7 +87,7 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
         try {
           size_t server = latest_idx->HashToServer(nhash);
           assert(server < servers_.size());
-          s = servers_[server]->Lookup(options, &ret);
+          s = factory_->Get(server)->Lookup(options, &ret);
         } catch (Redirect& re) {
           if (tmp_idx == NULL) {
             tmp_idx = new DirIndex(&giga_);
@@ -210,7 +210,7 @@ Status MDS::CLI::Fstat(const Slice& path, Stat* stat) {
         try {
           size_t server = latest_idx->HashToServer(options.name_hash);
           assert(server < servers_.size());
-          s = servers_[server]->Fstat(options, &ret);
+          s = factory_->Get(server)->Fstat(options, &ret);
         } catch (Redirect& re) {
           if (tmp_idx == NULL) {
             tmp_idx = new DirIndex(&giga_);
@@ -276,7 +276,7 @@ Status MDS::CLI::Fcreat(const Slice& path, int mode, Stat* stat) {
         try {
           size_t server = latest_idx->HashToServer(options.name_hash);
           assert(server < servers_.size());
-          s = servers_[server]->Fcreat(options, &ret);
+          s = factory_->Get(server)->Fcreat(options, &ret);
         } catch (Redirect& re) {
           if (tmp_idx == NULL) {
             tmp_idx = new DirIndex(&giga_);
@@ -348,7 +348,7 @@ Status MDS::CLI::Mkdir(const Slice& path, int mode, Stat* stat) {
         try {
           size_t server = latest_idx->HashToServer(options.name_hash);
           assert(server < servers_.size());
-          s = servers_[server]->Mkdir(options, &ret);
+          s = factory_->Get(server)->Mkdir(options, &ret);
         } catch (Redirect& re) {
           if (tmp_idx == NULL) {
             tmp_idx = new DirIndex(&giga_);
@@ -416,7 +416,7 @@ Status MDS::CLI::Listdir(const Slice& path, std::vector<std::string>* names) {
           size_t server = idx->GetServerForIndex(i);
           assert(server < servers_.size());
           if (visited.count(server) == 0) {
-            servers_[server]->Listdir(options, &ret);
+            factory_->Get(server)->Listdir(options, &ret);
             visited.insert(server);
             if (visited.size() >= giga_.num_servers) {
               break;
