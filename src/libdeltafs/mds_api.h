@@ -123,7 +123,7 @@ class MDS {
     uint64_t op_due;
   };
   struct ListdirRet {
-    std::vector<std::string> names;
+    std::vector<std::string>* names;
   };
   MDS_OP(Listdir)
 

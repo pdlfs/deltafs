@@ -365,7 +365,7 @@ Status MDS::CLI::Listdir(const Slice& path, std::vector<std::string>* names) {
     IndexHandle* idxh = NULL;
     s = FetchIndex(info.pid, info.zserver, &idxh);
     if (s.ok()) {
-      mutex_.Lock();
+      mutex_.Unlock();
 
       assert(idxh != NULL);
       DirIndex* idx = index_cache_->Value(idxh);
@@ -375,23 +375,26 @@ Status MDS::CLI::Listdir(const Slice& path, std::vector<std::string>* names) {
       options.session_id = cli_id_;
       options.dir_id = info.pid;
       ListdirRet ret;
+      ret.names = names;
 
       std::set<size_t> visited;
       int num_parts = 1 << idx->Radix();
       for (int i = 0; i < num_parts; i++) {
-        size_t server = idx->GetServerForIndex(i);
-        assert(server < servers_.size());
-        if (visited.count(server) == 0) {
-          servers_[server]->Listdir(options, &ret);
-          visited.insert(server);
+        if (idx->GetBit(i)) {
+          size_t server = idx->GetServerForIndex(i);
+          assert(server < servers_.size());
+          if (visited.count(server) == 0) {
+            servers_[server]->Listdir(options, &ret);
+            visited.insert(server);
+            if (visited.size() >= giga_.num_servers) {
+              break;
+            }
+          }
         }
       }
 
-      mutex_.Unlock();
+      mutex_.Lock();
       index_cache_->Release(idxh);
-      if (s.ok()) {
-        names->insert(names->end(), ret.names.begin(), ret.names.end());
-      }
     }
   }
   return s;

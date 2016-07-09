@@ -461,7 +461,7 @@ Status MDS::RPC::CLI::Listdir(const ListdirOptions& options, ListdirRet* ret) {
     s = Status::Disconnected(Slice());
   }
   if (s.ok()) {
-    std::vector<std::string>* names = &ret->names;
+    std::vector<std::string>* names = ret->names;
     if (out.err != 0) {
       s = Status::FromCode(out.err);
     } else {
@@ -485,7 +485,9 @@ Status MDS::RPC::CLI::Listdir(const ListdirOptions& options, ListdirRet* ret) {
 void MDS::RPC::SRV::LSDIR(Msg& in, Msg& out) {
   Status s;
   ListdirOptions options;
+  std::vector<std::string> names;
   ListdirRet ret;
+  ret.names = &names;
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetVarint32(&input, &options.session_id) ||
@@ -495,10 +497,9 @@ void MDS::RPC::SRV::LSDIR(Msg& in, Msg& out) {
     s = mds_->Listdir(options, &ret);
   }
   if (s.ok()) {
-    out.extra_buf.reserve(4000);
-    PutVarint32(&out.extra_buf, ret.names.size());
-    for (std::vector<std::string>::iterator it = ret.names.begin();
-         it != ret.names.end(); ++it) {
+    PutVarint32(&out.extra_buf, names.size());
+    for (std::vector<std::string>::iterator it = names.begin();
+         it != names.end(); ++it) {
       PutLengthPrefixedSlice(&out.extra_buf, *it);
     }
     out.contents = Slice(out.extra_buf);
