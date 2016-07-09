@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <set>
 
 #include "mds_cli.h"
 #include "pdlfs-common/mutexlock.h"
@@ -350,6 +351,49 @@ Status MDS::CLI::Mkdir(const Slice& path, int mode, Stat* stat) {
     }
   }
 
+  return s;
+}
+
+Status MDS::CLI::Listdir(const Slice& path, std::vector<std::string>* names) {
+  Status s;
+  assert(!path.ends_with("/"));
+  std::string fake_path = path.ToString();
+  fake_path.append("/.");
+  PathInfo info;
+  s = ResolvePath(fake_path, &info);
+  if (s.ok()) {
+    IndexHandle* idxh = NULL;
+    s = FetchIndex(info.pid, info.zserver, &idxh);
+    if (s.ok()) {
+      mutex_.Lock();
+
+      assert(idxh != NULL);
+      DirIndex* idx = index_cache_->Value(idxh);
+      assert(idx != NULL);
+      ListdirOptions options;
+      options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
+      options.session_id = cli_id_;
+      options.dir_id = info.pid;
+      ListdirRet ret;
+
+      std::set<size_t> visited;
+      int num_parts = 1 << idx->Radix();
+      for (int i = 0; i < num_parts; i++) {
+        size_t server = idx->GetServerForIndex(i);
+        assert(server < servers_.size());
+        if (visited.count(server) == 0) {
+          servers_[server]->Listdir(options, &ret);
+          visited.insert(server);
+        }
+      }
+
+      mutex_.Unlock();
+      index_cache_->Release(idxh);
+      if (s.ok()) {
+        names->insert(names->end(), ret.names.begin(), ret.names.end());
+      }
+    }
+  }
   return s;
 }
 
