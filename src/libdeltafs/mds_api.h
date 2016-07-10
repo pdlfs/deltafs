@@ -160,7 +160,7 @@ class MDS {
 class MDSWrapper : public MDS {
  public:
   explicit MDSWrapper(MDS* base = NULL) : base_(base) {}
-  ~MDSWrapper();
+  virtual ~MDSWrapper();
 
 #define DEF_OP(OP)                                              \
   virtual Status OP(const OP##Options& options, OP##Ret* ret) { \
@@ -189,7 +189,7 @@ class MDSWrapper : public MDS {
 class MDSTracer : public MDSWrapper {
  public:
   explicit MDSTracer(MDS* base) : MDSWrapper(base) {}
-  ~MDSTracer();
+  virtual ~MDSTracer();
 
 #ifndef NTRACE
 #define DEF_OP(OP)                                                           \
