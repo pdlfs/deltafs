@@ -191,17 +191,24 @@ class MDSTracer : public MDSWrapper {
   explicit MDSTracer(MDS* base) : MDSWrapper(base) {}
   ~MDSTracer();
 
-#ifndef NDEBUG
+#ifndef NTRACE
 #define DEF_OP(OP)                                                           \
   virtual Status OP(const OP##Options& options, OP##Ret* ret) {              \
     std::string pid = options.dir_id.DebugString();                          \
     std::string h = EscapeString(options.name_hash);                         \
     std::string n = options.name.ToString();                                 \
-    Verbose(__LOG_ARGS__, 1, ">> %s( %s/N[%s]H[%s] )", #OP, pid.c_str(),     \
+    Verbose(__LOG_ARGS__, 5, ">> %s %s/N[%s]H[%s]", #OP, pid.c_str(),        \
             n.c_str(), h.c_str());                                           \
-    Status s = base_->OP(options, ret);                                      \
-    Verbose(__LOG_ARGS__, 1, "<< %s( %s/N[%s]H[%s] ): %s", #OP, pid.c_str(), \
-            n.c_str(), h.c_str(), s.ToString().c_str());                     \
+    Status s;                                                                \
+    try {                                                                    \
+      s = base_->OP(options, ret);                                           \
+    } catch (Redirect & re) {                                                \
+      Verbose(__LOG_ARGS__, 3, "<< %s %s/N[%s]H[%s]: %s", #OP, pid.c_str(),  \
+              n.c_str(), h.c_str(), "Redirected");                           \
+      throw re;                                                              \
+    }                                                                        \
+    Verbose(__LOG_ARGS__, (!s.ok()) ? 1 : 3, "<< %s %s/N[%s]H[%s]: %s", #OP, \
+            pid.c_str(), n.c_str(), h.c_str(), s.ToString().c_str());        \
     return s;                                                                \
   }
 
