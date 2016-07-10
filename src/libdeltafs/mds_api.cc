@@ -19,6 +19,8 @@ MDS::RPC::SRV::~SRV() {}
 
 MDSWrapper::~MDSWrapper() {}
 
+MDSTracer::~MDSTracer() {}
+
 static char* EncodeDirId(char* dst, const DirId& id) {
   dst = EncodeVarint64(dst, id.reg);
   dst = EncodeVarint64(dst, id.snap);
@@ -278,7 +280,7 @@ void MDS::RPC::SRV::MKDIR(Msg& in, Msg& out) {
     s = Status::InvalidArgument(Slice());
   } else {
     try {
-      mds_->Mkdir(options, &ret);
+      s = mds_->Mkdir(options, &ret);
     } catch (Redirect& re) {
       out.extra_buf.swap(re);
       out.contents = Slice(out.extra_buf);
