@@ -37,17 +37,23 @@ void RPCMDSFactory::AddRPCStub(const std::string& srv_uri) {
   StubInfo info;
   info.stub = rpc_->NewClient(srv_uri);
   info.wrapper = new MDS::RPC::CLI(info.stub);
+  info.tracer = new MDSTracer(info.wrapper);
   stubs_.push_back(info);
 }
 
 MDS* RPCMDSFactory::Get(size_t srv_id) {
   assert(srv_id < stubs_.size());
-  return stubs_[srv_id].wrapper;
+  if (stubs_[srv_id].tracer != NULL) {
+    return stubs_[srv_id].tracer;
+  } else {
+    return stubs_[srv_id].wrapper;
+  }
 }
 
 RPCMDSFactory::~RPCMDSFactory() {
   std::vector<StubInfo>::iterator it;
   for (it = stubs_.begin(); it != stubs_.end(); ++it) {
+    delete it->tracer;
     delete it->wrapper;
     delete it->stub;
   }

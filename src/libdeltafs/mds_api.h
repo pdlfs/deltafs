@@ -13,8 +13,10 @@
 #include <vector>
 
 #include "pdlfs-common/fstypes.h"
+#include "pdlfs-common/logging.h"
 #include "pdlfs-common/mdb.h"
 #include "pdlfs-common/rpc.h"
+#include "pdlfs-common/strutil.h"
 
 namespace pdlfs {
 
@@ -121,6 +123,8 @@ class MDS {
     DirId dir_id;  // Parent directory id
     uint32_t session_id;
     uint64_t op_due;
+    Slice name_hash;
+    Slice name;
   };
   struct ListdirRet {
     std::vector<std::string>* names;
@@ -131,6 +135,8 @@ class MDS {
     DirId dir_id;  // Parent directory id
     uint32_t session_id;
     uint64_t op_due;
+    Slice name_hash;
+    Slice name;
   };
   struct ReadidxRet {
     std::string idx;
@@ -176,8 +182,40 @@ class MDSWrapper : public MDS {
 
 #undef DEF_OP
 
- private:
+ protected:
   MDS* base_;
+};
+
+// Log every RPC message to assist debugging.
+class MDSTracer : public MDSWrapper {
+ public:
+  explicit MDSTracer(MDS* base) : MDSWrapper(base) {}
+  ~MDSTracer();
+
+#ifndef NDEBUG
+#define DEF_OP(OP)                                                           \
+  virtual Status OP(const OP##Options& options, OP##Ret* ret) {              \
+    std::string pid = options.dir_id.DebugString();                          \
+    std::string h = EscapeString(options.name_hash);                         \
+    std::string n = options.name.ToString();                                 \
+    Verbose(__LOG_ARGS__, 1, ">> %s( %s/N[%s]H[%s] )", #OP, pid.c_str(),     \
+            n.c_str(), h.c_str());                                           \
+    Status s = base_->OP(options, ret);                                      \
+    Verbose(__LOG_ARGS__, 1, "<< %s( %s/N[%s]H[%s] ): %s", #OP, pid.c_str(), \
+            n.c_str(), h.c_str(), s.ToString().c_str());                     \
+    return s;                                                                \
+  }
+
+  DEF_OP(Fstat)
+  DEF_OP(Fcreat)
+  DEF_OP(Mkdir)
+  DEF_OP(Chmod)
+  DEF_OP(Lookup)
+  DEF_OP(Listdir)
+  DEF_OP(Readidx)
+
+#undef DEF_OP
+#endif
 };
 
 // RPC adaptors

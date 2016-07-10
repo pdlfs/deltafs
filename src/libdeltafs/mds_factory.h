@@ -15,6 +15,7 @@ namespace pdlfs {
 
 class RPCMDSFactory : public MDSFactory {
   struct StubInfo {
+    MDS* tracer;
     MDS* wrapper;
     rpc::If* stub;
   };
