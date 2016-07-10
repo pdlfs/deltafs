@@ -99,7 +99,6 @@ class ServerTest {
     MDS::MkdirOptions options;
     options.dir_id = DirId(0, 0, dir_ino);
     options.mode = ACCESSPERMS;
-    options.zserver = 0;
     options.uid = 0;
     options.gid = 0;
     std::string name = NodeName(nod_no);
