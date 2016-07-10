@@ -34,6 +34,7 @@ struct DirId {
   //   == 0 iff "*this" == "other",
   //   >  0 iff "*this" >  "other"
   int compare(const DirId& other) const;
+  std::string DebugString() const;
 
   uint64_t reg;
   uint64_t snap;

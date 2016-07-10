@@ -13,6 +13,17 @@
 
 namespace pdlfs {
 
+std::string DirId::DebugString() const {
+  char tmp[30];
+#if defined(DELTAFS)
+  snprintf(tmp, sizeof(tmp), "D[%llu:%llu:%llu]", (unsigned long long)reg,
+           (unsigned long long)snap, (unsigned long long)ino);
+#else
+  snprintf(tmp, sizeof(tmp), "D[%llu]", (unsigned long long)ino);
+#endif
+  return tmp;
+}
+
 #if defined(DELTAFS)
 #define KEY_INITIALIZER(id, tp) id.reg, id.snap, id.ino, tp
 #else
@@ -229,7 +240,12 @@ bool MDB::Exists(const DirId& id, const Slice& hash, Tx* tx) {
   Slice ignored;
   char tmp[1];
   s = db_->Get(options, key.Encode(), &ignored, tmp, sizeof(tmp));
-  return s.ok();
+  assert(!s.IsBufferFull());
+  if (!s.ok()) {
+    return false;
+  } else {
+    return true;
+  }
 }
 
 }  // namespace pdlfs
