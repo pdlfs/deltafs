@@ -33,23 +33,31 @@ Status RPCMDSFactory::Stop() {
   return rpc_->Stop();
 }
 
-void RPCMDSFactory::AddRPCStub(const std::string& srv_uri) {
+// REQUIRES: Init() has been called before.
+void RPCMDSFactory::AddRPCTarget(const std::string& srv_uri, bool trace) {
   StubInfo info;
+  assert(rpc_ != NULL);
   info.stub = rpc_->NewClient(srv_uri);
   info.wrapper = new MDSRPCWrapper(info.stub);
-  info.tracer = new MDSTracer(info.wrapper);
+  if (trace) {
+    info.mds = new MDSTracer(info.wrapper);
+  } else {
+    info.mds = info.wrapper;
+  }
   stubs_.push_back(info);
 }
 
 MDS* RPCMDSFactory::Get(size_t srv_id) {
   assert(srv_id < stubs_.size());
-  return stubs_[srv_id].tracer;
+  return stubs_[srv_id].mds;
 }
 
 RPCMDSFactory::~RPCMDSFactory() {
   std::vector<StubInfo>::iterator it;
   for (it = stubs_.begin(); it != stubs_.end(); ++it) {
-    delete it->tracer;
+    if (it->mds != it->wrapper) {
+      delete it->mds;
+    }
     delete it->wrapper;
     delete it->stub;
   }

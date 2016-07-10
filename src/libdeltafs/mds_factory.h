@@ -16,9 +16,9 @@ namespace pdlfs {
 class RPCMDSFactory : public MDSFactory {
   typedef MDS::RPC::CLI MDSRPCWrapper;
   struct StubInfo {
+    MDS* mds;
+    MDSRPCWrapper* wrapper;
     rpc::If* stub;
-    MDS* wrapper;
-    MDS* tracer;
   };
 
  public:
@@ -27,7 +27,7 @@ class RPCMDSFactory : public MDSFactory {
   Status Start();
   Status Stop();
 
-  void AddRPCStub(const std::string& srv_uri);
+  void AddRPCTarget(const std::string& srv_uri, bool trace = false);
   explicit RPCMDSFactory(Env* env = NULL) : env_(env) {}
   virtual ~RPCMDSFactory();
 
