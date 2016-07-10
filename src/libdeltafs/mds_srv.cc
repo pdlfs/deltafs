@@ -358,9 +358,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
   Dir::Ref* ref;
   const DirId& dir_id = options.dir_id;
   const Slice& name_hash = options.name_hash;
-  if (options.zserver >= giga_.num_virtual_servers) {
-    s = Status::InvalidArgument(Slice());
-  } else if (name_hash.empty() || options.name.empty()) {
+  if (name_hash.empty() || options.name.empty()) {
     s = Status::InvalidArgument(Slice());
   } else if (paranoid_checks_) {
     std::string tmp;
@@ -390,6 +388,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
       if (s.ok()) {
         uint64_t my_time = env_->NowMicros();
         uint64_t my_ino = NextIno();
+        DirId my_id(reg_id_, snap_id_, my_ino);
         mutex_.Unlock();
 
         tx = new Dir::Tx(mdb_);
@@ -403,6 +402,8 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         } else {
           Stat* stat = &ret->stat;
           uint32_t mode = S_IFDIR | (options.mode & ACCESSPERMS);
+          int rserver = PickupServer(my_id);
+          int zserver = rserver % giga_.num_virtual_servers;
           stat->SetRegId(reg_id_);
           stat->SetSnapId(snap_id_);
           stat->SetInodeNo(my_ino);
@@ -410,7 +411,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
           stat->SetFileMode(mode);
           stat->SetUserId(options.uid);
           stat->SetGroupId(options.gid);
-          stat->SetZerothServer(options.zserver);
+          stat->SetZerothServer(zserver);
           stat->SetModifyTime(my_time);
           stat->SetChangeTime(my_time);
           s = mdb_->SetNode(dir_id, name_hash, *stat, options.name, mdb_tx);

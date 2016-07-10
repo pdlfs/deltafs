@@ -332,7 +332,6 @@ Status MDS::CLI::Mkdir(const Slice& path, int mode, Stat* stat) {
       options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
       options.session_id = cli_id_;
       options.dir_id = info.pid;
-      options.zserver = PickupServer(info.pid);
       options.mode = mode;
       options.uid = uid_;
       options.gid = gid_;

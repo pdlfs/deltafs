@@ -83,7 +83,6 @@ class MDS {
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
-    uint32_t zserver;
     uint32_t session_id;
     uint64_t op_due;
     Slice name_hash;

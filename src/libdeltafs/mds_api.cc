@@ -222,7 +222,6 @@ Status MDS::RPC::CLI::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
     p = EncodeVarint32(p, options.mode);
     p = EncodeVarint32(p, options.uid);
     p = EncodeVarint32(p, options.gid);
-    p = EncodeVarint32(p, options.zserver);
     p = EncodeVarint32(p, options.session_id);
     p = EncodeVarint64(p, options.op_due);
     in.contents = Slice(scratch, p - scratch);
@@ -233,7 +232,6 @@ Status MDS::RPC::CLI::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
     PutVarint32(&in.extra_buf, options.mode);
     PutVarint32(&in.extra_buf, options.uid);
     PutVarint32(&in.extra_buf, options.gid);
-    PutVarint32(&in.extra_buf, options.zserver);
     PutVarint32(&in.extra_buf, options.session_id);
     PutVarint64(&in.extra_buf, options.op_due);
     in.contents = Slice(in.extra_buf);
@@ -274,7 +272,6 @@ void MDS::RPC::SRV::MKDIR(Msg& in, Msg& out) {
       !GetVarint32(&input, &options.mode) ||
       !GetVarint32(&input, &options.uid) ||
       !GetVarint32(&input, &options.gid) ||
-      !GetVarint32(&input, &options.zserver) ||
       !GetVarint32(&input, &options.session_id) ||
       !GetVarint64(&input, &options.op_due)) {
     s = Status::InvalidArgument(Slice());
