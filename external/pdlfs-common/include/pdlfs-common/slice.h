@@ -77,7 +77,13 @@ class Slice {
   }
 
   // Return a string that contains the copy of the referenced data.
-  std::string ToString() const { return std::string(data_, size_); }
+  std::string ToString() const {
+    if (size_ != 0) {
+      return std::string(data_, size_);
+    } else {
+      return std::string();
+    }
+  }
 
   // Return a string that contains the copy of a suffix of the referenced data.
   std::string substr(size_t start) const {
