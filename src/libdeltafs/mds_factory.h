@@ -14,10 +14,11 @@
 namespace pdlfs {
 
 class RPCMDSFactory : public MDSFactory {
+  typedef MDS::RPC::CLI MDSRPCWrapper;
   struct StubInfo {
-    MDS* tracer;
-    MDS* wrapper;
     rpc::If* stub;
+    MDS* wrapper;
+    MDS* tracer;
   };
 
  public:

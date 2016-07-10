@@ -36,18 +36,14 @@ Status RPCMDSFactory::Stop() {
 void RPCMDSFactory::AddRPCStub(const std::string& srv_uri) {
   StubInfo info;
   info.stub = rpc_->NewClient(srv_uri);
-  info.wrapper = new MDS::RPC::CLI(info.stub);
+  info.wrapper = new MDSRPCWrapper(info.stub);
   info.tracer = new MDSTracer(info.wrapper);
   stubs_.push_back(info);
 }
 
 MDS* RPCMDSFactory::Get(size_t srv_id) {
   assert(srv_id < stubs_.size());
-  if (stubs_[srv_id].tracer != NULL) {
-    return stubs_[srv_id].tracer;
-  } else {
-    return stubs_[srv_id].wrapper;
-  }
+  return stubs_[srv_id].tracer;
 }
 
 RPCMDSFactory::~RPCMDSFactory() {
