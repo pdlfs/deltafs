@@ -19,18 +19,18 @@ TEST(KeyTest, KeyEncoding) {
     Key k1(0, static_cast<KeyType>(1));
     Key k2(29, 12345, static_cast<KeyType>(127));
     Key k3(13, 37, 67890, static_cast<KeyType>(255));
-    ASSERT_EQ(k1.dir_id(), 0);
+    ASSERT_EQ(k1.inode(), 0);
     ASSERT_EQ(int(k1.type()), 1);
 #if defined(DELTAFS)
     ASSERT_EQ(k2.snap_id(), 29);
 #endif
-    ASSERT_EQ(k2.dir_id(), 12345);
+    ASSERT_EQ(k2.inode(), 12345);
     ASSERT_EQ(int(k2.type()), 127);
 #if defined(DELTAFS)
     ASSERT_EQ(k3.reg_id(), 13);
     ASSERT_EQ(k3.snap_id(), 37);
 #endif
-    ASSERT_EQ(k3.dir_id(), 67890);
+    ASSERT_EQ(k3.inode(), 67890);
     ASSERT_EQ(int(k3.type()), 255);
   }
   {
@@ -51,6 +51,19 @@ TEST(KeyTest, KeyEncoding) {
     ASSERT_EQ(k4.Encode(), k2.Encode());
     k5.SetHash(k2.hash());
     ASSERT_EQ(k5.Encode(), k2.Encode());
+  }
+  {
+    Key k1(31, kDataBlockType);
+    Key k2(31, kDataBlockType);
+    Key k3(31, kDataBlockType);
+    k1.SetOffset(0);
+    k2.SetOffset(32);
+    k3.SetOffset(128);
+    ASSERT_LT(k1.Encode(), k2.Encode());
+    ASSERT_LT(k2.Encode(), k3.Encode());
+    ASSERT_EQ(k1.offset(), 0);
+    ASSERT_EQ(k2.offset(), 32);
+    ASSERT_EQ(k3.offset(), 128);
   }
 }
 

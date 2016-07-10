@@ -22,22 +22,24 @@ enum KeyType {
   kDirIdxType = 2,      // GIGA+ directory index (deltafs, indexfs only)
   kDirMetaType = 3,     // Directory partition metadata (deltafs, indexfs only)
   kSuperBlockType = 4,  // File system superblock
-  kDataBlockType = 5,   // Data block for small files (or all files)
+  kDataBlockType = 5,   // Data block of stored files
   kInoType = 6  // Dedicated inode entry that can be hard linked (tablefs only)
 };
 
 class Key {
  public:
   Key() {}
-  explicit Key(uint64_t dir, KeyType type);
-  explicit Key(uint64_t snap, uint64_t dir, KeyType type);
-  explicit Key(uint64_t reg, uint64_t snap, uint64_t dir, KeyType type);
+  explicit Key(uint64_t ino, KeyType type);
+  explicit Key(uint64_t snap, uint64_t ino, KeyType type);
+  explicit Key(uint64_t reg, uint64_t snap, uint64_t ino, KeyType type);
   void SetName(const Slice& name);
   void SetHash(const Slice& hash);
+  void SetOffset(uint64_t off);
 
   uint64_t reg_id() const;
   uint64_t snap_id() const;
-  uint64_t dir_id() const;
+  uint64_t inode() const;
+  uint64_t offset() const;
   KeyType type() const;
   Slice hash() const;
   Slice prefix() const;

@@ -31,6 +31,11 @@ void Key::SetHash(const Slice& hash) {
   memcpy(rep_ + size_ - 8, hash.data(), hash.size());
 }
 
+void Key::SetOffset(uint64_t off) {
+  off = htobe64(off);
+  memcpy(rep_ + size_ - 8, &off, 8);
+}
+
 static Slice PackPrefix(char* dst, uint64_t R, uint64_t S, uint64_t D,
                         KeyType T) {
 #if !defined(DELTAFS)
@@ -87,7 +92,7 @@ uint64_t Key::snap_id() const {
   return result;
 }
 
-uint64_t Key::dir_id() const {
+uint64_t Key::inode() const {
   uint64_t result;
 #if !defined(DELTAFS)
   uint64_t composite;
@@ -100,6 +105,12 @@ uint64_t Key::dir_id() const {
   GetVarint64(&encoding, &result);
 #endif
   return result;
+}
+
+uint64_t Key::offset() const {
+  uint64_t off;
+  memcpy(&off, rep_ + size_ - 8, 8);
+  return be64toh(off);
 }
 
 KeyType Key::type() const {
