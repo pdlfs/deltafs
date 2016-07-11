@@ -17,21 +17,28 @@
 
 namespace pdlfs {
 
+class LookupStat;
+class Stat;
+
 enum KeyType {
   kDirEntType = 1,      // File or directory entry with embedded inode
   kDirIdxType = 2,      // GIGA+ directory index (deltafs, indexfs only)
   kDirMetaType = 3,     // Directory partition metadata (deltafs, indexfs only)
   kSuperBlockType = 4,  // File system superblock
-  kDataBlockType = 5,   // Data block of stored files
-  kInoType = 6  // Dedicated inode entry that can be hard linked (tablefs only)
+  kDataDesType = 5,     // Header block of stored files
+  kDataBlockType = 6,   // Data block of stored files
+  kInoType = 7  // Dedicated inode entry that can be hard linked (tablefs only)
 };
 
 class Key {
  public:
   Key() {}
+  explicit Key(const Slice& prefix);
   explicit Key(uint64_t ino, KeyType type);
   explicit Key(uint64_t snap, uint64_t ino, KeyType type);
   explicit Key(uint64_t reg, uint64_t snap, uint64_t ino, KeyType type);
+  explicit Key(const Stat& stat, KeyType type);
+  void SetType(KeyType type);
   void SetName(const Slice& name);
   void SetHash(const Slice& hash);
   void SetOffset(uint64_t off);

@@ -54,6 +54,8 @@ static Slice PackPrefix(char* dst, uint64_t R, uint64_t S, uint64_t D,
   return Slice(dst, p - dst);
 }
 
+void Key::SetType(KeyType type) { rep_[size_ - 8 - 1] = type; }
+
 Key::Key(uint64_t dir, KeyType type) {
   Slice prefix = PackPrefix(rep_, 0, 0, dir, type);
   size_ = prefix.size() + 8;
@@ -66,6 +68,16 @@ Key::Key(uint64_t snap, uint64_t dir, KeyType type) {
 
 Key::Key(uint64_t reg, uint64_t snap, uint64_t dir, KeyType type) {
   Slice prefix = PackPrefix(rep_, reg, snap, dir, type);
+  size_ = prefix.size() + 8;
+}
+
+Key::Key(const Stat& st, KeyType type) {
+  Slice prefix = PackPrefix(rep_, st.RegId(), st.SnapId(), st.InodeNo(), type);
+  size_ = prefix.size() + 8;
+}
+
+Key::Key(const Slice& prefix) {
+  memcpy(rep_, prefix.data(), prefix.size());
   size_ = prefix.size() + 8;
 }
 
