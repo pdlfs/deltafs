@@ -65,6 +65,14 @@ TEST(KeyTest, KeyEncoding) {
     ASSERT_EQ(k2.offset(), 32);
     ASSERT_EQ(k3.offset(), 128);
   }
+  {
+    Key k1(31, kDataDesType);
+    Key k2(k1.prefix());
+    ASSERT_EQ(k1.prefix(), k2.prefix());
+    Key k3(31, kDataBlockType);
+    k3.SetType(kDataDesType);
+    ASSERT_EQ(k1.prefix(), k3.prefix());
+  }
 }
 
 class StatTest {};

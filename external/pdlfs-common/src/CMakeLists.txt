@@ -145,6 +145,10 @@ set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-leveldb-tests})
 # the dir we generated pdlfs_config_expand.h in
 #
 add_library (pdlfs-common-static STATIC ${pdlfs-all-srcs})
+if (PDLFS_COMMON_LIBNAME)
+    set_target_properties(pdlfs-common-static PROPERTIES 
+                          OUTPUT_NAME "${PDLFS_COMMON_LIBNAME}-static")
+endif ()
 target_include_directories (pdlfs-common-static PUBLIC "../include")
 target_include_directories (pdlfs-common-static PUBLIC 
                                     "${CMAKE_CURRENT_BINARY_DIR}/../include")
@@ -158,6 +162,10 @@ endif ()
 #
 set (CMAKE_MACOSX_RPATH 1)
 add_library (pdlfs-common SHARED ${pdlfs-all-srcs})
+if (PDLFS_COMMON_LIBNAME)
+    set_target_properties(pdlfs-common PROPERTIES 
+                          OUTPUT_NAME "${PDLFS_COMMON_LIBNAME}")
+endif ()
 target_include_directories (pdlfs-common PUBLIC "../include")
 target_include_directories (pdlfs-common PUBLIC 
                                     "${CMAKE_CURRENT_BINARY_DIR}/../include")
