@@ -19,7 +19,7 @@ include (CheckCXXCompilerFlag)
 #
 
 # main directory sources and tests
-set (deltafs-srvr-srcs server_proc.cc)
+set (deltafs-srvr-srcs deltafs_server.cc)
 set (deltafs-srvr-tests )
 
 #

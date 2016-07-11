@@ -26,9 +26,8 @@ set (DELTAFS_VERSION_PATCH 0)
 #
 
 # main directory sources and tests
-set (deltafs-srcs deltafs_api.cc mds_api.cc mds_srv.cc mds_types.cc
-     mercury_rpc.cc rpc.cc)
-set (deltafs-tests mds_api_test.cc mercury_test.cc)
+set (deltafs-srcs deltafs_api.cc mds_api.cc mds_srv.cc)
+set (deltafs-tests mds_api_test.cc)
 
 #
 # here's the compiler/machine/os dependent stuff...
