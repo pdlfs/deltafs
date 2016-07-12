@@ -37,6 +37,18 @@ BlkDBOptions::BlkDBOptions()
       sync(false),
       db(NULL) {}
 
+BlkDB::BlkDB(const BlkDBOptions& options)
+    : cli_id_(options.cli_id),
+      max_open_streams_(options.max_open_streams),
+      verify_checksum_(options.verify_checksum),
+      sync_(options.sync),
+      db_(options.db) {
+  assert(db_ != NULL);
+  streams_ = new Stream*[max_open_streams_]();
+  num_open_streams_ = 0;
+  next_stream_ = 0;
+}
+
 BlkDB::~BlkDB() {
   assert(num_open_streams_ == 0);
   delete[] streams_;
@@ -54,6 +66,7 @@ Stream* BlkDB::GetStream(sid_t sid) {
 
 // REQUIRES: mutex_ has been locked.
 size_t BlkDB::Append(Stream* s) {
+  assert(s != NULL);
   size_t idx = next_stream_;
   assert(streams_[next_stream_] == NULL);
   streams_[next_stream_] = s;

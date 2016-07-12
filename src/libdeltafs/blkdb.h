@@ -19,7 +19,7 @@
 
 namespace pdlfs {
 
-typedef int sid_t;
+typedef int sid_t;  // Opaque stream descriptor
 
 struct Stream {
   DirId pid;
@@ -53,17 +53,7 @@ struct BlkDBOptions {
 
 class BlkDB {
  public:
-  BlkDB(const BlkDBOptions& options)
-      : cli_id_(options.cli_id),
-        max_open_streams_(options.max_open_streams),
-        verify_checksum_(options.verify_checksum),
-        sync_(options.sync),
-        db_(options.db) {
-    assert(db_ != NULL);
-    streams_ = new Stream*[max_open_streams_]();
-    num_open_streams_ = 0;
-    next_stream_ = 0;
-  }
+  BlkDB(const BlkDBOptions&);
   ~BlkDB();
 
   Status Open(const DirId& pid, const Slice& nhash, const Stat& stat,
