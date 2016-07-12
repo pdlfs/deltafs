@@ -11,9 +11,9 @@
 # to switch between compilation modes.
 
 # (A) Production use (optimized mode)
-OPT ?= -O2 -DNDEBUG
+# OPT ?= -O2 -DNDEBUG
 # (B) Debug mode, w/ full line-level debugging symbols
-# OPT ?= -g2
+OPT ?= -g2
 # (C) Profiling mode: opt, but w/debugging symbols
 # OPT ?= -O2 -g2 -DNDEBUG
 #-----------------------------------------------
@@ -26,7 +26,8 @@ include build_config.mk
 
 TESTS = \
 	src/libdeltafs/mds_api_test \
-	src/libdeltafs/mds_srv_test
+	src/libdeltafs/mds_srv_test \
+	src/libdeltafs/blkdb_test
 
 BINS = \
 	src/server/deltafs_server
@@ -62,8 +63,8 @@ SHARED_LIBOBJECTS := $(addprefix $(SHARED_OUTDIR)/, $(LIBDELTAFS_SOURCES:.cc=.o)
 SHARED_ALLOBJS := $(SHARED_LIBOBJECTS) $(SHARED_PDLFS_COMMON_LIBOBJECTS)
 
 ALL = \
-	$(STATIC_OUTDIR)/libpdlfs-common-static.a \
-	$(SHARED_OUTDIR)/libpdlfs-common.$(PLATFORM_SHARED_EXT) \
+	$(STATIC_OUTDIR)/libdeltafs-common-static.a \
+	$(SHARED_OUTDIR)/libdeltafs-common.$(PLATFORM_SHARED_EXT) \
 	$(STATIC_OUTDIR)/libdeltafs-static.a \
 	$(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT) \
 	$(BIN_PROGRAMS)
@@ -145,11 +146,11 @@ SHARED_OBJDIRS: \
 
 $(SHARED_ALLOBJS): | SHARED_OBJDIRS
 
-$(STATIC_OUTDIR)/libpdlfs-common-static.a:$(STATIC_PDLFS_COMMON_LIBOBJECTS)
+$(STATIC_OUTDIR)/libdeltafs-common-static.a:$(STATIC_PDLFS_COMMON_LIBOBJECTS)
 	rm -f $@
 	$(AR) -rs $@ $(STATIC_PDLFS_COMMON_LIBOBJECTS)
 
-$(SHARED_OUTDIR)/libpdlfs-common.$(PLATFORM_SHARED_EXT): $(SHARED_PDLFS_COMMON_LIBOBJECTS)
+$(SHARED_OUTDIR)/libdeltafs-common.$(PLATFORM_SHARED_EXT): $(SHARED_PDLFS_COMMON_LIBOBJECTS)
 	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libpdlfs-common.$(PLATFORM_SHARED_EXT) $(SHARED_PDLFS_COMMON_LIBOBJECTS) \
 		-o $(SHARED_OUTDIR)/libpdlfs-common.$(PLATFORM_SHARED_EXT) $(LIBS)
 
@@ -169,6 +170,9 @@ $(STATIC_OUTDIR)/mds_api_test:src/libdeltafs/mds_api_test.cc $(STATIC_LIBOBJECTS
 
 $(STATIC_OUTDIR)/mds_srv_test:src/libdeltafs/mds_srv_test.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/libdeltafs/mds_srv_test.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/blkdb_test:src/libdeltafs/blkdb_test.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/libdeltafs/blkdb_test.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/%.o: %.cc
 	$(CXX) $(CXXFLAGS) -c $< -o $@

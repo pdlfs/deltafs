@@ -177,9 +177,9 @@ TEST(BlkDBTest, FileWithHoles) {
   ASSERT_EQ(Read(stream, 8, 1), "9");
   ASSERT_EQ(Read(stream, 9, 1), "");
   // Un-aligned reads
-  ASSERT_EQ(Read(stream, 0, 3), "123");
-  ASSERT_EQ(Read(stream, 3, 2), "45");
-  ASSERT_EQ(Read(stream, 5, 5), "6789");
+  ASSERT_EQ(Read(stream, 0, 3), "12x");
+  ASSERT_EQ(Read(stream, 3, 2), "x5");
+  ASSERT_EQ(Read(stream, 5, 5), "x7x9");
   Close(stream);
 }
 

@@ -63,7 +63,7 @@ class BlkDB {
   ~BlkDB();
 
   Status Open(const DirId& pid, const Slice& nhash, const Stat& stat,
-              bool create_if_missing, bool error_if_exists, Stream* s);
+              bool create_if_missing, bool error_if_exists, Stream** s);
   Status Pwrite(Stream* s, const Slice& data, uint64_t off);
   Status Pread(Stream* s, Slice* result, uint64_t off, uint64_t size,
                char* scratch);

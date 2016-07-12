@@ -63,8 +63,8 @@ static bool FetchOffset(const Slice& encoding, uint64_t* result) {
 }
 
 struct BlkInfo {
-  bool ParseFrom(const Slice& k, const Slice& v);
   BlkInfo() {}
+  bool ParseFrom(const Slice& k, const Slice& v);
   uint64_t size;
   uint64_t off;
 };
