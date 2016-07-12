@@ -19,11 +19,11 @@
 
 namespace pdlfs {
 
+typedef int sid_t;
+
 struct Stream {
   DirId pid;
   char nhash[8];
-  Stream* prev;
-  Stream* next;
   Iterator* iter;
   uint64_t mtime;
   uint64_t size;       // Total size of stream
@@ -45,6 +45,7 @@ struct StreamInfo {
 struct BlkDBOptions {
   BlkDBOptions();
   int cli_id;
+  size_t max_open_streams;
   bool verify_checksum;
   bool sync;
   DB* db;
@@ -53,33 +54,43 @@ struct BlkDBOptions {
 class BlkDB {
  public:
   BlkDB(const BlkDBOptions& options)
-      : verify_checksum_(options.verify_checksum),
+      : cli_id_(options.cli_id),
+        max_open_streams_(options.max_open_streams),
+        verify_checksum_(options.verify_checksum),
         sync_(options.sync),
         db_(options.db) {
     assert(db_ != NULL);
-    head_.next = &head_;
-    head_.prev = &head_;
+    streams_ = new Stream*[max_open_streams_]();
+    num_open_streams_ = 0;
+    next_stream_ = 0;
   }
   ~BlkDB();
 
   Status Open(const DirId& pid, const Slice& nhash, const Stat& stat,
-              bool create_if_missing, bool error_if_exists, Stream** s);
-  Status Pwrite(Stream* s, const Slice& data, uint64_t off);
-  Status Pread(Stream* s, Slice* result, uint64_t off, uint64_t size,
+              bool create_if_missing, bool error_if_exists, sid_t* result);
+  Status Pwrite(sid_t sid, const Slice& data, uint64_t off);
+  Status Pread(sid_t sid, Slice* result, uint64_t off, uint64_t size,
                char* scratch);
-  Status Sync(Stream* s);
-  Status Close(Stream* s);
+  Status Sync(sid_t sid);
+  Status Close(sid_t sid);
+
+  Stream* GetStream(sid_t sid);
 
  private:
-  void Append(Stream* s);
-  void Remove(Stream* s);
-  port::Mutex mutex_;
-  Stream head_;
-
+  // Constant after construction
   int cli_id_;
+  size_t max_open_streams_;
   bool verify_checksum_;
   bool sync_;
   DB* db_;
+
+  // State below is protected by mutex_
+  port::Mutex mutex_;
+  size_t Append(Stream* s);
+  void Remove(size_t idx);
+  size_t next_stream_;
+  size_t num_open_streams_;
+  Stream** streams_;
 
   // No copying allowed
   void operator=(const BlkDB&);

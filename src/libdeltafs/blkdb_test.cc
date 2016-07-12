@@ -47,7 +47,7 @@ class BlkDBTest {
     return tmp;
   }
 
-  Stream* Open(int id, bool ocreat = false) {
+  int Open(int id, bool ocreat = false) {
     DirId pid(0, 0, 0);
     std::string nhash;
     DirIndex::PutHash(&nhash, Name(id));
@@ -55,25 +55,25 @@ class BlkDBTest {
     stat.SetRegId(0);
     stat.SetSnapId(0);
     stat.SetInodeNo(id);
-    Stream* stream;
-    Status s = blk_->Open(pid, nhash, stat, ocreat, false, &stream);
+    int fd;
+    Status s = blk_->Open(pid, nhash, stat, ocreat, false, &fd);
     if (s.ok()) {
-      return stream;
+      return fd;
     } else {
-      return NULL;
+      return -1;
     }
   }
 
-  Stream* Creat(int id) { return Open(id, true); }
+  int Creat(int id) { return Open(id, true); }
 
-  void Write(Stream* stream, const Slice& buf, uint64_t off) {
-    ASSERT_OK(blk_->Pwrite(stream, buf, off));
+  void Write(int fd, const Slice& buf, uint64_t off) {
+    ASSERT_OK(blk_->Pwrite(fd, buf, off));
   }
 
-  std::string Read(Stream* stream, uint64_t off, uint64_t size) {
+  std::string Read(int fd, uint64_t off, uint64_t size) {
     char* tmp = new char[size];
     Slice result;
-    ASSERT_OK(blk_->Pread(stream, &result, off, size, tmp));
+    ASSERT_OK(blk_->Pread(fd, &result, off, size, tmp));
     std::string data = result.ToString();
     delete tmp;
     std::string::iterator it = data.begin();
@@ -85,9 +85,9 @@ class BlkDBTest {
     return data;
   }
 
-  void Close(Stream* stream) {
-    ASSERT_OK(blk_->Sync(stream));
-    blk_->Close(stream);
+  void Close(int fd) {
+    ASSERT_OK(blk_->Sync(fd));
+    blk_->Close(fd);
   }
 };
 
@@ -96,91 +96,91 @@ TEST(BlkDBTest, Empty) {
 }
 
 TEST(BlkDBTest, CreateDeleteStreams) {
-  Stream* stream = Open(1);
-  ASSERT_TRUE(stream == NULL);
-  stream = Creat(1);
-  ASSERT_TRUE(stream != NULL);
-  Close(stream);
-  stream = Open(1);
-  ASSERT_TRUE(stream != NULL);
-  Close(stream);
-  stream = Open(2);
-  ASSERT_TRUE(stream == NULL);
+  int fd = Open(1);
+  ASSERT_TRUE(fd == -1);
+  fd = Creat(1);
+  ASSERT_TRUE(fd != -1);
+  Close(fd);
+  fd = Open(1);
+  ASSERT_TRUE(fd != -1);
+  Close(fd);
+  fd = Open(2);
+  ASSERT_TRUE(fd == -1);
 }
 
 TEST(BlkDBTest, SequentialIO) {
-  Stream* stream = Creat(1);
-  Write(stream, "1234", 0);
-  Write(stream, "56", 4);
-  Write(stream, "78", 6);
-  Write(stream, "9", 8);
-  Close(stream);
+  int fd = Creat(1);
+  Write(fd, "1234", 0);
+  Write(fd, "56", 4);
+  Write(fd, "78", 6);
+  Write(fd, "9", 8);
+  Close(fd);
 
-  stream = Open(1);
-  ASSERT_TRUE(stream != NULL);
+  fd = Open(1);
+  ASSERT_TRUE(fd != -1);
   // Reads all
-  ASSERT_EQ(Read(stream, 0, 10), "123456789");
+  ASSERT_EQ(Read(fd, 0, 10), "123456789");
   // Aligned reads
-  ASSERT_EQ(Read(stream, 0, 4), "1234");
-  ASSERT_EQ(Read(stream, 4, 2), "56");
-  ASSERT_EQ(Read(stream, 6, 2), "78");
-  ASSERT_EQ(Read(stream, 8, 1), "9");
-  ASSERT_EQ(Read(stream, 9, 1), "");
+  ASSERT_EQ(Read(fd, 0, 4), "1234");
+  ASSERT_EQ(Read(fd, 4, 2), "56");
+  ASSERT_EQ(Read(fd, 6, 2), "78");
+  ASSERT_EQ(Read(fd, 8, 1), "9");
+  ASSERT_EQ(Read(fd, 9, 1), "");
   // Un-aligned reads
-  ASSERT_EQ(Read(stream, 0, 3), "123");
-  ASSERT_EQ(Read(stream, 3, 2), "45");
-  ASSERT_EQ(Read(stream, 5, 5), "6789");
-  Close(stream);
+  ASSERT_EQ(Read(fd, 0, 3), "123");
+  ASSERT_EQ(Read(fd, 3, 2), "45");
+  ASSERT_EQ(Read(fd, 5, 5), "6789");
+  Close(fd);
 }
 
 TEST(BlkDBTest, RandomIO) {
-  Stream* stream = Creat(1);
-  Write(stream, "9", 8);
-  Write(stream, "56", 4);
-  Write(stream, "1234", 0);
-  Write(stream, "78", 6);
-  Close(stream);
+  int fd = Creat(1);
+  Write(fd, "9", 8);
+  Write(fd, "56", 4);
+  Write(fd, "1234", 0);
+  Write(fd, "78", 6);
+  Close(fd);
 
-  stream = Open(1);
-  ASSERT_TRUE(stream != NULL);
+  fd = Open(1);
+  ASSERT_TRUE(fd != -1);
   // Reads all
-  ASSERT_EQ(Read(stream, 0, 10), "123456789");
+  ASSERT_EQ(Read(fd, 0, 10), "123456789");
   // Aligned reads
-  ASSERT_EQ(Read(stream, 8, 1), "9");
-  ASSERT_EQ(Read(stream, 4, 2), "56");
-  ASSERT_EQ(Read(stream, 6, 2), "78");
-  ASSERT_EQ(Read(stream, 9, 1), "");
-  ASSERT_EQ(Read(stream, 0, 4), "1234");
+  ASSERT_EQ(Read(fd, 8, 1), "9");
+  ASSERT_EQ(Read(fd, 4, 2), "56");
+  ASSERT_EQ(Read(fd, 6, 2), "78");
+  ASSERT_EQ(Read(fd, 9, 1), "");
+  ASSERT_EQ(Read(fd, 0, 4), "1234");
   // Un-aligned reads
-  ASSERT_EQ(Read(stream, 3, 2), "45");
-  ASSERT_EQ(Read(stream, 0, 3), "123");
-  ASSERT_EQ(Read(stream, 5, 5), "6789");
-  Close(stream);
+  ASSERT_EQ(Read(fd, 3, 2), "45");
+  ASSERT_EQ(Read(fd, 0, 3), "123");
+  ASSERT_EQ(Read(fd, 5, 5), "6789");
+  Close(fd);
 }
 
 TEST(BlkDBTest, FileWithHoles) {
-  Stream* stream = Creat(1);
-  Write(stream, "12", 0);
-  Write(stream, "5", 4);
-  Write(stream, "7", 6);
-  Write(stream, "9", 8);
-  Close(stream);
+  int fd = Creat(1);
+  Write(fd, "12", 0);
+  Write(fd, "5", 4);
+  Write(fd, "7", 6);
+  Write(fd, "9", 8);
+  Close(fd);
 
-  stream = Open(1);
-  ASSERT_TRUE(stream != NULL);
+  fd = Open(1);
+  ASSERT_TRUE(fd != -1);
   // Reads all
-  ASSERT_EQ(Read(stream, 0, 10), "12xx5x7x9");
+  ASSERT_EQ(Read(fd, 0, 10), "12xx5x7x9");
   // Aligned reads
-  ASSERT_EQ(Read(stream, 0, 4), "12xx");
-  ASSERT_EQ(Read(stream, 4, 2), "5x");
-  ASSERT_EQ(Read(stream, 6, 2), "7x");
-  ASSERT_EQ(Read(stream, 8, 1), "9");
-  ASSERT_EQ(Read(stream, 9, 1), "");
+  ASSERT_EQ(Read(fd, 0, 4), "12xx");
+  ASSERT_EQ(Read(fd, 4, 2), "5x");
+  ASSERT_EQ(Read(fd, 6, 2), "7x");
+  ASSERT_EQ(Read(fd, 8, 1), "9");
+  ASSERT_EQ(Read(fd, 9, 1), "");
   // Un-aligned reads
-  ASSERT_EQ(Read(stream, 0, 3), "12x");
-  ASSERT_EQ(Read(stream, 3, 2), "x5");
-  ASSERT_EQ(Read(stream, 5, 5), "x7x9");
-  Close(stream);
+  ASSERT_EQ(Read(fd, 0, 3), "12x");
+  ASSERT_EQ(Read(fd, 3, 2), "x5");
+  ASSERT_EQ(Read(fd, 5, 5), "x7x9");
+  Close(fd);
 }
 
 }  // namespace pdlfs
