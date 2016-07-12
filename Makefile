@@ -11,9 +11,9 @@
 # to switch between compilation modes.
 
 # (A) Production use (optimized mode)
-# OPT ?= -O2 -DNDEBUG
+OPT ?= -O2 -DNDEBUG
 # (B) Debug mode, w/ full line-level debugging symbols
-OPT ?= -g2
+# OPT ?= -g2
 # (C) Profiling mode: opt, but w/debugging symbols
 # OPT ?= -O2 -g2 -DNDEBUG
 #-----------------------------------------------
@@ -151,16 +151,16 @@ $(STATIC_OUTDIR)/libdeltafs-common-static.a:$(STATIC_PDLFS_COMMON_LIBOBJECTS)
 	$(AR) -rs $@ $(STATIC_PDLFS_COMMON_LIBOBJECTS)
 
 $(SHARED_OUTDIR)/libdeltafs-common.$(PLATFORM_SHARED_EXT): $(SHARED_PDLFS_COMMON_LIBOBJECTS)
-	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libpdlfs-common.$(PLATFORM_SHARED_EXT) $(SHARED_PDLFS_COMMON_LIBOBJECTS) \
-		-o $(SHARED_OUTDIR)/libpdlfs-common.$(PLATFORM_SHARED_EXT) $(LIBS)
+	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libpdlfs-common.$(PLATFORM_SHARED_EXT) \
+		$(SHARED_PDLFS_COMMON_LIBOBJECTS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/libdeltafs-static.a:$(STATIC_LIBOBJECTS)
 	rm -f $@
 	$(AR) -rs $@ $(STATIC_LIBOBJECTS)
 
 $(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT): $(SHARED_LIBOBJECTS)
-	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libdeltafs.$(PLATFORM_SHARED_EXT) $(SHARED_LIBOBJECTS) \
-		-o $(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT) $(LIBS)
+	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libdeltafs.$(PLATFORM_SHARED_EXT) \
+		$(SHARED_LIBOBJECTS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/deltafs_server:src/server/deltafs_server.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/server/deltafs_server.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) -o $@ $(LIBS)
