@@ -177,15 +177,15 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
   return s;
 }
 
-Status MDS::CLI::Fstat(const Slice& path, Stat* stat) {
+Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
   Status s;
   char tmp[20];
-  PathInfo info;
+  PathInfo path;
   MutexLock ml(&mutex_);
-  s = ResolvePath(path, &info);
+  s = ResolvePath(p, &path);
   if (s.ok()) {
     IndexHandle* idxh = NULL;
-    s = FetchIndex(info.pid, info.zserver, &idxh);
+    s = FetchIndex(path.pid, path.zserver, &idxh);
     if (s.ok()) {
       mutex_.Unlock();
 
@@ -193,12 +193,12 @@ Status MDS::CLI::Fstat(const Slice& path, Stat* stat) {
       const DirIndex* idx = index_cache_->Value(idxh);
       assert(idx != NULL);
       FstatOptions options;
-      options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
+      options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
       options.session_id = cli_id_;
-      options.dir_id = info.pid;
-      options.name_hash = DirIndex::Hash(info.name, tmp);
+      options.dir_id = path.pid;
+      options.name_hash = DirIndex::Hash(path.name, tmp);
       if (paranoid_checks_) {
-        options.name = info.name;
+        options.name = path.name;
       }
       FstatRet ret;
 
@@ -225,16 +225,18 @@ Status MDS::CLI::Fstat(const Slice& path, Stat* stat) {
       } while (s.IsTryAgain());
 
       mutex_.Lock();
+      index_cache_->Release(idxh);
       if (tmp_idx != NULL) {
         if (s.ok()) {
-          index_cache_->Release(index_cache_->Insert(info.pid, tmp_idx));
+          index_cache_->Release(index_cache_->Insert(path.pid, tmp_idx));
         } else {
           delete tmp_idx;
         }
       }
-      index_cache_->Release(idxh);
       if (s.ok()) {
-        *stat = ret.stat;
+        ent->pid = options.dir_id;
+        ent->nhash = options.name_hash.ToString();
+        ent->stat = ret.stat;
       }
     }
   }
@@ -242,15 +244,15 @@ Status MDS::CLI::Fstat(const Slice& path, Stat* stat) {
   return s;
 }
 
-Status MDS::CLI::Fcreat(const Slice& path, int mode, Stat* stat) {
+Status MDS::CLI::Fcreat(const Slice& p, int mode, Fentry* ent) {
   Status s;
   char tmp[20];
-  PathInfo info;
+  PathInfo path;
   MutexLock ml(&mutex_);
-  s = ResolvePath(path, &info);
+  s = ResolvePath(p, &path);
   if (s.ok()) {
     IndexHandle* idxh = NULL;
-    s = FetchIndex(info.pid, info.zserver, &idxh);
+    s = FetchIndex(path.pid, path.zserver, &idxh);
     if (s.ok()) {
       mutex_.Unlock();
 
@@ -258,14 +260,14 @@ Status MDS::CLI::Fcreat(const Slice& path, int mode, Stat* stat) {
       const DirIndex* idx = index_cache_->Value(idxh);
       assert(idx != NULL);
       FcreatOptions options;
-      options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
+      options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
       options.session_id = cli_id_;
-      options.dir_id = info.pid;
+      options.dir_id = path.pid;
       options.mode = mode;
       options.uid = uid_;
       options.gid = gid_;
-      options.name_hash = DirIndex::Hash(info.name, tmp);
-      options.name = info.name;
+      options.name_hash = DirIndex::Hash(path.name, tmp);
+      options.name = path.name;
       FcreatRet ret;
 
       const DirIndex* latest_idx = idx;
@@ -296,16 +298,18 @@ Status MDS::CLI::Fcreat(const Slice& path, int mode, Stat* stat) {
       }
 
       mutex_.Lock();
+      index_cache_->Release(idxh);
       if (tmp_idx != NULL) {
         if (s.ok()) {
-          index_cache_->Release(index_cache_->Insert(info.pid, tmp_idx));
+          index_cache_->Release(index_cache_->Insert(path.pid, tmp_idx));
         } else {
           delete tmp_idx;
         }
       }
-      index_cache_->Release(idxh);
       if (s.ok()) {
-        *stat = ret.stat;
+        ent->pid = options.dir_id;
+        ent->nhash = options.name_hash.ToString();
+        ent->stat = ret.stat;
       }
     }
   }
@@ -313,15 +317,15 @@ Status MDS::CLI::Fcreat(const Slice& path, int mode, Stat* stat) {
   return s;
 }
 
-Status MDS::CLI::Mkdir(const Slice& path, int mode, Stat* stat) {
+Status MDS::CLI::Mkdir(const Slice& p, int mode) {
   Status s;
   char tmp[20];
-  PathInfo info;
+  PathInfo path;
   MutexLock ml(&mutex_);
-  s = ResolvePath(path, &info);
+  s = ResolvePath(p, &path);
   if (s.ok()) {
     IndexHandle* idxh = NULL;
-    s = FetchIndex(info.pid, info.zserver, &idxh);
+    s = FetchIndex(path.pid, path.zserver, &idxh);
     if (s.ok()) {
       mutex_.Unlock();
 
@@ -329,14 +333,14 @@ Status MDS::CLI::Mkdir(const Slice& path, int mode, Stat* stat) {
       const DirIndex* idx = index_cache_->Value(idxh);
       assert(idx != NULL);
       MkdirOptions options;
-      options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
+      options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
       options.session_id = cli_id_;
-      options.dir_id = info.pid;
+      options.dir_id = path.pid;
       options.mode = mode;
       options.uid = uid_;
       options.gid = gid_;
-      options.name_hash = DirIndex::Hash(info.name, tmp);
-      options.name = info.name;
+      options.name_hash = DirIndex::Hash(path.name, tmp);
+      options.name = path.name;
       MkdirRet ret;
 
       const DirIndex* latest_idx = idx;
@@ -367,16 +371,13 @@ Status MDS::CLI::Mkdir(const Slice& path, int mode, Stat* stat) {
       }
 
       mutex_.Lock();
+      index_cache_->Release(idxh);
       if (tmp_idx != NULL) {
         if (s.ok()) {
-          index_cache_->Release(index_cache_->Insert(info.pid, tmp_idx));
+          index_cache_->Release(index_cache_->Insert(path.pid, tmp_idx));
         } else {
           delete tmp_idx;
         }
-      }
-      index_cache_->Release(idxh);
-      if (s.ok()) {
-        *stat = ret.stat;
       }
     }
   }
@@ -384,16 +385,16 @@ Status MDS::CLI::Mkdir(const Slice& path, int mode, Stat* stat) {
   return s;
 }
 
-Status MDS::CLI::Listdir(const Slice& path, std::vector<std::string>* names) {
+Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
   Status s;
-  assert(!path.ends_with("/"));
-  std::string fake_path = path.ToString();
+  assert(!p.ends_with("/"));
+  std::string fake_path = p.ToString();
   fake_path.append("/.");
-  PathInfo info;
-  s = ResolvePath(fake_path, &info);
+  PathInfo path;
+  s = ResolvePath(fake_path, &path);
   if (s.ok()) {
     IndexHandle* idxh = NULL;
-    s = FetchIndex(info.pid, info.zserver, &idxh);
+    s = FetchIndex(path.pid, path.zserver, &idxh);
     if (s.ok()) {
       mutex_.Unlock();
 
@@ -401,9 +402,9 @@ Status MDS::CLI::Listdir(const Slice& path, std::vector<std::string>* names) {
       const DirIndex* idx = index_cache_->Value(idxh);
       assert(idx != NULL);
       ListdirOptions options;
-      options.op_due = atomic_path_resolution_ ? info.lease_due : kMaxMicros;
+      options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
       options.session_id = cli_id_;
-      options.dir_id = info.pid;
+      options.dir_id = path.pid;
       ListdirRet ret;
       ret.names = names;
 

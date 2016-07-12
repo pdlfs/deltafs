@@ -40,14 +40,20 @@ struct MDSCliOptions {
   int gid;
 };
 
+struct Fentry {
+  DirId pid;
+  std::string nhash;
+  Stat stat;
+};
+
 class MDS::CLI {
  public:
   static CLI* Open(const MDSCliOptions&);
   ~CLI();
 
-  Status Fstat(const Slice& path, Stat* stat);
-  Status Fcreat(const Slice& path, int mode, Stat* stat);
-  Status Mkdir(const Slice& path, int mode, Stat* stat);
+  Status Fstat(const Slice& path, Fentry* ent);
+  Status Fcreat(const Slice& path, int mode, Fentry* ent);
+  Status Mkdir(const Slice& path, int mode);
   Status Listdir(const Slice& path, std::vector<std::string>* names);
 
  private:
