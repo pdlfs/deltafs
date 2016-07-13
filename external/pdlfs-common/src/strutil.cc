@@ -80,32 +80,40 @@ bool ConsumeDecimalNumber(Slice* in, uint64_t* val) {
   return (digits > 0);
 }
 
-bool ParsePrettyBool(const Slice& value) {
-  if (value == "t" || value == "y") {
+bool ParsePrettyBool(const Slice& value, bool* val) {
+  if (value == "y" || value.starts_with("yes") || value.starts_with("true") ||
+      value.starts_with("enable")) {
+    *val = true;
     return true;
-  } else if (value.starts_with("true") || value.starts_with("yes")) {
+  } else if (value == "n" || value.starts_with("no") ||
+             value.starts_with("false") || value.starts_with("disable")) {
+    *val = false;
     return true;
   } else {
     return false;
   }
 }
 
-uint64_t ParsePrettyNumber(const Slice& value) {
+bool ParsePrettyNumber(const Slice& value, uint64_t* val) {
   Slice input = value;
   uint64_t base;
   if (!ConsumeDecimalNumber(&input, &base)) {
-    return 0;
+    return false;
   } else {
     if (input.empty()) {
-      return base;
+      *val = base;
+      return true;
     } else if (input.starts_with("k")) {
-      return base * 1024;
+      *val = base * 1024;
+      return true;
     } else if (input.starts_with("m")) {
-      return base * 1024 * 1024;
+      *val = base * 1024 * 1024;
+      return true;
     } else if (input.starts_with("g")) {
-      return base * 1024 * 1024 * 1024;
+      *val = base * 1024 * 1024 * 1024;
+      return true;
     } else {
-      return 0;
+      return false;
     }
   }
 }

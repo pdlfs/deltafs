@@ -46,11 +46,11 @@ extern size_t SplitString(const Slice& value, char delim,
                           std::vector<std::string>*);
 
 // Parse a human-readable text to a long int value.
-// return 0 if the text is unrecognizable.
-extern uint64_t ParsePrettyNumber(const Slice& value);
+// Return true if successfully parsed and false otherwise.
+extern bool ParsePrettyNumber(const Slice& value, uint64_t* val);
 
 // Parse a human-readable text to a boolean value.
-// Return False if the text is unrecognizable.
-extern bool ParsePrettyBool(const Slice& value);
+// Return true if successfully parsed and false otherwise.
+extern bool ParsePrettyBool(const Slice& value, bool* val);
 
 }  // namespace pdlfs

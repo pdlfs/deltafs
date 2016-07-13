@@ -14,18 +14,51 @@
 
 namespace pdlfs {
 
-class StrUtilTest {};
+class StrUtilTest {
+ public:
+  static std::string ToBool(const Slice& v) {
+    bool b;
+    if (ParsePrettyBool(v, &b)) {
+      return b ? "True" : "False";
+    } else {
+      return "Unknown";
+    }
+  }
+  static std::string ToInt(const Slice& v) {
+    uint64_t i;
+    if (ParsePrettyNumber(v, &i)) {
+      char tmp[30];
+      snprintf(tmp, sizeof(tmp), "%llu", (long long unsigned)i);
+      return tmp;
+    } else {
+      return "Unknown";
+    }
+  }
+};
 
 TEST(StrUtilTest, ParseBool) {
-  ASSERT_TRUE(ParsePrettyBool("y"));
-  ASSERT_TRUE(ParsePrettyBool("yes"));
-  ASSERT_TRUE(ParsePrettyBool("t"));
-  ASSERT_TRUE(ParsePrettyBool("true"));
+  ASSERT_EQ(ToBool("y"), "True");
+  ASSERT_EQ(ToBool("yes"), "True");
+  ASSERT_EQ(ToBool("enabled"), "True");
+  ASSERT_EQ(ToBool("true"), "True");
+  ASSERT_EQ(ToBool("n"), "False");
+  ASSERT_EQ(ToBool("no"), "False");
+  ASSERT_EQ(ToBool("disabled"), "False");
+  ASSERT_EQ(ToBool("false"), "False");
+  ASSERT_EQ(ToBool(""), "Unknown");
+  ASSERT_EQ(ToBool("ok"), "Unknown");
+  ASSERT_EQ(ToBool("default"), "Unknown");
+  ASSERT_EQ(ToBool("1"), "Unknown");
 }
 
 TEST(StrUtilTest, ParseNumber) {
-  ASSERT_EQ(ParsePrettyNumber("4096"), 4096);
-  ASSERT_EQ(ParsePrettyNumber("4k"), 4096);
+  ASSERT_EQ(ToInt("1m"), "1048576");
+  ASSERT_EQ(ToInt("4k"), "4096");
+  ASSERT_EQ(ToInt("256"), "256");
+  ASSERT_EQ(ToInt("0"), "0");
+  ASSERT_EQ(ToInt("-20"), "Unknown");
+  ASSERT_EQ(ToInt("0.3"), "Unknown");
+  ASSERT_EQ(ToInt("23p"), "Unknown");
 }
 
 TEST(StrUtilTest, Split) {
