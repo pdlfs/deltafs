@@ -11,8 +11,8 @@
 #include <string>
 #if defined(GFLAGS)
 #include <gflags/gflags.h>
-#define DEFINE_FLAG_PORT(n, v)                       \
-  static std::string FLAGS_load_##n() { return ""; } \
+#define DEFINE_FLAG_PORT(n, v)                              \
+  static inline std::string FLAGS_load_##n() { return ""; } \
   DEFINE_string(n, v, "deltafs");
 #else
 static std::string LoadFromEnv(const char* key) {
@@ -27,6 +27,13 @@ static std::string LoadFromEnv(const char* key) {
   static std::string FLAGS_load_##n() { return LoadFromEnv(#n); } \
   static std::string FLAGS_##n = v;
 #endif
+#include <ctype.h>
+static void ToLowerCase(std::string* str) {
+  std::string::iterator it;
+  for (it = str->begin(); it != str->end(); ++it) {
+    *it = tolower(*it);
+  }
+}
 #define DEFINE_FLAG(n, v)                  \
   DEFINE_FLAG_PORT(n, v)                   \
   std::string n() {                        \
@@ -34,6 +41,7 @@ static std::string LoadFromEnv(const char* key) {
     if (result.empty()) {                  \
       result = FLAGS_##n;                  \
     }                                      \
+    ToLowerCase(&result);                  \
     return result;                         \
   }
 

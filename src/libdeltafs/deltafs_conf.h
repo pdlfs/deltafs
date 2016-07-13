@@ -20,10 +20,12 @@ extern std::string NumOfMetadataSrvs();
 // Return the number of virtual metadata server.
 // e.g. 256
 extern std::string NumOfVirMetadataSrvs();
-// Return an array of addrs associated with a specific metadata server.
-// We are assuming each metadata server can have multiple addrs.
-// e.g. bmi+tcp://10.0.0.1:10000,bmi+tcp://10.0.0.1:20000
-extern std::string MetadataSrvAddrs(int srv_id);
+// Return an ordered array of server addrs. Addrs associated with
+// different servers are seperated by semicolon; addrs associated with
+// a same server are seperated by comma. We are assuming each metadata
+// server may have multiple addrs.
+// e.g. bmi+tcp://10.0.0.1:10000;bmi+tcp://10.0.0.1:20000
+extern std::string MetadataSrvAddrs();
 // Return the size of lookup cache at each metadata client.
 // e.g. 4096, 16k
 extern std::string SizeOfCliLookupCache();
