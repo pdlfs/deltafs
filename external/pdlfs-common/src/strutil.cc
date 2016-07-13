@@ -8,6 +8,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include <ctype.h>
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -89,7 +90,7 @@ bool ParsePrettyBool(const Slice& value) {
   }
 }
 
-bool ParsePrettyNumber(const Slice& value) {
+uint64_t ParsePrettyNumber(const Slice& value) {
   Slice input = value;
   uint64_t base;
   if (!ConsumeDecimalNumber(&input, &base)) {
@@ -109,23 +110,43 @@ bool ParsePrettyNumber(const Slice& value) {
   }
 }
 
+static Slice Trim(const Slice& v) {
+  Slice input = v;
+  while (!input.empty()) {
+    if (isspace(input[0])) {
+      input.remove_prefix(1);
+    } else if (isspace(input[-1])) {
+      input.remove_suffix(1);
+    } else {
+      break;
+    }
+  }
+  return input;
+}
+
 size_t SplitString(const Slice& value, char delim,
                    std::vector<std::string>* v) {
   size_t count = 0;
   Slice input = value;
   while (!input.empty()) {
-    char* start = input.data();
-    char* limit = strchr(start, delim);
+    const char* start = input.data();
+    const char* limit = strchr(start, delim);
     if (limit != NULL) {
-      v->push_back(Slice(start, limit - start).ToString());
       input.remove_prefix(limit - start + 1);
-      count++;
+      if (limit - start != 0) {
+        Slice sub = Trim(Slice(start, limit - start));
+        if (!sub.empty()) {
+          v->push_back(sub.ToString());
+          count++;
+        }
+      }
     } else {
       break;
     }
   }
-  if (!input.empty()) {
-    v->push_back(input.ToString());
+  Slice sub = Trim(input);
+  if (!sub.empty()) {
+    v->push_back(sub.ToString());
     count++;
   }
   return count;

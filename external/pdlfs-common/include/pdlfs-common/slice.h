@@ -12,6 +12,7 @@
 
 #include <assert.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 #include <ostream>
 #include <string>
@@ -51,10 +52,16 @@ class Slice {
   bool empty() const { return size_ == 0; }
 
   // Return the ith byte in the referenced data.
-  // REQUIRES: n < size()
-  const char& operator[](size_t n) const {
-    assert(n < size());
-    return data_[n];
+  // REQUIRES: -size() <= n < size()
+  const char& operator[](ssize_t n) const {
+    if (n >= 0) {
+      assert(n < size_);
+      return data_[n];
+    } else {
+      n += size_;
+      assert(n < size_);
+      return data_[n];
+    }
   }
 
   // Change this slice to refer to an empty array
