@@ -1,5 +1,3 @@
-#include "pdlfs-common/strutil.h"
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2016 Carnegie Mellon University.
@@ -15,6 +13,7 @@
 #include <stdio.h>
 
 #include "pdlfs-common/slice.h"
+#include "pdlfs-common/strutil.h"
 
 namespace pdlfs {
 
@@ -78,6 +77,58 @@ bool ConsumeDecimalNumber(Slice* in, uint64_t* val) {
   }
   *val = v;
   return (digits > 0);
+}
+
+bool ParsePrettyBool(const Slice& value) {
+  if (value == "t" || value == "y") {
+    return true;
+  } else if (value.starts_with("true") || value.starts_with("yes")) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool ParsePrettyNumber(const Slice& value) {
+  Slice input = value;
+  uint64_t base;
+  if (!ConsumeDecimalNumber(&input, &base)) {
+    return 0;
+  } else {
+    if (input.empty()) {
+      return base;
+    } else if (input.starts_with("k")) {
+      return base * 1024;
+    } else if (input.starts_with("m")) {
+      return base * 1024 * 1024;
+    } else if (input.starts_with("g")) {
+      return base * 1024 * 1024 * 1024;
+    } else {
+      return 0;
+    }
+  }
+}
+
+size_t SplitString(const Slice& value, char delim,
+                   std::vector<std::string>* v) {
+  size_t count = 0;
+  Slice input = value;
+  while (!input.empty()) {
+    char* start = input.data();
+    char* limit = strchr(start, delim);
+    if (limit != NULL) {
+      v->push_back(Slice(start, limit - start).ToString());
+      input.remove_prefix(limit - start + 1);
+      count++;
+    } else {
+      break;
+    }
+  }
+  if (!input.empty()) {
+    v->push_back(input.ToString());
+    count++;
+  }
+  return count;
 }
 
 }  // namespace pdlfs

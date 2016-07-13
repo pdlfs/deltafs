@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 #include <string>
+#include <vector>
 
 namespace pdlfs {
 
@@ -38,5 +39,18 @@ extern std::string EscapeString(const Slice& value);
 // numeric value.  Otherwise, returns false and leaves *in in an
 // unspecified state.
 extern bool ConsumeDecimalNumber(Slice* in, uint64_t* val);
+
+// Split a string into an array of substrings using a specified delimiter.
+// Return the size of the resulting array.
+extern size_t SplitString(const Slice& value, char delim,
+                          std::vector<std::string>*);
+
+// Parse a human-readable text to a long int value.
+// return 0 if the text is unrecognizable.
+extern uint64_t ParsePrettyNumber(const Slice& value);
+
+// Parse a human-readable text to a boolean value.
+// Return False if the text is unrecognizable.
+extern bool ParsePrettyBool(const Slice& value);
 
 }  // namespace pdlfs
