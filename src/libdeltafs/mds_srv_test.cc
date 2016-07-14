@@ -19,29 +19,28 @@ namespace pdlfs {
 
 class ServerTest {
  private:
-  std::string dbname_;
-  DBOptions dbopts_;
-  MDBOptions mdbopts_;
-  MDSOptions mdsopts_;
-
   Env* env_;
-  DB* db_;
-  MDB* mdb_;
+  std::string dbname_;
   MDS* mds_;
+  MDB* mdb_;
+  DB* db_;
 
  public:
   ServerTest() {
     env_ = Env::Default();
-    dbname_ = test::NewTmpDirectory("mds_srv_tests", env_);
-    DestroyDB(dbname_, dbopts_);
-    dbopts_.env = env_;
-    dbopts_.create_if_missing = true;
-    ASSERT_OK(DB::Open(dbopts_, dbname_, &db_));
-    mdbopts_.db = db_;
-    mdb_ = new MDB(mdbopts_);
-    mdsopts_.env = env_;
-    mdsopts_.mdb = mdb_;
-    mds_ = MDS::Open(mdsopts_);
+    dbname_ = test::NewTmpDirectory("mds_srv_test", env_);
+    DBOptions dbopts;
+    dbopts.env = env_;
+    DestroyDB(dbname_, dbopts);
+    dbopts.create_if_missing = true;
+    ASSERT_OK(DB::Open(dbopts, dbname_, &db_));
+    MDBOptions mdbopts;
+    mdbopts.db = db_;
+    mdb_ = new MDB(mdbopts);
+    MDSOptions mdsopts;
+    mdsopts.env = env_;
+    mdsopts.mdb = mdb_;
+    mds_ = MDS::Open(mdsopts);
   }
 
   ~ServerTest() {

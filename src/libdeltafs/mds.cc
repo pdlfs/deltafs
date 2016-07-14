@@ -86,8 +86,8 @@ MDSFactory::~MDSFactory() {}
 MDSCliOptions::MDSCliOptions()
     : env(NULL),
       factory(NULL),
-      index_cache_size(1 << 12),
-      lookup_cache_size(1 << 14),
+      index_cache_size(4096),
+      lookup_cache_size(4096),
       paranoid_checks(false),
       atomic_path_resolution(false),
       max_redirects_allowed(20),

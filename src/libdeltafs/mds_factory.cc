@@ -11,33 +11,37 @@
 
 namespace pdlfs {
 
-Status RPCMDSFactory::Init(const std::string& base_uri) {
+Status MDSFactoryImpl::Init(const MDSTopology& topo) {
   Status s;
   RPCOptions options;
   options.env = env_;  // okay to be NULL
   options.mode = kClientOnly;
-  options.uri = base_uri;
+  options.uri = topo.rpc_proto;
   rpc_ = RPC::Open(options);
+  const std::vector<std::string>* addrs = &topo.srv_addrs;
+  std::vector<std::string>::const_iterator it;
+  for (it = addrs->begin(); it != addrs->end(); ++it) {
+    AddTarget(*it, topo.rpc_tracing);
+  }
   return s;
 }
 
 // REQUIRES: Init() has been called before.
-Status RPCMDSFactory::Start() {
+Status MDSFactoryImpl::Start() {
   assert(rpc_ != NULL);
   return rpc_->Start();
 }
 
 // REQUIRES: Init() has been called before.
-Status RPCMDSFactory::Stop() {
+Status MDSFactoryImpl::Stop() {
   assert(rpc_ != NULL);
   return rpc_->Stop();
 }
 
-// REQUIRES: Init() has been called before.
-void RPCMDSFactory::AddRPCTarget(const std::string& srv_uri, bool trace) {
+void MDSFactoryImpl::AddTarget(const std::string& uri, bool trace) {
   StubInfo info;
   assert(rpc_ != NULL);
-  info.stub = rpc_->NewClient(srv_uri);
+  info.stub = rpc_->NewClient(uri);
   info.wrapper = new MDSRPCWrapper(info.stub);
   if (trace) {
     info.mds = new MDSTracer(info.wrapper);
@@ -47,12 +51,12 @@ void RPCMDSFactory::AddRPCTarget(const std::string& srv_uri, bool trace) {
   stubs_.push_back(info);
 }
 
-MDS* RPCMDSFactory::Get(size_t srv_id) {
+MDS* MDSFactoryImpl::Get(size_t srv_id) {
   assert(srv_id < stubs_.size());
   return stubs_[srv_id].mds;
 }
 
-RPCMDSFactory::~RPCMDSFactory() {
+MDSFactoryImpl::~MDSFactoryImpl() {
   std::vector<StubInfo>::iterator it;
   for (it = stubs_.begin(); it != stubs_.end(); ++it) {
     if (it->mds != it->wrapper) {

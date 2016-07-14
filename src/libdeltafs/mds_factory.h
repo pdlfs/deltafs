@@ -13,7 +13,15 @@
 
 namespace pdlfs {
 
-class RPCMDSFactory : public MDSFactory {
+struct MDSTopology {
+  bool rpc_tracing;
+  std::string rpc_proto;
+  std::vector<std::string> srv_addrs;
+  int num_vir_srvs;
+  int num_srvs;
+};
+
+class MDSFactoryImpl : public MDSFactory {
   typedef MDS::RPC::CLI MDSRPCWrapper;
   struct StubInfo {
     MDS* mds;
@@ -22,20 +30,20 @@ class RPCMDSFactory : public MDSFactory {
   };
 
  public:
-  virtual MDS* Get(size_t srv_id);
-  Status Init(const std::string& base_uri);
+  Status Init(const MDSTopology&);
   Status Start();
   Status Stop();
 
-  void AddRPCTarget(const std::string& srv_uri, bool trace = false);
-  explicit RPCMDSFactory(Env* env = NULL) : env_(env) {}
-  virtual ~RPCMDSFactory();
+  virtual MDS* Get(size_t srv_id);
+  explicit MDSFactoryImpl(Env* env = NULL) : rpc_(NULL), env_(env) {}
+  virtual ~MDSFactoryImpl();
 
  private:
   // No copying allowed
-  void operator=(const RPCMDSFactory&);
-  RPCMDSFactory(const RPCMDSFactory&);
+  void operator=(const MDSFactoryImpl&);
+  MDSFactoryImpl(const MDSFactoryImpl&);
 
+  void AddTarget(const std::string& uri, bool trace);
   std::vector<StubInfo> stubs_;
   RPC* rpc_;
   Env* env_;
