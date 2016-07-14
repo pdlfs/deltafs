@@ -49,100 +49,64 @@ class MDS {
   struct RPC;
 
   typedef std::string Redirect;
-#define MDS_OP(OP) virtual Status OP(const OP##Options&, OP##Ret*) = 0;
-
-  struct FstatOptions {
+  // Common input/output parameters shared by all RPC calls.
+  struct BaseOptions {
     DirId dir_id;  // Parent directory id
     uint32_t session_id;
     uint64_t op_due;
     Slice name_hash;
     Slice name;
   };
-  struct FstatRet {
-    Stat stat;
-  };
+  struct BaseRet {};
+
+#define MDS_OP(OP) virtual Status OP(const OP##Options&, OP##Ret*) = 0;
+#define MDS_OP_OPTIONS(OP) struct OP##Options : public BaseOptions
+#define MDS_OP_RET(OP) struct OP##Ret : public BaseRet
+
+  // -------------
+  // MDS interface
+  // -------------
+
+  MDS_OP_OPTIONS(Fstat){};
+  MDS_OP_RET(Fstat) { Stat stat; };
   MDS_OP(Fstat)
 
-  struct FcreatOptions {
-    DirId dir_id;  // Parent directory id
+  MDS_OP_OPTIONS(Fcreat) {
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
-    uint32_t session_id;
-    uint64_t op_due;
-    Slice name_hash;
-    Slice name;
   };
-  struct FcreatRet {
-    Stat stat;
-  };
+  MDS_OP_RET(Fcreat) { Stat stat; };
   MDS_OP(Fcreat)
 
-  struct MkdirOptions {
-    DirId dir_id;  // Parent directory id
+  MDS_OP_OPTIONS(Mkdir) {
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
-    uint32_t session_id;
-    uint64_t op_due;
-    Slice name_hash;
-    Slice name;
   };
-  struct MkdirRet {
-    Stat stat;
-  };
+  MDS_OP_RET(Mkdir) { Stat stat; };
   MDS_OP(Mkdir)
 
-  struct ChmodOptions {
-    DirId dir_id;  // Parent directory id
-    uint32_t mode;
-    uint32_t session_id;
-    uint64_t op_due;
-    Slice name_hash;
-    Slice name;
-  };
-  struct ChmodRet {
-    Stat stat;
-  };
+  MDS_OP_OPTIONS(Chmod) { uint32_t mode; };
+  MDS_OP_RET(Chmod) { Stat stat; };
   MDS_OP(Chmod)
 
-  struct LookupOptions {
-    DirId dir_id;  // Parent directory id
-    uint32_t session_id;
-    uint64_t op_due;
-    Slice name_hash;
-    Slice name;
-  };
-  struct LookupRet {
-    LookupStat stat;
-  };
+  MDS_OP_OPTIONS(Lookup){};
+  MDS_OP_RET(Lookup) { LookupStat stat; };
   MDS_OP(Lookup)
 
-  struct ListdirOptions {
-    DirId dir_id;  // Parent directory id
-    uint32_t session_id;
-    uint64_t op_due;
-    Slice name_hash;
-    Slice name;
-  };
-  struct ListdirRet {
-    std::vector<std::string>* names;
-  };
+  MDS_OP_OPTIONS(Listdir){};
+  MDS_OP_RET(Listdir) { std::vector<std::string>* names; };
   MDS_OP(Listdir)
 
-  struct ReadidxOptions {
-    DirId dir_id;  // Parent directory id
-    uint32_t session_id;
-    uint64_t op_due;
-    Slice name_hash;
-    Slice name;
-  };
-  struct ReadidxRet {
-    std::string idx;
-  };
+  MDS_OP_OPTIONS(Readidx){};
+  MDS_OP_RET(Readidx) { std::string idx; };
   MDS_OP(Readidx)
 
+#undef MDS_OP_RET
+#undef MDS_OP_OPTIONS
 #undef MDS_OP
+
   static Slice EncodeId(const DirId& id, char* scratch);
   static int PickupServer(const DirId& id);
   class SRV;
