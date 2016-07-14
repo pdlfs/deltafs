@@ -20,6 +20,9 @@ extern std::string NumOfMetadataSrvs();
 // Return the number of virtual metadata server.
 // e.g. 256
 extern std::string NumOfVirMetadataSrvs();
+// Return the instance id of myself.
+// e.g. 0
+extern std::string InstanceId();
 // Return the name of the RPC proto.
 // e.g. bmi+tcp, cci, mpi
 extern std::string RPCProto();
@@ -55,6 +58,12 @@ extern std::string EnvName();
 // Return the conf string that should be passed to Env loaders.
 // e.g. "rados_conf=/etc/ceph.conf;rados_osd_timeouts=5"
 extern std::string EnvConf();
+// Return the location info of input delta sets.
+// e.g. "/tmp/deltafs/run3"
+extern std::string InputInfo();
+// Return the location info of output deltas.
+// e.g. "/tmp/deltafs/run4"
+extern std::string OutputInfo();
 
 }  // namespace config
 }  // namespace pdlfs
