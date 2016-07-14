@@ -16,7 +16,7 @@ Status MDSFactoryImpl::Init(const MDSTopology& topo) {
   RPCOptions options;
   options.env = env_;  // okay to be NULL
   options.mode = kClientOnly;
-  options.uri = topo.rpc_proto; // such as bmi+tcp, mpi
+  options.uri = topo.rpc_proto;  // such as bmi+tcp, mpi
   rpc_ = RPC::Open(options);
   std::string full_uri = options.uri;
   if (!options.uri.empty()) {

@@ -30,13 +30,12 @@ class MDSFactoryImpl : public MDSFactory {
   };
 
  public:
-  Status Init(const MDSTopology&);
-  Status Start();
-  Status Stop();
-
   virtual MDS* Get(size_t srv_id);
   explicit MDSFactoryImpl(Env* env = NULL) : rpc_(NULL), env_(env) {}
   virtual ~MDSFactoryImpl();
+  Status Init(const MDSTopology&);
+  Status Start();
+  Status Stop();
 
  private:
   // No copying allowed
