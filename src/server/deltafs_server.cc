@@ -26,12 +26,13 @@ class ServerDaemon {
 
   int Init() {
     Status s;
-    env_ = Env::Default();
+    Env* env = Env::Default();
+    mds_env_.env = env;
     std::string fshome = "/tmp/deltafs_server";
-    env_->CreateDir(fshome);
-
+    env->CreateDir(fshome);
+    
     DBOptions dbopts;
-    dbopts.env = env_;
+    dbopts.env = env;
     dbopts.create_if_missing = true;
     s = DB::Open(dbopts, fshome, &db_);
     if (s.ok()) {
@@ -39,12 +40,12 @@ class ServerDaemon {
       mdbopts.db = db_;
       mdb_ = new MDB(mdbopts);
       MDSOptions mdsopts;
-      mdsopts.env = env_;
+      mdsopts.mds_env = &mds_env_;
       mdsopts.mdb = mdb_;
       mds_ = MDS::Open(mdsopts);
 
       rpc_if_ = new MDS::RPC::SRV(mds_);
-      rpc_ = new RPCServer(rpc_if_, env_);
+      rpc_ = new RPCServer(rpc_if_, env);
       rpc_->AddChannel("bmi+tcp://localhost:10101", 4);
     } else {
       db_ = NULL;
@@ -96,10 +97,10 @@ class ServerDaemon {
   port::Mutex mu_;
   port::CondVar cv_;
 
-  Env* env_;
   DB* db_;
   MDB* mdb_;
   MDS* mds_;
+  MDSEnv mds_env_;
   rpc::If* rpc_if_;
   RPCServer* rpc_;
 };

@@ -10,6 +10,7 @@
  */
 
 #include "mds_api.h"
+
 #include "pdlfs-common/dcntl.h"
 #include "pdlfs-common/lease.h"
 #include "pdlfs-common/map.h"
@@ -31,6 +32,9 @@ class MDS::SRV : public MDS {
   DEC_OP(Lookup)
   DEC_OP(Listdir)
   DEC_OP(Readidx)
+  DEC_OP(Opensession)
+  DEC_OP(Getinput)
+  DEC_OP(Getoutput)
 
 #undef DEC_OP
 
@@ -40,7 +44,11 @@ class MDS::SRV : public MDS {
   Status ProbeDir(const Dir* dir);
 
   // Constant after construction
-  Env* env_;
+  MDSEnv* mds_env_;
+  uint64_t NowMicros() { return mds_env_->env->NowMicros(); }
+  void SleepForMicroseconds(int micros) {
+    mds_env_->env->SleepForMicroseconds(micros);
+  }
   MDB* mdb_;
   typedef DirIndexOptions GIGA;
   GIGA giga_;
@@ -57,8 +65,10 @@ class MDS::SRV : public MDS {
   port::CondVar loading_cv_;
   DirTable* dirs_;
   void TryReuseIno(uint64_t ino);
+  uint64_t ino_;  // The last ino num we allocated
   uint64_t NextIno();
-  uint64_t ino_;  // The largest we have allocated
+  uint32_t session_;  // The last session id we allocated
+  uint32_t NextSession();
 
   friend class MDS;
   // No copying allowed

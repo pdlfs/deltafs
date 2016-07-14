@@ -554,6 +554,133 @@ void MDS::RPC::SRV::RDIDX(Msg& in, Msg& out) {
   }
 }
 
+Status MDS::RPC::CLI::Opensession(const OpensessionOptions& options,
+                                  OpensessionRet* ret) {
+  Status s;
+  Msg in;
+  Msg out;
+  try {
+    stub_->OPSES(in, out);
+  } catch (int rpc_err) {
+    s = Status::Disconnected(Slice());
+  }
+  if (s.ok()) {
+    if (out.err != 0) {
+      s = Status::FromCode(out.err);
+    } else {
+      Slice msg = out.contents;
+      Slice env_name;
+      Slice env_conf;
+      uint32_t id;
+      if (!GetLengthPrefixedSlice(&msg, &env_name) ||
+          !GetLengthPrefixedSlice(&msg, &env_conf) || !GetVarint32(&msg, &id)) {
+        s = Status::Corruption(Slice());
+      } else {
+        ret->env_name = env_name.ToString();
+        ret->env_conf = env_conf.ToString();
+        ret->session_id = id;
+      }
+    }
+  }
+  return s;
+}
+
+void MDS::RPC::SRV::OPSES(Msg& in, Msg& out) {
+  Status s;
+  OpensessionOptions options;
+  OpensessionRet ret;
+  s = mds_->Opensession(options, &ret);
+  if (s.ok()) {
+    PutLengthPrefixedSlice(&out.extra_buf, ret.env_name);
+    PutLengthPrefixedSlice(&out.extra_buf, ret.env_conf);
+    PutVarint32(&out.extra_buf, ret.session_id);
+    out.contents = Slice(out.extra_buf);
+    out.err = 0;
+  } else {
+    out.err = s.err_code();
+  }
+}
+
+Status MDS::RPC::CLI::Getinput(const GetinputOptions& options,
+                               GetinputRet* ret) {
+  Status s;
+  Msg in;
+  Msg out;
+  try {
+    stub_->GINPT(in, out);
+  } catch (int rpc_err) {
+    s = Status::Disconnected(Slice());
+  }
+  if (s.ok()) {
+    if (out.err != 0) {
+      s = Status::FromCode(out.err);
+    } else {
+      Slice msg = out.contents;
+      Slice info;
+      if (!GetLengthPrefixedSlice(&msg, &info)) {
+        s = Status::Corruption(Slice());
+      } else {
+        ret->info = info.ToString();
+      }
+    }
+  }
+  return s;
+}
+
+void MDS::RPC::SRV::GINPT(Msg& in, Msg& out) {
+  Status s;
+  GetinputOptions options;
+  GetinputRet ret;
+  s = mds_->Getinput(options, &ret);
+  if (s.ok()) {
+    PutLengthPrefixedSlice(&out.extra_buf, ret.info);
+    out.contents = Slice(out.extra_buf);
+    out.err = 0;
+  } else {
+    out.err = s.err_code();
+  }
+}
+
+Status MDS::RPC::CLI::Getoutput(const GetoutputOptions& options,
+                                GetoutputRet* ret) {
+  Status s;
+  Msg in;
+  Msg out;
+  try {
+    stub_->GOUPT(in, out);
+  } catch (int rpc_err) {
+    s = Status::Disconnected(Slice());
+  }
+  if (s.ok()) {
+    if (out.err != 0) {
+      s = Status::FromCode(out.err);
+    } else {
+      Slice msg = out.contents;
+      Slice info;
+      if (!GetLengthPrefixedSlice(&msg, &info)) {
+        s = Status::Corruption(Slice());
+      } else {
+        ret->info = info.ToString();
+      }
+    }
+  }
+  return s;
+}
+
+void MDS::RPC::SRV::GOUPT(Msg& in, Msg& out) {
+  Status s;
+  GetoutputOptions options;
+  GetoutputRet ret;
+  s = mds_->Getoutput(options, &ret);
+  if (s.ok()) {
+    PutLengthPrefixedSlice(&out.extra_buf, ret.info);
+    out.contents = Slice(out.extra_buf);
+    out.err = 0;
+  } else {
+    out.err = s.err_code();
+  }
+}
+
 void MDS::RPC::SRV::NONOP(Msg& in, Msg& out) {
   // Do nothing
   out.err = 0;

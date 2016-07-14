@@ -27,7 +27,7 @@ Status MDS::SRV::LoadDir(const DirId& id, DirInfo* info, DirIndex* index) {
   s = mdb_->GetInfo(id, info, mdb_tx);
   if (s.IsNotFound()) {
     mdb_tx = mdb_->CreateTx();
-    info->mtime = env_->NowMicros();
+    info->mtime = NowMicros();
     info->size = 0;
     s = mdb_->SetInfo(id, *info, mdb_tx);
   }
@@ -139,16 +139,24 @@ Status MDS::SRV::ProbeDir(const Dir* d) {
   }
 }
 
+// REQUIRES: mutex_ has been locked.
 uint64_t MDS::SRV::NextIno() {
   mutex_.AssertHeld();
   return ++ino_;
 }
 
+// REQUIRES: mutex_ has been locked.
 void MDS::SRV::TryReuseIno(uint64_t ino) {
   mutex_.AssertHeld();
   if (ino == ino_) {
     --ino_;
   }
+}
+
+// REQUIRES: mutex_ has been locked.
+uint32_t MDS::SRV::NextSession() {
+  mutex_.AssertHeld();
+  return ++session_;
 }
 
 // Read file or directory stats. Return OK on success.
@@ -274,7 +282,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_time = env_->NowMicros();
+        uint64_t my_time = NowMicros();
         uint64_t my_ino = NextIno();
         mutex_.Unlock();
 
@@ -386,7 +394,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_time = env_->NowMicros();
+        uint64_t my_time = NowMicros();
         uint64_t my_ino = NextIno();
         DirId my_id(reg_id_, snap_id_, my_ino);
         mutex_.Unlock();
@@ -541,7 +549,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_start = env_->NowMicros();
+        uint64_t my_start = NowMicros();
         uint64_t my_seq = d->seq;
         mutex_.Unlock();
 
@@ -569,7 +577,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
         }
 
         mutex_.Lock();
-        uint64_t my_end = env_->NowMicros();
+        uint64_t my_end = NowMicros();
         // No lease either we timeout or have a negative result, otherwise...
         if (s.ok() && (my_end - my_start) < (lease_duration_ - 10)) {
           Lease::Ref* lref = leases_->Lookup(dir_id, name_hash);
@@ -684,7 +692,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_start = env_->NowMicros();
+        uint64_t my_start = NowMicros();
         mutex_.Unlock();
 
         tx = new Dir::Tx(mdb_);
@@ -716,7 +724,7 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
         }
 
         mutex_.Lock();
-        uint64_t my_end = env_->NowMicros();
+        uint64_t my_end = NowMicros();
         // May need to wait for lease due if the target is a directory
         if (s.ok() && S_ISDIR(stat->FileMode())) {
           Lease::Ref* lref = leases_->Lookup(dir_id, name_hash);
@@ -740,9 +748,9 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
                 // lease entry even when the lease table is full
                 lref = NULL;
                 mutex_.Unlock();
-                env_->SleepForMicroseconds(lease_duration_ + 10);
+                SleepForMicroseconds(lease_duration_ + 10);
                 mutex_.Lock();
-                my_end = env_->NowMicros();
+                my_end = NowMicros();
               }
             }
             d->num_leases++;
@@ -756,9 +764,9 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
             mutex_.Unlock();
             uint64_t diff = l->due - my_end + 10;
             // Wait past lease due
-            env_->SleepForMicroseconds(diff);
+            SleepForMicroseconds(diff);
             mutex_.Lock();
-            my_end = env_->NowMicros();
+            my_end = NowMicros();
           }
           assert(l->parent == d);
           d->seq = 1 + d->seq;
@@ -820,6 +828,36 @@ Status MDS::SRV::Readidx(const ReadidxOptions& options, ReadidxRet* ret) {
     }
   }
 
+  return s;
+}
+
+// Assign an unique session id to a connecting client. Also informs the
+// client of the env we are running on so the client knowns where
+// to access file data and file system metadata.
+// Return OK on success.
+Status MDS::SRV::Opensession(const OpensessionOptions&, OpensessionRet* ret) {
+  Status s;
+  ret->env_name = mds_env_->env_name;
+  ret->env_conf = mds_env_->env_conf;
+  mutex_.Lock();
+  ret->session_id = NextSession();
+  mutex_.Unlock();
+  return s;
+}
+
+// Obtain location info on input delta sets
+// Return OK on success.
+Status MDS::SRV::Getinput(const GetinputOptions&, GetinputRet* ret) {
+  Status s;
+  ret->info = mds_env_->inputs;
+  return s;
+}
+
+// Obtain location info on output deltas.
+// Return OK on success.
+Status MDS::SRV::Getoutput(const GetoutputOptions&, GetoutputRet* ret) {
+  Status s;
+  ret->info = mds_env_->outputs;
   return s;
 }
 

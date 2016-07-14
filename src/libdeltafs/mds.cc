@@ -30,10 +30,10 @@ int MDS::PickupServer(const DirId& id) {
 }
 
 MDSOptions::MDSOptions()
-    : env(NULL),
+    : mds_env(NULL),
       mdb(NULL),
-      dir_table_size(1 << 16),
-      lease_table_size(1 << 18),
+      dir_table_size(4096),
+      lease_table_size(4096),
       lease_duration(1000 * 1000),
       snap_id(0),
       reg_id(0),
@@ -43,7 +43,7 @@ MDSOptions::MDSOptions()
       srv_id(0) {}
 
 MDS::SRV::SRV(const MDSOptions& options)
-    : env_(options.env),
+    : mds_env_(options.mds_env),
       mdb_(options.mdb),
       paranoid_checks_(options.paranoid_checks),
       lease_duration_(options.lease_duration),
@@ -70,13 +70,10 @@ MDS::SRV::~SRV() {
   delete dirs_;
 }
 
-MDS* MDS::Open(const MDSOptions& raw_options) {
-  assert(raw_options.mdb != NULL);
-  MDSOptions options(raw_options);
-  if (options.env == NULL) {
-    options.env = Env::Default();
-  }
-
+MDS* MDS::Open(const MDSOptions& options) {
+  assert(options.mds_env != NULL && options.mds_env->env != NULL);
+  assert(options.mdb != NULL);
+  // TODO: print options
   MDS* mds = new SRV(options);
   return mds;
 }

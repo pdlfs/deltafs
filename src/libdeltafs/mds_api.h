@@ -26,9 +26,17 @@ static const uint64_t kMaxMicros = ((0x1ull << 63) - 1);
 class Env;
 class MDB;
 
+struct MDSEnv {
+  std::string env_name;
+  std::string env_conf;
+  std::string outputs;
+  std::string inputs;
+  Env* env;
+};
+
 struct MDSOptions {
   MDSOptions();
-  Env* env;
+  MDSEnv* mds_env;
   MDB* mdb;
   size_t dir_table_size;
   size_t lease_table_size;
@@ -50,6 +58,7 @@ class MDS {
 
   typedef std::string Redirect;
   // Common input/output parameters shared by all RPC calls.
+  struct BaseRet {};
   struct BaseOptions {
     DirId dir_id;  // Parent directory id
     uint32_t session_id;
@@ -57,7 +66,6 @@ class MDS {
     Slice name_hash;
     Slice name;
   };
-  struct BaseRet {};
 
 #define MDS_OP(OP) virtual Status OP(const OP##Options&, OP##Ret*) = 0;
 #define MDS_OP_OPTIONS(OP) struct OP##Options : public BaseOptions
@@ -103,6 +111,26 @@ class MDS {
   MDS_OP_RET(Readidx) { std::string idx; };
   MDS_OP(Readidx)
 
+  // -------------
+  // MDS admin interface
+  // -------------
+
+  MDS_OP_OPTIONS(Opensession){};
+  MDS_OP_RET(Opensession) {
+    std::string env_name;
+    std::string env_conf;
+    uint32_t session_id;
+  };
+  MDS_OP(Opensession)
+
+  MDS_OP_OPTIONS(Getinput){};
+  MDS_OP_RET(Getinput) { std::string info; };
+  MDS_OP(Getinput)
+
+  MDS_OP_OPTIONS(Getoutput){};
+  MDS_OP_RET(Getoutput) { std::string info; };
+  MDS_OP(Getoutput)
+
 #undef MDS_OP_RET
 #undef MDS_OP_OPTIONS
 #undef MDS_OP
@@ -142,6 +170,9 @@ class MDSWrapper : public MDS {
   DEF_OP(Lookup)
   DEF_OP(Listdir)
   DEF_OP(Readidx)
+  DEF_OP(Opensession)
+  DEF_OP(Getinput)
+  DEF_OP(Getoutput)
 
 #undef DEF_OP
 
@@ -183,6 +214,9 @@ class MDSTracer : public MDSWrapper {
   DEF_OP(Lookup)
   DEF_OP(Listdir)
   DEF_OP(Readidx)
+  DEF_OP(Opensession)
+  DEF_OP(Getinput)
+  DEF_OP(Getoutput)
 
 #undef DEF_OP
 #endif
@@ -210,6 +244,9 @@ class MDS::RPC::CLI : public MDS {
   DEC_OP(Lookup)
   DEC_OP(Listdir)
   DEC_OP(Readidx)
+  DEC_OP(Opensession)
+  DEC_OP(Getinput)
+  DEC_OP(Getoutput)
 
 #undef DEC_OP
 
@@ -234,6 +271,9 @@ class MDS::RPC::SRV : public rpc::IfWrapper {
   DEC_RPC(LOKUP)
   DEC_RPC(LSDIR)
   DEC_RPC(RDIDX)
+  DEC_RPC(OPSES)
+  DEC_RPC(GINPT)
+  DEC_RPC(GOUPT)
 
 #undef DEC_RPC
 

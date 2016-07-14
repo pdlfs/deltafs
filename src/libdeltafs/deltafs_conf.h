@@ -60,10 +60,10 @@ extern std::string EnvName();
 extern std::string EnvConf();
 // Return the location info of input delta sets.
 // e.g. "/tmp/deltafs/run3"
-extern std::string InputInfo();
+extern std::string Inputs();
 // Return the location info of output deltas.
 // e.g. "/tmp/deltafs/run4"
-extern std::string OutputInfo();
+extern std::string Outputs();
 
 }  // namespace config
 }  // namespace pdlfs
