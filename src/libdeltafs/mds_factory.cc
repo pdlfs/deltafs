@@ -16,12 +16,24 @@ Status MDSFactoryImpl::Init(const MDSTopology& topo) {
   RPCOptions options;
   options.env = env_;  // okay to be NULL
   options.mode = kClientOnly;
-  options.uri = topo.rpc_proto;
+  options.uri = topo.rpc_proto; // such as bmi+tcp, mpi
   rpc_ = RPC::Open(options);
+  std::string full_uri = options.uri;
+  if (!options.uri.empty()) {
+    full_uri.append("://");
+  }
+  size_t prefix = full_uri.size();
   const std::vector<std::string>* addrs = &topo.srv_addrs;
   std::vector<std::string>::const_iterator it;
   for (it = addrs->begin(); it != addrs->end(); ++it) {
-    AddTarget(*it, topo.rpc_tracing);
+    const std::string* uri = &(*it);
+    // Add RPC proto prefix if necessary
+    if (!options.uri.empty() && !Slice(*it).starts_with(options.uri)) {
+      full_uri.resize(prefix);
+      full_uri.append(*it);
+      uri = &full_uri;
+    }
+    AddTarget(*uri, topo.rpc_tracing);
   }
   return s;
 }
