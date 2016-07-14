@@ -91,6 +91,8 @@ hg_return_t MercuryRPC::If_Message_cb(hg_proc_t proc, void* data) {
     return ret;                                                     \
   }
 
+// Server-side RPC callbacks
+
 SRV_CB(NONOP)
 SRV_CB(FSTAT)
 SRV_CB(MKDIR)
@@ -103,6 +105,9 @@ SRV_CB(RENME)
 SRV_CB(LOKUP)
 SRV_CB(LSDIR)
 SRV_CB(RDIDX)
+SRV_CB(OPSES)
+SRV_CB(GINPT)
+SRV_CB(GOUPT)
 
 #undef SRV_CB
 
@@ -156,6 +161,8 @@ hg_return_t MercuryRPC::Client::SaveReply(const hg_cb_info* info) {
     }                                                                        \
   }
 
+// Client-side RPC stubs
+
 CLI_STUB(NONOP)
 CLI_STUB(FSTAT)
 CLI_STUB(MKDIR)
@@ -168,6 +175,9 @@ CLI_STUB(RENME)
 CLI_STUB(LOKUP)
 CLI_STUB(LSDIR)
 CLI_STUB(RDIDX)
+CLI_STUB(OPSES)
+CLI_STUB(GINPT)
+CLI_STUB(GOUPT)
 
 #undef CLI_STUB
 
@@ -214,6 +224,8 @@ MercuryRPC::MercuryRPC(bool listen, const RPCOptions& options)
   hg_class_ = Mercury_HG_Init_na(na_class_, na_context_);
   hg_context_ = Mercury_HG_Context_create(hg_class_);
 
+  // Set RPC input/output coder and RPC handlers
+
   Register_NONOP();
   Register_FSTAT();
   Register_MKDIR();
@@ -226,6 +238,9 @@ MercuryRPC::MercuryRPC(bool listen, const RPCOptions& options)
   Register_LOKUP();
   Register_LSDIR();
   Register_RDIDX();
+  Register_OPSES();
+  Register_GINPT();
+  Register_GOUPT();
 }
 
 Status MercuryRPC::TEST_Start() {

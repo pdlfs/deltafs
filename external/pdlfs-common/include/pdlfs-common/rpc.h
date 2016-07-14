@@ -108,6 +108,9 @@ class If {
   ADD_RPC(LOKUP);
   ADD_RPC(LSDIR);
   ADD_RPC(RDIDX);
+  ADD_RPC(OPSES);
+  ADD_RPC(GINPT);
+  ADD_RPC(GOUPT);
 
 #undef ADD_RPC
 
@@ -143,6 +146,9 @@ class IfWrapper : public If {
   DEF_RPC(LOKUP);
   DEF_RPC(LSDIR);
   DEF_RPC(RDIDX);
+  DEF_RPC(OPSES);
+  DEF_RPC(GINPT);
+  DEF_RPC(GOUPT);
 
 #undef DEF_RPC
 

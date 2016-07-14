@@ -71,6 +71,9 @@ class MercuryRPC {
   REG_RPC(LOKUP)
   REG_RPC(LSDIR)
   REG_RPC(RDIDX)
+  REG_RPC(OPSES)
+  REG_RPC(GINPT)
+  REG_RPC(GOUPT)
 
 #undef REG_RPC
 #undef REG_ARGS
@@ -201,13 +204,16 @@ class MercuryRPC::Client : public If {
   DEC_RPC(LOKUP)
   DEC_RPC(LSDIR)
   DEC_RPC(RDIDX)
+  DEC_RPC(OPSES)
+  DEC_RPC(GINPT)
+  DEC_RPC(GOUPT)
 
 #undef DEC_RPC
 
  private:
   static hg_return_t SaveReply(const hg_cb_info* info);
   MercuryRPC* const rpc_;
-  std::string addr_;  // Unresolved target address
+  std::string addr_;  // To-be-resolved target RPC addr
   port::Mutex mu_;
   port::CondVar cv_;
   // No copying allowed
