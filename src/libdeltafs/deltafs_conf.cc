@@ -51,7 +51,9 @@ namespace config {
 
 DEFINE_FLAG(NumOfMetadataSrvs, "1")
 DEFINE_FLAG(NumOfVirMetadataSrvs, "1")
-DEFINE_FLAG(MetadataSrvAddrs, "bmi+tcp://localhost:10101")
+DEFINE_FLAG(RPCProto, "bmi+tcp")
+DEFINE_FLAG(RPCTracing, "false")
+DEFINE_FLAG(MetadataSrvAddrs, "localhost:10101")
 DEFINE_FLAG(SizeOfCliLookupCache, "64k")
 DEFINE_FLAG(SizeOfCliIndexCache, "16k")
 DEFINE_FLAG(AtomicPathResolution, "false")

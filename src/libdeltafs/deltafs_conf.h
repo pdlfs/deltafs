@@ -20,11 +20,17 @@ extern std::string NumOfMetadataSrvs();
 // Return the number of virtual metadata server.
 // e.g. 256
 extern std::string NumOfVirMetadataSrvs();
+// Return the name of the RPC proto.
+// e.g. bmi+tcp, cci, mpi
+extern std::string RPCProto();
+// Indicate if deltafs should trace every RPC message.
+// e.g. true, yes
+extern std::string RPCTracing();
 // Return an ordered array of server addrs. Addrs associated with
-// different servers are seperated by semicolon; addrs associated with
-// a same server are seperated by comma. We are assuming each metadata
-// server may have multiple addrs.
-// e.g. bmi+tcp://10.0.0.1:10000;bmi+tcp://10.0.0.1:20000
+// different servers are separated by semicolons; addrs associated with
+// a same server are separated by commas. We are assuming each metadata
+// server may potentially have multiple addrs.
+// e.g. 10.0.0.1:10000;10.0.0.1:20000
 extern std::string MetadataSrvAddrs();
 // Return the size of lookup cache at each metadata client.
 // e.g. 4096, 16k
