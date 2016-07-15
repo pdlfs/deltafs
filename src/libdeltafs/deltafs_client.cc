@@ -110,6 +110,14 @@ Status Client::Mkdir(const Slice& path, int mode) {
 
 class Client::Loader {
  public:
+  explicit Loader()
+      : env_(NULL), mdsfty_(NULL), mdscli_(NULL), db_(NULL), blkdb_(NULL) {}
+  ~Loader() {}
+
+  Status status() const { return status_; }
+  Client* OpenClient();
+
+ private:
   static int FetchUid() {
 #if defined(PDLFS_PLATFORM_POSIX)
     return getuid();
@@ -126,9 +134,11 @@ class Client::Loader {
 #endif
   }
 
-  void LoadEnv();
+  void LoadIds();
   void LoadMDSTopology();
-  void LoadMDSCliOptions();
+  void OpenSession();
+  void OpenDB();
+  void OpenMDSCli();
 
   Status status_;
   bool ok() const { return status_.ok(); }
@@ -137,12 +147,17 @@ class Client::Loader {
   MDSFactoryImpl* mdsfty_;
   MDSCliOptions mdscliopts_;
   MDSClient* mdscli_;
+  DBOptions dbopts_;
+  DB* db_;
+  BlkDBOptions blkdbopts_;
+  BlkDB* blkdb_;
   int cli_id_;
+  int session_id_;
   int uid_;
   int gid_;
 };
 
-#define DEF_LOADER_UINT64(conf)                          \
+#define DEF_LOADER_UI64(conf)                            \
   static Status Load##conf(uint64_t* dst) {              \
     std::string str_##conf = config::conf();             \
     if (!ParsePrettyNumber(str_##conf, dst)) {           \
@@ -161,23 +176,28 @@ class Client::Loader {
     }                                                    \
   }
 
-DEF_LOADER_UINT64(NumOfVirMetadataSrvs)
-DEF_LOADER_UINT64(NumOfMetadataSrvs)
-DEF_LOADER_UINT64(SizeOfCliLookupCache)
-DEF_LOADER_UINT64(SizeOfCliIndexCache)
+DEF_LOADER_UI64(InstanceId)
+DEF_LOADER_UI64(NumOfVirMetadataSrvs)
+DEF_LOADER_UI64(NumOfMetadataSrvs)
+DEF_LOADER_UI64(SizeOfCliLookupCache)
+DEF_LOADER_UI64(SizeOfCliIndexCache)
 
 DEF_LOADER_BOOL(AtomicPathResolution)
 DEF_LOADER_BOOL(ParanoidChecks)
+DEF_LOADER_BOOL(VerifyChecksums)
 DEF_LOADER_BOOL(RPCTracing)
 
-void Client::Loader::LoadEnv() {
-  env_ = Env::Default();
+void Client::Loader::LoadIds() {
   uid_ = FetchUid();
   gid_ = FetchGid();
-  cli_id_ = 0;
+
+  uint64_t cli_id;
+  status_ = LoadInstanceId(&cli_id);
+  if (ok()) {
+    cli_id_ = cli_id;
+  }
 }
 
-// REQUIRES: LoadEnv() has been called.
 void Client::Loader::LoadMDSTopology() {
   uint64_t num_vir_srvs;
   uint64_t num_srvs;
@@ -210,7 +230,7 @@ void Client::Loader::LoadMDSTopology() {
   }
 
   if (ok()) {
-    MDSFactoryImpl* fty = new MDSFactoryImpl(env_);
+    MDSFactoryImpl* fty = new MDSFactoryImpl;
     status_ = fty->Init(mdstopo_);
     if (ok()) {
       status_ = fty->Start();
@@ -223,8 +243,71 @@ void Client::Loader::LoadMDSTopology() {
   }
 }
 
-// REQUIRES: LoadMDSTopology() has been called.
-void Client::Loader::LoadMDSCliOptions() {
+// REQUIRES: both LoadIds() and LoadMDSTopology() have been called.
+void Client::Loader::OpenSession() {
+  std::string env_name;
+  std::string env_conf;
+
+  if (ok()) {
+    assert(mdsfty_ != NULL);
+    MDS* mds = mdsfty_->Get(cli_id_ % mdstopo_.num_srvs);
+    assert(mds != NULL);
+    MDS::OpensessionOptions options;
+    MDS::OpensessionRet ret;
+    status_ = mds->Opensession(options, &ret);
+    if (ok()) {
+      session_id_ = ret.session_id;
+      env_name = ret.env_name;
+      env_conf = ret.env_conf;
+    }
+  }
+
+  if (ok()) {
+    env_ = Env::Default();  // FIXME
+  }
+}
+
+// REQUIRES: OpenSession() has been called.
+void Client::Loader::OpenDB() {
+  std::string output_root;
+
+  if (ok()) {
+    assert(mdsfty_ != NULL);
+    MDS* mds = mdsfty_->Get(session_id_ % mdstopo_.num_srvs);
+    assert(mds != NULL);
+    MDS::GetoutputOptions options;
+    MDS::GetoutputRet ret;
+    status_ = mds->Getoutput(options, &ret);
+    if (ok()) {
+      output_root = ret.info;
+    }
+  }
+
+  if (ok()) {
+    status_ = LoadVerifyChecksums(&blkdbopts_.verify_checksum);
+  }
+
+  if (ok()) {
+    dbopts_.compression = kNoCompression;
+    dbopts_.disable_compaction = true;
+    dbopts_.env = env_;
+  }
+
+  if (ok()) {
+    std::string dbhome = output_root;
+    char tmp[30];
+    snprintf(tmp, sizeof(tmp), "/data_%d", session_id_);
+    dbhome += tmp;
+    status_ = DB::Open(dbopts_, dbhome, &db_);
+    if (ok()) {
+      blkdbopts_.db = db_;
+      blkdb_ = new BlkDB(blkdbopts_);
+    }
+  }
+}
+
+// REQUIRES: OpenSession() has been called.
+void Client::Loader::OpenMDSCli() {
   uint64_t idx_cache_sz;
   uint64_t lookup_cache_sz;
 
@@ -249,7 +332,7 @@ void Client::Loader::LoadMDSCliOptions() {
     mdscliopts_.lookup_cache_size = lookup_cache_sz;
     mdscliopts_.num_virtual_servers = mdstopo_.num_vir_srvs;
     mdscliopts_.num_servers = mdstopo_.num_srvs;
-    mdscliopts_.cli_id = cli_id_;
+    mdscliopts_.cli_id = session_id_;
     mdscliopts_.uid = uid_;
     mdscliopts_.gid = gid_;
   }
@@ -259,25 +342,33 @@ void Client::Loader::LoadMDSCliOptions() {
   }
 }
 
-Status Client::Open(Client** cliptr) {
-  *cliptr = NULL;
+Client* Client::Loader::OpenClient() {
+  LoadIds();
+  LoadMDSTopology();
+  OpenSession();
+  OpenDB();
+  OpenMDSCli();
 
-  Loader loader;
-  loader.LoadEnv();
-  loader.LoadMDSTopology();
-  loader.LoadMDSCliOptions();
-  if (!loader.ok()) {
-    return loader.status_;
+  if (ok()) {
+    Client* cli = new Client;
+    cli->mdscli_ = mdscli_;
+    cli->mdsfty_ = mdsfty_;
+    cli->blk_db_ = blkdb_;
+    cli->db_ = db_;
+    return cli;
+  } else {
+    delete mdscli_;
+    delete mdsfty_;
+    delete blkdb_;
+    delete db_;
+    return NULL;
   }
+}
 
-  Client* cli = new Client;
-  assert(loader.mdsfty_ != NULL);
-  cli->mdsfty_ = loader.mdsfty_;
-  assert(loader.mdscli_ != NULL);
-  cli->mdscli_ = loader.mdscli_;
-
-  *cliptr = cli;
-  return Status::OK();
+Status Client::Open(Client** cliptr) {
+  Loader ld;
+  *cliptr = ld.OpenClient();
+  return ld.status();
 }
 
 }  // namespace pdlfs

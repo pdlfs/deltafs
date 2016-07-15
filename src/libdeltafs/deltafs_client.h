@@ -36,6 +36,7 @@ class Client {
   MDSFactoryImpl* mdsfty_;
   MDSClient* mdscli_;
   BlkDB* blk_db_;
+  DB* db_;
 
   class Loader;
   // No copying allowed
