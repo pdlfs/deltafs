@@ -444,6 +444,166 @@ void MDS::RPC::SRV::CHMOD(Msg& in, Msg& out) {
   }
 }
 
+Status MDS::RPC::CLI::Utime(const UtimeOptions& options, UtimeRet* ret) {
+  Status s;
+  Msg in;
+  if (!kDebugRPC) {
+    char* scratch = &in.buf[0];
+    char* p = scratch;
+    p = EncodeDirId(p, options.dir_id);
+    p = EncodeLengthPrefixedSlice(p, options.name_hash);
+    p = EncodeLengthPrefixedSlice(p, options.name);
+    p = EncodeVarint64(p, options.atime);
+    p = EncodeVarint64(p, options.mtime);
+    p = EncodeVarint32(p, options.session_id);
+    p = EncodeVarint64(p, options.op_due);
+    in.contents = Slice(scratch, p - scratch);
+  } else {
+    PutDirId(&in.extra_buf, options.dir_id);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name_hash);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name);
+    PutVarint64(&in.extra_buf, options.atime);
+    PutVarint64(&in.extra_buf, options.mtime);
+    PutVarint32(&in.extra_buf, options.session_id);
+    PutVarint64(&in.extra_buf, options.op_due);
+    in.contents = Slice(in.extra_buf);
+    if (in.contents.size() > sizeof(in.buf)) {
+      s = Status::BufferFull(Slice());
+    }
+  }
+
+  Msg out;
+  if (s.ok()) {
+    try {
+      stub_->UTIME(in, out);
+    } catch (int rpc_err) {
+      s = Status::Disconnected(Slice());
+    }
+    if (s.ok()) {
+      if (out.err == -1) {
+        Redirect re(out.contents.data(), out.contents.size());
+        throw re;
+      } else if (out.err != 0) {
+        s = Status::FromCode(out.err);
+      } else if (!ret->stat.DecodeFrom(out.contents)) {
+        s = Status::Corruption(Slice());
+      }
+    }
+  }
+  return s;
+}
+
+void MDS::RPC::SRV::UTIME(Msg& in, Msg& out) {
+  Status s;
+  UtimeOptions options;
+  UtimeRet ret;
+  Slice input = in.contents;
+  if (!GetDirId(&input, &options.dir_id) ||
+      !GetLengthPrefixedSlice(&input, &options.name_hash) ||
+      !GetLengthPrefixedSlice(&input, &options.name) ||
+      !GetVarint64(&input, &options.atime) ||
+      !GetVarint64(&input, &options.mtime) ||
+      !GetVarint32(&input, &options.session_id) ||
+      !GetVarint64(&input, &options.op_due)) {
+    s = Status::InvalidArgument(Slice());
+  } else {
+    try {
+      s = mds_->Utime(options, &ret);
+    } catch (Redirect& re) {
+      out.extra_buf.swap(re);
+      out.contents = Slice(out.extra_buf);
+      out.err = -1;
+      return;
+    }
+  }
+  if (s.ok()) {
+    out.contents = ret.stat.EncodeTo(out.buf);
+    out.err = 0;
+  } else {
+    out.err = s.err_code();
+  }
+}
+
+Status MDS::RPC::CLI::Trunc(const TruncOptions& options, TruncRet* ret) {
+  Status s;
+  Msg in;
+  if (!kDebugRPC) {
+    char* scratch = &in.buf[0];
+    char* p = scratch;
+    p = EncodeDirId(p, options.dir_id);
+    p = EncodeLengthPrefixedSlice(p, options.name_hash);
+    p = EncodeLengthPrefixedSlice(p, options.name);
+    p = EncodeVarint64(p, options.mtime);
+    p = EncodeVarint64(p, options.size);
+    p = EncodeVarint32(p, options.session_id);
+    p = EncodeVarint64(p, options.op_due);
+    in.contents = Slice(scratch, p - scratch);
+  } else {
+    PutDirId(&in.extra_buf, options.dir_id);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name_hash);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name);
+    PutVarint64(&in.extra_buf, options.mtime);
+    PutVarint64(&in.extra_buf, options.size);
+    PutVarint32(&in.extra_buf, options.session_id);
+    PutVarint64(&in.extra_buf, options.op_due);
+    in.contents = Slice(in.extra_buf);
+    if (in.contents.size() > sizeof(in.buf)) {
+      s = Status::BufferFull(Slice());
+    }
+  }
+
+  Msg out;
+  if (s.ok()) {
+    try {
+      stub_->TRUNC(in, out);
+    } catch (int rpc_err) {
+      s = Status::Disconnected(Slice());
+    }
+    if (s.ok()) {
+      if (out.err == -1) {
+        Redirect re(out.contents.data(), out.contents.size());
+        throw re;
+      } else if (out.err != 0) {
+        s = Status::FromCode(out.err);
+      } else if (!ret->stat.DecodeFrom(out.contents)) {
+        s = Status::Corruption(Slice());
+      }
+    }
+  }
+  return s;
+}
+
+void MDS::RPC::SRV::TRUNC(Msg& in, Msg& out) {
+  Status s;
+  TruncOptions options;
+  TruncRet ret;
+  Slice input = in.contents;
+  if (!GetDirId(&input, &options.dir_id) ||
+      !GetLengthPrefixedSlice(&input, &options.name_hash) ||
+      !GetLengthPrefixedSlice(&input, &options.name) ||
+      !GetVarint64(&input, &options.mtime) ||
+      !GetVarint64(&input, &options.size) ||
+      !GetVarint32(&input, &options.session_id) ||
+      !GetVarint64(&input, &options.op_due)) {
+    s = Status::InvalidArgument(Slice());
+  } else {
+    try {
+      s = mds_->Trunc(options, &ret);
+    } catch (Redirect& re) {
+      out.extra_buf.swap(re);
+      out.contents = Slice(out.extra_buf);
+      out.err = -1;
+      return;
+    }
+  }
+  if (s.ok()) {
+    out.contents = ret.stat.EncodeTo(out.buf);
+    out.err = 0;
+  } else {
+    out.err = s.err_code();
+  }
+}
+
 Status MDS::RPC::CLI::Listdir(const ListdirOptions& options, ListdirRet* ret) {
   Status s;
   Msg in;

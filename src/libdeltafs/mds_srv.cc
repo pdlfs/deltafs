@@ -464,6 +464,30 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
   return s;
 }
 
+// Update file last access and modification times. Return OK on success.
+// Current implementation does not store last access time so only
+// the last modification time is actually changed.
+//
+// Errors may occur when the file or directory targeted does not exist,
+// when the current server is not the right one to execute the call,
+// when the data read from the DB is corrupted, and when other
+// internal or external errors occur...
+Status MDS::SRV::Utime(const UtimeOptions& options, UtimeRet* ret) {
+  return Status::NotSupported(Slice());
+}
+
+// Shrink or extend the size of a file to a specified value. Return OK
+// on success. Cannot operate on directories. Also update the last
+// modification time of the file.
+//
+// Errors may occur when the file targeted does not exist or is not a
+// regular file, when the current server is not the right one to
+// execute the call, when the data read from DB is corrupted,
+// and when other internal or external error occur...
+Status MDS::SRV::Trunc(const TruncOptions& options, TruncRet* ret) {
+  return Status::NotSupported(Slice());
+}
+
 // Lookup a directory for pathname resolution. Return OK on success.
 // Multiple read threads should be able to run concurrently without blocking
 // each other or being blocked by any concurrent write operations.
