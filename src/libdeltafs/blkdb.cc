@@ -207,6 +207,7 @@ Status BlkDB::Open(const DirId& pid, const Slice& nhash, const Stat& stat,
       }
       stream->mtime = info.mtime;
       stream->size = info.size;
+      stream->dirty = false;
     }
     mutex_.Unlock();
   }
@@ -217,10 +218,13 @@ Status BlkDB::Open(const DirId& pid, const Slice& nhash, const Stat& stat,
 
 Status BlkDB::Sync(sid_t sid) {
   Status s;
-  Stream* stream = GetStream(sid);
-  if (stream == NULL) {
+  Stream* stream;
+  MutexLock ml(&mutex_);
+  size_t idx = sid;
+  if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
     s = Status::InvalidArgument("Bad stream id");
-  } else {
+  } else if (stream->dirty) {
+    mutex_.Unlock();
     StreamInfo info;
     info.mtime = stream->mtime;
     info.size = stream->size;
@@ -232,6 +236,10 @@ Status BlkDB::Sync(sid_t sid) {
     WriteOptions options;
     options.sync = true;
     s = db_->Put(options, key.Encode(), encoding);
+    mutex_.Lock();
+    if (s.ok()) {
+      stream->dirty = false;
+    }
   }
   return s;
 }
@@ -245,6 +253,7 @@ Status BlkDB::Close(sid_t sid) {
   if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
     s = Status::InvalidArgument("Bad stream id");
   } else {
+    assert(!stream->dirty);
     Remove(idx);
     if (stream->iter != NULL) {
       delete stream->iter;
@@ -272,6 +281,7 @@ Status BlkDB::Pwrite(sid_t sid, const Slice& data, uint64_t off) {
     s = db_->Put(options, key.Encode(), data);
     mutex_.Lock();
     if (s.ok()) {
+      stream->dirty = true;  // Sync needed
       if (stream->iter != NULL) {
         delete stream->iter;
         stream->iter = NULL;

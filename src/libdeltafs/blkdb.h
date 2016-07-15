@@ -26,7 +26,8 @@ struct Stream {
   char nhash[8];
   Iterator* iter;
   uint64_t mtime;
-  uint64_t size;       // Total size of stream
+  uint64_t size;  // Total size of the stream
+  bool dirty;
   char prefix_rep[1];  // Beginning of prefix encoding
 
   Slice prefix() const {
