@@ -62,7 +62,11 @@ MDS::SRV::SRV(const MDSOptions& options)
   leases_ = new LeaseTable(lease_options);
 
   dirs_ = new DirTable(options.dir_table_size);
-  ino_ = srv_id_;
+
+  assert(srv_id_ >= 0);
+  uint64_t tmp = srv_id_;
+  tmp <<= 32;
+  ino_ = tmp;
 }
 
 MDS::SRV::~SRV() {

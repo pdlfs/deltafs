@@ -66,11 +66,12 @@ class MDS::SRV : public MDS {
   HashSet loading_dirs_;  // A set of dirs being loaded into a memory cache
   port::CondVar loading_cv_;
   DirTable* dirs_;
-  void TryReuseIno(uint64_t ino);
-  uint64_t ino_;  // The last ino num we allocated
-  uint64_t NextIno();
-  uint32_t session_;  // The last session id we allocated
   uint32_t NextSession();
+  uint32_t session_;  // The last session id we allocated
+  void TryReuseIno(uint64_t ino);
+  uint64_t NextIno();
+  uint64_t ino_;  // The last ino num we allocated
+  Status status_;
 
   friend class MDS;
   // No copying allowed

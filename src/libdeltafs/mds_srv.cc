@@ -126,13 +126,15 @@ Status MDS::SRV::FetchDir(const DirId& id, Dir::Ref** ref) {
   return s;
 }
 
-// Quickly check directory status. Return OK on success.
-// Return a non-OK status when the directory contains errors and must be
-// fenced from online operations.
+// Quickly check background status. Return OK on success.
+// Return a non-OK status when the directory (or the server as a whole)
+// contains errors and must be fenced from online operations.
 // REQUIRES: mutex_ has been locked.
 Status MDS::SRV::ProbeDir(const Dir* d) {
   mutex_.AssertHeld();
-  if (!d->status.ok()) {
+  if (!status_.ok()) {
+    return status_;
+  } else if (!d->status.ok()) {
     return d->status;
   } else {
     return Status::OK();
@@ -142,7 +144,16 @@ Status MDS::SRV::ProbeDir(const Dir* d) {
 // REQUIRES: mutex_ has been locked.
 uint64_t MDS::SRV::NextIno() {
   mutex_.AssertHeld();
-  return ++ino_;
+  uint64_t result = ++ino_;
+  if (paranoid_checks_) {
+    assert(srv_id_ >= 0);
+    uint64_t limit = srv_id_ + 1;
+    limit <<= 32;
+    if (result + 1 >= limit) {
+      status_ = Status::BufferFull("No more free inodes");
+    }
+  }
+  return result;
 }
 
 // REQUIRES: mutex_ has been locked.
