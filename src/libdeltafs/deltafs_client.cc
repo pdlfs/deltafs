@@ -22,6 +22,8 @@ namespace pdlfs {
 Client::~Client() {
   delete mdscli_;
   delete mdsfty_;
+  delete blkdb_;
+  delete db_;
 }
 
 // Open a file for writing. Return OK on success.
@@ -36,13 +38,13 @@ Status Client::Wopen(const Slice& path, int mode, int* fd) {
   }
 
   if (s.ok()) {
-    s = blk_db_->Open(ent.pid, ent.nhash, ent.stat,
+    s = blkdb_->Open(ent.pid, ent.nhash, ent.stat,
                       true,   // create if missing
                       false,  // error if exists
                       fd);
 #if 0
     if (s.ok()) {
-      if (blk_db_->GetStream(fd)->size != ent.stat.FileSize()) {
+      if (blkdb_->GetStream(fd)->size != ent.stat.FileSize()) {
         // FIXME
       }
     }
@@ -53,7 +55,7 @@ Status Client::Wopen(const Slice& path, int mode, int* fd) {
 
 // Write a chunk of data at a specified offset. Return OK on success.
 Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
-  return blk_db_->Pwrite(fd, data, off);
+  return blkdb_->Pwrite(fd, data, off);
 }
 
 // Open a file for reading. Return OK on success.
@@ -65,13 +67,13 @@ Status Client::Ropen(const Slice& path, int* fd) {
 
   if (s.ok()) {
     // Create the file if missing since the MDS says it exists.
-    s = blk_db_->Open(ent.pid, ent.nhash, ent.stat,
+    s = blkdb_->Open(ent.pid, ent.nhash, ent.stat,
                       true,   // create if missing
                       false,  // error if exists
                       fd);
 #if 0
     if (s.ok()) {
-      if (blk_db_->GetStream(fd)->size != ent.stat.FileSize()) {
+      if (blkdb_->GetStream(fd)->size != ent.stat.FileSize()) {
         // FIXME
       }
     }
@@ -83,13 +85,13 @@ Status Client::Ropen(const Slice& path, int* fd) {
 // Read a chunk of data at a specified offset. Return OK on success.
 Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
                      char* buf) {
-  return blk_db_->Pread(fd, result, off, size, buf);
+  return blkdb_->Pread(fd, result, off, size, buf);
 }
 
 Status Client::Close(int fd) {
-  Status s = blk_db_->Sync(fd);
+  Status s = blkdb_->Sync(fd);
   if (s.ok()) {
-    return blk_db_->Close(fd);
+    return blkdb_->Close(fd);
   } else {
     return s;
   }
@@ -108,14 +110,14 @@ Status Client::Mkdir(const Slice& path, int mode) {
   return s;
 }
 
-class Client::Loader {
+class Client::Builder {
  public:
-  explicit Loader()
+  explicit Builder()
       : env_(NULL), mdsfty_(NULL), mdscli_(NULL), db_(NULL), blkdb_(NULL) {}
-  ~Loader() {}
+  ~Builder() {}
 
   Status status() const { return status_; }
-  Client* OpenClient();
+  Client* BuildClient();
 
  private:
   static int FetchUid() {
@@ -187,7 +189,7 @@ DEF_LOADER_BOOL(ParanoidChecks)
 DEF_LOADER_BOOL(VerifyChecksums)
 DEF_LOADER_BOOL(RPCTracing)
 
-void Client::Loader::LoadIds() {
+void Client::Builder::LoadIds() {
   uid_ = FetchUid();
   gid_ = FetchGid();
 
@@ -198,7 +200,7 @@ void Client::Loader::LoadIds() {
   }
 }
 
-void Client::Loader::LoadMDSTopology() {
+void Client::Builder::LoadMDSTopology() {
   uint64_t num_vir_srvs;
   uint64_t num_srvs;
 
@@ -244,7 +246,7 @@ void Client::Loader::LoadMDSTopology() {
 }
 
 // REQUIRES: both LoadIds() and LoadMDSTopology() have been called.
-void Client::Loader::OpenSession() {
+void Client::Builder::OpenSession() {
   std::string env_name;
   std::string env_conf;
 
@@ -268,7 +270,7 @@ void Client::Loader::OpenSession() {
 }
 
 // REQUIRES: OpenSession() has been called.
-void Client::Loader::OpenDB() {
+void Client::Builder::OpenDB() {
   std::string output_root;
 
   if (ok()) {
@@ -307,7 +309,7 @@ void Client::Loader::OpenDB() {
 }
 
 // REQUIRES: OpenSession() has been called.
-void Client::Loader::OpenMDSCli() {
+void Client::Builder::OpenMDSCli() {
   uint64_t idx_cache_sz;
   uint64_t lookup_cache_sz;
 
@@ -342,7 +344,7 @@ void Client::Loader::OpenMDSCli() {
   }
 }
 
-Client* Client::Loader::OpenClient() {
+Client* Client::Builder::BuildClient() {
   LoadIds();
   LoadMDSTopology();
   OpenSession();
@@ -353,7 +355,7 @@ Client* Client::Loader::OpenClient() {
     Client* cli = new Client;
     cli->mdscli_ = mdscli_;
     cli->mdsfty_ = mdsfty_;
-    cli->blk_db_ = blkdb_;
+    cli->blkdb_ = blkdb_;
     cli->db_ = db_;
     return cli;
   } else {
@@ -366,9 +368,9 @@ Client* Client::Loader::OpenClient() {
 }
 
 Status Client::Open(Client** cliptr) {
-  Loader ld;
-  *cliptr = ld.OpenClient();
-  return ld.status();
+  Builder builder;
+  *cliptr = builder.BuildClient();
+  return builder.status();
 }
 
 }  // namespace pdlfs

@@ -35,7 +35,7 @@ struct RPCOptions {
   int num_io_threads;         // Default: 1
   ThreadPool* extra_workers;  // Default: NULL
   rpc::If* fs;
-  Env* env;
+  Env* env;  // Default: NULL, which indicates Env::Default() should be used
 };
 
 class RPC {
@@ -46,8 +46,11 @@ class RPC {
   // RPC implementation should ensure the results of the following calls
   // are thread-safe so no external synchronization is needed.
   static RPC* Open(const RPCOptions&);
-  virtual rpc::If* NewClient(const std::string& addr) = 0;
+  virtual rpc::If* NewClient(const std::string& uri) = 0;
 
+  // The following calls shall return immediately.
+  // One or more background looping threads maybe be created or destroyed
+  // after these calls.
   virtual Status Start() = 0;
   virtual Status Stop() = 0;
 
@@ -57,6 +60,9 @@ class RPC {
   RPC(const RPC&);
 };
 
+// Helper class that binds multiple RPC listening ports to a single
+// logical server, with each listening port associated with
+// dedicated pools of I/O threads and worker threads.
 class RPCServer {
   struct RPCInfo {
     ThreadPool* pool;
@@ -84,10 +90,13 @@ class RPCServer {
 namespace rpc {
 class If {
  public:
+  // Each RPC message contains a chunk of un-structured data.
+  // This allows us to port to different RPC frameworks with different
+  // type systems.
   struct Message {
     int err;
     Slice contents;
-    char buf[500];
+    char buf[500];  // Avoiding allocating dynamic memory for small messages
     std::string extra_buf;
   };
 
@@ -102,6 +111,9 @@ class If {
   ADD_RPC(FCRET);
   ADD_RPC(CHMOD);
   ADD_RPC(CHOWN);
+  ADD_RPC(UTIME);
+  ADD_RPC(TRUNC);
+  ADD_RPC(SATTR);
   ADD_RPC(UNLNK);
   ADD_RPC(RMDIR);
   ADD_RPC(RENME);
@@ -140,6 +152,9 @@ class IfWrapper : public If {
   DEF_RPC(FCRET);
   DEF_RPC(CHMOD);
   DEF_RPC(CHOWN);
+  DEF_RPC(UTIME);
+  DEF_RPC(TRUNC);
+  DEF_RPC(SATTR);
   DEF_RPC(UNLNK);
   DEF_RPC(RMDIR);
   DEF_RPC(RENME);

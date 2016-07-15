@@ -35,10 +35,10 @@ class Client {
   Client() {}
   MDSFactoryImpl* mdsfty_;
   MDSClient* mdscli_;
-  BlkDB* blk_db_;
+  BlkDB* blkdb_;
   DB* db_;
 
-  class Loader;
+  class Builder;
   // No copying allowed
   void operator=(const Client&);
   Client(const Client&);

@@ -99,6 +99,9 @@ SRV_CB(MKDIR)
 SRV_CB(FCRET)
 SRV_CB(CHMOD)
 SRV_CB(CHOWN)
+SRV_CB(UTIME)
+SRV_CB(TRUNC)
+SRV_CB(SATTR)
 SRV_CB(UNLNK)
 SRV_CB(RMDIR)
 SRV_CB(RENME)
@@ -169,6 +172,9 @@ CLI_STUB(MKDIR)
 CLI_STUB(FCRET)
 CLI_STUB(CHMOD)
 CLI_STUB(CHOWN)
+CLI_STUB(UTIME)
+CLI_STUB(TRUNC)
+CLI_STUB(SATTR)
 CLI_STUB(UNLNK)
 CLI_STUB(RMDIR)
 CLI_STUB(RENME)
@@ -232,6 +238,9 @@ MercuryRPC::MercuryRPC(bool listen, const RPCOptions& options)
   Register_FCRET();
   Register_CHMOD();
   Register_CHOWN();
+  Register_UTIME();
+  Register_TRUNC();
+  Register_SATTR();
   Register_UNLNK();
   Register_RMDIR();
   Register_RENME();
