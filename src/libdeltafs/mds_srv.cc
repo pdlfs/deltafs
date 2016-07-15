@@ -473,7 +473,82 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
 // when the data read from the DB is corrupted, and when other
 // internal or external errors occur...
 Status MDS::SRV::Utime(const UtimeOptions& options, UtimeRet* ret) {
-  return Status::NotSupported(Slice());
+  Status s;
+  Dir::Tx* tx = NULL;
+  Dir::Ref* ref;
+  const DirId& dir_id = options.dir_id;
+  const Slice& name_hash = options.name_hash;
+  if (name_hash.empty()) {
+    s = Status::InvalidArgument(Slice());
+  } else if (paranoid_checks_ && !options.name.empty()) {
+    std::string tmp;
+    DirIndex::PutHash(&tmp, options.name);
+    if (name_hash.compare(tmp) != 0) {
+      s = Status::Corruption(Slice());
+    }
+  }
+
+  if (s.ok()) {
+    MutexLock ml(&mutex_);
+    s = FetchDir(dir_id, &ref);
+    if (s.ok()) {
+      assert(ref != NULL);
+      Dir::Guard guard(dirs_, ref);
+      Dir* const d = ref->value;
+      assert(d != NULL);
+      DirLock dl(d);
+      s = ProbeDir(d);
+      if (s.ok()) {
+        int srv_id = d->index.HashToServer(name_hash);
+        if (srv_id != srv_id_) {
+          Slice encoding = d->index.Encode();
+          Redirect re(encoding.data(), encoding.size());
+          throw re;
+        }
+      }
+      if (s.ok()) {
+        uint64_t my_time = NowMicros();
+        mutex_.Unlock();
+
+        tx = new Dir::Tx(mdb_);
+        tx->Ref();
+        assert(d->tx.Acquire_Load() == NULL);
+        d->tx.Release_Store(tx);
+        MDB::Tx* mdb_tx = tx->rep();
+
+        Slice name;
+        Stat* stat = &ret->stat;
+        s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
+        // TODO: paranoid checks
+        if (s.ok()) {
+          stat->SetModifyTime(options.mtime);
+          stat->SetChangeTime(my_time);
+          s = mdb_->SetNode(dir_id, name_hash, *stat, name, mdb_tx);
+        }
+
+        if (s.ok()) {
+          s = mdb_->Commit(mdb_tx);
+        }
+
+        mutex_.Lock();
+        assert(d->tx.NoBarrier_Load() == tx);
+        d->tx.NoBarrier_Store(NULL);
+        assert(tx != NULL);
+        bool last_ref = tx->Unref();
+        if (!last_ref) {
+          tx = NULL;
+        }
+      }
+    }
+  }
+
+  if (s.ok()) {
+    ret->stat.AssertAllSet();
+  }
+  if (tx != NULL) {
+    tx->Dispose(mdb_);
+  }
+  return s;
 }
 
 // Shrink or extend the size of a file to a specified value. Return OK
@@ -485,7 +560,87 @@ Status MDS::SRV::Utime(const UtimeOptions& options, UtimeRet* ret) {
 // execute the call, when the data read from DB is corrupted,
 // and when other internal or external error occur...
 Status MDS::SRV::Trunc(const TruncOptions& options, TruncRet* ret) {
-  return Status::NotSupported(Slice());
+  Status s;
+  Dir::Tx* tx = NULL;
+  Dir::Ref* ref;
+  const DirId& dir_id = options.dir_id;
+  const Slice& name_hash = options.name_hash;
+  if (name_hash.empty()) {
+    s = Status::InvalidArgument(Slice());
+  } else if (paranoid_checks_ && !options.name.empty()) {
+    std::string tmp;
+    DirIndex::PutHash(&tmp, options.name);
+    if (name_hash.compare(tmp) != 0) {
+      s = Status::Corruption(Slice());
+    }
+  }
+
+  if (s.ok()) {
+    MutexLock ml(&mutex_);
+    s = FetchDir(dir_id, &ref);
+    if (s.ok()) {
+      assert(ref != NULL);
+      Dir::Guard guard(dirs_, ref);
+      Dir* const d = ref->value;
+      assert(d != NULL);
+      DirLock dl(d);
+      s = ProbeDir(d);
+      if (s.ok()) {
+        int srv_id = d->index.HashToServer(name_hash);
+        if (srv_id != srv_id_) {
+          Slice encoding = d->index.Encode();
+          Redirect re(encoding.data(), encoding.size());
+          throw re;
+        }
+      }
+      if (s.ok()) {
+        uint64_t my_time = NowMicros();
+        mutex_.Unlock();
+
+        tx = new Dir::Tx(mdb_);
+        tx->Ref();
+        assert(d->tx.Acquire_Load() == NULL);
+        d->tx.Release_Store(tx);
+        MDB::Tx* mdb_tx = tx->rep();
+
+        Slice name;
+        Stat* stat = &ret->stat;
+        s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
+        // TODO: paranoid checks
+        if (s.ok()) {
+          if (!S_ISREG(stat->FileMode())) {
+            s = Status::FileExpected(Slice());
+          } else {
+            stat->SetFileSize(options.size);
+            stat->SetModifyTime(options.mtime);
+            stat->SetChangeTime(my_time);
+            s = mdb_->SetNode(dir_id, name_hash, *stat, name, mdb_tx);
+          }
+        }
+
+        if (s.ok()) {
+          s = mdb_->Commit(mdb_tx);
+        }
+
+        mutex_.Lock();
+        assert(d->tx.NoBarrier_Load() == tx);
+        d->tx.NoBarrier_Store(NULL);
+        assert(tx != NULL);
+        bool last_ref = tx->Unref();
+        if (!last_ref) {
+          tx = NULL;
+        }
+      }
+    }
+  }
+
+  if (s.ok()) {
+    ret->stat.AssertAllSet();
+  }
+  if (tx != NULL) {
+    tx->Dispose(mdb_);
+  }
+  return s;
 }
 
 // Lookup a directory for pathname resolution. Return OK on success.
