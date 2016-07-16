@@ -29,7 +29,7 @@ Client::~Client() {
 // Open a file for writing. Return OK on success.
 // If the file already exists, it is not truncated.
 // If the file doesn't exist, it will be created.
-Status Client::Wopen(const Slice& path, int mode, int* fd) {
+Status Client::Wopen(const Slice& path, int mode, FileInfo* info) {
   Status s;
   Fentry ent;
   s = mdscli_->Fcreat(path, mode, &ent);
@@ -37,17 +37,24 @@ Status Client::Wopen(const Slice& path, int mode, int* fd) {
     s = mdscli_->Fstat(path, &ent);
   }
 
+  uint64_t mtime;
+  uint64_t size;
+  int fd;
   if (s.ok()) {
     s = blkdb_->Open(ent, true,  // create if missing
                      false,      // error if exists
-                     fd);
+                     &mtime, &size, &fd);
 #if 0
     if (s.ok()) {
-      if (blkdb_->GetStream(fd)->size != ent.stat.FileSize()) {
+      if (size != ent.stat.FileSize()) {
         // FIXME
       }
     }
 #endif
+    if (s.ok()) {
+      info->size = size;
+      info->fd = fd;
+    }
   }
   return s;
 }
@@ -59,23 +66,30 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
 
 // Open a file for reading. Return OK on success.
 // If the file doesn't exist, it won't be created.
-Status Client::Ropen(const Slice& path, int* fd) {
+Status Client::Ropen(const Slice& path, FileInfo* info) {
   Status s;
   Fentry ent;
   s = mdscli_->Fstat(path, &ent);
 
+  uint64_t mtime;
+  uint64_t size;
+  int fd;
   if (s.ok()) {
     // Create the file if missing since the MDS says it exists.
     s = blkdb_->Open(ent, true,  // create if missing
                      false,      // error if exists
-                     fd);
+                     &mtime, &size, &fd);
 #if 0
     if (s.ok()) {
-      if (blkdb_->GetStream(fd)->size != ent.stat.FileSize()) {
+      if (size != ent.stat.FileSize()) {
         // FIXME
       }
     }
 #endif
+    if (s.ok()) {
+      info->size = size;
+      info->fd = fd;
+    }
   }
   return s;
 }
@@ -86,13 +100,25 @@ Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
   return blkdb_->Pread(fd, result, off, size, buf);
 }
 
-Status Client::Close(int fd) {
-  Status s = blkdb_->Sync(fd);
-  if (s.ok()) {
-    return blkdb_->Close(fd);
-  } else {
-    return s;
+Status Client::Sync(int fd) {
+  Fentry ent;
+  uint64_t mtime;
+  uint64_t size;
+  bool dirty;
+  Status s = blkdb_->GetInfo(fd, &ent, &dirty, &mtime, &size);
+  if (s.ok() && dirty) {
+    s = blkdb_->Sync(fd);
+    if (s.ok()) {
+      s = mdscli_->Fsync(ent, mtime, size);
+    }
   }
+  return s;
+}
+
+// REQUIRES: Sync(...) has been called.
+Status Client::Close(int fd) {
+  blkdb_->Close(fd);
+  return Status::OK();
 }
 
 Status Client::Mkfile(const Slice& path, int mode) {

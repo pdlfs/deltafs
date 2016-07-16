@@ -55,8 +55,11 @@ class BlkDBTest {
     ent.stat.SetRegId(0);
     ent.stat.SetSnapId(0);
     ent.stat.SetInodeNo(id);
+    uint64_t ignored_mtime;
+    uint64_t ignored_size;
     int fd;
-    Status s = blk_->Open(ent, ocreat, false, &fd);
+    Status s =
+        blk_->Open(ent, ocreat, false, &ignored_mtime, &ignored_size, &fd);
     if (s.ok()) {
       return fd;
     } else {

@@ -27,10 +27,11 @@ class Client {
     int fd;
   };
 
-  Status Wopen(const Slice& path, int mode, int* fd);
+  Status Wopen(const Slice& path, int mode, FileInfo*);
   Status Pwrite(int fd, const Slice& data, uint64_t off);
-  Status Ropen(const Slice& path, int* fd);
+  Status Ropen(const Slice& path, FileInfo*);
   Status Pread(int fd, Slice* result, uint64_t off, uint64_t size, char* buf);
+  Status Sync(int fd);
   Status Close(int fd);
 
   Status Mkfile(const Slice& path, int mode);

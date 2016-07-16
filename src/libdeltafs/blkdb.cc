@@ -54,14 +54,26 @@ BlkDB::~BlkDB() {
   delete[] streams_;
 }
 
-Stream* BlkDB::GetStream(sid_t sid) {
-  MutexLock ml(&mutex_);
+Status BlkDB::GetInfo(sid_t sid, Fentry* entry, bool* dirty, uint64_t* mtime,
+                      uint64_t* size) {
+  Status s;
   size_t idx = sid;
-  if (idx >= max_open_streams_) {
-    return NULL;
+  Stream* stream;
+  MutexLock ml(&mutex_);
+  if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
+    s = Status::InvalidArgument("Bad stream id");
   } else {
-    return streams_[idx];
+    Slice encoding = stream->encoding();
+    if (!entry->DecodeFrom(&encoding)) {
+      s = Status::Corruption(Slice());
+    }
+    if (s.ok()) {
+      *dirty = (stream->nsync < stream->nwrites);
+      *mtime = stream->mtime;
+      *size = stream->size;
+    }
   }
+  return s;
 }
 
 // REQUIRES: mutex_ has been locked.
@@ -122,7 +134,8 @@ static Slice ExtractUntypedKeyPrefix(const Slice& v) {
 }
 
 Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
-                   bool error_if_exists, sid_t* result) {
+                   bool error_if_exists, uint64_t* mtime, uint64_t* size,
+                   sid_t* result) {
   *result = -1;
   Status s;
   char tmp[100];
@@ -146,15 +159,15 @@ Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
 
   StreamInfo info;
   bool found = false;
-  uint64_t mtime = 0;
-  uint64_t size = 0;
+  *mtime = 0;
+  *size = 0;
   for (; s.ok() && iter->Valid(); iter->Next()) {
     Slice k = iter->key();
     if (k.starts_with(key_prefix)) {
       Slice v = iter->value();
       if (info.DecodeFrom(&v)) {
-        mtime = std::max(mtime, info.mtime);
-        size = std::max(size, info.size);
+        *mtime = std::max(*mtime, info.mtime);
+        *size = std::max(*size, info.size);
       } else {
         s = Status::Corruption("Bad stream info block");
       }
@@ -177,8 +190,8 @@ Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
   }
 
   if (s.ok()) {
-    info.mtime = mtime;
-    info.size = size;
+    info.mtime = *mtime;
+    info.size = *size;
   }
 
   if (s.ok()) {
@@ -207,7 +220,7 @@ Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
       stream->iter = NULL;
       stream->mtime = info.mtime;
       stream->size = info.size;
-      stream->nwrites = found ? 0 : 1; // Sync needed
+      stream->nwrites = found ? 0 : 1;  // Sync needed
       stream->nsync = 0;
       if (found) {
         stream->iter = iter;
@@ -240,7 +253,7 @@ Status BlkDB::Sync(sid_t sid) {
     key.SetType(kDataDesType);
     key.SetOffset(session_id_);
     WriteOptions options;
-    options.sync = true; // Force sync
+    options.sync = true;  // Force sync
     s = db_->Put(options, key.Encode(), info_encoding);
     mutex_.Lock();
     if (s.ok()) {

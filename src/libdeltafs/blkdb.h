@@ -62,15 +62,16 @@ class BlkDB {
   BlkDB(const BlkDBOptions&);
   ~BlkDB();
 
-  Status Open(const Fentry& ent, bool create_if_missing, bool error_if_exists,
-              sid_t* result);
+  Status Open(const Fentry& entry, bool create_if_missing, bool error_if_exists,
+              uint64_t* mtime, uint64_t* size, sid_t* result);
   Status Pwrite(sid_t sid, const Slice& data, uint64_t off);
   Status Pread(sid_t sid, Slice* result, uint64_t off, uint64_t size,
                char* scratch);
   Status Sync(sid_t sid);
   Status Close(sid_t sid);
 
-  Stream* GetStream(sid_t sid);
+  Status GetInfo(sid_t sid, Fentry* entry, bool* dirty, uint64_t* mtime,
+                 uint64_t* size);
 
  private:
   // Constant after construction
