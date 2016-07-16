@@ -425,6 +425,8 @@ bool DirIndex::Update(const Slice& other) {
     bool checks = options_->paranoid_checks;
     if (!ParseDirIndex(other, checks, &view)) {
       return false;
+    } else if (rep_->zeroth_server() != view.zeroth_server()) {
+      return false;
     } else {
       rep_->Merge(view);
       return true;
