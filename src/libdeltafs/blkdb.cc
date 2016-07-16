@@ -31,14 +31,14 @@ Slice StreamInfo::EncodeTo(char* scratch) const {
 }
 
 BlkDBOptions::BlkDBOptions()
-    : cli_id(0),
+    : session_id(0),
       max_open_streams(1024),
       verify_checksum(false),
       sync(false),
       db(NULL) {}
 
 BlkDB::BlkDB(const BlkDBOptions& options)
-    : cli_id_(options.cli_id),
+    : session_id_(options.session_id),
       max_open_streams_(options.max_open_streams),
       verify_checksum_(options.verify_checksum),
       sync_(options.sync),
@@ -114,11 +114,19 @@ bool BlkInfo::ParseFrom(const Slice& k, const Slice& v) {
   }
 }
 
-Status BlkDB::Open(const DirId& pid, const Slice& nhash, const Stat& stat,
-                   bool create_if_missing, bool error_if_exists,
-                   sid_t* result) {
+static Slice ExtractUntypedKeyPrefix(const Slice& v) {
+  Slice input = v;
+  Slice key_prefix;
+  GetLengthPrefixedSlice(&input, &key_prefix);
+  return key_prefix;
+}
+
+Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
+                   bool error_if_exists, sid_t* result) {
   *result = -1;
   Status s;
+  char tmp[100];
+  Slice fentry_encoding = fentry.EncodeTo(tmp);
   mutex_.Lock();
   if (num_open_streams_ >= max_open_streams_) {
     s = Status::BufferFull("Too many open streams");
@@ -128,12 +136,13 @@ Status BlkDB::Open(const DirId& pid, const Slice& nhash, const Stat& stat,
     return s;
   }
 
-  Key key(stat, kDataDesType);
-  Slice prefix = key.prefix();
+  Key key(ExtractUntypedKeyPrefix(fentry_encoding));
+  key.SetType(kDataDesType);
+  Slice key_prefix = key.prefix();
   ReadOptions options;
   options.verify_checksums = verify_checksum_;
   Iterator* iter = db_->NewIterator(options);
-  iter->Seek(prefix);
+  iter->Seek(key_prefix);
 
   StreamInfo info;
   bool found = false;
@@ -141,7 +150,7 @@ Status BlkDB::Open(const DirId& pid, const Slice& nhash, const Stat& stat,
   uint64_t size = 0;
   for (; s.ok() && iter->Valid(); iter->Next()) {
     Slice k = iter->key();
-    if (k.starts_with(prefix)) {
+    if (k.starts_with(key_prefix)) {
       Slice v = iter->value();
       if (info.DecodeFrom(&v)) {
         mtime = std::max(mtime, info.mtime);
@@ -178,7 +187,7 @@ Status BlkDB::Open(const DirId& pid, const Slice& nhash, const Stat& stat,
       Slice encoding = info.EncodeTo(tmp);
       WriteOptions options;
       options.sync = sync_;
-      key.SetOffset(cli_id_);
+      key.SetOffset(session_id_);
       s = db_->Put(options, key.Encode(), encoding);
     }
   }
@@ -188,26 +197,22 @@ Status BlkDB::Open(const DirId& pid, const Slice& nhash, const Stat& stat,
     if (num_open_streams_ >= max_open_streams_) {
       s = Status::BufferFull("Too many open streams");
     } else {
-      Key k(prefix);
-      k.SetType(kDataBlockType);
-      Slice p = k.prefix();
-      Stream* stream = static_cast<Stream*>(malloc(sizeof(Stream) + p.size()));
+      Stream* stream =
+          static_cast<Stream*>(malloc(sizeof(Stream) + fentry_encoding.size()));
       *result = static_cast<sid_t>(Append(stream));
-      stream->prefix_rep[0] = static_cast<unsigned char>(p.size());
-      memcpy(stream->prefix_rep + 1, p.data(), p.size());
-      assert(stream->prefix() == p);
-      stream->pid = pid;
-      assert(nhash.size() == 8);
-      memcpy(stream->nhash, nhash.data(), nhash.size());
+      stream->encoding_data[0] =
+          static_cast<unsigned char>(fentry_encoding.size());
+      memcpy(stream->encoding_data + 1, fentry_encoding.data(),
+             fentry_encoding.size());
+      stream->iter = NULL;
+      stream->mtime = info.mtime;
+      stream->size = info.size;
+      stream->nwrites = found ? 0 : 1; // Sync needed
+      stream->nsync = 0;
       if (found) {
         stream->iter = iter;
         iter = NULL;
-      } else {
-        stream->iter = NULL;
       }
-      stream->mtime = info.mtime;
-      stream->size = info.size;
-      stream->dirty = false;
     }
     mutex_.Unlock();
   }
@@ -223,22 +228,23 @@ Status BlkDB::Sync(sid_t sid) {
   size_t idx = sid;
   if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
     s = Status::InvalidArgument("Bad stream id");
-  } else if (stream->dirty) {
+  } else if (stream->nsync < stream->nwrites) {
+    int nwrites = stream->nwrites;
     mutex_.Unlock();
     StreamInfo info;
     info.mtime = stream->mtime;
     info.size = stream->size;
     char tmp[20];
-    Slice encoding = info.EncodeTo(tmp);
-    Key key(stream->prefix());
+    Slice info_encoding = info.EncodeTo(tmp);
+    Key key(ExtractUntypedKeyPrefix(stream->encoding()));
     key.SetType(kDataDesType);
-    key.SetOffset(cli_id_);
+    key.SetOffset(session_id_);
     WriteOptions options;
-    options.sync = true;
-    s = db_->Put(options, key.Encode(), encoding);
+    options.sync = true; // Force sync
+    s = db_->Put(options, key.Encode(), info_encoding);
     mutex_.Lock();
     if (s.ok()) {
-      stream->dirty = false;
+      stream->nsync = nwrites;
     }
   }
   return s;
@@ -253,7 +259,7 @@ Status BlkDB::Close(sid_t sid) {
   if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
     s = Status::InvalidArgument("Bad stream id");
   } else {
-    assert(!stream->dirty);
+    assert(stream->nsync >= stream->nwrites);
     Remove(idx);
     if (stream->iter != NULL) {
       delete stream->iter;
@@ -274,14 +280,14 @@ Status BlkDB::Pwrite(sid_t sid, const Slice& data, uint64_t off) {
     mutex_.Unlock();
     WriteOptions options;
     options.sync = sync_;
-    Key key(stream->prefix());
-    assert(key.type() == kDataBlockType);
+    Key key(ExtractUntypedKeyPrefix(stream->encoding()));
+    key.SetType(kDataBlockType);
     uint64_t end = off + data.size();
     key.SetOffset(end - 1);
     s = db_->Put(options, key.Encode(), data);
     mutex_.Lock();
     if (s.ok()) {
-      stream->dirty = true;  // Sync needed
+      stream->nwrites++;  // Sync needed
       if (stream->iter != NULL) {
         delete stream->iter;
         stream->iter = NULL;
@@ -317,17 +323,20 @@ Status BlkDB::Pread(sid_t sid, Slice* result, uint64_t off, uint64_t size,
       options.verify_checksums = verify_checksum_;
       iter = db_->NewIterator(options);
     }
-    Slice prefix = stream->prefix();
+
     if (off < stream->size) {
       if (off + size > stream->size) {
         size = stream->size - off;
       }
 
-      bool need_reseek = true;
+      Key key(ExtractUntypedKeyPrefix(stream->encoding()));
+      key.SetType(kDataBlockType);
+      Slice key_prefix = key.prefix();
+      bool need_reseek = true;  // Reuse iterator position if possible
       if (iter->Valid()) {
         Slice k = iter->key();
-        if (k.starts_with(prefix)) {
-          k.remove_prefix(prefix.size());
+        if (k.starts_with(key_prefix)) {
+          k.remove_prefix(key_prefix.size());
           BlkInfo blk;
           if (blk.ParseFrom(k, iter->value())) {
             if (off >= blk.off) {
@@ -342,8 +351,6 @@ Status BlkDB::Pread(sid_t sid, Slice* result, uint64_t off, uint64_t size,
         }
       }
       if (need_reseek) {
-        Key key(prefix);
-        assert(key.type() == kDataBlockType);
         key.SetOffset(off);
         iter->Seek(key.Encode());
       }
@@ -353,8 +360,8 @@ Status BlkDB::Pread(sid_t sid, Slice* result, uint64_t off, uint64_t size,
         BlkInfo blk;
         Slice k = iter->key();
         Slice data = iter->value();
-        if (!k.starts_with(prefix)) break;  // End-of-file
-        k.remove_prefix(prefix.size());
+        if (!k.starts_with(key_prefix)) break;  // End-of-file
+        k.remove_prefix(key_prefix.size());
         if (!blk.ParseFrom(k, data)) {
           iter->Next();
           continue;  // Skip non-known blocks

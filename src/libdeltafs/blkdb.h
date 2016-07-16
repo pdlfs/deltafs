@@ -11,6 +11,7 @@
 
 #include <assert.h>
 
+#include "mds_cli.h"
 #include "pdlfs-common/dcntl.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/fstypes.h"
@@ -19,19 +20,23 @@
 
 namespace pdlfs {
 
-typedef int sid_t;  // Opaque stream descriptor
+// Opaque stream descriptor
+typedef int sid_t;
 
 struct Stream {
-  DirId pid;
-  char nhash[8];
   Iterator* iter;
   uint64_t mtime;
-  uint64_t size;  // Total size of the stream
-  bool dirty;
-  char prefix_rep[1];  // Beginning of prefix encoding
+  uint64_t size;     // Total size of the stream
+  uint32_t nwrites;  // Number of blocks written
+  uint32_t nsync;    // Number of blocks synced to the DB
 
-  Slice prefix() const {
-    return Slice(prefix_rep + 1, prefix_rep[0]);  // Stream identifier
+  // Formatted as:
+  //   encoding_length  unsigned char
+  //   encoding         char[encoding_length]
+  char encoding_data[1];  // Beginning of encoded data
+
+  Slice encoding() const {
+    return Slice(encoding_data + 1, encoding_data[0]);  // Fentry encoding
   }
 };
 
@@ -45,7 +50,7 @@ struct StreamInfo {
 
 struct BlkDBOptions {
   BlkDBOptions();
-  int cli_id;
+  int session_id;
   size_t max_open_streams;
   bool verify_checksum;
   bool sync;
@@ -57,8 +62,8 @@ class BlkDB {
   BlkDB(const BlkDBOptions&);
   ~BlkDB();
 
-  Status Open(const DirId& pid, const Slice& nhash, const Stat& stat,
-              bool create_if_missing, bool error_if_exists, sid_t* result);
+  Status Open(const Fentry& ent, bool create_if_missing, bool error_if_exists,
+              sid_t* result);
   Status Pwrite(sid_t sid, const Slice& data, uint64_t off);
   Status Pread(sid_t sid, Slice* result, uint64_t off, uint64_t size,
                char* scratch);
@@ -69,7 +74,7 @@ class BlkDB {
 
  private:
   // Constant after construction
-  int cli_id_;
+  int session_id_;
   size_t max_open_streams_;
   bool verify_checksum_;
   bool sync_;

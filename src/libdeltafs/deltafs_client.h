@@ -22,14 +22,19 @@ class Client {
   static Status Open(Client**);
   ~Client();
 
+  struct FileInfo {
+    uint64_t size;
+    int fd;
+  };
+
   Status Wopen(const Slice& path, int mode, int* fd);
   Status Pwrite(int fd, const Slice& data, uint64_t off);
   Status Ropen(const Slice& path, int* fd);
   Status Pread(int fd, Slice* result, uint64_t off, uint64_t size, char* buf);
   Status Close(int fd);
 
-  Status Mkdir(const Slice& path, int mode);
   Status Mkfile(const Slice& path, int mode);
+  Status Mkdir(const Slice& path, int mode);
 
  private:
   Client() {}

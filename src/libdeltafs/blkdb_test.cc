@@ -48,15 +48,15 @@ class BlkDBTest {
   }
 
   int Open(int id, bool ocreat = false) {
-    DirId pid(0, 0, 0);
-    std::string nhash;
-    DirIndex::PutHash(&nhash, Name(id));
-    Stat stat;
-    stat.SetRegId(0);
-    stat.SetSnapId(0);
-    stat.SetInodeNo(id);
+    Fentry ent;
+    ent.pid = DirId(0, 0, 0);
+    DirIndex::PutHash(&ent.nhash, Name(id));
+    ent.zserver = 0;
+    ent.stat.SetRegId(0);
+    ent.stat.SetSnapId(0);
+    ent.stat.SetInodeNo(id);
     int fd;
-    Status s = blk_->Open(pid, nhash, stat, ocreat, false, &fd);
+    Status s = blk_->Open(ent, ocreat, false, &fd);
     if (s.ok()) {
       return fd;
     } else {

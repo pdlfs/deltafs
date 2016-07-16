@@ -38,10 +38,9 @@ Status Client::Wopen(const Slice& path, int mode, int* fd) {
   }
 
   if (s.ok()) {
-    s = blkdb_->Open(ent.pid, ent.nhash, ent.stat,
-                      true,   // create if missing
-                      false,  // error if exists
-                      fd);
+    s = blkdb_->Open(ent, true,  // create if missing
+                     false,      // error if exists
+                     fd);
 #if 0
     if (s.ok()) {
       if (blkdb_->GetStream(fd)->size != ent.stat.FileSize()) {
@@ -67,10 +66,9 @@ Status Client::Ropen(const Slice& path, int* fd) {
 
   if (s.ok()) {
     // Create the file if missing since the MDS says it exists.
-    s = blkdb_->Open(ent.pid, ent.nhash, ent.stat,
-                      true,   // create if missing
-                      false,  // error if exists
-                      fd);
+    s = blkdb_->Open(ent, true,  // create if missing
+                     false,      // error if exists
+                     fd);
 #if 0
     if (s.ok()) {
       if (blkdb_->GetStream(fd)->size != ent.stat.FileSize()) {
