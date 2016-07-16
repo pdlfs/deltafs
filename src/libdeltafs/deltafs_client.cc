@@ -327,6 +327,7 @@ void Client::Builder::OpenDB() {
     status_ = DB::Open(dbopts_, dbhome, &db_);
     if (ok()) {
       blkdbopts_.db = db_;
+      blkdbopts_.session_id = session_id_;
       blkdb_ = new BlkDB(blkdbopts_);
     }
   }
@@ -358,7 +359,8 @@ void Client::Builder::OpenMDSCli() {
     mdscliopts_.lookup_cache_size = lookup_cache_sz;
     mdscliopts_.num_virtual_servers = mdstopo_.num_vir_srvs;
     mdscliopts_.num_servers = mdstopo_.num_srvs;
-    mdscliopts_.cli_id = session_id_;
+    mdscliopts_.session_id = session_id_;
+    mdscliopts_.cli_id = cli_id_;
     mdscliopts_.uid = uid_;
     mdscliopts_.gid = gid_;
   }
