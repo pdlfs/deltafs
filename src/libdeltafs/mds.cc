@@ -94,6 +94,7 @@ MDSCliOptions::MDSCliOptions()
       max_redirects_allowed(20),
       num_virtual_servers(1),
       num_servers(1),
+      session_id(0),
       cli_id(0),
       uid(0),
       gid(0) {}
@@ -104,6 +105,7 @@ MDS::CLI::CLI(const MDSCliOptions& options)
       paranoid_checks_(options.paranoid_checks),
       atomic_path_resolution_(options.atomic_path_resolution),
       max_redirects_allowed_(options.max_redirects_allowed),
+      session_id_(options.session_id),
       cli_id_(options.cli_id),
       uid_(options.uid),
       gid_(options.gid) {

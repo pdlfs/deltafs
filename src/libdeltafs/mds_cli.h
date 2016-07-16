@@ -35,14 +35,19 @@ struct MDSCliOptions {
   int max_redirects_allowed;
   int num_virtual_servers;
   int num_servers;
+  int session_id;
   int cli_id;
   int uid;
   int gid;
 };
 
 struct Fentry {
+  Fentry() {}
+  bool DecodeFrom(Slice* input);
+  Slice EncodeTo(char* scratch) const;
   DirId pid;
   std::string nhash;
+  int zserver;
   Stat stat;
 };
 
@@ -51,9 +56,11 @@ class MDS::CLI {
   static CLI* Open(const MDSCliOptions&);
   ~CLI();
 
-  Status Fstat(const Slice& path, Fentry* ent);
-  Status Fcreat(const Slice& path, int mode, Fentry* ent);
+  Status Fstat(const Slice& path, Fentry*);
+  Status Fcreat(const Slice& path, int mode, Fentry*);
+  Status Fsync(const Fentry&, uint64_t mtime, uint64_t size);
   Status Mkdir(const Slice& path, int mode);
+
   Status Listdir(const Slice& path, std::vector<std::string>* names);
 
  private:
@@ -81,6 +88,7 @@ class MDS::CLI {
   bool paranoid_checks_;
   bool atomic_path_resolution_;
   int max_redirects_allowed_;
+  int session_id_;
   int cli_id_;
   int uid_;
   int gid_;

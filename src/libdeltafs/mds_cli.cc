@@ -14,9 +14,55 @@
 #include <set>
 
 #include "mds_cli.h"
+#include "pdlfs-common/fstypes.h"
 #include "pdlfs-common/mutexlock.h"
 
 namespace pdlfs {
+
+bool Fentry::DecodeFrom(Slice* input) {
+  Slice key_prefix;
+  Slice sli;
+  uint32_t u32;
+  if (!GetLengthPrefixedSlice(input, &key_prefix) ||
+      !GetVarint64(input, &pid.reg) || !GetVarint64(input, &pid.snap) ||
+      !GetVarint64(input, &pid.ino) || !GetLengthPrefixedSlice(input, &sli) ||
+      !GetVarint32(input, &u32)) {
+    return false;
+  } else {
+    Key key(key_prefix);
+    stat.SetRegId(key.reg_id());
+    stat.SetSnapId(key.snap_id());
+    stat.SetInodeNo(key.inode());
+    nhash = sli.ToString();
+    zserver = u32;
+    return true;
+  }
+}
+
+// The encoding has the following format:
+//
+//   key_prefix_length      varint32
+//   key_prefix             char[key_prefix_length]
+//   reg_id of parent dir   varint64
+//   snap_id of parent dir  varint64
+//   ino_no of parent dir   varint64
+//   nhash_length           varint32
+//   nhash                  char[nhash_length]
+//   zserver of parent dir  varint32
+Slice Fentry::EncodeTo(char* scratch) const {
+  char* p = scratch;
+
+  KeyType dummy = static_cast<KeyType>(0);
+  Key key(stat, dummy);
+  p = EncodeLengthPrefixedSlice(p, key.prefix());
+  p = EncodeVarint64(p, pid.reg);
+  p = EncodeVarint64(p, pid.snap);
+  p = EncodeVarint64(p, pid.ino);
+  p = EncodeLengthPrefixedSlice(p, nhash);
+  p = EncodeVarint32(p, zserver);
+
+  return Slice(scratch, p - scratch);
+}
 
 Status MDS::CLI::FetchIndex(const DirId& id, int zserver,
                             IndexHandle** result) {
@@ -29,7 +75,7 @@ Status MDS::CLI::FetchIndex(const DirId& id, int zserver,
     DirIndex* idx = new DirIndex(&giga_);
     ReadidxOptions options;
     options.op_due = kMaxMicros;
-    options.session_id = cli_id_;
+    options.session_id = session_id_;
     options.dir_id = id;
     ReadidxRet ret;
     assert(zserver >= 0);
@@ -71,7 +117,7 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
       assert(idx != NULL);
       LookupOptions options;
       options.op_due = atomic_path_resolution_ ? op_due : kMaxMicros;
-      options.session_id = cli_id_;
+      options.session_id = session_id_;
       options.dir_id = pid;
       options.name_hash = nhash;
       if (paranoid_checks_) {
@@ -194,7 +240,7 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
       assert(idx != NULL);
       FstatOptions options;
       options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
-      options.session_id = cli_id_;
+      options.session_id = session_id_;
       options.dir_id = path.pid;
       options.name_hash = DirIndex::Hash(path.name, tmp);
       if (paranoid_checks_) {
@@ -234,9 +280,12 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
         }
       }
       if (s.ok()) {
-        ent->pid = options.dir_id;
-        ent->nhash = options.name_hash.ToString();
-        ent->stat = ret.stat;
+        if (ent != NULL) {
+          ent->pid = path.pid;
+          ent->nhash = options.name_hash.ToString();
+          ent->zserver = path.zserver;
+          ent->stat = ret.stat;
+        }
       }
     }
   }
@@ -261,7 +310,7 @@ Status MDS::CLI::Fcreat(const Slice& p, int mode, Fentry* ent) {
       assert(idx != NULL);
       FcreatOptions options;
       options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
-      options.session_id = cli_id_;
+      options.session_id = session_id_;
       options.dir_id = path.pid;
       options.mode = mode;
       options.uid = uid_;
@@ -307,9 +356,12 @@ Status MDS::CLI::Fcreat(const Slice& p, int mode, Fentry* ent) {
         }
       }
       if (s.ok()) {
-        ent->pid = options.dir_id;
-        ent->nhash = options.name_hash.ToString();
-        ent->stat = ret.stat;
+        if (ent != NULL) {
+          ent->pid = path.pid;
+          ent->nhash = options.name_hash.ToString();
+          ent->zserver = path.zserver;
+          ent->stat = ret.stat;
+        }
       }
     }
   }
@@ -334,7 +386,7 @@ Status MDS::CLI::Mkdir(const Slice& p, int mode) {
       assert(idx != NULL);
       MkdirOptions options;
       options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
-      options.session_id = cli_id_;
+      options.session_id = session_id_;
       options.dir_id = path.pid;
       options.mode = mode;
       options.uid = uid_;
@@ -385,6 +437,78 @@ Status MDS::CLI::Mkdir(const Slice& p, int mode) {
   return s;
 }
 
+// Send inode status changes to metadata server so the metadata server
+// may keep an updated view of the file. Cannot operate on directories.
+// Metadata server identifies files through file paths. However, file
+// path may change (due to rename, unlink, and creat operations)
+// as long as we don't keep an active lease on the path that we use to
+// open the file in the first place.
+//
+// Current solution is to always send file ids (reg_id + snap_id + ino)
+// along with status updates. So the metadata server can detect
+// conflicts either when the file we want to update no long exists
+// (e.g. concurrently unlinked by others) or is no longer associated
+// with the path (e.g. concurrently renamed by others).
+Status MDS::CLI::Fsync(const Fentry& ent, uint64_t mtime, uint64_t size) {
+  Status s;
+  IndexHandle* idxh = NULL;
+  s = FetchIndex(ent.pid, ent.zserver, &idxh);
+  if (s.ok()) {
+    mutex_.Unlock();
+
+    assert(idxh != NULL);
+    const DirIndex* idx = index_cache_->Value(idxh);
+    assert(idx != NULL);
+    TruncOptions options;  // TODO: add file id to options
+    options.op_due = kMaxMicros;
+    options.session_id = session_id_;
+    options.dir_id = ent.pid;
+    options.name_hash = ent.nhash;
+    options.mtime = mtime;
+    options.size = size;
+    TruncRet ret;
+
+    const DirIndex* latest_idx = idx;
+    DirIndex* tmp_idx = NULL;
+    int redirects_allowed = max_redirects_allowed_;
+    do {
+      try {
+        size_t server = latest_idx->HashToServer(ent.nhash);
+        assert(server < giga_.num_servers);
+        s = factory_->Get(server)->Trunc(options, &ret);
+      } catch (Redirect& re) {
+        if (tmp_idx == NULL) {
+          tmp_idx = new DirIndex(&giga_);
+          tmp_idx->Update(*idx);
+        }
+        if (--redirects_allowed == 0 || !tmp_idx->Update(re)) {
+          s = Status::Corruption(Slice());
+        } else {
+          s = Status::TryAgain(Slice());
+        }
+        latest_idx = tmp_idx;
+      }
+    } while (s.IsTryAgain());
+    if (s.ok()) {
+      if (paranoid_checks_ && !S_ISREG(ret.stat.FileMode())) {
+        s = Status::Corruption(Slice());
+      }
+    }
+
+    mutex_.Lock();
+    index_cache_->Release(idxh);
+    if (tmp_idx != NULL) {
+      if (s.ok()) {
+        index_cache_->Release(index_cache_->Insert(ent.pid, tmp_idx));
+      } else {
+        delete tmp_idx;
+      }
+    }
+  }
+
+  return s;
+}
+
 Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
   Status s;
   assert(!p.ends_with("/"));
@@ -403,7 +527,7 @@ Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
       assert(idx != NULL);
       ListdirOptions options;
       options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
-      options.session_id = cli_id_;
+      options.session_id = session_id_;
       options.dir_id = path.pid;
       ListdirRet ret;
       ret.names = names;
