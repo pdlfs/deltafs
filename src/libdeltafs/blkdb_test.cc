@@ -89,7 +89,7 @@ class BlkDBTest {
   }
 
   void Close(int fd) {
-    ASSERT_OK(blk_->Sync(fd));
+    ASSERT_OK(blk_->Flush(fd));
     blk_->Close(fd);
   }
 };

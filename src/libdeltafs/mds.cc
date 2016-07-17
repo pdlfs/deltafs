@@ -122,13 +122,9 @@ MDS::CLI::~CLI() {
   delete lookup_cache_;
 }
 
-MDS::CLI* MDS::CLI::Open(const MDSCliOptions& raw_options) {
-  assert(raw_options.factory != NULL);
-  MDSCliOptions options(raw_options);
-  if (options.env == NULL) {
-    options.env = Env::Default();
-  }
-
+MDS::CLI* MDS::CLI::Open(const MDSCliOptions& options) {
+  assert(options.env != NULL && options.factory != NULL);
+  // TODO: print options
   MDS::CLI* cli = new MDS::CLI(options);
   return cli;
 }

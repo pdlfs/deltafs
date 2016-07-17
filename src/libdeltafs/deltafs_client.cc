@@ -314,6 +314,7 @@ void Client::Builder::OpenDB() {
   }
 
   if (ok()) {
+    dbopts_.create_if_missing = true;
     dbopts_.compression = kNoCompression;
     dbopts_.disable_compaction = true;
     dbopts_.env = env_;
