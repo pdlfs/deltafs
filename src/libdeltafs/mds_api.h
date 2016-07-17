@@ -274,16 +274,16 @@ class MDS::RPC::CLI : public MDS {
   rpc::If* stub_;
 };
 
-class MDS::RPC::SRV : public rpc::IfWrapper {
+class MDS::RPC::SRV : public rpc::If {
   typedef rpc::If::Message Msg;
 
  public:
+  virtual void Call(Msg& in, Msg& out);
   SRV(MDS* mds) : mds_(mds) {}
   virtual ~SRV();
 
-#define DEC_RPC(OP) virtual void OP(Msg& in, Msg& out);
+#define DEC_RPC(OP) void OP(Msg& in, Msg& out);
 
-  DEC_RPC(NONOP)
   DEC_RPC(FSTAT)
   DEC_RPC(MKDIR)
   DEC_RPC(FCRET)

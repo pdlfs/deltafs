@@ -15,12 +15,13 @@
 namespace pdlfs {
 namespace rpc {
 
-class IfImpl : public IfWrapper {
+class EchoFS : public If {
  public:
-  IfImpl() : IfWrapper() {}
-  virtual ~IfImpl() {}
+  EchoFS() {}
+  virtual ~EchoFS() {}
 
-  virtual void NONOP(Message& in, Message& out) {
+  virtual void Call(Message& in, Message& out) {
+    out.op = in.op;
     out.err = in.err;
     out.contents = in.contents;
   }
@@ -30,7 +31,7 @@ class MercuryTest {
  public:
   std::string buf_;
   RPCOptions options_;
-  IfImpl fs_;
+  EchoFS fs_;
   MercuryRPC* rpc_;
   ThreadPool* pool_;
   MercuryRPC::LocalLooper* looper_;
@@ -67,9 +68,11 @@ TEST(MercuryTest, SendReceive) {
   for (int i = 0; i < 1000; ++i) {
     If::Message input;
     If::Message output;
+    input.op = rnd.Uniform(128);
     input.err = rnd.Uniform(128);
     input.contents = test::RandomString(&rnd, 4000, &buf_);
-    client_->NONOP(input, output);
+    client_->Call(input, output);
+    ASSERT_EQ(input.op, output.op);
     ASSERT_EQ(input.err, output.err);
     ASSERT_EQ(input.contents, output.contents);
   }

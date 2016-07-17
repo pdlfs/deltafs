@@ -39,47 +39,23 @@ class MercuryRPC {
   class LocalLooper;
   class Client;
 
-#define REG_ARGS(OP) #OP, If_Message_cb, If_Message_cb, If_##OP##_decorator
-  static hg_return_t If_Message_cb(hg_proc_t proc, void* data);
-
-#define REG_RPC(OP)                                            \
-  static hg_return_t If_##OP##_decorator(hg_handle_t handle);  \
-  static hg_return_t If_##OP##_cb(hg_handle_t handle);         \
-  static void If_##OP##_wrapper(void* arg) {                   \
-    hg_handle_t handle = reinterpret_cast<hg_handle_t>(arg);   \
-    If_##OP##_cb(handle);                                      \
-  }                                                            \
-                                                               \
-  hg_id_t hg_##OP##_id_;                                       \
-                                                               \
-  void Register_##OP() {                                       \
-    hg_##OP##_id_ = HG_Register_name(hg_class_, REG_ARGS(OP)); \
-    if (NA_Is_listening(na_class_)) {                          \
-      HG_Register_data(hg_class_, hg_##OP##_id_, this, NULL);  \
-    }                                                          \
+  static hg_return_t RPCMessageCoder(hg_proc_t proc, void* data);
+  static hg_return_t RPCCallbackDecorator(hg_handle_t handle);
+  static hg_return_t RPCCallback(hg_handle_t handle);
+  static void RPCWrapper(void* arg) {
+    hg_handle_t handle = reinterpret_cast<hg_handle_t>(arg);
+    RPCCallback(handle);
   }
 
-  REG_RPC(NONOP)
-  REG_RPC(FSTAT)
-  REG_RPC(MKDIR)
-  REG_RPC(FCRET)
-  REG_RPC(CHMOD)
-  REG_RPC(CHOWN)
-  REG_RPC(UTIME)
-  REG_RPC(TRUNC)
-  REG_RPC(SATTR)
-  REG_RPC(UNLNK)
-  REG_RPC(RMDIR)
-  REG_RPC(RENME)
-  REG_RPC(LOKUP)
-  REG_RPC(LSDIR)
-  REG_RPC(RDIDX)
-  REG_RPC(OPSES)
-  REG_RPC(GINPT)
-  REG_RPC(GOUPT)
+  hg_id_t hg_rpc_id_;
 
-#undef REG_RPC
-#undef REG_ARGS
+  void RegisterRPC() {
+    hg_rpc_id_ = HG_Register_name(hg_class_, "fs_call", RPCMessageCoder,
+                                  RPCMessageCoder, RPCCallbackDecorator);
+    if (NA_Is_listening(na_class_)) {
+      HG_Register_data(hg_class_, hg_rpc_id_, this, NULL);
+    }
+  }
 
   // Start or stop the background looping thread.
   Status TEST_Start();
@@ -182,10 +158,12 @@ class MercuryRPC::LocalLooper {
 
 class MercuryRPC::Client : public If {
  public:
-  Client(MercuryRPC* rpc, const std::string& addr)
+  explicit Client(MercuryRPC* rpc, const std::string& addr)
       : rpc_(rpc), addr_(addr), cv_(&mu_) {
     rpc_->Ref();
   }
+
+  virtual void Call(Message& in, Message& out);
 
   virtual ~Client() {
     if (rpc_ != NULL) {
@@ -193,33 +171,10 @@ class MercuryRPC::Client : public If {
     }
   }
 
-#define DEC_RPC(OP) virtual void OP(Message& in, Message& out);
-
-  DEC_RPC(NONOP)
-  DEC_RPC(FSTAT)
-  DEC_RPC(MKDIR)
-  DEC_RPC(FCRET)
-  DEC_RPC(CHMOD)
-  DEC_RPC(CHOWN)
-  DEC_RPC(UTIME)
-  DEC_RPC(TRUNC)
-  DEC_RPC(SATTR)
-  DEC_RPC(UNLNK)
-  DEC_RPC(RMDIR)
-  DEC_RPC(RENME)
-  DEC_RPC(LOKUP)
-  DEC_RPC(LSDIR)
-  DEC_RPC(RDIDX)
-  DEC_RPC(OPSES)
-  DEC_RPC(GINPT)
-  DEC_RPC(GOUPT)
-
-#undef DEC_RPC
-
  private:
   static hg_return_t SaveReply(const hg_cb_info* info);
   MercuryRPC* const rpc_;
-  std::string addr_;  // To-be-resolved target RPC addr
+  std::string addr_;  // To-be-resolved target RPC address
   port::Mutex mu_;
   port::CondVar cv_;
   // No copying allowed

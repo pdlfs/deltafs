@@ -19,7 +19,6 @@
 namespace pdlfs {
 // Internal RPC interface
 namespace rpc {
-class IfWrapper;
 class If;
 }
 
@@ -46,7 +45,7 @@ class RPC {
   // RPC implementation should ensure the results of the following calls
   // are thread-safe so no external synchronization is needed.
   static RPC* Open(const RPCOptions&);
-  virtual rpc::If* NewClient(const std::string& uri) = 0;
+  virtual rpc::If* OpenClientStub(const std::string& uri) = 0;
 
   // The following calls shall return immediately.
   // One or more background looping threads maybe be created or destroyed
@@ -94,84 +93,21 @@ class If {
   // This allows us to port to different RPC frameworks with different
   // type systems.
   struct Message {
-    int err;
-    Slice contents;
-    char buf[500];  // Avoiding allocating dynamic memory for small messages
+    int op;          // Operation type
+    int err;         // Error code
+    Slice contents;  // Message body
+    char buf[500];   // Avoiding allocating dynamic memory for small messages
     std::string extra_buf;
   };
 
-  If() {}
+  virtual void Call(Message& in, Message& out) = 0;
   virtual ~If();
-
-#define ADD_RPC(OP) virtual void OP(Message& in, Message& out) = 0
-
-  ADD_RPC(NONOP);
-  ADD_RPC(FSTAT);
-  ADD_RPC(MKDIR);
-  ADD_RPC(FCRET);
-  ADD_RPC(CHMOD);
-  ADD_RPC(CHOWN);
-  ADD_RPC(UTIME);
-  ADD_RPC(TRUNC);
-  ADD_RPC(SATTR);
-  ADD_RPC(UNLNK);
-  ADD_RPC(RMDIR);
-  ADD_RPC(RENME);
-  ADD_RPC(LOKUP);
-  ADD_RPC(LSDIR);
-  ADD_RPC(RDIDX);
-  ADD_RPC(OPSES);
-  ADD_RPC(GINPT);
-  ADD_RPC(GOUPT);
-
-#undef ADD_RPC
+  If() {}
 
  private:
   // No copying allowed
   void operator=(const If&);
   If(const If&);
-};
-
-class IfWrapper : public If {
- public:
-  explicit IfWrapper(If* base = NULL) : base_(base) {}
-  virtual ~IfWrapper();
-
-#define DEF_RPC(OP)                            \
-  virtual void OP(Message& in, Message& out) { \
-    if (base_ != NULL) {                       \
-      base_->OP(in, out);                      \
-    } else {                                   \
-      throw ENODEV;                            \
-    }                                          \
-  }
-
-  DEF_RPC(NONOP);
-  DEF_RPC(FSTAT);
-  DEF_RPC(MKDIR);
-  DEF_RPC(FCRET);
-  DEF_RPC(CHMOD);
-  DEF_RPC(CHOWN);
-  DEF_RPC(UTIME);
-  DEF_RPC(TRUNC);
-  DEF_RPC(SATTR);
-  DEF_RPC(UNLNK);
-  DEF_RPC(RMDIR);
-  DEF_RPC(RENME);
-  DEF_RPC(LOKUP);
-  DEF_RPC(LSDIR);
-  DEF_RPC(RDIDX);
-  DEF_RPC(OPSES);
-  DEF_RPC(GINPT);
-  DEF_RPC(GOUPT);
-
-#undef DEF_RPC
-
- private:
-  If* base_;
-  // No copying allowed
-  void operator=(const IfWrapper&);
-  IfWrapper(const IfWrapper&);
 };
 
 }  // namespace rpc

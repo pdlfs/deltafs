@@ -22,10 +22,10 @@ struct MDSTopology {
 };
 
 class MDSFactoryImpl : public MDSFactory {
-  typedef MDS::RPC::CLI MDSRPCWrapper;
+  typedef MDS::RPC::CLI MDSWrapper;  // convert RPC to MDS...
   struct StubInfo {
     MDS* mds;
-    MDSRPCWrapper* wrapper;
+    MDSWrapper* wrapper;
     rpc::If* stub;
   };
 

@@ -35,14 +35,14 @@ RPCServer::~RPCServer() {
   }
 }
 
-void RPCServer::AddChannel(const std::string& uri, int workers) {
+void RPCServer::AddChannel(const std::string& listening_uri, int workers) {
   RPCInfo info;
   RPCOptions options;
   options.env = env_;
   info.pool = ThreadPool::NewFixed(workers);
   options.extra_workers = info.pool;
   options.fs = fs_;
-  options.uri = uri;
+  options.uri = listening_uri;
   info.rpc = RPC::Open(options);
   rpcs_.push_back(info);
 }
@@ -75,8 +75,6 @@ namespace rpc {
 
 If::~If() {}
 
-IfWrapper::~IfWrapper() {}
-
 #if defined(MERCURY)
 class RPCImpl : public RPC {
   MercuryRPC::LocalLooper* looper_;
@@ -86,7 +84,7 @@ class RPCImpl : public RPC {
   virtual Status Start() { return looper_->Start(); }
   virtual Status Stop() { return looper_->Stop(); }
 
-  virtual If* NewClient(const std::string& addr) {
+  virtual If* OpenClientStub(const std::string& addr) {
     return new MercuryRPC::Client(rpc_, addr);
   }
 

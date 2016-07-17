@@ -14,22 +14,26 @@
 namespace pdlfs {
 namespace rpc {
 
-hg_return_t MercuryRPC::If_Message_cb(hg_proc_t proc, void* data) {
+hg_return_t MercuryRPC::RPCMessageCoder(hg_proc_t proc, void* data) {
   hg_return_t ret;
   If::Message* msg = reinterpret_cast<If::Message*>(data);
   hg_proc_op_t op = hg_proc_get_op(proc);
 
   switch (op) {
     case HG_ENCODE: {
-      hg_int8_t err = msg->err;
-      ret = hg_proc_hg_int8_t(proc, &err);
+      hg_int8_t op_code = static_cast<int8_t>(msg->op);
+      ret = hg_proc_hg_int8_t(proc, &op_code);
       if (ret == HG_SUCCESS) {
-        hg_uint16_t len = msg->contents.size();
-        ret = hg_proc_hg_uint16_t(proc, &len);
+        hg_int8_t err_code = static_cast<int8_t>(msg->err);
+        ret = hg_proc_hg_int8_t(proc, &err_code);
         if (ret == HG_SUCCESS) {
-          if (len > 0) {
-            char* p = const_cast<char*>(&msg->contents[0]);
-            ret = hg_proc_memcpy(proc, p, len);
+          hg_uint16_t len = static_cast<uint16_t>(msg->contents.size());
+          ret = hg_proc_hg_uint16_t(proc, &len);
+          if (ret == HG_SUCCESS) {
+            if (len > 0) {
+              char* p = const_cast<char*>(&msg->contents[0]);
+              ret = hg_proc_memcpy(proc, p, len);
+            }
           }
         }
       }
@@ -37,24 +41,30 @@ hg_return_t MercuryRPC::If_Message_cb(hg_proc_t proc, void* data) {
     }
 
     case HG_DECODE: {
-      hg_int8_t err;
-      ret = hg_proc_hg_int8_t(proc, &err);
+      hg_int8_t op_code;
+      ret = hg_proc_hg_int8_t(proc, &op_code);
       if (ret == HG_SUCCESS) {
-        msg->err = err;
-        hg_uint16_t len;
-        ret = hg_proc_hg_uint16_t(proc, &len);
+        msg->op = op_code;
+        hg_int8_t err;
+        ret = hg_proc_hg_int8_t(proc, &err);
         if (ret == HG_SUCCESS) {
-          if (len > 0) {
-            char* p;
-            if (len <= sizeof(msg->buf)) {
-              p = &msg->buf[0];
-            } else {
-              msg->extra_buf.reserve(len);
-              msg->extra_buf.resize(1);
-              p = &msg->extra_buf[0];
+          msg->err = err;
+          hg_uint16_t len;
+          ret = hg_proc_hg_uint16_t(proc, &len);
+          if (ret == HG_SUCCESS) {
+            if (len > 0) {
+              char* p;
+              if (len <= sizeof(msg->buf)) {
+                p = &msg->buf[0];
+              } else {
+                // Hacking std::string to avoid an extra copy of data
+                msg->extra_buf.reserve(len);
+                msg->extra_buf.resize(1);
+                p = &msg->extra_buf[0];
+              }
+              ret = hg_proc_memcpy(proc, p, len);
+              msg->contents = Slice(p, len);
             }
-            ret = hg_proc_memcpy(proc, p, len);
-            msg->contents = Slice(p, len);
           }
         }
       }
@@ -68,54 +78,30 @@ hg_return_t MercuryRPC::If_Message_cb(hg_proc_t proc, void* data) {
   return ret;
 }
 
-#define SRV_CB(OP)                                                  \
-  hg_return_t MercuryRPC::If_##OP##_decorator(hg_handle_t handle) { \
-    MercuryRPC* rpc = registered_data(handle);                      \
-    if (rpc->pool_ == NULL) {                                       \
-      return If_##OP##_cb(handle);                                  \
-    } else {                                                        \
-      rpc->pool_->Schedule(If_##OP##_wrapper, handle);              \
-      return HG_SUCCESS;                                            \
-    }                                                               \
-  }                                                                 \
-                                                                    \
-  hg_return_t MercuryRPC::If_##OP##_cb(hg_handle_t handle) {        \
-    If::Message input;                                              \
-    If::Message output;                                             \
-    hg_return_t ret = HG_Get_input(handle, &input);                 \
-    if (ret == HG_SUCCESS) {                                        \
-      registered_data(handle)->fs_->OP(input, output);              \
-      ret = HG_Respond(handle, NULL, NULL, &output);                \
-    }                                                               \
-    HG_Destroy(handle);                                             \
-    return ret;                                                     \
+hg_return_t MercuryRPC::RPCCallbackDecorator(hg_handle_t handle) {
+  MercuryRPC* rpc = registered_data(handle);
+  if (rpc->pool_ != NULL) {
+    rpc->pool_->Schedule(RPCWrapper, handle);
+    return HG_SUCCESS;
+  } else {
+    return RPCCallback(handle);
   }
+}
 
-// Server-side RPC callbacks
-
-SRV_CB(NONOP)
-SRV_CB(FSTAT)
-SRV_CB(MKDIR)
-SRV_CB(FCRET)
-SRV_CB(CHMOD)
-SRV_CB(CHOWN)
-SRV_CB(UTIME)
-SRV_CB(TRUNC)
-SRV_CB(SATTR)
-SRV_CB(UNLNK)
-SRV_CB(RMDIR)
-SRV_CB(RENME)
-SRV_CB(LOKUP)
-SRV_CB(LSDIR)
-SRV_CB(RDIDX)
-SRV_CB(OPSES)
-SRV_CB(GINPT)
-SRV_CB(GOUPT)
-
-#undef SRV_CB
+hg_return_t MercuryRPC::RPCCallback(hg_handle_t handle) {
+  If::Message input;
+  If::Message output;
+  hg_return_t ret = HG_Get_input(handle, &input);
+  if (ret == HG_SUCCESS) {
+    registered_data(handle)->fs_->Call(input, output);
+    ret = HG_Respond(handle, NULL, NULL, &output);
+  }
+  HG_Destroy(handle);
+  return ret;
+}
 
 namespace {
-struct OpState {
+struct RPCState {
   bool reply_received;
   port::Mutex* mutex;
   port::CondVar* cv;
@@ -126,7 +112,7 @@ struct OpState {
 }  // namespace
 
 hg_return_t MercuryRPC::Client::SaveReply(const hg_cb_info* info) {
-  OpState* state = reinterpret_cast<OpState*>(info->arg);
+  RPCState* state = reinterpret_cast<RPCState*>(info->arg);
   MutexLock l(state->mutex);
   state->ret = info->ret;
   if (state->ret == HG_SUCCESS) {
@@ -137,60 +123,36 @@ hg_return_t MercuryRPC::Client::SaveReply(const hg_cb_info* info) {
   return HG_SUCCESS;
 }
 
-#define CLI_STUB(OP)                                                         \
-  void MercuryRPC::Client::OP(Message& in, Message& out) {                   \
-    na_addr_t na_addr;                                                       \
-    na_return_t r = rpc_->Lookup(addr_, &na_addr);                           \
-    if (r != NA_SUCCESS) throw EHOSTUNREACH;                                 \
-    hg_handle_t handle;                                                      \
-    hg_return_t ret =                                                        \
-        HG_Create(rpc_->hg_context_, na_addr, rpc_->hg_##OP##_id_, &handle); \
-    if (ret == HG_SUCCESS) {                                                 \
-      OpState state;                                                         \
-      state.out = &out;                                                      \
-      state.mutex = &mu_;                                                    \
-      state.cv = &cv_;                                                       \
-      state.reply_received = false;                                          \
-      state.handle = handle;                                                 \
-      MutexLock l(state.mutex);                                              \
-      ret = HG_Forward(handle, SaveReply, &state, &in);                      \
-      if (ret == HG_SUCCESS) {                                               \
-        while (!state.reply_received) state.cv->Wait();                      \
-      }                                                                      \
-      HG_Destroy(handle);                                                    \
-    }                                                                        \
-    if (ret != HG_SUCCESS) {                                                 \
-      throw ENETUNREACH;                                                     \
-    }                                                                        \
+void MercuryRPC::Client::Call(Message& in, Message& out) {
+  na_addr_t na_addr;
+  na_return_t r = rpc_->Lookup(addr_, &na_addr);
+  if (r != NA_SUCCESS) throw EHOSTUNREACH;
+  hg_handle_t handle;
+  hg_return_t ret =
+      HG_Create(rpc_->hg_context_, na_addr, rpc_->hg_rpc_id_, &handle);
+  if (ret == HG_SUCCESS) {
+    RPCState state;
+    state.out = &out;
+    state.mutex = &mu_;
+    state.cv = &cv_;
+    state.reply_received = false;
+    state.handle = handle;
+    MutexLock l(state.mutex);
+    ret = HG_Forward(handle, SaveReply, &state, &in);
+    if (ret == HG_SUCCESS) {
+      while (!state.reply_received) state.cv->Wait();
+    }
+    HG_Destroy(handle);
   }
-
-// Client-side RPC stubs
-
-CLI_STUB(NONOP)
-CLI_STUB(FSTAT)
-CLI_STUB(MKDIR)
-CLI_STUB(FCRET)
-CLI_STUB(CHMOD)
-CLI_STUB(CHOWN)
-CLI_STUB(UTIME)
-CLI_STUB(TRUNC)
-CLI_STUB(SATTR)
-CLI_STUB(UNLNK)
-CLI_STUB(RMDIR)
-CLI_STUB(RENME)
-CLI_STUB(LOKUP)
-CLI_STUB(LSDIR)
-CLI_STUB(RDIDX)
-CLI_STUB(OPSES)
-CLI_STUB(GINPT)
-CLI_STUB(GOUPT)
-
-#undef CLI_STUB
+  if (ret != HG_SUCCESS) {
+    throw ENETUNREACH;
+  }
+}
 
 template <typename T>
 T* MercuryCall(const char* label, T* ptr) {
   if (ptr == NULL) {
-    fprintf(stderr, "mercury %s failed\n", label);
+    Error(__LOG_ARGS__, "Call %s failed\n", label);
     abort();
   } else {
     return ptr;
@@ -225,31 +187,14 @@ MercuryRPC::MercuryRPC(bool listen, const RPCOptions& options)
       bg_loop_running_(false),
       bg_error_(false),
       lookup_cv_(&mutex_) {
+  assert(!options.uri.empty());
+
   na_class_ = Mercury_NA_Initialize(options.uri.c_str(), listen);
   na_context_ = Mercury_NA_Context_create(na_class_);
   hg_class_ = Mercury_HG_Init_na(na_class_, na_context_);
   hg_context_ = Mercury_HG_Context_create(hg_class_);
 
-  // Set RPC input/output coder and RPC handlers
-
-  Register_NONOP();
-  Register_FSTAT();
-  Register_MKDIR();
-  Register_FCRET();
-  Register_CHMOD();
-  Register_CHOWN();
-  Register_UTIME();
-  Register_TRUNC();
-  Register_SATTR();
-  Register_UNLNK();
-  Register_RMDIR();
-  Register_RENME();
-  Register_LOKUP();
-  Register_LSDIR();
-  Register_RDIDX();
-  Register_OPSES();
-  Register_GINPT();
-  Register_GOUPT();
+  RegisterRPC();
 }
 
 Status MercuryRPC::TEST_Start() {

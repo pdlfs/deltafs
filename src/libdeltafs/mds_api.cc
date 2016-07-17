@@ -44,14 +44,75 @@ static bool GetDirId(Slice* input, DirId* id) {
 }
 
 #ifndef NDEBUG
-#define MDS_RPC_DEBUG 1
+#define DELTAFS_RPC_DEBUG 1
 #else
-#define MDS_RPC_DEBUG 0
+#define DELTAFS_RPC_DEBUG 0
 #endif
 
-static const bool kDebugRPC = MDS_RPC_DEBUG;
+static const bool kDebugRPC = DELTAFS_RPC_DEBUG;
 
-#undef MDS_RPC_DEBUG
+#undef DELTAFS_RPC_DEBUG
+
+// RPC op types
+namespace {
+/* clang-format off */
+enum {
+  kNonop, kFstat, kFcreat, kMkdir,
+  kChmod, kUtime, kTrunc,
+  kLookup, kListdir, kReadidx,
+  kOpensession,
+  kGetinput,
+  kGetoutput
+};
+/* clang-format on */
+}  // namespace
+
+// RPC dispatcher
+void MDS::RPC::SRV::Call(Msg& in, Msg& out) {
+  switch (in.op) {
+    case kLookup:
+      LOKUP(in, out);
+      break;
+    case kFstat:
+      FSTAT(in, out);
+      break;
+    case kFcreat:
+      FCRET(in, out);
+      break;
+    case kTrunc:
+      TRUNC(in, out);
+      break;
+    case kMkdir:
+      MKDIR(in, out);
+      break;
+    case kChmod:
+      CHMOD(in, out);
+      break;
+    case kUtime:
+      UTIME(in, out);
+      break;
+    case kListdir:
+      LSDIR(in, out);
+      break;
+    case kReadidx:
+      RDIDX(in, out);
+      break;
+    case kOpensession:
+      OPSES(in, out);
+      break;
+    case kGetinput:
+      GINPT(in, out);
+      break;
+    case kGetoutput:
+      GOUPT(in, out);
+      break;
+    case kNonop:
+      out.err = 0;
+      break;
+    default:
+      out.err = Status::kNotSupported;
+  }
+}
 
 Status MDS::RPC::CLI::Fstat(const FstatOptions& options, FstatRet* ret) {
   Status s;
@@ -80,7 +141,8 @@ Status MDS::RPC::CLI::Fstat(const FstatOptions& options, FstatRet* ret) {
   Msg out;
   if (s.ok()) {
     try {
-      stub_->FSTAT(in, out);
+      in.op = kFstat;
+      stub_->Call(in, out);
     } catch (int rpc_err) {
       s = Status::Disconnected(Slice());
     }
@@ -102,6 +164,7 @@ void MDS::RPC::SRV::FSTAT(Msg& in, Msg& out) {
   Status s;
   FstatOptions options;
   FstatRet ret;
+  assert(in.op == kFstat);
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetLengthPrefixedSlice(&input, &options.name_hash) ||
@@ -160,7 +223,8 @@ Status MDS::RPC::CLI::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
   Msg out;
   if (s.ok()) {
     try {
-      stub_->FCRET(in, out);
+      in.op = kFcreat;
+      stub_->Call(in, out);
     } catch (int rpc_err) {
       s = Status::Disconnected(Slice());
     }
@@ -182,6 +246,7 @@ void MDS::RPC::SRV::FCRET(Msg& in, Msg& out) {
   Status s;
   FcreatOptions options;
   FcreatRet ret;
+  assert(in.op == kFcreat);
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetLengthPrefixedSlice(&input, &options.name_hash) ||
@@ -243,7 +308,8 @@ Status MDS::RPC::CLI::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
   Msg out;
   if (s.ok()) {
     try {
-      stub_->MKDIR(in, out);
+      in.op = kMkdir;
+      stub_->Call(in, out);
     } catch (int rpc_err) {
       s = Status::Disconnected(Slice());
     }
@@ -265,6 +331,7 @@ void MDS::RPC::SRV::MKDIR(Msg& in, Msg& out) {
   Status s;
   MkdirOptions options;
   MkdirRet ret;
+  assert(in.op == kMkdir);
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetLengthPrefixedSlice(&input, &options.name_hash) ||
@@ -320,7 +387,8 @@ Status MDS::RPC::CLI::Lookup(const LookupOptions& options, LookupRet* ret) {
   Msg out;
   if (s.ok()) {
     try {
-      stub_->LOKUP(in, out);
+      in.op = kLookup;
+      stub_->Call(in, out);
     } catch (int rpc_err) {
       s = Status::Disconnected(Slice());
     }
@@ -342,6 +410,7 @@ void MDS::RPC::SRV::LOKUP(Msg& in, Msg& out) {
   Status s;
   LookupOptions options;
   LookupRet ret;
+  assert(in.op == kLookup);
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetLengthPrefixedSlice(&input, &options.name_hash) ||
@@ -396,7 +465,8 @@ Status MDS::RPC::CLI::Chmod(const ChmodOptions& options, ChmodRet* ret) {
   Msg out;
   if (s.ok()) {
     try {
-      stub_->CHMOD(in, out);
+      in.op = kChmod;
+      stub_->Call(in, out);
     } catch (int rpc_err) {
       s = Status::Disconnected(Slice());
     }
@@ -418,6 +488,7 @@ void MDS::RPC::SRV::CHMOD(Msg& in, Msg& out) {
   Status s;
   ChmodOptions options;
   ChmodRet ret;
+  assert(in.op == kChmod);
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetLengthPrefixedSlice(&input, &options.name_hash) ||
@@ -475,7 +546,8 @@ Status MDS::RPC::CLI::Utime(const UtimeOptions& options, UtimeRet* ret) {
   Msg out;
   if (s.ok()) {
     try {
-      stub_->UTIME(in, out);
+      in.op = kUtime;
+      stub_->Call(in, out);
     } catch (int rpc_err) {
       s = Status::Disconnected(Slice());
     }
@@ -497,6 +569,7 @@ void MDS::RPC::SRV::UTIME(Msg& in, Msg& out) {
   Status s;
   UtimeOptions options;
   UtimeRet ret;
+  assert(in.op == kUtime);
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetLengthPrefixedSlice(&input, &options.name_hash) ||
@@ -555,7 +628,8 @@ Status MDS::RPC::CLI::Trunc(const TruncOptions& options, TruncRet* ret) {
   Msg out;
   if (s.ok()) {
     try {
-      stub_->TRUNC(in, out);
+      in.op = kTrunc;
+      stub_->Call(in, out);
     } catch (int rpc_err) {
       s = Status::Disconnected(Slice());
     }
@@ -577,6 +651,7 @@ void MDS::RPC::SRV::TRUNC(Msg& in, Msg& out) {
   Status s;
   TruncOptions options;
   TruncRet ret;
+  assert(in.op == kTrunc);
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetLengthPrefixedSlice(&input, &options.name_hash) ||
@@ -615,7 +690,8 @@ Status MDS::RPC::CLI::Listdir(const ListdirOptions& options, ListdirRet* ret) {
   in.contents = Slice(scratch, p - scratch);
   Msg out;
   try {
-    stub_->LSDIR(in, out);
+    in.op = kListdir;
+    stub_->Call(in, out);
   } catch (int rpc_err) {
     s = Status::Disconnected(Slice());
   }
@@ -647,6 +723,7 @@ void MDS::RPC::SRV::LSDIR(Msg& in, Msg& out) {
   std::vector<std::string> names;
   ListdirRet ret;
   ret.names = &names;
+  assert(in.op == kListdir);
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetVarint32(&input, &options.session_id) ||
@@ -679,7 +756,8 @@ Status MDS::RPC::CLI::Readidx(const ReadidxOptions& options, ReadidxRet* ret) {
   in.contents = Slice(scratch, p - scratch);
   Msg out;
   try {
-    stub_->RDIDX(in, out);
+    in.op = kReadidx;
+    stub_->Call(in, out);
   } catch (int rpc_err) {
     s = Status::Disconnected(Slice());
   }
@@ -697,6 +775,7 @@ void MDS::RPC::SRV::RDIDX(Msg& in, Msg& out) {
   Status s;
   ReadidxOptions options;
   ReadidxRet ret;
+  assert(in.op == kReadidx);
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetVarint32(&input, &options.session_id) ||
@@ -720,7 +799,8 @@ Status MDS::RPC::CLI::Opensession(const OpensessionOptions& options,
   Msg in;
   Msg out;
   try {
-    stub_->OPSES(in, out);
+    in.op = kOpensession;
+    stub_->Call(in, out);
   } catch (int rpc_err) {
     s = Status::Disconnected(Slice());
   }
@@ -749,6 +829,7 @@ void MDS::RPC::SRV::OPSES(Msg& in, Msg& out) {
   Status s;
   OpensessionOptions options;
   OpensessionRet ret;
+  assert(in.op == kOpensession);
   s = mds_->Opensession(options, &ret);
   if (s.ok()) {
     PutLengthPrefixedSlice(&out.extra_buf, ret.env_name);
@@ -767,7 +848,8 @@ Status MDS::RPC::CLI::Getinput(const GetinputOptions& options,
   Msg in;
   Msg out;
   try {
-    stub_->GINPT(in, out);
+    in.op = kGetinput;
+    stub_->Call(in, out);
   } catch (int rpc_err) {
     s = Status::Disconnected(Slice());
   }
@@ -791,6 +873,7 @@ void MDS::RPC::SRV::GINPT(Msg& in, Msg& out) {
   Status s;
   GetinputOptions options;
   GetinputRet ret;
+  assert(in.op == kGetinput);
   s = mds_->Getinput(options, &ret);
   if (s.ok()) {
     PutLengthPrefixedSlice(&out.extra_buf, ret.info);
@@ -807,7 +890,8 @@ Status MDS::RPC::CLI::Getoutput(const GetoutputOptions& options,
   Msg in;
   Msg out;
   try {
-    stub_->GOUPT(in, out);
+    in.op = kGetoutput;
+    stub_->Call(in, out);
   } catch (int rpc_err) {
     s = Status::Disconnected(Slice());
   }
@@ -831,6 +915,7 @@ void MDS::RPC::SRV::GOUPT(Msg& in, Msg& out) {
   Status s;
   GetoutputOptions options;
   GetoutputRet ret;
+  assert(in.op == kGetoutput);
   s = mds_->Getoutput(options, &ret);
   if (s.ok()) {
     PutLengthPrefixedSlice(&out.extra_buf, ret.info);
@@ -839,11 +924,6 @@ void MDS::RPC::SRV::GOUPT(Msg& in, Msg& out) {
   } else {
     out.err = s.err_code();
   }
-}
-
-void MDS::RPC::SRV::NONOP(Msg& in, Msg& out) {
-  // Do nothing
-  out.err = 0;
 }
 
 }  // namespace pdlfs

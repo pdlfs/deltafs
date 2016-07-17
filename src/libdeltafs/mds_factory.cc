@@ -50,11 +50,11 @@ Status MDSFactoryImpl::Stop() {
   return rpc_->Stop();
 }
 
-void MDSFactoryImpl::AddTarget(const std::string& uri, bool trace) {
+void MDSFactoryImpl::AddTarget(const std::string& target_uri, bool trace) {
   StubInfo info;
   assert(rpc_ != NULL);
-  info.stub = rpc_->NewClient(uri);
-  info.wrapper = new MDSRPCWrapper(info.stub);
+  info.stub = rpc_->OpenClientStub(target_uri);
+  info.wrapper = new MDSWrapper(info.stub);
   if (trace) {
     info.mds = new MDSTracer(info.wrapper);
   } else {
