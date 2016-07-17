@@ -31,6 +31,7 @@ class Client {
   Status Pwrite(int fd, const Slice& data, uint64_t off);
   Status Ropen(const Slice& path, FileInfo*);
   Status Pread(int fd, Slice* result, uint64_t off, uint64_t size, char* buf);
+  Status Fdatasync(int fd);
   Status Flush(int fd);
   Status Close(int fd);
 
@@ -38,16 +39,16 @@ class Client {
   Status Mkdir(const Slice& path, int mode);
 
  private:
-  Client() {}
-  MDSFactoryImpl* mdsfty_;
-  MDSClient* mdscli_;
-  BlkDB* blkdb_;
-  DB* db_;
-
   class Builder;
   // No copying allowed
   void operator=(const Client&);
   Client(const Client&);
+  Client() {}
+
+  MDSFactoryImpl* mdsfty_;
+  MDSClient* mdscli_;
+  BlkDB* blkdb_;
+  DB* db_;
 };
 
 }  // namespace pdlfs

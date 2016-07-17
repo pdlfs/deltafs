@@ -245,31 +245,30 @@ Status BlkDB::Flush(sid_t sid, bool force_sync) {
   size_t idx = sid;
   if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
     s = Status::InvalidArgument("Bad stream id");
-  } else if (stream->nflus < stream->nwrites) {
-    int nwrites = stream->nwrites;
-    mutex_.Unlock();
+  } else if (force_sync || stream->nflus < stream->nwrites) {
+    uint32_t nwrites = stream->nwrites;
+    uint32_t nflus = stream->nflus;
     StreamInfo info;
     info.mtime = stream->mtime;
     info.size = stream->size;
-    char tmp[20];
-    Slice info_encoding = info.EncodeTo(tmp);
-    Key key(ExtractUntypedKeyPrefix(stream->encoding()));
-    key.SetType(kDataDesType);
-    key.SetOffset(session_id_);
-    WriteOptions options;
-    options.sync = (force_sync || sync_);
-    s = db_->Put(options, key.Encode(), info_encoding);
-    mutex_.Lock();
-    if (s.ok()) {
-      stream->nflus = nwrites;
-    }
-  } else if (force_sync) {
-    int nwrites = stream->nwrites;
     mutex_.Unlock();
-    s = db_->SyncWAL();
+    if (nflus < nwrites) {
+      char tmp[20];
+      Slice info_encoding = info.EncodeTo(tmp);
+      Key key(ExtractUntypedKeyPrefix(stream->encoding()));
+      key.SetType(kDataDesType);
+      key.SetOffset(session_id_);
+      WriteOptions options;
+      options.sync = (force_sync || sync_);
+      s = db_->Put(options, key.Encode(), info_encoding);
+    } else {
+      s = db_->SyncWAL();
+    }
     mutex_.Lock();
     if (s.ok()) {
-      stream->nflus = nwrites;
+      if (nwrites > stream->nflus) {
+        stream->nflus = nwrites;
+      }
     }
   }
   return s;

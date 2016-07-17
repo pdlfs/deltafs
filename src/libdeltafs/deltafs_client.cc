@@ -100,6 +100,21 @@ Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
   return blkdb_->Pread(fd, result, off, size, buf);
 }
 
+Status Client::Fdatasync(int fd) {
+  Fentry ent;
+  uint64_t mtime;
+  uint64_t size;
+  bool dirty;
+  Status s = blkdb_->GetInfo(fd, &ent, &dirty, &mtime, &size);
+  if (s.ok()) {
+    s = blkdb_->Flush(fd, true); // Force sync
+    if (s.ok() && dirty) {
+      s = mdscli_->Ftruncate(ent, mtime, size);
+    }
+  }
+  return s;
+}
+
 Status Client::Flush(int fd) {
   Fentry ent;
   uint64_t mtime;

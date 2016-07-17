@@ -97,6 +97,22 @@ ssize_t deltafs_pwrite(int __fd, const void* __buf, size_t __sz, off_t __off) {
   }
 }
 
+int deltafs_fdatasync(int __fd) {
+  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  if (client == NULL) {
+    errno = ENODEV;
+    return -1;
+  } else {
+    pdlfs::Status s = client->Fdatasync(__fd);
+    if (s.ok()) {
+      return 0;
+    } else {
+      pdlfs::SetErrno(s);
+      return -1;
+    }
+  }
+}
+
 int deltafs_close(int __fd) {
   pdlfs::port::InitOnce(&once, pdlfs::InitClient);
   if (client == NULL) {
