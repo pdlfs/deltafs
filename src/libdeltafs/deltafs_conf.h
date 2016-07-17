@@ -35,6 +35,12 @@ extern std::string RPCTracing();
 // server may potentially have multiple addrs.
 // e.g. 10.0.0.1:10000;10.0.0.1:20000
 extern std::string MetadataSrvAddrs();
+// Return the size of lease table at each metadata server.
+// e.g. 4096, 16k
+extern std::string SizeOfSrvLeaseTable();
+// Return the size of directory table at each metadata server.
+// e.g. 4096, 16k
+extern std::string SizeOfSrvDirTable();
 // Return the size of lookup cache at each metadata client.
 // e.g. 4096, 16k
 extern std::string SizeOfCliLookupCache();
@@ -43,7 +49,7 @@ extern std::string SizeOfCliLookupCache();
 extern std::string SizeOfCliIndexCache();
 // Indicate if deltafs should ensure atomic pathname resolutions.
 // e.g. true, yes
-extern std::string AtomicPathResolution();
+extern std::string AtomicPathRes();
 // Indicate if deltafs should perform paranoid checks.
 // e.g. true, yes
 extern std::string ParanoidChecks();

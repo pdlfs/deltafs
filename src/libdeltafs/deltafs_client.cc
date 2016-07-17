@@ -8,7 +8,6 @@
  */
 
 #include "deltafs_client.h"
-#include "deltafs_conf.h"
 #include "deltafs_conf_loader.h"
 #if defined(PDLFS_PLATFORM_POSIX)
 #include <sys/types.h>
@@ -333,10 +332,9 @@ void Client::Builder::OpenMDSCli() {
   }
 
   if (ok()) {
-    status_ = config::LoadParanoidChecks(&mdscliopts_.paranoid_checks);
+    status_ = config::LoadAtomicPathRes(&mdscliopts_.atomic_path_resolution);
     if (ok()) {
-      status_ =
-          config::LoadAtomicPathResolution(&mdscliopts_.atomic_path_resolution);
+      status_ = config::LoadParanoidChecks(&mdscliopts_.paranoid_checks);
     }
   }
 

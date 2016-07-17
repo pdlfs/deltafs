@@ -10,3 +10,41 @@
  */
 
 #include "mds_srv.h"
+#include "pdlfs-common/port.h"
+#include "pdlfs-common/rpc.h"
+
+namespace pdlfs {
+
+class MetadataServer {
+  typedef MDS::RPC::SRV RPCWrapper;
+
+ public:
+  static Status Open(MetadataServer**);
+  ~MetadataServer();
+  Status Dispose();
+
+  Status RunTillInterruption();
+  void Interrupt();
+
+ private:
+  class Builder;
+  // No copying allowed
+  void operator=(const MetadataServer&);
+  MetadataServer(const MetadataServer&);
+
+  MetadataServer() : interrupted_(NULL), cv_(&mutex_), running_(false) {}
+  MDSEnv* myenv_;
+  port::AtomicPointer interrupted_;
+  port::Mutex mutex_;
+  port::CondVar cv_;
+  bool running_;
+
+  RPCServer* rpc_;
+  RPCWrapper* wrapper_;
+
+  MDS* mds_;
+  MDB* mdb_;
+  DB* db_;
+};
+
+}  // namespace pdlfs
