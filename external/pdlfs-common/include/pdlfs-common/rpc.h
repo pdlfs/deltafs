@@ -98,7 +98,7 @@ class If {
     Slice contents;  // Message body
     Message() : op(0), err(0) {}
 
-    char buf[500];   // Avoiding allocating dynamic memory for small messages
+    char buf[500];  // Avoiding allocating dynamic memory for small messages
     std::string extra_buf;
   };
 
