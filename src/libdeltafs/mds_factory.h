@@ -31,7 +31,7 @@ class MDSFactoryImpl : public MDSFactory {
 
  public:
   virtual MDS* Get(size_t srv_id);
-  explicit MDSFactoryImpl(Env* env = NULL) : rpc_(NULL), env_(env) {}
+  explicit MDSFactoryImpl(Env* env = NULL) : env_(env), rpc_(NULL) {}
   virtual ~MDSFactoryImpl();
   Status Init(const MDSTopology&);
   Status Start();
@@ -42,10 +42,10 @@ class MDSFactoryImpl : public MDSFactory {
   void operator=(const MDSFactoryImpl&);
   MDSFactoryImpl(const MDSFactoryImpl&);
 
+  Env* env_;  // okay to be NULL
   void AddTarget(const std::string& uri, bool trace);
   std::vector<StubInfo> stubs_;
   RPC* rpc_;
-  Env* env_;
 };
 
 }  // namespace pdlfs

@@ -9,6 +9,7 @@
 
 #include "deltafs_client.h"
 #include "deltafs_conf.h"
+#include "deltafs_conf_loader.h"
 #if defined(PDLFS_PLATFORM_POSIX)
 #include <sys/types.h>
 #include <unistd.h>
@@ -107,7 +108,7 @@ Status Client::Fdatasync(int fd) {
   bool dirty;
   Status s = blkdb_->GetInfo(fd, &ent, &dirty, &mtime, &size);
   if (s.ok()) {
-    s = blkdb_->Flush(fd, true); // Force sync
+    s = blkdb_->Flush(fd, true);  // Force sync
     if (s.ok() && dirty) {
       s = mdscli_->Ftruncate(ent, mtime, size);
     }
@@ -198,42 +199,12 @@ class Client::Builder {
   int gid_;
 };
 
-#define DEF_LOADER_UI64(conf)                            \
-  static Status Load##conf(uint64_t* dst) {              \
-    std::string str_##conf = config::conf();             \
-    if (!ParsePrettyNumber(str_##conf, dst)) {           \
-      return Status::InvalidArgument(#conf, str_##conf); \
-    } else {                                             \
-      return Status::OK();                               \
-    }                                                    \
-  }
-#define DEF_LOADER_BOOL(conf)                            \
-  static Status Load##conf(bool* dst) {                  \
-    std::string str_##conf = config::conf();             \
-    if (!ParsePrettyBool(str_##conf, dst)) {             \
-      return Status::InvalidArgument(#conf, str_##conf); \
-    } else {                                             \
-      return Status::OK();                               \
-    }                                                    \
-  }
-
-DEF_LOADER_UI64(InstanceId)
-DEF_LOADER_UI64(NumOfVirMetadataSrvs)
-DEF_LOADER_UI64(NumOfMetadataSrvs)
-DEF_LOADER_UI64(SizeOfCliLookupCache)
-DEF_LOADER_UI64(SizeOfCliIndexCache)
-
-DEF_LOADER_BOOL(AtomicPathResolution)
-DEF_LOADER_BOOL(ParanoidChecks)
-DEF_LOADER_BOOL(VerifyChecksums)
-DEF_LOADER_BOOL(RPCTracing)
-
 void Client::Builder::LoadIds() {
   uid_ = FetchUid();
   gid_ = FetchGid();
 
   uint64_t cli_id;
-  status_ = LoadInstanceId(&cli_id);
+  status_ = config::LoadInstanceId(&cli_id);
   if (ok()) {
     cli_id_ = cli_id;
   }
@@ -244,9 +215,9 @@ void Client::Builder::LoadMDSTopology() {
   uint64_t num_srvs;
 
   if (ok()) {
-    status_ = LoadNumOfVirMetadataSrvs(&num_vir_srvs);
+    status_ = config::LoadNumOfVirMetadataSrvs(&num_vir_srvs);
     if (ok()) {
-      status_ = LoadNumOfMetadataSrvs(&num_srvs);
+      status_ = config::LoadNumOfMetadataSrvs(&num_srvs);
       if (ok()) {
         std::string addrs = config::MetadataSrvAddrs();
         size_t num_addrs = SplitString(addrs, ';', &mdstopo_.srv_addrs);
@@ -260,7 +231,7 @@ void Client::Builder::LoadMDSTopology() {
   }
 
   if (ok()) {
-    status_ = LoadRPCTracing(&mdstopo_.rpc_tracing);
+    status_ = config::LoadRPCTracing(&mdstopo_.rpc_tracing);
   }
 
   if (ok()) {
@@ -325,7 +296,7 @@ void Client::Builder::OpenDB() {
   }
 
   if (ok()) {
-    status_ = LoadVerifyChecksums(&blkdbopts_.verify_checksum);
+    status_ = config::LoadVerifyChecksums(&blkdbopts_.verify_checksum);
   }
 
   if (ok()) {
@@ -355,16 +326,17 @@ void Client::Builder::OpenMDSCli() {
   uint64_t lookup_cache_sz;
 
   if (ok()) {
-    status_ = LoadSizeOfCliIndexCache(&idx_cache_sz);
+    status_ = config::LoadSizeOfCliIndexCache(&idx_cache_sz);
     if (ok()) {
-      status_ = LoadSizeOfCliLookupCache(&lookup_cache_sz);
+      status_ = config::LoadSizeOfCliLookupCache(&lookup_cache_sz);
     }
   }
 
   if (ok()) {
-    status_ = LoadParanoidChecks(&mdscliopts_.paranoid_checks);
+    status_ = config::LoadParanoidChecks(&mdscliopts_.paranoid_checks);
     if (ok()) {
-      status_ = LoadAtomicPathResolution(&mdscliopts_.atomic_path_resolution);
+      status_ =
+          config::LoadAtomicPathResolution(&mdscliopts_.atomic_path_resolution);
     }
   }
 
