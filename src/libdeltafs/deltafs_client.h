@@ -31,7 +31,7 @@ class Client {
   Status Pwrite(int fd, const Slice& data, uint64_t off);
   Status Ropen(const Slice& path, FileInfo*);
   Status Pread(int fd, Slice* result, uint64_t off, uint64_t size, char* buf);
-  Status Sync(int fd);
+  Status Flush(int fd);
   Status Close(int fd);
 
   Status Mkfile(const Slice& path, int mode);

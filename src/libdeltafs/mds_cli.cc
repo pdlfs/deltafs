@@ -449,7 +449,7 @@ Status MDS::CLI::Mkdir(const Slice& p, int mode) {
 // conflicts either when the file we want to update no long exists
 // (e.g. concurrently unlinked by others) or is no longer associated
 // with the path (e.g. concurrently renamed by others).
-Status MDS::CLI::Fsync(const Fentry& ent, uint64_t mtime, uint64_t size) {
+Status MDS::CLI::Ftruncate(const Fentry& ent, uint64_t mtime, uint64_t size) {
   Status s;
   IndexHandle* idxh = NULL;
   s = FetchIndex(ent.pid, ent.zserver, &idxh);

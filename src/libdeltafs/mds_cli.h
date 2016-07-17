@@ -58,7 +58,7 @@ class MDS::CLI {
 
   Status Fstat(const Slice& path, Fentry*);
   Status Fcreat(const Slice& path, int mode, Fentry*);
-  Status Fsync(const Fentry&, uint64_t mtime, uint64_t size);
+  Status Ftruncate(const Fentry&, uint64_t mtime, uint64_t size);
   Status Mkdir(const Slice& path, int mode);
 
   Status Listdir(const Slice& path, std::vector<std::string>* names);

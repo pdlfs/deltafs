@@ -68,7 +68,7 @@ Status BlkDB::GetInfo(sid_t sid, Fentry* entry, bool* dirty, uint64_t* mtime,
       s = Status::Corruption(Slice());
     }
     if (s.ok()) {
-      *dirty = (stream->nsync < stream->nwrites);
+      *dirty = (stream->nflus < stream->nwrites);
       *mtime = stream->mtime;
       *size = stream->size;
     }
@@ -197,11 +197,11 @@ Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
   if (s.ok()) {
     if (!found) {
       char tmp[20];
-      Slice encoding = info.EncodeTo(tmp);
+      Slice info_encoding = info.EncodeTo(tmp);
       WriteOptions options;
       options.sync = sync_;
       key.SetOffset(session_id_);
-      s = db_->Put(options, key.Encode(), encoding);
+      s = db_->Put(options, key.Encode(), info_encoding);
     }
   }
 
@@ -220,8 +220,8 @@ Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
       stream->iter = NULL;
       stream->mtime = info.mtime;
       stream->size = info.size;
-      stream->nwrites = found ? 0 : 1;  // Sync needed
-      stream->nsync = 0;
+      stream->nwrites = 0;
+      stream->nflus = 0;
       if (found) {
         stream->iter = iter;
         iter = NULL;
@@ -234,14 +234,18 @@ Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
   return s;
 }
 
-Status BlkDB::Sync(sid_t sid) {
+// Save the latest modification time and size of the stream to the DB, but not
+// necessarily to the underlying storage, unless "force_sync" is true.
+// Return OK on success. If the stream has not changed since its last
+// flush, no action is taken, unless "force_sync" is true.
+Status BlkDB::Flush(sid_t sid, bool force_sync) {
   Status s;
   Stream* stream;
   MutexLock ml(&mutex_);
   size_t idx = sid;
   if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
     s = Status::InvalidArgument("Bad stream id");
-  } else if (stream->nsync < stream->nwrites) {
+  } else if (stream->nflus < stream->nwrites) {
     int nwrites = stream->nwrites;
     mutex_.Unlock();
     StreamInfo info;
@@ -253,17 +257,25 @@ Status BlkDB::Sync(sid_t sid) {
     key.SetType(kDataDesType);
     key.SetOffset(session_id_);
     WriteOptions options;
-    options.sync = true;  // Force sync
+    options.sync = (force_sync || sync_);
     s = db_->Put(options, key.Encode(), info_encoding);
     mutex_.Lock();
     if (s.ok()) {
-      stream->nsync = nwrites;
+      stream->nflus = nwrites;
+    }
+  } else if (force_sync) {
+    int nwrites = stream->nwrites;
+    mutex_.Unlock();
+    s = db_->SyncWAL();
+    mutex_.Lock();
+    if (s.ok()) {
+      stream->nflus = nwrites;
     }
   }
   return s;
 }
 
-// REQUIRES: Sync(...) has been called against the stream.
+// REQUIRES: Flush(...) has been called against the stream.
 Status BlkDB::Close(sid_t sid) {
   Status s;
   Stream* stream;
@@ -272,7 +284,8 @@ Status BlkDB::Close(sid_t sid) {
   if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
     s = Status::InvalidArgument("Bad stream id");
   } else {
-    assert(stream->nsync >= stream->nwrites);
+    // Will lose data if the following should be true
+    assert(stream->nflus >= stream->nwrites);
     Remove(idx);
     if (stream->iter != NULL) {
       delete stream->iter;
@@ -300,7 +313,7 @@ Status BlkDB::Pwrite(sid_t sid, const Slice& data, uint64_t off) {
     s = db_->Put(options, key.Encode(), data);
     mutex_.Lock();
     if (s.ok()) {
-      stream->nwrites++;  // Sync needed
+      stream->nwrites++;  // Flush needed
       if (stream->iter != NULL) {
         delete stream->iter;
         stream->iter = NULL;

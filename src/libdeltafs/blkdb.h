@@ -28,7 +28,7 @@ struct Stream {
   uint64_t mtime;
   uint64_t size;     // Total size of the stream
   uint32_t nwrites;  // Number of blocks written
-  uint32_t nsync;    // Number of blocks synced to the DB
+  uint32_t nflus;    // Number of blocks flushed to the DB
 
   // Formatted as:
   //   encoding_length  unsigned char
@@ -67,7 +67,7 @@ class BlkDB {
   Status Pwrite(sid_t sid, const Slice& data, uint64_t off);
   Status Pread(sid_t sid, Slice* result, uint64_t off, uint64_t size,
                char* scratch);
-  Status Sync(sid_t sid);
+  Status Flush(sid_t sid, bool force_sync = false);
   Status Close(sid_t sid);
 
   Status GetInfo(sid_t sid, Fentry* entry, bool* dirty, uint64_t* mtime,
