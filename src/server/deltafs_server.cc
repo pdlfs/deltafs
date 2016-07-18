@@ -49,11 +49,11 @@ int main(int argc, char* argv[]) {
     srv->Dispose();
   }
   delete srv;
-  if (s.ok()) {
-    pdlfs::Info(__LOG_ARGS__, "Bye!");
-    return 0;
-  } else {
+  if (!s.ok()) {
     pdlfs::Error(__LOG_ARGS__, "Failed - %s", s.ToString().c_str());
     return 1;
+  } else {
+    pdlfs::Info(__LOG_ARGS__, "Bye!");
+    return 0;
   }
 }

@@ -167,7 +167,8 @@ void MDS::SRV::TryReuseIno(uint64_t ino) {
 // REQUIRES: mutex_ has been locked.
 uint32_t MDS::SRV::NextSession() {
   mutex_.AssertHeld();
-  return ++session_;
+  session_ += giga_.num_servers;
+  return session_;
 }
 
 // Read file or directory stats. Return OK on success.

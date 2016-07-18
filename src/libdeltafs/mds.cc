@@ -51,6 +51,7 @@ MDS::SRV::SRV(const MDSOptions& options)
       reg_id_(options.reg_id),
       srv_id_(options.srv_id),
       loading_cv_(&mutex_),
+      session_(0),
       ino_(0) {
   giga_.num_servers = options.num_servers;
   giga_.num_virtual_servers = options.num_virtual_servers;
@@ -64,6 +65,7 @@ MDS::SRV::SRV(const MDSOptions& options)
   dirs_ = new DirTable(options.dir_table_size);
 
   assert(srv_id_ >= 0);
+  session_ = srv_id_;
   uint64_t tmp = srv_id_;
   tmp <<= 32;
   ino_ = tmp;
