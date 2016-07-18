@@ -30,7 +30,8 @@ TESTS = \
 	src/libdeltafs/blkdb_test
 
 BINS = \
-	src/server/deltafs_server
+	src/server/deltafs_server \
+	src/cmds/deltafs_shell
 
 CFLAGS += -I./external/pdlfs-common/include -I./include $(PLATFORM_CCFLAGS) $(OPT)
 CXXFLAGS += -I./external/pdlfs-common/include -I./include $(PLATFORM_CXXFLAGS) $(OPT)
@@ -75,7 +76,7 @@ all: $(ALL)
 	mkdir -p $(OUTDIR)
 	cd $(OUTDIR) && ln -fs ../$(STATIC_OUTDIR)/*.a .
 	cd $(OUTDIR) && ln -fs ../$(SHARED_OUTDIR)/*.$(PLATFORM_SHARED_EXT) .
-	cd $(OUTDIR) && ln -fs ../$(STATIC_OUTDIR)/deltafs_server .
+	cd $(OUTDIR) && ln -fs ../$(STATIC_OUTDIR)/deltafs_* .
 
 tests: $(TEST_PROGRAMS)
 
@@ -104,6 +105,9 @@ $(STATIC_OUTDIR)/external/pdlfs-common/modules/rados: | $(STATIC_OUTDIR)
 $(STATIC_OUTDIR)/src/libdeltafs: | $(STATIC_OUTDIR)
 	mkdir -p $@
 
+$(STATIC_OUTDIR)/src/cmds: | $(STATIC_OUTDIR)
+	mkdir -p $@
+
 $(STATIC_OUTDIR)/src/server: | $(STATIC_OUTDIR)
 	mkdir -p $@
 
@@ -114,6 +118,7 @@ STATIC_OBJDIRS: \
 	$(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb/db \
 	$(STATIC_OUTDIR)/external/pdlfs-common/modules/rados \
 	$(STATIC_OUTDIR)/src/libdeltafs \
+	$(STATIC_OUTDIR)/src/cmds \
 	$(STATIC_OUTDIR)/src/server
 
 $(STATIC_ALLOBJS): | STATIC_OBJDIRS
@@ -161,6 +166,9 @@ $(STATIC_OUTDIR)/libdeltafs-static.a:$(STATIC_LIBOBJECTS)
 $(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT): $(SHARED_LIBOBJECTS)
 	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libdeltafs.$(PLATFORM_SHARED_EXT) \
 		$(SHARED_LIBOBJECTS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/deltafs_shell:src/cmds/deltafs_shell.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/cmds/deltafs_shell.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/deltafs_server:src/server/deltafs_server.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/server/deltafs_server.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) -o $@ $(LIBS)
