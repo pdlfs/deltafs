@@ -21,7 +21,7 @@
 // these log entries will go to stderr.
 namespace pdlfs {
 
-#define __LOG_ARGS__ Logger::Default(), __FILE__, __LINE__
+#define __LOG_ARGS__ ::pdlfs::Logger::Default(), __FILE__, __LINE__
 
 // Emit a verbose log entry to *info_log if info_log is non-NULL.
 extern void Verbose(Logger* info_log, const char* file, int line, int level,

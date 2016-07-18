@@ -63,7 +63,7 @@ Status MetadataServer::RunTillInterruption() {
   Status s;
   MutexLock ml(&mutex_);
   if (!running_ && rpc_ != NULL) {
-    Verbose(__LOG_ARGS__, 1, "Deltafs is starting ...");
+    Info(__LOG_ARGS__, "Deltafs is starting ...");
     s = rpc_->Start();
     if (s.ok()) {
       running_ = true;
@@ -71,7 +71,7 @@ Status MetadataServer::RunTillInterruption() {
         cv_.Wait();
       }
       if (rpc_ != NULL) {
-        Verbose(__LOG_ARGS__, 1, "Deltafs is shutting down ...");
+        Info(__LOG_ARGS__, "Deltafs is shutting down ...");
         s = rpc_->Stop();
       }
     }
@@ -276,7 +276,7 @@ void MetadataServer::Builder::OpenRPC() {
   if (ok()) {
     wrapper_ = new RPCWrapper(mds_);
     rpc_ = new RPCServer(wrapper_);
-    rpc_->AddChannel(uri, 4); // FIXME
+    rpc_->AddChannel(uri, 4);  // FIXME
   }
 }
 

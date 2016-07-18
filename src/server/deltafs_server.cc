@@ -28,7 +28,7 @@ static void Shutdown() {
 }
 static void HandleSignal(int signal) {
   if (signal == SIGINT) {
-    pdlfs::Log(pdlfs::Logger::Default(), "SIGINT received");
+    pdlfs::Info(__LOG_ARGS__, "SIGINT received");
   }
   Shutdown();
 }
@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
 #endif
-  pdlfs::Log(pdlfs::Logger::Default(), "Deltafs is initializing ...");
+  pdlfs::Info(__LOG_ARGS__, "Deltafs is initializing ...");
   pdlfs::Status s = pdlfs::MetadataServer::Open(&srv);
   if (s.ok()) {
     signal(SIGINT, HandleSignal);
@@ -50,10 +50,10 @@ int main(int argc, char* argv[]) {
   }
   delete srv;
   if (s.ok()) {
-    pdlfs::Log(pdlfs::Logger::Default(), "Bye!");
+    pdlfs::Info(__LOG_ARGS__, "Bye!");
     return 0;
   } else {
-    pdlfs::Log(pdlfs::Logger::Default(), "Failed - %s", s.ToString().c_str());
+    pdlfs::Error(__LOG_ARGS__, "Failed - %s", s.ToString().c_str());
     return 1;
   }
 }
