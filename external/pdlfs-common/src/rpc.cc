@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <vector>
 
+#include "pdlfs-common/logging.h"
 #include "pdlfs-common/rpc.h"
 #if defined(MERCURY)
 #include "mercury_rpc.h"
@@ -110,6 +111,10 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
   if (options.env == NULL) {
     options.env = Env::Default();
   }
+#ifndef NDEBUG
+  Verbose(__LOG_ARGS__, 5, "rpc.proto=%s", options.uri.c_str());
+  Verbose(__LOG_ARGS__, 5, "rpc.num_io_threads=%d", options.num_io_threads);
+#endif
 #if defined(MERCURY)
   return new rpc::RPCImpl(options);
 #else
