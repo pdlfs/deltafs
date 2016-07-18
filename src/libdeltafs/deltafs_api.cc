@@ -27,16 +27,24 @@ typedef Client::FileInfo FileInfo;
 static void InitClient() {
   Status s = Client::Open(&client);
   if (!s.ok()) {
-    Error(__LOG_ARGS__, "Cannot open client :%s", s.ToString().c_str());
+    Error(__LOG_ARGS__, "Fail to open client :%s", s.ToString().c_str());
     client = NULL;
   }
 }
 static void SetErrno(const Status& s) {
-  if (!s.ok()) {
-    errno = EIO;  // FIXME
+  if (s.IsNotFound()) {
+    errno = ENOENT;
+  } else if (s.IsAlreadyExists()) {
+    errno = EEXIST;
+  } else if (s.IsFileExpected()) {
+    errno = EISDIR;
+  } else if (s.IsDirExpected()) {
+    errno = ENOTDIR;
+  } else if (!s.ok()) {
+    errno = EIO;  // TODO: map more error types
   }
 }
-}
+}  // namespace pdlfs
 
 int deltafs_open(const char* __path, int __oflags, mode_t __mode,
                  struct stat* __buf) {
@@ -47,7 +55,7 @@ int deltafs_open(const char* __path, int __oflags, mode_t __mode,
   } else {
     pdlfs::FileInfo info;
     pdlfs::Status s;
-    if (O_RDONLY != (__oflags & O_RDONLY)) {
+    if (O_RDONLY != __oflags) {
       s = client->Wopen(__path, __mode, &info);
     } else {
       s = client->Ropen(__path, &info);

@@ -452,6 +452,7 @@ Status MDS::CLI::Mkdir(const Slice& p, int mode) {
 Status MDS::CLI::Ftruncate(const Fentry& ent, uint64_t mtime, uint64_t size) {
   Status s;
   IndexHandle* idxh = NULL;
+  MutexLock ml(&mutex_);
   s = FetchIndex(ent.pid, ent.zserver, &idxh);
   if (s.ok()) {
     mutex_.Unlock();

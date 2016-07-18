@@ -264,6 +264,7 @@ void Client::Builder::OpenSession() {
     MDS* mds = mdsfty_->Get(cli_id_ % mdstopo_.num_srvs);
     assert(mds != NULL);
     MDS::OpensessionOptions options;
+    options.dir_id = DirId(0, 0, 0);
     MDS::OpensessionRet ret;
     status_ = mds->Opensession(options, &ret);
     if (ok()) {
@@ -287,6 +288,7 @@ void Client::Builder::OpenDB() {
     MDS* mds = mdsfty_->Get(session_id_ % mdstopo_.num_srvs);
     assert(mds != NULL);
     MDS::GetoutputOptions options;
+    options.dir_id = DirId(0, 0, 0);
     MDS::GetoutputRet ret;
     status_ = mds->Getoutput(options, &ret);
     if (ok()) {
