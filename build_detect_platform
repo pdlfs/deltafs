@@ -154,7 +154,15 @@ if [ "$CROSS_COMPILE" = "true" ]; then
     # Cross-compiling; do not try any compilation tests.
     true
 else
-    CXXOUTPUT="${TMPDIR}/pdlfs_common_build_detect_platform.$$"
+    CXXOUTPUT="${TMPDIR}/deltafs_build_detect_platform.$$"
+
+    # Add -std=c++0x if that works
+    $CXX $CXXFLAGS -std=c++0x -x c++ - -o $CXXOUTPUT 2>/dev/null  <<EOF
+      int main() {}
+EOF
+    if [ "$?" = 0 ]; then
+        PLATFORM_CXXFLAGS="-std=c++0x"
+    fi
 
     # Test whether glog is installed
     # https://github.com/google/glog/
@@ -185,7 +193,7 @@ EOF
       int main() {}
 EOF
     if [ "$?" = 0 ]; then
-        COMMON_FLAGS="$COMMON_FLAGS -std=c++11 -DRADOS"
+        COMMON_FLAGS="$COMMON_FLAGS -DRADOS"
         PLATFORM_LIBS="$PLATFORM_LIBS -lrados"
     fi
 
