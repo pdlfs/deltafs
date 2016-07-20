@@ -1,9 +1,9 @@
 [submodule "deps/bmi"]
 	path = deps/bmi
-	url = git://git.mcs.anl.gov/bmi
+	url = http://git.mcs.anl.gov/bmi
 [submodule "deps/openpa"]
 	path = deps/openpa
-	url = git://git.mcs.anl.gov/radix/openpa
+	url = http://git.mcs.anl.gov/radix/openpa
 [submodule "deps/mercury"]
 	path = deps/mercury
 	url = https://github.com/mercury-hpc/mercury.git
