@@ -27,6 +27,7 @@
 #  -DGFLAGS                     if the Google flags library is present
 #  -DRADOS                      if the Ceph rados library is present
 #  -DMERCURY                    if the Mercury RPC library is present
+#  -DMPI                        if MPI env is present
 #
 
 OUTPUT=$1
@@ -40,14 +41,10 @@ fi
 rm -f $OUTPUT
 touch $OUTPUT
 
-if test -z "$CC"; then
-    CC=gcc
-fi
-
-if test -z "$CXX"; then
-    CXX=g++
-fi
-
+if test -z "$CC"; then CC="gcc"; fi
+if test -z "$CXX"; then CXX="g++"; fi
+if test -z "$MPICC"; then MPICC="mpicc"; fi
+if test -z "$MPICXX"; then MPICXX="mpicxx"; fi
 if test -z "$TMPDIR"; then
     TMPDIR=/tmp
 fi
@@ -224,6 +221,17 @@ EOF
 EOF
     if [ "$?" = 0 ]; then
         PLATFORM_LIBS="$PLATFORM_LIBS -ltcmalloc"
+    fi
+
+    # If MPI has been installed, build deltafs with it
+    $MPICXX $CXXFLAGS -x c++ - -o $CXXOUTPUT 2>/dev/null <<EOF
+      #include <mpi/mpi.h>
+      int main() {}
+EOF
+    if [ "$?" = 0 ]; then
+        COMMON_FLAGS="$COMMON_FLAGS -DMPI"
+        CC="$MPICC"
+        CXX="$MPICXX"
     fi
 
     rm -f $CXXOUTPUT 2>/dev/null
