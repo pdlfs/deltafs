@@ -9,6 +9,9 @@
 
 #include <signal.h>
 #include <stdlib.h>
+#if defined(PDLFS_WITH_MPI)
+#include <mpi/mpi.h>
+#endif
 
 #include "../libdeltafs/deltafs_mds.h"
 
@@ -20,6 +23,8 @@
 #endif
 
 static pdlfs::MetadataServer* srv = NULL;
+static int srv_id = 0;
+static int num_srvs = 1;
 
 static void Shutdown() {
   if (srv != NULL) {
@@ -34,6 +39,26 @@ static void HandleSignal(int signal) {
 }
 
 int main(int argc, char* argv[]) {
+#if defined(PDLFS_WITH_MPI)
+  int r = MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, NULL);
+  if (r == MPI_SUCCESS) {
+    r = MPI_Comm_rank(MPI_COMM_WORLD, &srv_id);
+    if (r == MPI_SUCCESS) {
+      r = MPI_Comm_size(MPI_COMM_WORLD, &num_srvs);
+    }
+    MPI_Finalize();  // MPI no longer needed
+  }
+  if (r != MPI_SUCCESS) {
+    fprintf(stderr, "MPI initialization failed");
+    abort();
+  } else {
+    char tmp[20];
+    snprintf(tmp, sizeof(tmp), "%d", srv_id);
+    setenv("DELTAFS_InstanceId", tmp, 0);  // Do not override
+    snprintf(tmp, sizeof(tmp), "%d", num_srvs);
+    setenv("DELTAFS_NumOfMetadataSrvs", tmp, 0);  // Do not override
+  }
+#endif
 #if defined(GFLAGS)
   google::ParseCommandLineFlags(&argc, &argv, true);
 #endif
