@@ -9,12 +9,6 @@
 
 #include <stdlib.h>
 #include <string>
-#if defined(GFLAGS)
-#include <gflags/gflags.h>
-#define DEFINE_FLAG_PORT(n, v)                              \
-  static inline std::string FLAGS_load_##n() { return ""; } \
-  DEFINE_string(n, v, "deltafs");
-#else
 static std::string LoadFromEnv(const char* key) {
   const char* v = getenv(key);
   if (v == NULL) {
@@ -23,8 +17,14 @@ static std::string LoadFromEnv(const char* key) {
     return v;
   }
 }
-#define DEFINE_FLAG_PORT(n, v)                                    \
-  static std::string FLAGS_load_##n() { return LoadFromEnv(#n); } \
+#if defined(GFLAGS)
+#include <gflags/gflags.h>
+#define DEFINE_FLAG_PORT(n, v)                                               \
+  static std::string FLAGS_load_##n() { return LoadFromEnv("DELTAFS_" #n); } \
+  DEFINE_string(n, v, "deltafs");
+#else
+#define DEFINE_FLAG_PORT(n, v)                                               \
+  static std::string FLAGS_load_##n() { return LoadFromEnv("DELTAFS_" #n); } \
   static std::string FLAGS_##n = v;
 #endif
 #include <ctype.h>
