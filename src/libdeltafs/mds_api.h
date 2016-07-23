@@ -202,7 +202,7 @@ class MDSTracer : public MDSWrapper {
   explicit MDSTracer(MDS* base) : MDSWrapper(base) {}
   virtual ~MDSTracer();
 
-#ifndef NTRACE
+#if VERBOSE >= 1
 #define DEF_OP(OP)                                                           \
   virtual Status OP(const OP##Options& options, OP##Ret* ret) {              \
     std::string pid = options.dir_id.DebugString();                          \

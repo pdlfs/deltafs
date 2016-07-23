@@ -146,6 +146,7 @@ void MetadataServer::Builder::LoadIds() {
 void MetadataServer::Builder::LoadMDSTopology() {
   uint64_t num_vir_srvs;
   uint64_t num_srvs;
+  size_t num_addrs;
 
   if (ok()) {
     status_ = config::LoadNumOfVirMetadataSrvs(&num_vir_srvs);
@@ -153,14 +154,31 @@ void MetadataServer::Builder::LoadMDSTopology() {
       status_ = config::LoadNumOfMetadataSrvs(&num_srvs);
       if (ok()) {
         std::string addrs = config::MetadataSrvAddrs();
-        size_t num_addrs = SplitString(addrs, ';', &mdstopo_.srv_addrs);
-        if (num_addrs < num_srvs) {
-          status_ = Status::InvalidArgument("Not enough addrs");
-        } else if (num_addrs > num_srvs) {
-          status_ = Status::InvalidArgument("Too many addrs");
-        } else if (srv_id_ >= num_addrs) {
-          status_ = Status::InvalidArgument("Bad srv id");
+        num_addrs = SplitString(addrs, ';', &mdstopo_.srv_addrs);
+      }
+    }
+  }
+
+  if (ok()) {
+    if (srv_id_ >= num_srvs) {
+      status_ = Status::InvalidArgument("Bad instance id");
+    } else {
+      if (num_addrs == 0) {
+        std::vector<std::string> ips;
+        status_ = Env::Default()->FetchHostIPAddrs(&ips);
+        if (ok() && !ips.empty()) {
+          int port = 10101 + srv_id_;
+          char tmp[30];
+          snprintf(tmp, sizeof(tmp), "%s:%d", ips[0].c_str(), port);
+          mdstopo_.srv_addrs.assign(num_srvs, "");
+          mdstopo_.srv_addrs[srv_id_] = tmp;
+        } else {
+          status_ = Status::IOError("Fail to obtain local IP address");
         }
+      } else if (num_addrs < num_srvs) {
+        status_ = Status::InvalidArgument("Not enough addresses");
+      } else if (num_addrs > num_srvs) {
+        status_ = Status::InvalidArgument("Too many addresses");
       }
     }
   }

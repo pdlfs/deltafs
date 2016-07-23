@@ -111,9 +111,9 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
   if (options.env == NULL) {
     options.env = Env::Default();
   }
-#ifndef NDEBUG
-  Verbose(__LOG_ARGS__, 5, "rpc.proto=%s", options.uri.c_str());
-  Verbose(__LOG_ARGS__, 5, "rpc.num_io_threads=%d", options.num_io_threads);
+#if VERBOSE >= 1
+  Verbose(__LOG_ARGS__, 1, "rpc.uri=%s", options.uri.c_str());
+  Verbose(__LOG_ARGS__, 1, "rpc.num_io_threads=%d", options.num_io_threads);
 #endif
 #if defined(MERCURY)
   return new rpc::RPCImpl(options);
