@@ -20,6 +20,7 @@
 #
 #  -DPDLFS_PLATFORM_ATOMIC_PRESENT    if <atomic> is present
 #  -DPDLFS_PLATFORM_POSIX             if on POSIX-based platforms
+#  -DPDLFS_WITH_MPI                   if MPI is installed
 #  -DPDLFS_OS_*                       where "*" is the OS name
 #
 #  -DSNAPPY                     if the Snappy library is present
@@ -27,7 +28,6 @@
 #  -DGFLAGS                     if the Google flags library is present
 #  -DRADOS                      if the Ceph rados library is present
 #  -DMERCURY                    if the Mercury RPC library is present
-#  -DMPI                        if MPI env is present
 #
 
 OUTPUT=$1
@@ -229,7 +229,7 @@ EOF
       int main() {}
 EOF
     if [ "$?" = 0 ]; then
-        COMMON_FLAGS="$COMMON_FLAGS -DMPI"
+        COMMON_FLAGS="$COMMON_FLAGS -DPDLFS_WITH_MPI"
         CC="$MPICC"
         CXX="$MPICXX"
     fi
