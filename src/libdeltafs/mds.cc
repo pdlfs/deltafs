@@ -79,7 +79,19 @@ MDS::SRV::~SRV() {
 MDS* MDS::Open(const MDSOptions& options) {
   assert(options.mds_env != NULL && options.mds_env->env != NULL);
   assert(options.mdb != NULL);
-  // TODO: print options
+#if VERBOSE >= 1
+  Verbose(__LOG_ARGS__, 1, "mds.num_virtual_servers=%d",
+          options.num_virtual_servers);
+  Verbose(__LOG_ARGS__, 1, "mds.num_servers=%d", options.num_servers);
+  Verbose(__LOG_ARGS__, 1, "mds.dir_table_size=%zu", options.dir_table_size);
+  Verbose(__LOG_ARGS__, 1, "mds.lease_table_size=%zu",
+          options.lease_table_size);
+  Verbose(__LOG_ARGS__, 1, "mds.reg_id=%llu",
+          (unsigned long long)options.reg_id);
+  Verbose(__LOG_ARGS__, 1, "mds.snap_id=%llu",
+          (unsigned long long)options.snap_id);
+  Verbose(__LOG_ARGS__, 1, "mds.srv_id=%d", options.srv_id);
+#endif
   MDS* mds = new SRV(options);
   return mds;
 }
@@ -126,7 +138,19 @@ MDS::CLI::~CLI() {
 
 MDS::CLI* MDS::CLI::Open(const MDSCliOptions& options) {
   assert(options.env != NULL && options.factory != NULL);
-  // TODO: print options
+#if VERBOSE >= 1
+  Verbose(__LOG_ARGS__, 1, "mds.num_virtual_servers=%d",
+          options.num_virtual_servers);
+  Verbose(__LOG_ARGS__, 1, "mds.num_servers=%d", options.num_servers);
+  Verbose(__LOG_ARGS__, 1, "mds.cli.index_cache_size=%zu",
+          options.index_cache_size);
+  Verbose(__LOG_ARGS__, 1, "mds.cli.lookup_cache_size=%zu",
+          options.lookup_cache_size);
+  Verbose(__LOG_ARGS__, 1, "mds.cli.uid=%d", options.uid);
+  Verbose(__LOG_ARGS__, 1, "mds.cli.gid=%d", options.gid);
+  Verbose(__LOG_ARGS__, 1, "mds.cli.session_id=%d", options.session_id);
+  Verbose(__LOG_ARGS__, 1, "mds.cli.cli_id=%d", options.cli_id);
+#endif
   MDS::CLI* cli = new MDS::CLI(options);
   return cli;
 }
