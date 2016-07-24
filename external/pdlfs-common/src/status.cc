@@ -43,28 +43,30 @@ Status::Status(Code code, const Slice& msg, const Slice& msg2) {
 namespace {
 /* clang-format off */
 static const char* kCodeString[] = {
-  /* kOk */ "OK",                                       /* 0 */
-  /* kNotFound */ "Not found",                          /* 1 */
-  /* kAlreadyExists */ "Already exists",                /* 2 */
-  /* kCorruption */ "Corruption",                       /* 3 */
-  /* kNotSupported */ "Not implemented",                /* 4 */
-  /* kInvalidArgument */ "Invalid argument",            /* 5 */
-  /* kIOError */ "IO error",                            /* 6 */
-  /* kBufferFull */ "Buffer full",                      /* 7 */
-  /* kReadOnly */ "Read only",                          /* 8 */
-  /* kWriteOnly */ "Write only",                        /* 9 */
-  /* kDeadLocked */ "Dead locked",                      /* 10 */
-  /* kOptimisticLockFailed */ "Optimistic lock failed", /* 11 */
-  /* kTryAgain */ "Try again",                          /* 12 */
-  /* kDisconnected */ "Disconnected",                   /* 13 */
-  /* kAssertionFailed */ "Assertion failed",            /* 14 */
-  /* kAccessDenied */ "Permission denied",              /* 15 */
-  /* kDirExpected */ "Dir expected",                    /* 16 */
-  /* kFileExpected */ "File expected",                  /* 17 */
-  /* kDirNotEmpty */ "Dir not empty",                   /* 18 */
-  /* kDirNotAllocated */ "Dir not allocated",           /* 19 */
-  /* kDirDisabled */ "Dir disabled",                    /* 20 */
-  /* kDirMarkedDeleted */ "Dir marked deleted",         /* 21 */
+  /* kOk */ "OK",                                         /* 0 */
+  /* kNotFound */ "Not found",                            /* 1 */
+  /* kAlreadyExists */ "Already exists",                  /* 2 */
+  /* kCorruption */ "Corruption",                         /* 3 */
+  /* kNotSupported */ "Not implemented",                  /* 4 */
+  /* kInvalidArgument */ "Invalid argument",              /* 5 */
+  /* kIOError */ "IO error",                              /* 6 */
+  /* kBufferFull */ "Buffer full",                        /* 7 */
+  /* kReadOnly */ "Read only",                            /* 8 */
+  /* kWriteOnly */ "Write only",                          /* 9 */
+  /* kDeadLocked */ "Dead locked",                        /* 10 */
+  /* kOptimisticLockFailed */ "Optimistic lock failed",   /* 11 */
+  /* kTryAgain */ "Try again",                            /* 12 */
+  /* kDisconnected */ "Disconnected",                     /* 13 */
+  /* kAssertionFailed */ "Assertion failed",              /* 14 */
+  /* kAccessDenied */ "Permission denied",                /* 15 */
+  /* kDirExpected */ "Dir expected",                      /* 16 */
+  /* kFileExpected */ "File expected",                    /* 17 */
+  /* kDirNotEmpty */ "Dir not empty",                     /* 18 */
+  /* kDirNotAllocated */ "Dir not allocated",             /* 19 */
+  /* kDirDisabled */ "Dir disabled",                      /* 20 */
+  /* kDirMarkedDeleted */ "Dir marked deleted",           /* 21 */
+  /* kInvalidFileDescriptor */ "Invalid file descriptor", /* 22 */
+  /* kTooManyOpens */ "Too many open files"               /* 23 */                 
 };
 /* clang-format on */
 }

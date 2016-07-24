@@ -66,6 +66,8 @@ class Status {
   DEF_ERR(DirNotAllocated);
   DEF_ERR(DirDisabled);
   DEF_ERR(DirMarkedDeleted);
+  DEF_ERR(InvalidFileDescriptor);
+  DEF_ERR(TooManyOpens);
 
 #undef DEF_ERR
 
@@ -97,10 +99,13 @@ class Status {
     kDirNotEmpty = 18,
     kDirNotAllocated = 19,
     kDirDisabled = 20,
-    kDirMarkedDeleted = 21
+    kDirMarkedDeleted = 21,
+    kInvalidFileDescriptor = 22,
+    kTooManyOpens = 23,
+    kUnknownError = 24
   };
 
-  static const int kMaxCode = kDirMarkedDeleted;
+  static const int kMaxCode = kUnknownError - 1;
 
   static Status FromCode(int err_code) {
     assert(err_code > 0 && err_code <= kMaxCode);

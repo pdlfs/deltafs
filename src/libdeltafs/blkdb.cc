@@ -61,7 +61,7 @@ Status BlkDB::GetInfo(sid_t sid, Fentry* entry, bool* dirty, uint64_t* mtime,
   Stream* stream;
   MutexLock ml(&mutex_);
   if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
-    s = Status::InvalidArgument("Bad stream id");
+    s = Status::InvalidFileDescriptor(Slice());
   } else {
     Slice encoding = stream->encoding();
     if (!entry->DecodeFrom(&encoding)) {
@@ -148,7 +148,7 @@ Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
   Slice fentry_encoding = fentry.EncodeTo(tmp);
   mutex_.Lock();
   if (num_open_streams_ >= max_open_streams_) {
-    s = Status::BufferFull("Too many open streams");
+    s = Status::TooManyOpens(Slice());
   }
   mutex_.Unlock();
   if (!s.ok()) {
@@ -214,7 +214,7 @@ Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
   if (s.ok()) {
     mutex_.Lock();
     if (num_open_streams_ >= max_open_streams_) {
-      s = Status::BufferFull("Too many open streams");
+      s = Status::TooManyOpens(Slice());
     } else {
       Stream* stream =
           static_cast<Stream*>(malloc(sizeof(Stream) + fentry_encoding.size()));
@@ -250,7 +250,7 @@ Status BlkDB::Flush(sid_t sid, bool force_sync) {
   MutexLock ml(&mutex_);
   size_t idx = sid;
   if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
-    s = Status::InvalidArgument("Bad stream id");
+    s = Status::InvalidFileDescriptor(Slice());
   } else if (force_sync || stream->nflus < stream->nwrites) {
     uint32_t nwrites = stream->nwrites;
     uint32_t nflus = stream->nflus;
@@ -287,7 +287,7 @@ Status BlkDB::Close(sid_t sid) {
   MutexLock ml(&mutex_);
   size_t idx = sid;
   if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
-    s = Status::InvalidArgument("Bad stream id");
+    s = Status::InvalidFileDescriptor(Slice());
   } else {
     // Will lose data if the following should be true
     assert(stream->nflus >= stream->nwrites);
@@ -306,7 +306,7 @@ Status BlkDB::Pwrite(sid_t sid, const Slice& data, uint64_t off) {
   MutexLock ml(&mutex_);
   size_t idx = sid;
   if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
-    s = Status::InvalidArgument("Bad stream id");
+    s = Status::InvalidFileDescriptor(Slice());
   } else {
     mutex_.Unlock();
     WriteOptions options;
@@ -343,7 +343,7 @@ Status BlkDB::Pread(sid_t sid, Slice* result, uint64_t off, uint64_t size,
   MutexLock ml(&mutex_);
   size_t idx = sid;
   if (idx >= max_open_streams_ || (stream = streams_[idx]) == NULL) {
-    s = Status::InvalidArgument("Bad stream id");
+    s = Status::InvalidFileDescriptor(Slice());
   } else {
     Iterator* iter = stream->iter;
     stream->iter = NULL;

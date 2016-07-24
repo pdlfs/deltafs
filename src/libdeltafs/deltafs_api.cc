@@ -18,10 +18,10 @@
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
 
+static pdlfs::port::OnceType once = PDLFS_ONCE_INIT;
 // global Deltafs client instance shared by all threads within a process
 static pdlfs::Client* client;
 
-static pdlfs::port::OnceType once = PDLFS_ONCE_INIT;
 namespace pdlfs {
 typedef Client::FileInfo FileInfo;
 static void InitClient() {
@@ -40,6 +40,14 @@ static void SetErrno(const Status& s) {
     errno = EISDIR;
   } else if (s.IsDirExpected()) {
     errno = ENOTDIR;
+  } else if (s.IsInvalidFileDescriptor()) {
+    errno = EBADFD;
+  } else if (s.IsTooManyOpens()) {
+    errno = EMFILE;
+  } else if (s.IsAccessDenied()) {
+    errno = EACCES;
+  } else if (s.IsReadOnly()) {
+    errno = EROFS;
   } else if (!s.ok()) {
     errno = EIO;  // TODO: map more error types
   }
