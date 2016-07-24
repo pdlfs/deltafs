@@ -32,7 +32,7 @@ Client::~Client() {
 Status Client::Wopen(const Slice& path, int mode, FileInfo* info) {
   Status s;
   Fentry ent;
-  s = mdscli_->Fcreat(path, mode, &ent);
+  s = mdscli_->Fcreat(path, true, mode, &ent);
   if (s.IsAlreadyExists()) {
     s = mdscli_->Fstat(path, &ent);
   }
@@ -139,7 +139,8 @@ Status Client::Close(int fd) {
 Status Client::Mkfile(const Slice& path, int mode) {
   Status s;
   Fentry ent;
-  s = mdscli_->Fcreat(path, mode, &ent);
+  const bool error_if_exists = true;
+  s = mdscli_->Fcreat(path, error_if_exists, mode, &ent);
   return s;
 }
 

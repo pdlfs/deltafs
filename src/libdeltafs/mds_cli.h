@@ -57,7 +57,7 @@ class MDS::CLI {
   ~CLI();
 
   Status Fstat(const Slice& path, Fentry*);
-  Status Fcreat(const Slice& path, int mode, Fentry*);
+  Status Fcreat(const Slice& path, bool error_if_exists, int mode, Fentry*);
   Status Ftruncate(const Fentry&, uint64_t mtime, uint64_t size);
   Status Mkdir(const Slice& path, int mode);
 

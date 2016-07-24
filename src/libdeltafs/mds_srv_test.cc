@@ -7,6 +7,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -78,6 +79,7 @@ class ServerTest {
   int Mknod(int dir_ino, int nod_no) {
     MDS::FcreatOptions options;
     options.dir_id = DirId(0, 0, dir_ino);
+    options.flags = O_EXCL;
     options.mode = ACCESSPERMS;
     options.uid = 0;
     options.gid = 0;

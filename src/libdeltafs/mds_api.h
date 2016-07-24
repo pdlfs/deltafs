@@ -80,6 +80,7 @@ class MDS {
   MDS_OP(Fstat)
 
   MDS_OP_OPTIONS(Fcreat) {
+    uint32_t flags;
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;

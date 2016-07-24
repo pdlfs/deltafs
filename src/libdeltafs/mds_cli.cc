@@ -293,7 +293,8 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
   return s;
 }
 
-Status MDS::CLI::Fcreat(const Slice& p, int mode, Fentry* ent) {
+Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, int mode,
+                        Fentry* ent) {
   Status s;
   char tmp[20];
   PathInfo path;
@@ -312,6 +313,7 @@ Status MDS::CLI::Fcreat(const Slice& p, int mode, Fentry* ent) {
       options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
       options.session_id = session_id_;
       options.dir_id = path.pid;
+      options.flags = error_if_exists ? O_EXCL : 0;
       options.mode = mode;
       options.uid = uid_;
       options.gid = gid_;

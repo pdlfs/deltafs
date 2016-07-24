@@ -199,6 +199,7 @@ Status MDS::RPC::CLI::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
     p = EncodeDirId(p, options.dir_id);
     p = EncodeLengthPrefixedSlice(p, options.name_hash);
     p = EncodeLengthPrefixedSlice(p, options.name);
+    p = EncodeVarint32(p, options.flags);
     p = EncodeVarint32(p, options.mode);
     p = EncodeVarint32(p, options.uid);
     p = EncodeVarint32(p, options.gid);
@@ -209,6 +210,7 @@ Status MDS::RPC::CLI::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
     PutDirId(&in.extra_buf, options.dir_id);
     PutLengthPrefixedSlice(&in.extra_buf, options.name_hash);
     PutLengthPrefixedSlice(&in.extra_buf, options.name);
+    PutVarint32(&in.extra_buf, options.flags);
     PutVarint32(&in.extra_buf, options.mode);
     PutVarint32(&in.extra_buf, options.uid);
     PutVarint32(&in.extra_buf, options.gid);
@@ -251,6 +253,7 @@ void MDS::RPC::SRV::FCRET(Msg& in, Msg& out) {
   if (!GetDirId(&input, &options.dir_id) ||
       !GetLengthPrefixedSlice(&input, &options.name_hash) ||
       !GetLengthPrefixedSlice(&input, &options.name) ||
+      !GetVarint32(&input, &options.flags) ||
       !GetVarint32(&input, &options.mode) ||
       !GetVarint32(&input, &options.uid) ||
       !GetVarint32(&input, &options.gid) ||
