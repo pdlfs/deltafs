@@ -133,8 +133,14 @@ static Slice ExtractUntypedKeyPrefix(const Slice& v) {
   return key_prefix;
 }
 
+Status BlkDB::Creat(const Fentry& fentry, sid_t* result) {
+  uint64_t ignored_mtime;
+  uint64_t ignored_size;
+  return Open(fentry, true, true, &ignored_mtime, &ignored_size, result);
+}
+
 Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
-                   bool error_if_exists, uint64_t* mtime, uint64_t* size,
+                   bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
                    sid_t* result) {
   *result = -1;
   Status s;
@@ -179,8 +185,8 @@ Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
 
   if (s.ok()) {
     if (found) {
-      if (error_if_exists) {
-        s = Status::AlreadyExists(Slice());
+      if (truncate_if_exists) {
+        s = Status::NotSupported(Slice());
       }
     } else {
       if (!create_if_missing) {

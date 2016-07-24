@@ -62,8 +62,9 @@ class BlkDB {
   BlkDB(const BlkDBOptions&);
   ~BlkDB();
 
-  Status Open(const Fentry& entry, bool create_if_missing, bool error_if_exists,
-              uint64_t* mtime, uint64_t* size, sid_t* result);
+  Status Creat(const Fentry&, sid_t*);
+  Status Open(const Fentry&, bool create_if_missing, bool truncate_if_exists,
+              uint64_t* mtime, uint64_t* size, sid_t*);
   Status Pwrite(sid_t sid, const Slice& data, uint64_t off);
   Status Pread(sid_t sid, Slice* result, uint64_t off, uint64_t size,
                char* scratch);

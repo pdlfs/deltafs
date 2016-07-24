@@ -9,11 +9,10 @@
 
 #include "deltafs_client.h"
 #include "deltafs_conf_loader.h"
-#if defined(PDLFS_PLATFORM_POSIX)
+
+#include <fcntl.h>
 #include <sys/types.h>
 #include <unistd.h>
-#endif
-
 #include "pdlfs-common/rpc.h"
 #include "pdlfs-common/strutil.h"
 
@@ -26,24 +25,42 @@ Client::~Client() {
   delete db_;
 }
 
-// Open a file for writing. Return OK on success.
-// If the file already exists, it is not truncated.
-// If the file doesn't exist, it will be created.
-Status Client::Wopen(const Slice& path, int mode, FileInfo* info) {
+// Open a file for I/O operations. Return OK on success.
+// If O_CREAT is specified and the file does not exist, it will be created.
+// If both O_CREAT and O_EXCL are specified and the file exists,
+// error is returned.
+// If O_TRUNC is specified and the file already exists and is a regular
+// file and the open mode allows writing, it will be truncated to length 0.
+// In addition to opening the file, a file descriptor is allocated
+// to represent the file. The current length of the file is also returned along
+// with the file descriptor.
+// Only a fixed amount of file can be opened simultaneously.
+Status Client::Fopen(const Slice& path, int flags, int mode, FileInfo* info) {
   Status s;
   Fentry ent;
-  s = mdscli_->Fcreat(path, true, mode, &ent);
-  if (s.IsAlreadyExists()) {
+  uint64_t my_time = Env::Default()->NowMicros();
+  if ((flags & O_CREAT) == O_CREAT) {
+    const bool error_if_exists = (flags & O_EXCL) == O_EXCL;
+    s = mdscli_->Fcreat(path, error_if_exists, mode, &ent);
+  } else {
     s = mdscli_->Fstat(path, &ent);
   }
 
-  uint64_t mtime;
-  uint64_t size;
+  uint64_t mtime = 0;
+  uint64_t size = 0;
   int fd;
   if (s.ok()) {
-    s = blkdb_->Open(ent, true,  // create if missing
-                     false,      // error if exists
-                     &mtime, &size, &fd);
+    if (ent.stat.ChangeTime() >= my_time) {
+      // File doesn't exist before so we know it has length 0
+      s = blkdb_->Creat(ent, &fd);
+    } else {
+      // File exists and we need to check file length
+      const bool create_if_missing = false;
+      const bool truncate_if_exists =
+          (flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC) == O_TRUNC;
+      s = blkdb_->Open(ent, create_if_missing, truncate_if_exists, &mtime,
+                       &size, &fd);
+    }
 #if 0
     if (s.ok()) {
       if (size != ent.stat.FileSize()) {
@@ -56,42 +73,13 @@ Status Client::Wopen(const Slice& path, int mode, FileInfo* info) {
       info->fd = fd;
     }
   }
+
   return s;
 }
 
 // Write a chunk of data at a specified offset. Return OK on success.
 Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   return blkdb_->Pwrite(fd, data, off);
-}
-
-// Open a file for reading. Return OK on success.
-// If the file doesn't exist, it won't be created.
-Status Client::Ropen(const Slice& path, FileInfo* info) {
-  Status s;
-  Fentry ent;
-  s = mdscli_->Fstat(path, &ent);
-
-  uint64_t mtime;
-  uint64_t size;
-  int fd;
-  if (s.ok()) {
-    // Create the file if missing since the MDS says it exists.
-    s = blkdb_->Open(ent, true,  // create if missing
-                     false,      // error if exists
-                     &mtime, &size, &fd);
-#if 0
-    if (s.ok()) {
-      if (size != ent.stat.FileSize()) {
-        // FIXME
-      }
-    }
-#endif
-    if (s.ok()) {
-      info->size = size;
-      info->fd = fd;
-    }
-  }
-  return s;
 }
 
 // Read a chunk of data at a specified offset. Return OK on success.

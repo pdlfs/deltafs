@@ -55,11 +55,7 @@ int deltafs_open(const char* __path, int __oflags, mode_t __mode,
   } else {
     pdlfs::FileInfo info;
     pdlfs::Status s;
-    if (O_RDONLY != __oflags) {
-      s = client->Wopen(__path, __mode, &info);
-    } else {
-      s = client->Ropen(__path, &info);
-    }
+    s = client->Fopen(__path, __oflags, __mode, &info);
     if (s.ok()) {
       __buf->st_size = info.size;
       return info.fd;
