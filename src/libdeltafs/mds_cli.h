@@ -10,6 +10,7 @@
  */
 
 #include "mds_api.h"
+#include "pdlfs-common/fio.h"
 #include "pdlfs-common/index_cache.h"
 #include "pdlfs-common/lookup_cache.h"
 #include "pdlfs-common/port.h"
@@ -39,16 +40,6 @@ struct MDSCliOptions {
   int cli_id;
   int uid;
   int gid;
-};
-
-struct Fentry {
-  Fentry() {}
-  bool DecodeFrom(Slice* input);
-  Slice EncodeTo(char* scratch) const;
-  DirId pid;
-  std::string nhash;
-  int zserver;
-  Stat stat;
 };
 
 class MDS::CLI {
