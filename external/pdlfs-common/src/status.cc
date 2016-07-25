@@ -66,7 +66,7 @@ static const char* kCodeString[] = {
   /* kDirDisabled */ "Dir disabled",                      /* 20 */
   /* kDirMarkedDeleted */ "Dir marked deleted",           /* 21 */
   /* kInvalidFileDescriptor */ "Invalid file descriptor", /* 22 */
-  /* kTooManyOpens */ "Too many open files"               /* 23 */                 
+  /* kTooManyOpens */ "Too many open files"               /* 23 */
 };
 /* clang-format on */
 }
