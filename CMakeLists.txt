@@ -24,6 +24,12 @@ cmake_minimum_required (VERSION 2.8) # uses target_include_directories from 2.8
 
 project (DELTAFS)
 
+# link shared lib with rpath
+set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+# quiet CMP0042 warning
+set (CMAKE_MACOSX_RPATH 1)
+
 #
 # we compile everything with -DDELTAFS.  we also set the common library's
 # name to deltafs-common (since we may add deltafs-specific code to it).

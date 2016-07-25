@@ -23,8 +23,10 @@
 #endif
 
 static pdlfs::MetadataServer* srv = NULL;
+#if 0
 static int srv_id = 0;
 static int num_srvs = 1;
+#endif
 
 static void Shutdown() {
   if (srv != NULL) {

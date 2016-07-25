@@ -44,9 +44,9 @@ set (pcl-vers "${pcl-vers}.${PDLFS_COMMON_VERSION_PATCH}")
 
 # main directory sources and tests
 set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c.cc dbfiles.cc
-     dbfiles.cc dcntl.cc env.cc fstypes.cc gigaplus.cc hash.cc histogram.cc 
-     index_cache.cc lease.cc log_reader.cc log_writer.cc logging.cc 
-     lookup_cache.cc mdb.cc mercury_rpc.cc 
+     dbfiles.cc dcntl.cc env.cc fio.cc fstypes.cc gigaplus.cc hash.cc
+     histogram.cc index_cache.cc lease.cc log_reader.cc log_writer.cc
+     logging.cc lookup_cache.cc mdb.cc mercury_rpc.cc
      osd.cc osd_internal.cc port_posix.cc posix_env.cc rpc.cc
      slice.cc status.cc strutil.cc testharness.cc testutil.cc xxhash.cc)
 set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
