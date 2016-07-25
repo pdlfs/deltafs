@@ -34,7 +34,7 @@ set (dfs-vers "${dfs-vers}.${DELTAFS_VERSION_PATCH}")
 # main directory sources and tests
 set (deltafs-srcs blkdb.cc deltafs_api.cc deltafs_client.cc deltafs_conf.cc
      deltafs_mds.cc mds.cc mds_api.cc mds_cli.cc mds_factory.cc mds_srv.cc)
-set (deltafs-tests blkdb_test.cc mds_api_test.cc mds_cli_test.cc 
+set (deltafs-tests blkdb_test.cc mds_api_test.cc
      mds_srv_test.cc)
 
 #
