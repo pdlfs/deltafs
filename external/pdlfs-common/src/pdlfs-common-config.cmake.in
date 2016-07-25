@@ -1,0 +1,9 @@
+#
+# if you have depends, uncommend and add them: "find_dependency(Foo 2.4.1)"
+#include (CMakeFindDependencyMacro)
+#
+
+include ("${CMAKE_CURRENT_LIST_DIR}/@PCL_N@-targets.cmake")
+
+# could include a macros file if one is used
+

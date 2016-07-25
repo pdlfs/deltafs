@@ -9,17 +9,34 @@
 #
 
 # configure/load in standard modules we plan to use
+include (CMakePackageConfigHelpers)
+include (CheckCXXCompilerFlag)
 set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set (THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package (Threads REQUIRED)
-include (CheckCXXCompilerFlag)
 
 #
-# library version set here (e.g. for generating shared libs if we want
+# we allow the library binary to be installed and "find_package"'d 
+# under an alternate name (though header files are still under pdlfs-common).
+# we set "PCL_N" to the name we are going to use.
+#
+if (PDLFS_COMMON_LIBNAME)
+    set (PCL_N ${PDLFS_COMMON_LIBNAME})        # user specified name
+else ()
+    set (PCL_N "pdlfs-common")                 # default name
+endif ()
+
+# where to install files for "find_package"
+set (pcl-pkg-loc "share/cmake/${PCL_N}")
+
+#
+# library version set here (e.g. for shared libs)
 #
 set (PDLFS_COMMON_VERSION_MAJOR 1)
 set (PDLFS_COMMON_VERSION_MINOR 0)
 set (PDLFS_COMMON_VERSION_PATCH 0)
+set (pcl-vers "${PDLFS_COMMON_VERSION_MAJOR}.${PDLFS_COMMON_VERSION_MINOR}")
+set (pcl-vers "${pcl-vers}.${PDLFS_COMMON_VERSION_PATCH}")
 
 #
 # list of source files and tests
@@ -60,7 +77,8 @@ if (NOT PDLFS_OS)
 endif ()
 
 #
-# upper case and edit PDLFS_OS to match what the old build system uses
+# upper case and edit PDLFS_OS to match the old build system uses
+# (since some of the code still expects it... XXX: cleanup later)
 #
 string (TOUPPER ${PDLFS_OS} PDLFS_OS_EDITED)
 if (${PDLFS_OS_EDITED} STREQUAL "DARWIN")
@@ -75,48 +93,6 @@ elseif (${PDLFS_OS_EDITED} MATCHES "^CYGWIN_")
   set (PDLFS_OS_EDITED "CYGWIN")
   set (PDLFS_OS_LINUX 1)          # yuck, inherited it from leveldb
 endif ()
-
-#
-# here's the compiler/machine/os dependent stuff...
-#
-
-# XXX: leveldb build_detect_platform complains about gcc 4.4.3 memcmp
-# XXX: we duplicate the behavior, but assume that this isn't a problem
-# XXX: with newer compilers
-if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
-    if (${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 4.4.4)
-        add_compile_options (-fno-builtin-memcmp)
-        message ("**** NOTE: adding -fno-builtin-memcmp for old gcc")
-    endif ()
-endif ()
-
-set (pdlfs-try-common-flags -Wpedantic -Wno-long-long -Wall
-                            -Wno-sign-compare -pthread)
-foreach (lcv ${pdlfs-try-common-flags})
-    CHECK_CXX_COMPILER_FLAG (${lcv} flag${lcv})
-    if (${flag${lcv}})
-        add_compile_options (${lcv})
-    endif ()
-endforeach ()
-
-# "-pthread" should take care of all thread related options.
-# but if we don't have it, fall back to -D_REENTRANT
-if (NOT flag-pthread)
-    add_definitions (-D_REENTRANT)
-endif ()
-
-# XXX: untested solaris, does it need "-mt"?
-# XXX: leveldb also added "-lrt" .. but is that really needed?
-if (${PDLFS_OS_EDITED} STREQUAL "SOLARIS")
-    CHECK_CXX_COMPILER_FLAG (-mt flag-mt)
-    if (${flag-mt})
-        add_compile_options (-mt)
-    endif ()
-endif ()
-
-#
-# end of the compiler/machine/os dependent stuff!
-#
 
 #
 # setup for and configure pldfs_config_expand.h.in
@@ -141,51 +117,89 @@ set (pdlfs-all-srcs ${pdlfs-common-srcs} ${pdlfs-leveldb-srcs})
 set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-leveldb-tests})
 
 #
-# build static lib and arrange for targets to -I our include dir and
-# the dir we generated pdlfs_config_expand.h in
+# create the library target (user can specify shared vs. static
+# using BUILD_SHARED_LIBS).   arrange for users of our lib to
+# get the correct -Is for our include directories.  (for building
+# we need a -I pointing to the build dir for pdlfs_config_expand.h)
 #
-add_library (pdlfs-common-static STATIC ${pdlfs-all-srcs})
-if (PDLFS_COMMON_LIBNAME)
-    set_target_properties(pdlfs-common-static PROPERTIES 
-                          OUTPUT_NAME "${PDLFS_COMMON_LIBNAME}-static")
-endif ()
-target_include_directories (pdlfs-common-static PUBLIC "../include")
-target_include_directories (pdlfs-common-static PUBLIC 
-                                    "${CMAKE_CURRENT_BINARY_DIR}/../include")
-if (CMAKE_THREAD_LIBS_INIT)
-  target_link_libraries (pdlfs-common-static "${CMAKE_THREAD_LIBS_INIT}")
-endif ()
-
-#
-# build shared lib and arrange for targets to -I our include dir and
-# the dir we generated pdlfs_config_expand.h in
-#
-set (CMAKE_MACOSX_RPATH 1)
-add_library (pdlfs-common SHARED ${pdlfs-all-srcs})
-if (PDLFS_COMMON_LIBNAME)
-    set_target_properties(pdlfs-common PROPERTIES 
-                          OUTPUT_NAME "${PDLFS_COMMON_LIBNAME}")
-endif ()
-target_include_directories (pdlfs-common PUBLIC "../include")
-target_include_directories (pdlfs-common PUBLIC 
-                                    "${CMAKE_CURRENT_BINARY_DIR}/../include")
+add_library (pdlfs-common ${pdlfs-all-srcs})
+set_target_properties (pdlfs-common PROPERTIES OUTPUT_NAME "${PCL_N}")
+target_include_directories (pdlfs-common PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>
+    $<INSTALL_INTERFACE:include>)
 if (CMAKE_THREAD_LIBS_INIT)
   target_link_libraries (pdlfs-common "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
-set (pdlfs-common-vers
-    "${PDLFS_COMMON_VERSION_MAJOR}.${PDLFS_COMMON_VERSION_MINOR}")
-set (pdlfs-common-vers
-    "${pdlfs-common-vers}.${PDLFS_COMMON_VERSION_PATCH}")
 set_target_properties(pdlfs-common
-                      PROPERTIES VERSION ${pdlfs-common-vers}
+                      PROPERTIES VERSION ${pcl-vers}
                       SOVERSION ${PDLFS_COMMON_VERSION_MAJOR})
+
+#
+# here's the compiler/machine/os dependent stuff...
+#
+
+# XXX: leveldb build_detect_platform complains about gcc 4.4.3 memcmp
+# XXX: we duplicate the behavior, but assume that this isn't a problem
+# XXX: with newer compilers
+if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+    if (${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 4.4.4)
+        target_compile_options (pdlfs-common PRIVATE -fno-builtin-memcmp)
+        message ("**** NOTE: adding -fno-builtin-memcmp for old gcc")
+    endif ()
+endif ()
+
+set (pdlfs-try-common-flags -Wpedantic -Wno-long-long -Wall
+                            -Wno-sign-compare -pthread)
+foreach (lcv ${pdlfs-try-common-flags})
+    CHECK_CXX_COMPILER_FLAG (${lcv} flag${lcv})
+    if (${flag${lcv}})
+        target_compile_options (pdlfs-common PRIVATE ${lcv})
+    endif ()
+endforeach ()
+
+# "-pthread" should take care of all thread related options.
+# but if we don't have it, fall back to -D_REENTRANT
+if (NOT flag-pthread)
+    target_compile_definitions (pdlfs-common PUBLIC -D_REENTRANT)
+endif ()
+
+# XXX: untested solaris, does it need "-mt"?
+# XXX: leveldb also added "-lrt" .. but is that really needed?
+if (${PDLFS_OS_EDITED} STREQUAL "SOLARIS")
+    CHECK_CXX_COMPILER_FLAG (-mt flag-mt)
+    if (${flag-mt})
+        target_compile_options (pdlfs-common PUBLIC -mt)
+    endif ()
+endif ()
+
+#
+# end of the compiler/machine/os dependent stuff!
+#
+
+#
+# installation stuff (packaging and install commands)
+#
+write_basic_package_version_file(
+    "${PCL_N}-config-version.cmake"
+    VERSION ${pcl-vers}
+    COMPATIBILITY AnyNewerVersion)
+
+# generate our config file for find_package()
+configure_file (pdlfs-common-config.cmake.in ${PCL_N}-config.cmake @ONLY)
 
 #
 # "make install" rules
 #
-install (TARGETS pdlfs-common-static pdlfs-common
+install (TARGETS pdlfs-common EXPORT pcl-targets
          ARCHIVE DESTINATION lib
          LIBRARY DESTINATION lib)
+install (EXPORT pcl-targets
+         DESTINATION ${pcl-pkg-loc}
+         FILE "${PCL_N}-targets.cmake")
+install (FILES "${CMAKE_CURRENT_BINARY_DIR}/${PCL_N}-config.cmake"
+               "${CMAKE_CURRENT_BINARY_DIR}/${PCL_N}-config-version.cmake"
+         DESTINATION ${pcl-pkg-loc} )
 install (DIRECTORY ../include/pdlfs-common
          DESTINATION include
          FILES_MATCHING PATTERN "*.h")

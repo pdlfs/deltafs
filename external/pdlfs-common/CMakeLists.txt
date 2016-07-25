@@ -28,6 +28,12 @@ cmake_minimum_required (VERSION 2.8) # uses target_include_directories from 2.8
 
 project (PDLFS-COMMON)
 
+# link shared lib with rpath
+set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+# quiet CMP0042 warning
+set (CMAKE_MACOSX_RPATH 1)
+
 enable_testing ()
 
 set (PDLFS_PLATFORM "POSIX" CACHE STRING "Select platform (e.g. POSIX)")
