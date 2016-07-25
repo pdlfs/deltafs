@@ -143,43 +143,50 @@ void MetadataServer::Builder::LoadIds() {
   }
 }
 
+static std::string GetLocalUri(int srv_id) {
+  std::vector<std::string> ips;
+  Status s = Env::Default()->FetchHostIPAddrs(&ips);
+  if (s.ok() && !ips.empty()) {
+    int port = 10101 + srv_id;
+    char tmp[30];
+    snprintf(tmp, sizeof(tmp), "%s:%d", ips[0].c_str(), port);
+    return tmp;
+  } else {
+    return "";
+  }
+}
+
 void MetadataServer::Builder::LoadMDSTopology() {
   uint64_t num_vir_srvs;
   uint64_t num_srvs;
-  size_t num_addrs;
 
   if (ok()) {
     status_ = config::LoadNumOfVirMetadataSrvs(&num_vir_srvs);
     if (ok()) {
       status_ = config::LoadNumOfMetadataSrvs(&num_srvs);
       if (ok()) {
-        std::string addrs = config::MetadataSrvAddrs();
-        num_addrs = SplitString(addrs, ';', &mdstopo_.srv_addrs);
+        if (srv_id_ >= num_srvs) {
+          status_ = Status::InvalidArgument("Bad instance id");
+        }
       }
     }
   }
 
   if (ok()) {
-    if (srv_id_ >= num_srvs) {
-      status_ = Status::InvalidArgument("Bad instance id");
-    } else {
-      if (num_addrs == 0) {
-        std::vector<std::string> ips;
-        status_ = Env::Default()->FetchHostIPAddrs(&ips);
-        if (ok() && !ips.empty()) {
-          int port = 10101 + srv_id_;
-          char tmp[30];
-          snprintf(tmp, sizeof(tmp), "%s:%d", ips[0].c_str(), port);
-          mdstopo_.srv_addrs.assign(num_srvs, "");
-          mdstopo_.srv_addrs[srv_id_] = tmp;
-        } else {
-          status_ = Status::IOError("Fail to obtain local IP address");
-        }
-      } else if (num_addrs < num_srvs) {
-        status_ = Status::InvalidArgument("Not enough addresses");
-      } else if (num_addrs > num_srvs) {
-        status_ = Status::InvalidArgument("Too many addresses");
+    size_t num_addrs =
+        SplitString(config::MetadataSrvAddrs(), ';', &mdstopo_.srv_addrs);
+    if (num_addrs == 0) {
+      std::string uri = GetLocalUri(srv_id_);
+      if (uri.empty()) {
+        status_ = Status::IOError("Fail to obtain local IP address");
+      } else {
+        mdstopo_.srv_addrs = std::vector<std::string>(num_srvs);
+        mdstopo_.srv_addrs[srv_id_] = uri;
       }
+    } else if (num_addrs < num_srvs) {
+      status_ = Status::InvalidArgument("Not enough addrs");
+    } else if (num_addrs > num_srvs) {
+      status_ = Status::InvalidArgument("Too many addrs");
     }
   }
 
