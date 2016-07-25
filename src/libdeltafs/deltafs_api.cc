@@ -41,7 +41,7 @@ static void SetErrno(const Status& s) {
   } else if (s.IsDirExpected()) {
     errno = ENOTDIR;
   } else if (s.IsInvalidFileDescriptor()) {
-    errno = EBADFD;
+    errno = EBADF;
   } else if (s.IsTooManyOpens()) {
     errno = EMFILE;
   } else if (s.IsAccessDenied()) {
