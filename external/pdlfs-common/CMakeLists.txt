@@ -15,15 +15,36 @@
 #   - cmake [flags] directory
 #   - make
 #
-#  where directory is the top-level source directory where this file
-#  resides.   useful flags:
+#  where directory is the top-level source directory where this file resides.
 #
+#  general cmake flags:
 #    -DCMAKE_INSTALL_PREFIX=/usr/local     -- the prefix for installing
 #    -DCMAKE_BUILD_TYPE=type               -- type can be DEBUG, RELEASE, ...
-#    -DPDLFS_PLATFORM=POSIX                -- currently only posix
-#    -DPDLFS_OS=Linux                      -- uname -s for target
+#    -DCMAKE_PREFIX_PATH=/dir              -- external packages
+#    -DBUILD_SHARED_LIBS=OFF               -- turn ON for shared libs
 #
+#     note that CMAKE_PREFIX_PATH can be a list of directories:
+#      -DCMAKE_PREFIX_PATH='/dir1;/dir2;/dir3'
 #
+# pdlfs-common config flags:
+#   -DPDLFS_PLATFORM=POSIX                 -- platform (currently only posix)
+#   -DPDLFS_OS=Linux                       -- "uname -s" for target
+#   -DPDLFS_COMMON_LIBNAME=pdlfs-common    -- name for binary lib files
+#
+# pdlfs-common config compile time options flags:
+#   -DPDLFS_MERCURY_RPC=ON                 -- compile in mercury rpc code
+#
+# note: package config files for external packages must be preinstalled in 
+#       CMAKE_INSTALL_PATH or CMAKE_PREFIX_PATH.
+#
+
+#
+# PDLFS_COMMON_LIBNAME allows clients to do custom compile-time configuration
+# of the library and install the customized version under an alternate name
+# (e.g. lib/libdeltafs-common.a instead of lib/pdlfs-common.a).  note that
+# the include files are still shared under include/pdlfs-common.
+#
+
 cmake_minimum_required (VERSION 2.8) # uses target_include_directories from 2.8
 
 project (PDLFS-COMMON)
@@ -39,6 +60,13 @@ enable_testing ()
 set (PDLFS_PLATFORM "POSIX" CACHE STRING "Select platform (e.g. POSIX)")
 set (PDLFS_OS "${CMAKE_SYSTEM_NAME}" CACHE 
               STRING "Select operating system (uname -s)")
+
+#
+# external packages
+#
+if (PDLFS_MERCURY_RPC)
+    find_package(mercury CONFIG REQUIRED)
+endif ()
 
 add_subdirectory (src)
 

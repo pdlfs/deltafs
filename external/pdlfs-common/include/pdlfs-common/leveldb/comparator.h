@@ -12,8 +12,6 @@
 
 #include <string>
 
-#include "pdlfs-common/pdlfs_config.h"
-
 namespace pdlfs {
 
 class Slice;

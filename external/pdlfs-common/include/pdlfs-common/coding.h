@@ -14,7 +14,6 @@
 #include <string.h>
 #include <string>
 
-#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/slice.h"
 

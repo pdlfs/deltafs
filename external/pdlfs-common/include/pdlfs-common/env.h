@@ -15,7 +15,6 @@
 #include <string>
 #include <vector>
 
-#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/status.h"
 

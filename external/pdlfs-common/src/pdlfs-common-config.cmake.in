@@ -1,9 +1,23 @@
-#
-# if you have depends, uncommend and add them: "find_dependency(Foo 2.4.1)"
-#include (CMakeFindDependencyMacro)
-#
 
-include ("${CMAKE_CURRENT_LIST_DIR}/@PCL_N@-targets.cmake")
+set (PDLFS_REQUIRED_PACKAGES "@PDLFS_REQUIRED_PACKAGES@")
 
-# could include a macros file if one is used
+include (CMakeFindDependencyMacro)
+
+foreach (lcv ${PDLFS_REQUIRED_PACKAGES})
+    find_dependency (${lcv})
+endforeach ()
+
+# XXX: as long as we hide mercury behind our API we don't need to worry
+# about target_include_directories our lib with ${MERCURY_INCLUDE_DIR}
+
+# check for user requested components (which we map to linked in packages)
+foreach (comp ${@PDLFS_NAME@_FIND_COMPONENTS})
+    if (NOT ";${PDLFS_REQUIRED_PACKAGES};" MATCHES ";${comp};")
+        set(@PDLFS_NAME@_FOUND False)
+        set(@PDLFS_NAME@_NOTFOUND_MESSAGE 
+            "Specified unsupported component: ${comp}")
+    endif()
+endforeach()
+
+include ("${CMAKE_CURRENT_LIST_DIR}/@PDLFS_NAME@-targets.cmake")
 

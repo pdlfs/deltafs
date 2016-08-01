@@ -13,7 +13,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/slice.h"
 
 namespace pdlfs {

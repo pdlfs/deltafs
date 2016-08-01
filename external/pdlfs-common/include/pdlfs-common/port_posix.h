@@ -10,8 +10,6 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/pdlfs_config.h"
-
 #undef PLATFORM_IS_LITTLE_ENDIAN
 #if defined(PDLFS_OS_MACOSX)
 #include <machine/endian.h>

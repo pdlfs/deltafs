@@ -1,5 +1,3 @@
-#include "pdlfs-common/port_posix.h"
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2016 Carnegie Mellon University.
@@ -9,6 +7,9 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+
+#include "pdlfs-common/pdlfs_platform.h"
+#include "pdlfs-common/port_posix.h"
 
 namespace pdlfs {
 namespace port {

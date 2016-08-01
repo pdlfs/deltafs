@@ -1,23 +1,21 @@
 
 /*
- * pdlfs_config_expand.h  base config and defns from cmake
+ * pdlfs_config_expand.h.in  base config and defns from cmake
  * 02-Jun-2016  chuck@ece.cmu.edu
  */
 
 /*
- * this file is only included by pdlfs_config.h
+ * this file should only be included by pdlfs_config.h.
  */
-#cmakedefine PDLFS_PLATFORM_POSIX
-#cmakedefine PDLFS_OS_CYGWIN
-#cmakedefine PDLFS_OS_DARWIN
-#cmakedefine PDLFS_OS_MACOSX
-#cmakedefine PDLFS_OS_LINUX
-#cmakedefine PDLFS_OS_SOLARIS
-#cmakedefine PDLFS_OS_FREEBSD
-#cmakedefine PDLFS_OS_NETBSD
-#cmakedefine PDLFS_OS_OPENBSD
-#cmakedefine PDLFS_OS_HPUX
 
 #define PDLFS_COMMON_VERSION_MAJOR @PDLFS_COMMON_VERSION_MAJOR@
 #define PDLFS_COMMON_VERSION_MINOR @PDLFS_COMMON_VERSION_MINOR@
+#define PDLFS_COMMON_VERSION_PATCH @PDLFS_COMMON_VERSION_PATCH@
+#define PDLFS_COMMON_VERSION "@PDLFS_COMMON_VERSION@"
+#define PDLFS_COMMON_LIBNAME "@PDLFS_NAME@"
 
+#cmakedefine PDLFS_MERCURY_RPC
+
+#ifdef PDLFS_MERCURY_RPC
+#define MERCURY   /* XXXCDC: backward compat hack */
+#endif

@@ -1,0 +1,22 @@
+
+/*
+ * pdlfs_platform_expand.h.in  platform constants from cmake
+ * 29-Jul-2016  chuck@ece.cmu.edu
+ */
+
+/*
+ * this file should only be included by pdlfs_platform.h.  when
+ * we stop using old-style makefiles, the content of this file
+ * should migrate to a pdlfs_platform.h.in and this file can be removed.
+ */
+#cmakedefine PDLFS_PLATFORM_POSIX
+#cmakedefine PDLFS_OS_CYGWIN
+#cmakedefine PDLFS_OS_DARWIN
+#cmakedefine PDLFS_OS_MACOSX
+#cmakedefine PDLFS_OS_LINUX
+#cmakedefine PDLFS_OS_SOLARIS
+#cmakedefine PDLFS_OS_FREEBSD
+#cmakedefine PDLFS_OS_NETBSD
+#cmakedefine PDLFS_OS_OPENBSD
+#cmakedefine PDLFS_OS_HPUX
+

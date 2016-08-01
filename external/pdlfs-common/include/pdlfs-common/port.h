@@ -10,6 +10,8 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/pdlfs_platform.h"
+
 // Include the appropriate platform specific file below.
 #if defined(PDLFS_PLATFORM_POSIX)
 #include "pdlfs-common/port_posix.h"

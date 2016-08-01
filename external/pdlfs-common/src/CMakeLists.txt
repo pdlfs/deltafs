@@ -15,28 +15,39 @@ set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set (THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package (Threads REQUIRED)
 
+if (TARGET mercury AND PDLFS_MERCURY_RPC)
+    list (APPEND PDLFS_REQUIRED_PACKAGES mercury)   # for *-config.cmake
+    list (APPEND pdlfs-xtra-libs mercury)           # for build
+    # XXX: mercury doesn't set its INTERFACE_INCLUDE_DIRECTORIES property
+    # XXX: so we have to do it here...
+    list (APPEND pdlfs-xtra-incs ${MERCURY_INCLUDE_DIR})
+endif ()
+
 #
 # we allow the library binary to be installed and "find_package"'d 
 # under an alternate name (though header files are still under pdlfs-common).
-# we set "PCL_N" to the name we are going to use.
+# we set "PDLFS_NAME" to the name we are going to use.
 #
 if (PDLFS_COMMON_LIBNAME)
-    set (PCL_N ${PDLFS_COMMON_LIBNAME})        # user specified name
+    set (PDLFS_NAME ${PDLFS_COMMON_LIBNAME})        # user specified name
 else ()
-    set (PCL_N "pdlfs-common")                 # default name
+    set (PDLFS_NAME "pdlfs-common")                 # default name
 endif ()
 
 # where to install files for "find_package"
-set (pcl-pkg-loc "share/cmake/${PCL_N}")
+set (pdlfs-pkg-loc "share/cmake/${PDLFS_NAME}")
 
 #
-# library version set here (e.g. for shared libs)
+# library version set here (e.g. for shared libs).  we allow our container
+# to choose the version, or it can just take the default.
 #
-set (PDLFS_COMMON_VERSION_MAJOR 1)
-set (PDLFS_COMMON_VERSION_MINOR 0)
-set (PDLFS_COMMON_VERSION_PATCH 0)
-set (pcl-vers "${PDLFS_COMMON_VERSION_MAJOR}.${PDLFS_COMMON_VERSION_MINOR}")
-set (pcl-vers "${pcl-vers}.${PDLFS_COMMON_VERSION_PATCH}")
+if (NOT DEFINED PDLFS_COMMON_VERSION_MAJOR)
+    set (PDLFS_COMMON_VERSION_MAJOR 1)
+    set (PDLFS_COMMON_VERSION_MINOR 0)
+    set (PDLFS_COMMON_VERSION_PATCH 0)
+endif ()
+set (pdlfs-vers "${PDLFS_COMMON_VERSION_MAJOR}.${PDLFS_COMMON_VERSION_MINOR}")
+set (PDLFS_COMMON_VERSION "${pdlfs-vers}.${PDLFS_COMMON_VERSION_PATCH}")
 
 #
 # list of source files and tests
@@ -95,12 +106,14 @@ elseif (${PDLFS_OS_EDITED} MATCHES "^CYGWIN_")
 endif ()
 
 #
-# setup for and configure pldfs_config_expand.h.in
+# setup and configure pdlfs_config_expand.h.in and pdlfs_platform_expand.h.in
 #
 set (PDLFS_PLATFORM_${PDLFS_PLATFORM} 1)
 set (PDLFS_OS_${PDLFS_OS_EDITED} 1)
 configure_file ("../include/pdlfs-common/pdlfs_config_expand.h.in"
-                "../include/pdlfs-common/pdlfs_config_expand.h" @ONLY)
+                "../include/pdlfs-common/${PDLFS_NAME}_config_expand.h" @ONLY)
+configure_file ("../include/pdlfs-common/pdlfs_platform_expand.h.in"
+                "../include/pdlfs-common/pdlfs_platform_expand.h" @ONLY)
 
 #
 # prepend the subdir name to files that live in subdirs (e.g. leveldb/)
@@ -120,10 +133,11 @@ set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-leveldb-tests})
 # create the library target (user can specify shared vs. static
 # using BUILD_SHARED_LIBS).   arrange for users of our lib to
 # get the correct -Is for our include directories.  (for building
-# we need a -I pointing to the build dir for pdlfs_config_expand.h)
+# we need a -I pointing to the build dir for the expanded *.h.in files)
 #
 add_library (pdlfs-common ${pdlfs-all-srcs})
-set_target_properties (pdlfs-common PROPERTIES OUTPUT_NAME "${PCL_N}")
+set_target_properties (pdlfs-common PROPERTIES OUTPUT_NAME "${PDLFS_NAME}")
+target_compile_definitions (pdlfs-common PUBLIC -DPDLFS_CONFIG=${PDLFS_NAME})
 target_include_directories (pdlfs-common PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>
@@ -131,8 +145,13 @@ target_include_directories (pdlfs-common PUBLIC
 if (CMAKE_THREAD_LIBS_INIT)
   target_link_libraries (pdlfs-common "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
+
+target_link_libraries (pdlfs-common ${pdlfs-xtra-libs})
+# XXX: for mercury
+target_include_directories (pdlfs-common PRIVATE ${pdlfs-xtra-incs})
+
 set_target_properties(pdlfs-common
-                      PROPERTIES VERSION ${pcl-vers}
+                      PROPERTIES VERSION ${PDLFS_COMMON_VERSION}
                       SOVERSION ${PDLFS_COMMON_VERSION_MAJOR})
 
 #
@@ -181,30 +200,31 @@ endif ()
 # installation stuff (packaging and install commands)
 #
 write_basic_package_version_file(
-    "${PCL_N}-config-version.cmake"
-    VERSION ${pcl-vers}
+    "${PDLFS_NAME}-config-version.cmake"
+    VERSION ${PDLFS_COMMON_VERSION}
     COMPATIBILITY AnyNewerVersion)
 
 # generate our config file for find_package()
-configure_file (pdlfs-common-config.cmake.in ${PCL_N}-config.cmake @ONLY)
+configure_file (pdlfs-common-config.cmake.in ${PDLFS_NAME}-config.cmake @ONLY)
 
 #
 # "make install" rules
 #
-install (TARGETS pdlfs-common EXPORT pcl-targets
+install (TARGETS pdlfs-common EXPORT pdlfs-targets
          ARCHIVE DESTINATION lib
          LIBRARY DESTINATION lib)
-install (EXPORT pcl-targets
-         DESTINATION ${pcl-pkg-loc}
-         FILE "${PCL_N}-targets.cmake")
-install (FILES "${CMAKE_CURRENT_BINARY_DIR}/${PCL_N}-config.cmake"
-               "${CMAKE_CURRENT_BINARY_DIR}/${PCL_N}-config-version.cmake"
-         DESTINATION ${pcl-pkg-loc} )
+install (EXPORT pdlfs-targets
+         DESTINATION ${pdlfs-pkg-loc}
+         FILE "${PDLFS_NAME}-targets.cmake")
+install (FILES "${CMAKE_CURRENT_BINARY_DIR}/${PDLFS_NAME}-config.cmake"
+               "${CMAKE_CURRENT_BINARY_DIR}/${PDLFS_NAME}-config-version.cmake"
+         DESTINATION ${pdlfs-pkg-loc} )
 install (DIRECTORY ../include/pdlfs-common
          DESTINATION include
          FILES_MATCHING PATTERN "*.h")
 install (FILES
-  "${CMAKE_CURRENT_BINARY_DIR}/../include/pdlfs-common/pdlfs_config_expand.h"
+  "${CMAKE_CURRENT_BINARY_DIR}/../include/pdlfs-common/${PDLFS_NAME}_config_expand.h"
+  "${CMAKE_CURRENT_BINARY_DIR}/../include/pdlfs-common/pdlfs_platform_expand.h"
          DESTINATION include/pdlfs-common)
 
 #
