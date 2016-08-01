@@ -38,6 +38,13 @@ add_definitions (-DDELTAFS)
 set (PDLFS_COMMON_LIBNAME "deltafs-common")
 
 #
+# external packages
+#
+if (PDLFS_MERCURY_RPC)
+    find_package(mercury CONFIG REQUIRED)
+endif ()
+
+#
 # add the automatically determined parts of the RPATH
 # which point to directories outside the build tree to the install RPATH
 #
