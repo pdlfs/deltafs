@@ -7,6 +7,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/pdlfs_config.h"
 #include "mercury_rpc.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
@@ -44,7 +45,7 @@ class MercuryTest {
     options_.num_io_threads = 1;
     options_.env = env_;
     options_.fs = &fs_;
-    options_.uri = "bmi+tcp://localhost:10101";
+    options_.uri = "bmi+tcp://10101";
     options_.extra_workers = pool_;
     bool listen = true;
     rpc_ = new MercuryRPC(listen, options_);

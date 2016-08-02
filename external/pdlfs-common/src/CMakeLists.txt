@@ -250,3 +250,9 @@ foreach (lcv ${pdlfs-all-tests})
 
 endforeach ()
 
+# mercury test also directly uses mercury API... add that to test target
+if (TARGET mercury_test AND PDLFS_MERCURY_RPC)
+    target_include_directories (mercury_test PRIVATE ${MERCURY_INCLUDE_DIR})
+    target_link_libraries (mercury_test mercury)
+endif ()
+

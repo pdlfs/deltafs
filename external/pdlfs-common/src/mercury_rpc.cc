@@ -7,6 +7,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/logging.h"
 #if defined(MERCURY)
 #include "mercury_rpc.h"
@@ -124,12 +125,12 @@ hg_return_t MercuryRPC::Client::SaveReply(const hg_cb_info* info) {
 }
 
 void MercuryRPC::Client::Call(Message& in, Message& out) {
-  na_addr_t na_addr;
-  na_return_t r = rpc_->Lookup(addr_, &na_addr);
-  if (r != NA_SUCCESS) throw EHOSTUNREACH;
+  hg_addr_t hg_addr;
+  hg_return_t r = rpc_->Lookup(addr_, &hg_addr);
+  if (r != HG_SUCCESS) throw EHOSTUNREACH;
   hg_handle_t handle;
   hg_return_t ret =
-      HG_Create(rpc_->hg_context_, na_addr, rpc_->hg_rpc_id_, &handle);
+      HG_Create(rpc_->hg_context_, hg_addr, rpc_->hg_rpc_id_, &handle);
   if (ret == HG_SUCCESS) {
     RPCState state;
     state.out = &out;
@@ -149,23 +150,6 @@ void MercuryRPC::Client::Call(Message& in, Message& out) {
   }
 }
 
-template <typename T>
-T* MercuryCall(const char* label, T* ptr) {
-  if (ptr == NULL) {
-    Error(__LOG_ARGS__, "Call %s failed\n", label);
-    abort();
-  } else {
-    return ptr;
-  }
-}
-
-#define Mercury_NA_Initialize(a, b) \
-  MercuryCall("NA_Initialize", NA_Initialize(a, b))
-#define Mercury_NA_Context_create(a) \
-  MercuryCall("NA_Context_create", NA_Context_create(a));
-#define Mercury_HG_Init_na(a, b) MercuryCall("HG_Init_na", HG_Init_na(a, b))
-#define Mercury_HG_Context_create(a) \
-  MercuryCall("HG_Context_create", HG_Context_create(a))
 
 void MercuryRPC::Ref() { ++refs_; }
 
@@ -178,7 +162,8 @@ void MercuryRPC::Unref() {
 }
 
 MercuryRPC::MercuryRPC(bool listen, const RPCOptions& options)
-    : env_(options.env),
+    : listen_(listen),
+      env_(options.env),
       fs_(options.fs),
       refs_(0),
       pool_(options.extra_workers),
@@ -189,10 +174,12 @@ MercuryRPC::MercuryRPC(bool listen, const RPCOptions& options)
       lookup_cv_(&mutex_) {
   assert(!options.uri.empty());
 
-  na_class_ = Mercury_NA_Initialize(options.uri.c_str(), listen);
-  na_context_ = Mercury_NA_Context_create(na_class_);
-  hg_class_ = Mercury_HG_Init_na(na_class_, na_context_);
-  hg_context_ = Mercury_HG_Context_create(hg_class_);
+  hg_class_ = HG_Init(options.uri.c_str(), (listen) ? HG_TRUE : HG_FALSE);
+  if (hg_class_) hg_context_ = HG_Context_create(hg_class_);
+  if (hg_class_ == NULL || hg_context_ == NULL) {
+    Error(__LOG_ARGS__, "hg init call failed");
+    abort();
+  }
 
   RegisterRPC();
 }
@@ -228,61 +215,59 @@ MercuryRPC::~MercuryRPC() {
   mutex_.Unlock();
 
   for (AddrTable::iterator it = addrs_.begin(); it != addrs_.end(); ++it) {
-    NA_Addr_free(na_class_, it->second);
+    HG_Addr_free(hg_class_, it->second);
   }
 
   HG_Context_destroy(hg_context_);
   HG_Finalize(hg_class_);
-  NA_Context_destroy(na_class_, na_context_);
-  NA_Finalize(na_class_);
 }
 
 namespace {
 struct LookupState {
   const std::string* addr;
   MercuryRPC* rpc;
-  na_return_t ret;
+  hg_return_t ret;
   bool ok;
 };
 }  // namespace
 
-na_return_t MercuryRPC::SaveAddr(const na_cb_info* info) {
+hg_return_t MercuryRPC::SaveAddr(const hg_cb_info* info) {
   LookupState* state = reinterpret_cast<LookupState*>(info->arg);
   MercuryRPC* const rpc = state->rpc;
   state->ret = info->ret;
 
   MutexLock l(&rpc->mutex_);
-  if (state->ret == NA_SUCCESS) {
-    na_addr_t result = info->info.lookup.addr;
+  if (state->ret == HG_SUCCESS) {
+    hg_addr_t result = info->info.lookup.addr;
     if (rpc->addrs_.find(*state->addr) == rpc->addrs_.end()) {
       rpc->addrs_.insert(std::make_pair(*state->addr, result));
     } else {
-      NA_Addr_free(rpc->na_class_, result);
+      HG_Addr_free(rpc->hg_class_, result);
     }
   }
 
   state->ok = true;
   rpc->lookup_cv_.SignalAll();
-  return NA_SUCCESS;
+  return HG_SUCCESS;
 }
 
-na_return_t MercuryRPC::Lookup(const std::string& addr, na_addr_t* result) {
+hg_return_t MercuryRPC::Lookup(const std::string& addr, hg_addr_t* result) {
   MutexLock l(&mutex_);
   AddrTable::iterator it = addrs_.find(addr);
   if (it != addrs_.end()) {
     *result = it->second;
-    return NA_SUCCESS;
+    return HG_SUCCESS;
   } else {
     LookupState state;
     state.rpc = this;
     state.addr = &addr;
     state.ok = false;
-    NA_Addr_lookup(na_class_, na_context_, SaveAddr, &state, addr.c_str(),
-                   NA_OP_ID_IGNORE);
+    HG_Addr_lookup(hg_context_, SaveAddr, &state, addr.c_str(),
+                   HG_OP_ID_IGNORE);
     while (!state.ok) {
       lookup_cv_.Wait();
     }
-    if (state.ret == NA_SUCCESS) {
+    if (state.ret == HG_SUCCESS) {
       it = addrs_.find(addr);
       assert(it != addrs_.end());
       *result = it->second;
@@ -291,35 +276,14 @@ na_return_t MercuryRPC::Lookup(const std::string& addr, na_addr_t* result) {
   }
 }
 
-na_return_t MercuryRPC::LookupSelf(na_addr_t* result) {
-  assert(NA_Is_listening(na_class_));
-  MutexLock l(&mutex_);
-  AddrTable::iterator it = addrs_.find("__SELF__");
-  if (it != addrs_.end()) {
-    *result = it->second;
-    return NA_SUCCESS;
-  } else {
-    mutex_.Unlock();
-    na_return_t ret = NA_Addr_self(na_class_, result);
-    mutex_.Lock();
-    if (ret == NA_SUCCESS) {
-      it = addrs_.find("__SELF__");
-      if (it == addrs_.end()) {
-        addrs_.insert(std::make_pair("__SELF__", *result));
-      } else {
-        NA_Addr_free(na_class_, *result);
-        *result = it->second;
-      }
-    }
-    return ret;
-  }
-}
-
-std::string MercuryRPC::ToString(na_addr_t addr) {
-  char tmp[50];
-  size_t len = sizeof(tmp);
-  NA_Addr_to_string(na_class_, tmp, &len, addr);
-  return tmp;
+std::string MercuryRPC::ToString(hg_addr_t addr) {
+  std::string rv;
+  char tmp[64];
+  tmp[0] = 0;    // XXX: in case HG_Addr_to_string_fails()
+  hg_size_t len = sizeof(tmp);
+  HG_Addr_to_string(hg_class_, tmp, &len, addr);  // XXX: ignored ret val
+  rv = tmp;
+  return rv;
 }
 
 void MercuryRPC::TEST_LoopForever(void* arg) {

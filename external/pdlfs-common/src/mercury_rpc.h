@@ -26,15 +26,13 @@ class MercuryRPC {
  public:
   void Ref();
   void Unref();
-  std::string ToString(na_addr_t addr);
-  na_return_t LookupSelf(na_addr_t* result);
-  na_return_t Lookup(const std::string& addr, na_addr_t* result);
+  std::string ToString(hg_addr_t addr);
+  hg_return_t Lookup(const std::string& addr, hg_addr_t* result);
   MercuryRPC(bool listen, const RPCOptions&);
 
-  na_class_t* na_class_;
-  na_context_t* na_context_;
   hg_class_t* hg_class_;
   hg_context_t* hg_context_;
+  bool listen_;
 
   class LocalLooper;
   class Client;
@@ -52,7 +50,7 @@ class MercuryRPC {
   void RegisterRPC() {
     hg_rpc_id_ = HG_Register_name(hg_class_, "fs_call", RPCMessageCoder,
                                   RPCMessageCoder, RPCCallbackDecorator);
-    if (NA_Is_listening(na_class_)) {
+    if (listen_) {
       HG_Register_data(hg_class_, hg_rpc_id_, this, NULL);
     }
   }
@@ -84,9 +82,9 @@ class MercuryRPC {
   bool bg_error_;
 
   port::CondVar lookup_cv_;
-  typedef std::map<std::string, na_addr_t> AddrTable;
+  typedef std::map<std::string, hg_addr_t> AddrTable;
   AddrTable addrs_;
-  static na_return_t SaveAddr(const na_cb_info* info);
+  static hg_return_t SaveAddr(const hg_cb_info* info);
   static void TEST_LoopForever(void* arg);
 
   // No copying allowed
