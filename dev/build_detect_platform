@@ -134,17 +134,23 @@ COMMON_FLAGS="$COMMON_FLAGS -DPDLFS_MAKEFILE"
 # except for the test and benchmark files. By default, find will output a list
 # of all files matching either rule, so we need to append -print to make the
 # prune take effect.
-PDLFS_COMMON_DIRS="$PREFIX/external/pdlfs-common/src $PREFIX/external/pdlfs-common/modules"
+PDLFS_COMMON_DIR="$PREFIX/external/pdlfs-common/src"
+
+PDLFS_MODULE_RADOS_DIR="$PREFIX/external/pdlfs-common/modules/rados"
 
 set -f # temporarily disable globbing so that our patterns aren't expanded
 PRUNE_TEST="-name *test*.cc -prune"
-LIBPDLFS_COMMON_SOURCE_FILES=`find $PDLFS_COMMON_DIRS $PRUNE_TEST -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
-LIBDELTAFS_SOURCE_FILES=`find $PREFIX/src/libdeltafs $PRUNE_TEST -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
+LIBPDLFS_COMMON_SOURCE_FILES=`find $PDLFS_COMMON_DIR $PRUNE_TEST \
+    -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
+LIBPDLFS_MODULE_RADOS_SOURCE_FILES=`find $PDLFS_MODULE_RADOS_DIR $PRUNE_TEST \
+    -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
+LIBDELTAFS_SOURCE_FILES=`find $PREFIX/src/libdeltafs $PRUNE_TEST \
+    -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
+
 set +f # re-enable globbing
 
-# The sources consist of the portable files, plus the platform-specific
-# port file.
 echo "LIBPDLFS_COMMON_SOURCES=`echo $LIBPDLFS_COMMON_SOURCE_FILES`" >> $OUTPUT
+echo "LIBPDLFS_MODULE_RADOS_SOURCES=`echo $LIBPDLFS_MODULE_RADOS_SOURCE_FILES`" >> $OUTPUT
 echo "LIBDELTAFS_SOURCES=`echo $LIBDELTAFS_SOURCE_FILES`" >> $OUTPUT
 
 if [ "$CROSS_COMPILE" = "true" ]; then
