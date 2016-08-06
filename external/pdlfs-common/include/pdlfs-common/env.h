@@ -90,8 +90,31 @@ class Env {
   // Create the specified directory.
   virtual Status CreateDir(const Slice& dirname) = 0;
 
+  // Load a directory created by another process.
+  // This call makes no sense for Env implementations that are
+  // backed by a POSIX file system but is usually needed
+  // for implementations that are backed by a shared
+  // object storage service.
+  // Return OK if the directory is attached and ready to use.
+  // For Env implementations that are backed by a POSIX file system,
+  // return OK if the directory exists.
+  virtual Status AttachDir(const Slice& dirname) = 0;
+
   // Delete the specified directory.
   virtual Status DeleteDir(const Slice& dirname) = 0;
+
+  // Forget a directory previously loaded or created.
+  // After this call, the directory appears to have never been
+  // created before.
+  // This call makes no sense for Env implementations that are
+  // backed by a POSIX file system but is useful for implementations
+  // that are backed by a shared object storage.
+  // Return OK is the directory is detached and appears deleted.
+  // Return OK does not mean the directory has been physically
+  // removed.
+  // Return NotSupported for Env implementations that are
+  // backed by a POSIX file system.
+  virtual Status DetachDir(const Slice& dirname) = 0;
 
   // Store the size of fname in *file_size.
   virtual Status GetFileSize(const Slice& fname, uint64_t* file_size) = 0;
@@ -346,7 +369,11 @@ class EnvWrapper : public Env {
 
   virtual Status CreateDir(const Slice& d) { return target_->CreateDir(d); }
 
+  virtual Status AttachDir(const Slice& d) { return target_->AttachDir(d); }
+
   virtual Status DeleteDir(const Slice& d) { return target_->DeleteDir(d); }
+
+  virtual Status DetachDir(const Slice& d) { return target_->DetachDir(d); }
 
   virtual Status GetFileSize(const Slice& f, uint64_t* s) {
     return target_->GetFileSize(f, s);

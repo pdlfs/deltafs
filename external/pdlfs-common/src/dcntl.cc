@@ -113,9 +113,9 @@ Dir::Ref* DirTable::Insert(const DirId& id, Dir* dir) {
   if (mu_ != NULL) {
     mu_->Lock();
   }
-  Dir::Ref* r;
+  Dir::Ref* r = NULL;
   bool error = false;
-  int err;
+  int err = 0;
   if (lru_.Exists(key, hash)) {
     error = true;
     err = EEXIST;

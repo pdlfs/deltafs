@@ -99,9 +99,9 @@ Lease::Ref* LeaseTable::Insert(const DirId& pid, const Slice& nhash,
   if (mu_ != NULL) {
     mu_->Lock();
   }
-  Lease::Ref* r;
+  Lease::Ref* r = NULL;
   bool error = false;
-  int err;
+  int err = 0;
   if (lru_.Exists(key, hash)) {
     error = true;
     err = EEXIST;

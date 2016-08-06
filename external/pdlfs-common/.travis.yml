@@ -7,7 +7,7 @@ os:
 - osx
 sudo: false
 script:
-- make -j4 -f .Makefile check
+- make -j4 -f ./dev/Makefile check
 install:
 - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8" CC="gcc-4.8"; fi
 addons:

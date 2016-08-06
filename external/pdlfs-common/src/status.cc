@@ -82,7 +82,7 @@ std::string Status::ToString() const {
       return type;
     } else {
       std::string result(type);
-      result.append(" :");
+      result.append(": ");
       result.append(state_ + 5, length);
       return result;
     }

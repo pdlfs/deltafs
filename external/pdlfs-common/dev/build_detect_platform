@@ -171,7 +171,7 @@ EOF
       int main() {}
 EOF
     if [ "$?" = 0 ]; then
-        COMMON_FLAGS="$COMMON_FLAGS -std=c++11 -DRADOS"
+        COMMON_FLAGS="$COMMON_FLAGS -DRADOS"
         PLATFORM_LIBS="$PLATFORM_LIBS -lrados"
     fi
 

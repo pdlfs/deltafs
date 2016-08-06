@@ -47,4 +47,9 @@ extern void Error(Logger* info_log, const char* file, int line,
 #endif
     ;
 
+inline void Error(Logger* info_log, const char* file, int line,
+                  const Status& err) {
+  Error(info_log, file, line, "%s", err.ToString().c_str());
+}
+
 }  // namespace pdlfs

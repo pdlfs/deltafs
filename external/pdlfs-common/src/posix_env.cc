@@ -191,16 +191,12 @@ class PosixEnv : public Env {
   virtual Status NewSequentialFile(const Slice& fname,
                                    SequentialFile** result) {
     FILE* f = fopen(fname.data(), "r");
-    if (f == NULL) {
-      *result = NULL;
-      if (errno == ENOENT) {
-        return Status::NotFound(fname);
-      } else {
-        return IOError(fname, errno);
-      }
-    } else {
+    if (f != NULL) {
       *result = new PosixSequentialFile(fname, f);
       return Status::OK();
+    } else {
+      *result = NULL;
+      return IOError(fname, errno);
     }
   }
 
@@ -210,11 +206,7 @@ class PosixEnv : public Env {
     Status s;
     int fd = open(fname.data(), O_RDONLY);
     if (fd < 0) {
-      if (errno == ENOENT) {
-        s = Status::NotFound(fname);
-      } else {
-        s = IOError(fname, errno);
-      }
+      s = IOError(fname, errno);
     } else if (mmap_limit_.Acquire()) {
       uint64_t size;
       s = GetFileSize(fname, &size);
@@ -237,15 +229,14 @@ class PosixEnv : public Env {
   }
 
   virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
-    Status s;
     FILE* f = fopen(fname.data(), "w");
-    if (f == NULL) {
-      *result = NULL;
-      s = IOError(fname, errno);
-    } else {
+    if (f != NULL) {
       *result = new PosixWritableFile(fname, f);
+      return Status::OK();
+    } else {
+      *result = NULL;
+      return IOError(fname, errno);
     }
-    return s;
   }
 
   virtual bool FileExists(const Slice& fname) {
@@ -270,11 +261,7 @@ class PosixEnv : public Env {
   virtual Status DeleteFile(const Slice& fname) {
     Status result;
     if (unlink(fname.data()) != 0) {
-      if (errno == ENOENT) {
-        result = Status::NotFound(fname);
-      } else {
-        result = IOError(fname, errno);
-      }
+      result = IOError(fname, errno);
     }
     return result;
   }
@@ -287,12 +274,27 @@ class PosixEnv : public Env {
     return result;
   }
 
+  virtual Status AttachDir(const Slice& dirname) {
+    Status result;
+    DIR* dir = opendir(dirname.data());
+    if (dir == NULL) {
+      result = IOError(dirname, errno);
+    } else {
+      closedir(dir);
+    }
+    return result;
+  }
+
   virtual Status DeleteDir(const Slice& dirname) {
     Status result;
     if (rmdir(dirname.data()) != 0) {
       result = IOError(dirname, errno);
     }
     return result;
+  }
+
+  virtual Status DetachDir(const Slice& dirname) {
+    return Status::NotSupported(Slice());
   }
 
   virtual Status GetFileSize(const Slice& fname, uint64_t* size) {

@@ -1,12 +1,9 @@
 #!/bin/bash
 #
-# Copyright (c) 2014-2016 Carnegie Mellon University.
+# Utility script for operating ceph rados.
 #
-# All rights reserved.
+# Aug-05-2016 zhengq@cs.cmu.edu
 #
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file. See the AUTHORS file for names of contributors.
-
 SUDO="sudo"
 
 if test $# -lt 1; then
@@ -25,21 +22,21 @@ if test $# -lt 1; then
   stat   | check the existence of a particular object  |
 =====================================================================
 
-* On Ubuntu, ceph rados can be installed by:
+* On Ubuntu, ceph rados could be installed by:
 
     sudo apt-get install ceph librados-dev
 
 * Please use `basename $0` only for local testing and debugging 
-* `basename $0` can work with ceph 0.80+"
+* `basename $0` only works with ceph 0.80.x"
   exit 1
 fi
 
 set -x
 
 me=$0
-SRC_DIR=$(cd -P -- `dirname $me` && pwd -P)
+SCRIPT_DIR=$(cd -P -- `dirname $me` && pwd -P)
 RADOS_RUN=/tmp/pdlfs-rados
-TEMPLATE_CEPH_CONF=$SRC_DIR/ceph.conf
+TEMPLATE_CEPH_CONF=$SCRIPT_DIR/ceph.conf
 CEPH_CONF=$RADOS_RUN/ceph.conf
 
 prepare_rados() {
@@ -50,6 +47,8 @@ prepare_rados() {
   $SUDO sed "s/@localhost@/`hostname -s`/g; \
              s/@rados_run@/${RADOS_RUN//\//\\\/}/g" \
       $TEMPLATE_CEPH_CONF | $SUDO tee $CEPH_CONF
+  $SUDO rm -f /tmp/ceph.conf
+  $SUDO ln -fs $CEPH_CONF /tmp/ceph.conf
 }
 
 fix_pools() {

@@ -24,7 +24,13 @@
 namespace pdlfs {
 
 inline Status IOError(const Slice& err_context, int err_number) {
-  return Status::IOError(err_context, strerror(err_number));
+  if (err_number != ENOENT && err_number != EEXIST) {
+    return Status::IOError(err_context, strerror(err_number));
+  } else if (err_number == EEXIST) {
+    return Status::AlreadyExists(Slice());
+  } else {
+    return Status::NotFound(Slice());
+  }
 }
 
 inline int LockOrUnlock(int fd, bool lock) {

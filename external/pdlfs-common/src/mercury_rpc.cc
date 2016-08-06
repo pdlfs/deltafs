@@ -7,8 +7,8 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/logging.h"
+#include "pdlfs-common/pdlfs_config.h"
 #if defined(MERCURY)
 #include "mercury_rpc.h"
 
@@ -150,7 +150,6 @@ void MercuryRPC::Client::Call(Message& in, Message& out) {
   }
 }
 
-
 void MercuryRPC::Ref() { ++refs_; }
 
 void MercuryRPC::Unref() {
@@ -279,7 +278,7 @@ hg_return_t MercuryRPC::Lookup(const std::string& addr, hg_addr_t* result) {
 std::string MercuryRPC::ToString(hg_addr_t addr) {
   std::string rv;
   char tmp[64];
-  tmp[0] = 0;    // XXX: in case HG_Addr_to_string_fails()
+  tmp[0] = 0;  // XXX: in case HG_Addr_to_string_fails()
   hg_size_t len = sizeof(tmp);
   HG_Addr_to_string(hg_class_, tmp, &len, addr);  // XXX: ignored ret val
   rv = tmp;

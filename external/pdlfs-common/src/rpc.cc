@@ -11,8 +11,8 @@
 #include <stdlib.h>
 #include <vector>
 
-#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/logging.h"
+#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/rpc.h"
 #if defined(MERCURY)
 #include "mercury_rpc.h"

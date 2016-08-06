@@ -7,8 +7,8 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/pdlfs_config.h"
 #include "mercury_rpc.h"
+#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 

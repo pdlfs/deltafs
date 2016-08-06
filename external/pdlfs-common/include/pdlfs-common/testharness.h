@@ -15,6 +15,7 @@
 #include <sstream>
 
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/logging.h"
 #include "pdlfs-common/random.h"
 
 namespace pdlfs {

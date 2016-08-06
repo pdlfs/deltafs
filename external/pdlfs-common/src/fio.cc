@@ -12,7 +12,15 @@
 
 namespace pdlfs {
 
-FileIO::~FileIO() {}
+Fio::~Fio() {}
+
+Slice Fentry::ExtractUntypedKeyPrefix(const Slice& encoding) {
+  Slice input = encoding;
+  Slice key_prefix;
+  GetLengthPrefixedSlice(&input, &key_prefix);
+  assert(!key_prefix.empty());
+  return key_prefix;
+}
 
 bool Fentry::DecodeFrom(Slice* input) {
   Slice key_prefix;

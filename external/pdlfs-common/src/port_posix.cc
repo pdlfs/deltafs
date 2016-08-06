@@ -8,8 +8,8 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/pdlfs_platform.h"
 #include "pdlfs-common/port_posix.h"
+#include "pdlfs-common/pdlfs_platform.h"
 
 namespace pdlfs {
 namespace port {
