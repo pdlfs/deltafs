@@ -23,7 +23,7 @@
 #endif
 
 static pdlfs::MetadataServer* srv = NULL;
-#if 0
+#if defined(PDLFS_WITH_MPI)
 static int srv_id = 0;
 static int num_srvs = 1;
 #endif
