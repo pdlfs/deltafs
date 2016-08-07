@@ -28,6 +28,7 @@
 #  -DGFLAGS                     if the Google flags library is present
 #  -DRADOS                      if the Ceph rados library is present
 #  -DMERCURY                    if the Mercury RPC library is present
+#  -DMARGO                      if the Margo Mercury suite library is present
 #
 
 OUTPUT=$1
@@ -198,6 +199,16 @@ EOF
     if [ "$?" = 0 ]; then
         COMMON_FLAGS="$COMMON_FLAGS -DRADOS"
         PLATFORM_LIBS="$PLATFORM_LIBS -lrados"
+    fi
+
+    # Test whether margo mercury suite is installed
+    $CXX $CXXFLAGS -x c++ - -o $CXXOUTPUT 2>/dev/null  <<EOF
+      #include <margo.h>
+      int main() {}
+EOF
+    if [ "$?" = 0 ]; then
+        COMMON_FLAGS="$COMMON_FLAGS -DMARGO"
+        PLATFORM_LIBS="$PLATFORM_LIBS -lmargo -labt-snoozer -labt"
     fi
 
     # Test whether mercury rpc is installed
