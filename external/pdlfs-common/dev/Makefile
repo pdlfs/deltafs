@@ -13,11 +13,11 @@
 # to switch between compilation modes.
 
 # (A) Production use (optimized mode)
-OPT ?= -O2 -DNDEBUG
+OPT ?= -O2 -DVERBOSE=1 -DNDEBUG
 # (B) Debug mode, w/ full line-level debugging symbols
-# OPT ?= -g2
+# OPT ?= -g2 -DVERBOSE=10
 # (C) Profiling mode: opt, but w/debugging symbols
-# OPT ?= -O2 -g2 -DNDEBUG
+# OPT ?= -O2 -g2 -DVERBOSE=1 -DNDEBUG
 #-----------------------------------------------
 
 # detect what platform we're building on
@@ -38,6 +38,7 @@ TESTS = \
 	src/osd_test \
 	src/gigaplus_test \
 	src/fstypes_test \
+	src/margo_test \
 	src/mercury_test \
 	src/strutil_test \
 	src/leveldb/bloom_test \
@@ -145,6 +146,9 @@ $(STATIC_OUTDIR)/gigaplus_test:src/gigaplus_test.cc $(STATIC_LIBOBJECTS) $(TESTH
 
 $(STATIC_OUTDIR)/fstypes_test:src/fstypes_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/fstypes_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/margo_test:src/margo_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/margo_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/mercury_test:src/mercury_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/mercury_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)

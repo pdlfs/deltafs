@@ -21,6 +21,8 @@
 #  -DGLOG                       if the Google logging library is present
 #  -DGFLAGS                     if the Google flags library is present
 #  -DRADOS                      if the Ceph rados library is present
+#  -DMERCURY                    if the Mercury RPC library is present
+#  -DMARGO                      if the Margo Mercury suite library is present
 #
 
 OUTPUT=$1
@@ -142,6 +144,14 @@ if [ "$CROSS_COMPILE" = "true" ]; then
 else
     CXXOUTPUT="${TMPDIR}/pdlfs_common_build_detect_platform.$$"
 
+    # Add -std=c++0x if the compiler accepts it
+    $CXX $CXXFLAGS -std=c++0x -x c++ - -o $CXXOUTPUT 2>/dev/null  <<EOF
+      int main() {}
+EOF
+    if [ "$?" = 0 ]; then
+        PLATFORM_CXXFLAGS="-std=c++0x"
+    fi
+
     # Test whether glog is installed
     # https://github.com/google/glog/
     $CXX $CXXFLAGS -x c++ - -o $CXXOUTPUT 2>/dev/null  <<EOF
@@ -173,6 +183,26 @@ EOF
     if [ "$?" = 0 ]; then
         COMMON_FLAGS="$COMMON_FLAGS -DRADOS"
         PLATFORM_LIBS="$PLATFORM_LIBS -lrados"
+    fi
+
+    # Test whether margo mercury suite is installed
+    $CXX $CXXFLAGS -x c++ - -o $CXXOUTPUT 2>/dev/null  <<EOF
+      #include <margo.h>
+      int main() {}
+EOF
+    if [ "$?" = 0 ]; then
+        COMMON_FLAGS="$COMMON_FLAGS -DMARGO"
+        PLATFORM_LIBS="$PLATFORM_LIBS -lmargo -labt-snoozer -labt -lev"
+    fi
+
+    # Test whether mercury rpc is installed
+    $CXX $CXXFLAGS -x c++ - -o $CXXOUTPUT 2>/dev/null  <<EOF
+      #include <mercury.h>
+      int main() {}
+EOF
+    if [ "$?" = 0 ]; then
+        COMMON_FLAGS="$COMMON_FLAGS -DMERCURY"
+        PLATFORM_LIBS="$PLATFORM_LIBS -lmercury -lna"
     fi
 
     # Test whether snappy library is installed

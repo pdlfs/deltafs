@@ -15,8 +15,8 @@
 #include <map>
 #include <string>
 
+#include "pdlfs-common/lru.h"
 #include "pdlfs-common/mutexlock.h"
-#include "pdlfs-common/port.h"
 #include "pdlfs-common/rpc.h"
 
 namespace pdlfs {
@@ -24,11 +24,16 @@ namespace rpc {
 
 class MercuryRPC {
  public:
-  void Ref();
-  void Unref();
+  struct Addr;
   std::string ToString(hg_addr_t addr);
-  hg_return_t Lookup(const std::string& addr, hg_addr_t* result);
-  MercuryRPC(bool listen, const RPCOptions&);
+  typedef LRUEntry<Addr> AddrEntry;
+  void Release(AddrEntry* entry);
+  AddrEntry* LookupCache(const std::string& addr);
+  AddrEntry* Bind(const std::string& addr, Addr*);
+  hg_return_t Lookup(const std::string& addr, AddrEntry** result);
+  MercuryRPC(bool listen, const RPCOptions& options);
+  void Unref();
+  void Ref();
 
   hg_class_t* hg_class_;
   hg_context_t* hg_context_;
@@ -48,19 +53,18 @@ class MercuryRPC {
   hg_id_t hg_rpc_id_;
 
   void RegisterRPC() {
-    hg_rpc_id_ = HG_Register_name(hg_class_, "fs_call", RPCMessageCoder,
+    hg_rpc_id_ = HG_Register_name(hg_class_, "deltafs_rpc", RPCMessageCoder,
                                   RPCMessageCoder, RPCCallbackDecorator);
     if (listen_) {
       HG_Register_data(hg_class_, hg_rpc_id_, this, NULL);
     }
   }
 
-  // Start or stop the background looping thread.
-  Status TEST_Start();
-  Status TEST_Stop();
-
  private:
   ~MercuryRPC();
+  // No copying allowed
+  void operator=(const MercuryRPC&);
+  MercuryRPC(const MercuryRPC&);
 
   static inline MercuryRPC* registered_data(hg_handle_t handle) {
     hg_info* info = HG_Get_info(handle);
@@ -70,26 +74,47 @@ class MercuryRPC {
     return rpc;
   }
 
+  struct Timer {
+    Timer* prev;
+    Timer* next;
+    hg_handle_t handle;
+    uint64_t due;
+  };
+
+  friend class Client;
+  friend class LocalLooper;
+  void AddTimerFor(hg_handle_t handle, Timer*);
+  void RemoveTimer(Timer* timer);
+  void CheckTimers();
+
+  // State below is protected by mutex_
+  port::Mutex mutex_;
+  port::CondVar lookup_cv_;
+  LRUCache<AddrEntry> addr_cache_;
+  void Remove(Timer*);
+  void Append(Timer*);
+  Timer timers_;
+  int refs_;
+
+  // Constant after construction
+  uint64_t rpc_timeout_;
+  ThreadPool* pool_;
   Env* env_;
   If* fs_;
-  int refs_;
-  ThreadPool* pool_;
+};
 
-  port::Mutex mutex_;
-  port::AtomicPointer shutting_down_;
-  port::CondVar bg_cv_;
-  bool bg_loop_running_;
-  bool bg_error_;
+// ====================
+// Mercury addr
+// ====================
 
-  port::CondVar lookup_cv_;
-  typedef std::map<std::string, hg_addr_t> AddrTable;
-  AddrTable addrs_;
-  static hg_return_t SaveAddr(const hg_cb_info* info);
-  static void TEST_LoopForever(void* arg);
+struct MercuryRPC::Addr {
+  hg_class_t* clazz;
+  hg_addr_t rep;
 
-  // No copying allowed
-  void operator=(const MercuryRPC&);
-  MercuryRPC(const MercuryRPC&);
+  Addr(hg_class_t* hgz, hg_addr_t hga) {
+    clazz = hgz;
+    rep = hga;
+  }
 };
 
 // ====================
@@ -98,12 +123,17 @@ class MercuryRPC {
 
 class MercuryRPC::LocalLooper {
  private:
-  MercuryRPC* const rpc_;
-  port::AtomicPointer shutting_down_;
+  // State below is protected by mutex_
   port::Mutex mutex_;
+  port::AtomicPointer shutting_down_;
   port::CondVar bg_cv_;
-  int max_bg_loops_;
   int bg_loops_;
+  int bg_id_;
+
+  // Constant after construction
+  bool ignore_rpc_error_;  // Keep looping even if we receive rpc errors
+  int max_bg_loops_;
+  MercuryRPC* rpc_;
 
   void BGLoop();
   static void BGLoopWrapper(void* arg) {
@@ -113,11 +143,13 @@ class MercuryRPC::LocalLooper {
 
  public:
   LocalLooper(MercuryRPC* rpc, const RPCOptions& options)
-      : rpc_(rpc),
-        shutting_down_(NULL),
+      : shutting_down_(NULL),
         bg_cv_(&mutex_),
+        bg_loops_(0),
+        bg_id_(0),
+        ignore_rpc_error_(false),
         max_bg_loops_(options.num_io_threads),
-        bg_loops_(0) {
+        rpc_(rpc) {
     rpc_->Ref();
   }
 
@@ -170,9 +202,9 @@ class MercuryRPC::Client : public If {
   }
 
  private:
-  static hg_return_t SaveReply(const hg_cb_info* info);
-  MercuryRPC* const rpc_;
-  std::string addr_;  // To-be-resolved target RPC address
+  MercuryRPC* rpc_;
+  std::string addr_;  // Unresolved target address
+
   port::Mutex mu_;
   port::CondVar cv_;
   // No copying allowed

@@ -10,6 +10,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include <string>
 #undef PLATFORM_IS_LITTLE_ENDIAN
 #if defined(PDLFS_OS_MACOSX)
 #include <machine/endian.h>
@@ -47,7 +48,7 @@
 #else
 #include <endian.h>
 #endif
-
+#include <errno.h>
 #include <pthread.h>
 #ifdef SNAPPY
 #include <snappy.h>
@@ -60,7 +61,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <string>
+#include <sys/time.h>
+#include <time.h>
 
 #include "pdlfs-common/atomic_pointer.h"  // Platform-specific atomic pointer
 
@@ -95,11 +97,10 @@ class CondVar;
 class Mutex {
  public:
   Mutex();
-  ~Mutex();
-
+  void AssertHeld() {}
   void Lock();
   void Unlock();
-  void AssertHeld() {}
+  ~Mutex();
 
  private:
   friend class CondVar;
@@ -113,10 +114,12 @@ class Mutex {
 class CondVar {
  public:
   explicit CondVar(Mutex* mu);
-  ~CondVar();
+  // Return true iff we run out of time, false otherwise.
+  bool TimedWait(uint64_t micro);
   void Wait();
   void Signal();
   void SignalAll();
+  ~CondVar();
 
  private:
   pthread_cond_t cv_;

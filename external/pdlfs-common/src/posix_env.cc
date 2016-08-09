@@ -135,16 +135,17 @@ class PosixMmapReadableFile : public RandomAccessFile {
   }
 };
 
-class PosixThreadPool : public ThreadPool {
+class PosixFixedThreadPool : public ThreadPool {
  public:
-  PosixThreadPool(int size)
+  PosixFixedThreadPool(int size)
       : bg_cv_(&mu_),
         started_threads_(0),
         max_threads_(size),
         shutting_down_(NULL) {}
 
-  virtual ~PosixThreadPool();
+  virtual ~PosixFixedThreadPool();
   virtual void Schedule(void (*function)(void* arg), void* arg);
+  virtual std::string ToDebugString();
   void StartThread(void (*function)(void* arg), void* arg);
 
  private:
@@ -152,7 +153,7 @@ class PosixThreadPool : public ThreadPool {
   void BGThread();
 
   static void* BGThreadWrapper(void* arg) {
-    reinterpret_cast<PosixThreadPool*>(arg)->BGThread();
+    reinterpret_cast<PosixFixedThreadPool*>(arg)->BGThread();
     return NULL;
   }
 
@@ -454,7 +455,7 @@ class PosixEnv : public Env {
   }
 
  private:
-  PosixThreadPool pool_;
+  PosixFixedThreadPool pool_;
   PosixLockTable locks_;
   MmapLimiter mmap_limit_;
 };
@@ -467,7 +468,14 @@ static pthread_t PthreadCreate(void* (*start_routine)(void*), void* arg) {
   return new_th;
 }
 
-PosixThreadPool::~PosixThreadPool() {
+std::string PosixFixedThreadPool::ToDebugString() {
+  char tmp[100];
+  snprintf(tmp, sizeof(tmp), "POSIX fixed thread pool: max_thread=%d",
+           max_threads_);
+  return tmp;
+}
+
+PosixFixedThreadPool::~PosixFixedThreadPool() {
   mu_.Lock();
   shutting_down_.Release_Store(this);
   bg_cv_.SignalAll();
@@ -477,7 +485,7 @@ PosixThreadPool::~PosixThreadPool() {
   mu_.Unlock();
 }
 
-void PosixThreadPool::Schedule(void (*function)(void*), void* arg) {
+void PosixFixedThreadPool::Schedule(void (*function)(void*), void* arg) {
   if (!shutting_down_.Acquire_Load()) {
     mu_.Lock();
 
@@ -503,7 +511,7 @@ void PosixThreadPool::Schedule(void (*function)(void*), void* arg) {
   }
 }
 
-void PosixThreadPool::BGThread() {
+void PosixFixedThreadPool::BGThread() {
   void (*function)(void*) = NULL;
   void* arg;
 
@@ -533,7 +541,7 @@ void PosixThreadPool::BGThread() {
   }
 }
 
-void PosixThreadPool::StartThread(void (*function)(void* arg), void* arg) {
+void PosixFixedThreadPool::StartThread(void (*function)(void* arg), void* arg) {
   StartThreadState* state = new StartThreadState;
   state->user_function = function;
   state->arg = arg;
@@ -541,7 +549,7 @@ void PosixThreadPool::StartThread(void (*function)(void* arg), void* arg) {
 }
 
 ThreadPool* ThreadPool::NewFixed(int num_threads) {
-  return new PosixThreadPool(num_threads);
+  return new PosixFixedThreadPool(num_threads);
 }
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;

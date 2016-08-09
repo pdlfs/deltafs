@@ -22,7 +22,8 @@ namespace pdlfs {
 
 RPCOptions::RPCOptions()
     : mode(kServerClient),
-      num_io_threads(1),  // TODO: can we really use multiple I/O threads?
+      rpc_timeout(5000000LLU),
+      num_io_threads(1),
       extra_workers(NULL),
       fs(NULL),
       env(NULL) {}
@@ -86,7 +87,7 @@ class RPCImpl : public RPC {
   virtual Status Start() { return looper_->Start(); }
   virtual Status Stop() { return looper_->Stop(); }
 
-  virtual If* OpenClientStub(const std::string& addr) {
+  virtual If* OpenClientFor(const std::string& addr) {
     return new MercuryRPC::Client(rpc_, addr);
   }
 
@@ -97,8 +98,8 @@ class RPCImpl : public RPC {
   }
 
   virtual ~RPCImpl() {
-    delete looper_;
     rpc_->Unref();
+    delete looper_;
   }
 };
 #endif
@@ -114,12 +115,18 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
   }
 #if VERBOSE >= 1
   Verbose(__LOG_ARGS__, 1, "rpc.uri=%s", options.uri.c_str());
+  Verbose(__LOG_ARGS__, 1, "rpc.timeout=%llu",
+          (unsigned long long)options.rpc_timeout);
   Verbose(__LOG_ARGS__, 1, "rpc.num_io_threads=%d", options.num_io_threads);
+  Verbose(__LOG_ARGS__, 1, "rpc.extra_workers=%s",
+          options.extra_workers != NULL
+              ? options.extra_workers->ToDebugString().c_str()
+              : "NULL");
 #endif
 #if defined(MERCURY)
   return new rpc::RPCImpl(options);
 #else
-  char msg[] = "Not possible: no rpc impl available\n";
+  char msg[] = "No rpc implementation is available\n";
   fwrite(msg, 1, sizeof(msg), stderr);
   abort();
 #endif

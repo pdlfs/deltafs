@@ -42,6 +42,25 @@ void CondVar::Wait() {
   PthreadCall("pthread_cond_wait", pthread_cond_wait(&cv_, &mu_->mu_));
 }
 
+bool CondVar::TimedWait(uint64_t micro) {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  struct timespec ts;
+  ts.tv_sec = tv.tv_sec;
+  ts.tv_nsec = tv.tv_usec * 1000;
+  int r = pthread_cond_timedwait(&cv_, &mu_->mu_, &ts);
+  if (r != 0) {
+    if (errno != ETIMEDOUT) {
+      PthreadCall("pthread_cond_timedwait", r);
+      abort();
+    } else {
+      return true;  // Timeout!
+    }
+  } else {
+    return false;  // No timeout
+  }
+}
+
 void CondVar::Signal() {
   PthreadCall("pthread_cond_signal", pthread_cond_signal(&cv_));
 }

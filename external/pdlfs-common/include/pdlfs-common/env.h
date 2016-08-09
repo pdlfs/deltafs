@@ -328,10 +328,13 @@ class ThreadPool {
   // serialized.
   virtual void Schedule(void (*function)(void* arg), void* arg) = 0;
 
+  // Return a description of the pool implementation.
+  virtual std::string ToDebugString() = 0;
+
  private:
   // No copying allowed
-  ThreadPool(const ThreadPool&);
   void operator=(const ThreadPool&);
+  ThreadPool(const ThreadPool&);
 };
 
 // An implementation of Env that forwards all calls to another Env.
