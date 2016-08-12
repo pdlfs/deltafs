@@ -17,7 +17,7 @@ namespace pdlfs {
 
 OSD::~OSD() {}
 
-OSDEnv::OSDEnv(OSD* osd) { impl_ = new InternalImpl(osd); }
+OSDEnv::OSDEnv(OSD* osd) { impl_ = new Impl(osd); }
 
 OSDEnv::~OSDEnv() { delete impl_; }
 
@@ -31,16 +31,19 @@ MountOptions::MountOptions()
 UnmountOptions::UnmountOptions() : deletion(false) {}
 
 static bool ResolvePath(const Slice& path, Slice* parent, Slice* base) {
-  const char* a = path.data();
-  const char* b = strrchr(a, '/');
-
-  *base = Slice(b + 1, a + path.size() - b - 1);
-  if (b - a != 0) {
-    *parent = Slice(a, b - a);
+  if (path.size() > 1 && path[0] == '/') {
+    const char* a = path.c_str();
+    const char* b = strrchr(a, '/');
+    *base = Slice(b + 1, a + path.size() - b - 1);
+    if (b - a != 0) {
+      *parent = Slice(a, b - a);
+    } else {
+      *parent = Slice("/");
+    }
+    return !base->empty();
   } else {
-    *parent = Slice("/");
+    return false;
   }
-  return true;
 }
 
 bool OSDEnv::FileSetExists(const Slice& dirname) {
@@ -227,20 +230,11 @@ Status ReadFileToString(OSD* osd, const Slice& name, std::string* data) {
 }
 
 class OSDAdaptor : public OSD {
- private:
-  Env* env_;
-  std::string prefix_;
-
-  std::string FullPath(const Slice& name) {
-    std::string path = prefix_ + name.data();
-    return path;
-  }
-
  public:
   OSDAdaptor(Env* env, const Slice& prefix) : env_(env) {
     AppendSliceTo(&prefix_, prefix);
     env_->CreateDir(prefix_);
-    prefix_.append("/<obj>");
+    prefix_.append("/obj_");
   }
 
   virtual ~OSDAdaptor() {}
@@ -284,13 +278,20 @@ class OSDAdaptor : public OSD {
 
  private:
   // No copying allowed
-  OSDAdaptor(const OSDAdaptor&);
   void operator=(const OSDAdaptor&);
+  OSDAdaptor(const OSDAdaptor&);
+
+  std::string FullPath(const Slice& name) {
+    std::string path = prefix_ + name.data();
+    return path;
+  }
+
+  std::string prefix_;
+  Env* env_;
 };
 
 OSD* NewOSDAdaptor(const Slice& prefix, Env* env) {
-  if (env == NULL) env = Env::Default();
-  return new OSDAdaptor(env, prefix);
+  return new OSDAdaptor(env == NULL ? Env::Default() : env, prefix);
 }
 
 }  // namespace pdlfs

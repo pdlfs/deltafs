@@ -14,6 +14,9 @@
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/rpc.h"
+#if defined(MARGO) && defined(MERCURY)
+#include "margo_rpc.h"
+#endif
 #if defined(MERCURY)
 #include "mercury_rpc.h"
 #endif
@@ -25,8 +28,9 @@ RPCOptions::RPCOptions()
       rpc_timeout(5000000LLU),
       num_io_threads(1),
       extra_workers(NULL),
-      fs(NULL),
-      env(NULL) {}
+      addr_cache_size(128),
+      env(NULL),
+      fs(NULL) {}
 
 RPC::~RPC() {}
 
@@ -78,8 +82,32 @@ namespace rpc {
 
 If::~If() {}
 
+namespace {
+#if defined(MARGO) && defined(MERCURY)
+class MargoRPCImpl : public RPC {
+  MargoRPC* rpc_;
+
+ public:
+  virtual Status Start() { return rpc_->Start(); }
+  virtual Status Stop() { return rpc_->Stop(); }
+
+  virtual If* OpenClientFor(const std::string& addr) {
+    return new MargoRPC::Client(rpc_, addr);
+  }
+
+  MargoRPCImpl(const RPCOptions& options) {
+    rpc_ = new MargoRPC(options.mode == kServerClient, options);
+    rpc_->Ref();
+  }
+
+  virtual ~MargoRPCImpl() { rpc_->Unref(); }
+};
+#endif
+}
+
+namespace {
 #if defined(MERCURY)
-class RPCImpl : public RPC {
+class MercuryRPCImpl : public RPC {
   MercuryRPC::LocalLooper* looper_;
   MercuryRPC* rpc_;
 
@@ -91,18 +119,19 @@ class RPCImpl : public RPC {
     return new MercuryRPC::Client(rpc_, addr);
   }
 
-  RPCImpl(const RPCOptions& options) {
+  MercuryRPCImpl(const RPCOptions& options) {
     rpc_ = new MercuryRPC(options.mode == kServerClient, options);
     looper_ = new MercuryRPC::LocalLooper(rpc_, options);
     rpc_->Ref();
   }
 
-  virtual ~RPCImpl() {
+  virtual ~MercuryRPCImpl() {
     rpc_->Unref();
     delete looper_;
   }
 };
 #endif
+}
 
 }  // namespace rpc
 
@@ -123,8 +152,10 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
               ? options.extra_workers->ToDebugString().c_str()
               : "NULL");
 #endif
-#if defined(MERCURY)
-  return new rpc::RPCImpl(options);
+#if defined(MARGO) && defined(MERCURY)
+  return new rpc::MargoRPCImpl(options);  // Use Margo if we have it built
+#elif defined(MERCURY)
+  return new rpc::MercuryRPCImpl(options);  // Use Mercury otherwise
 #else
   char msg[] = "No rpc implementation is available\n";
   fwrite(msg, 1, sizeof(msg), stderr);

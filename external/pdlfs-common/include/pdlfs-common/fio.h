@@ -50,6 +50,7 @@ class Fio {
   virtual Status Flush(const Slice& fentry, Handle* fh,
                        bool force_sync = false) = 0;
   virtual Status Close(const Slice& fentry, Handle* fh) = 0;
+  virtual Status Drop(const Slice& fentry) = 0;
 
  private:
   // No copying allowed

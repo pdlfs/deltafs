@@ -25,11 +25,11 @@ static Status OSCopyFile(const Slice& s, const Slice& t) {
   Status status;
   int r = -1;
   int w = -1;
-  if ((r = open(s.data(), O_RDONLY)) == -1) {
+  if ((r = open(s.c_str(), O_RDONLY)) == -1) {
     status = IOError(s, errno);
   }
   if (status.ok()) {
-    if ((w = open(t.data(), O_CREAT | O_TRUNC | O_WRONLY, 0644)) == -1) {
+    if ((w = open(t.c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0644)) == -1) {
       status = IOError(t, errno);
     }
   }
@@ -191,7 +191,7 @@ class PosixEnv : public Env {
 
   virtual Status NewSequentialFile(const Slice& fname,
                                    SequentialFile** result) {
-    FILE* f = fopen(fname.data(), "r");
+    FILE* f = fopen(fname.c_str(), "r");
     if (f != NULL) {
       *result = new PosixSequentialFile(fname, f);
       return Status::OK();
@@ -205,7 +205,7 @@ class PosixEnv : public Env {
                                      RandomAccessFile** result) {
     *result = NULL;
     Status s;
-    int fd = open(fname.data(), O_RDONLY);
+    int fd = open(fname.c_str(), O_RDONLY);
     if (fd < 0) {
       s = IOError(fname, errno);
     } else if (mmap_limit_.Acquire()) {
@@ -230,7 +230,7 @@ class PosixEnv : public Env {
   }
 
   virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
-    FILE* f = fopen(fname.data(), "w");
+    FILE* f = fopen(fname.c_str(), "w");
     if (f != NULL) {
       *result = new PosixWritableFile(fname, f);
       return Status::OK();
@@ -241,13 +241,13 @@ class PosixEnv : public Env {
   }
 
   virtual bool FileExists(const Slice& fname) {
-    return access(fname.data(), F_OK) == 0;
+    return access(fname.c_str(), F_OK) == 0;
   }
 
   virtual Status GetChildren(const Slice& dir,
                              std::vector<std::string>* result) {
     result->clear();
-    DIR* d = opendir(dir.data());
+    DIR* d = opendir(dir.c_str());
     if (d == NULL) {
       return IOError(dir, errno);
     }
@@ -261,7 +261,7 @@ class PosixEnv : public Env {
 
   virtual Status DeleteFile(const Slice& fname) {
     Status result;
-    if (unlink(fname.data()) != 0) {
+    if (unlink(fname.c_str()) != 0) {
       result = IOError(fname, errno);
     }
     return result;
@@ -269,7 +269,7 @@ class PosixEnv : public Env {
 
   virtual Status CreateDir(const Slice& dirname) {
     Status result;
-    if (mkdir(dirname.data(), 0755) != 0) {
+    if (mkdir(dirname.c_str(), 0755) != 0) {
       result = IOError(dirname, errno);
     }
     return result;
@@ -277,7 +277,7 @@ class PosixEnv : public Env {
 
   virtual Status AttachDir(const Slice& dirname) {
     Status result;
-    DIR* dir = opendir(dirname.data());
+    DIR* dir = opendir(dirname.c_str());
     if (dir == NULL) {
       result = IOError(dirname, errno);
     } else {
@@ -288,7 +288,7 @@ class PosixEnv : public Env {
 
   virtual Status DeleteDir(const Slice& dirname) {
     Status result;
-    if (rmdir(dirname.data()) != 0) {
+    if (rmdir(dirname.c_str()) != 0) {
       result = IOError(dirname, errno);
     }
     return result;
@@ -301,7 +301,7 @@ class PosixEnv : public Env {
   virtual Status GetFileSize(const Slice& fname, uint64_t* size) {
     Status s;
     struct stat sbuf;
-    if (stat(fname.data(), &sbuf) != 0) {
+    if (stat(fname.c_str(), &sbuf) != 0) {
       *size = 0;
       s = IOError(fname, errno);
     } else {
@@ -317,11 +317,12 @@ class PosixEnv : public Env {
     Status status;
     int r = -1;
     int w = -1;
-    if ((r = open(src.data(), O_RDONLY)) == -1) {
+    if ((r = open(src.c_str(), O_RDONLY)) == -1) {
       status = IOError(src, errno);
     }
     if (status.ok()) {
-      if ((w = open(target.data(), O_CREAT | O_TRUNC | O_WRONLY, 0644)) == -1) {
+      if ((w = open(target.c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0644)) ==
+          -1) {
         status = IOError(target, errno);
       }
     }
@@ -349,7 +350,7 @@ class PosixEnv : public Env {
 
   virtual Status RenameFile(const Slice& src, const Slice& target) {
     Status result;
-    if (rename(src.data(), target.data()) != 0) {
+    if (rename(src.c_str(), target.c_str()) != 0) {
       result = IOError(src, errno);
     }
     return result;
@@ -358,7 +359,7 @@ class PosixEnv : public Env {
   virtual Status LockFile(const Slice& fname, FileLock** lock) {
     *lock = NULL;
     Status s;
-    int fd = open(fname.data(), O_RDWR | O_CREAT, 0644);
+    int fd = open(fname.c_str(), O_RDWR | O_CREAT, 0644);
     if (fd < 0) {
       s = IOError(fname, errno);
     } else if (!locks_.Insert(fname)) {

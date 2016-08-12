@@ -92,6 +92,11 @@ class Slice {
     }
   }
 
+  const char* c_str() const {
+    assert(data_[size_] == 0);
+    return data_;
+  }
+
   // Return a string that contains the copy of a suffix of the referenced data.
   std::string substr(size_t start) const {
     assert(start <= size());

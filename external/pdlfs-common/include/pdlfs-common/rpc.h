@@ -23,7 +23,7 @@ class If;
 }
 
 enum RPCMode {
-  kServerClient,  // Will also need to listen client requests
+  kServerClient,  // Will listen incoming client requests
   kClientOnly
 };
 
@@ -43,8 +43,13 @@ struct RPCOptions {
   // the pool instead of I/O threads for execution.
   ThreadPool* extra_workers;  // Default: NULL
 
-  rpc::If* fs;
+  // Max number of server addrs that may be cached locally
+  size_t addr_cache_size;  //  Default: 128
   Env* env;  // Default: NULL, which indicates Env::Default() should be used
+
+  // Server callback implementation.
+  // Not needed for clients.
+  rpc::If* fs;
 };
 
 class RPC {
@@ -56,6 +61,7 @@ class RPC {
   // are thread-safe so that no explicit synchronization is needed
   // to make RPC calls.
   static RPC* Open(const RPCOptions&);
+  // The result should be deleted when it is no longer needed.
   virtual rpc::If* OpenClientFor(const std::string& addr) = 0;
 
   // RPC implementation must not use the caller thread to process

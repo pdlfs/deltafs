@@ -8,6 +8,8 @@
  * this file should only be included by pdlfs_config.h.
  */
 
+#define PDLFS_COMMON_PREFIX "@CMAKE_INSTALL_PREFIX@"
+
 #define PDLFS_COMMON_VERSION_MAJOR @PDLFS_COMMON_VERSION_MAJOR@
 #define PDLFS_COMMON_VERSION_MINOR @PDLFS_COMMON_VERSION_MINOR@
 #define PDLFS_COMMON_VERSION_PATCH @PDLFS_COMMON_VERSION_PATCH@
@@ -15,7 +17,11 @@
 #define PDLFS_COMMON_LIBNAME "@PDLFS_NAME@"
 
 #cmakedefine PDLFS_MERCURY_RPC
+#cmakedefine PDLFS_RADOS
 
 #ifdef PDLFS_MERCURY_RPC
 #define MERCURY   /* XXXCDC: backward compat hack */
+#endif
+#ifdef PDLFS_RADOS
+#define RADOS     /* XXXCDC: backward compat hack */
 #endif

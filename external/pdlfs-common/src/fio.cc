@@ -15,8 +15,8 @@ namespace pdlfs {
 Fio::~Fio() {}
 
 Slice Fentry::ExtractUntypedKeyPrefix(const Slice& encoding) {
-  Slice input = encoding;
   Slice key_prefix;
+  Slice input = encoding;
   GetLengthPrefixedSlice(&input, &key_prefix);
   assert(!key_prefix.empty());
   return key_prefix;
@@ -26,9 +26,15 @@ bool Fentry::DecodeFrom(Slice* input) {
   Slice key_prefix;
   Slice sli;
   uint32_t u32;
-  if (!GetLengthPrefixedSlice(input, &key_prefix) ||
-      !GetVarint64(input, &pid.reg) || !GetVarint64(input, &pid.snap) ||
-      !GetVarint64(input, &pid.ino) || !GetLengthPrefixedSlice(input, &sli) ||
+  if (!GetLengthPrefixedSlice(input, &key_prefix)) {
+    return false;
+  }
+#if defined(DELTAFS)
+  if (!GetVarint64(input, &pid.reg) || !GetVarint64(input, &pid.snap)) {
+    return false;
+  }
+#endif
+  if (!GetVarint64(input, &pid.ino) || !GetLengthPrefixedSlice(input, &sli) ||
       !GetVarint32(input, &u32)) {
     return false;
   } else {
@@ -58,8 +64,10 @@ Slice Fentry::EncodeTo(char* scratch) const {
   KeyType dummy = static_cast<KeyType>(0);
   Key key(stat, dummy);
   p = EncodeLengthPrefixedSlice(p, key.prefix());
+#if defined(DELTAFS)
   p = EncodeVarint64(p, pid.reg);
   p = EncodeVarint64(p, pid.snap);
+#endif
   p = EncodeVarint64(p, pid.ino);
   p = EncodeLengthPrefixedSlice(p, nhash);
   p = EncodeVarint32(p, zserver);

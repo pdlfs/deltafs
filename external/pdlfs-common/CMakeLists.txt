@@ -33,9 +33,13 @@
 #
 # pdlfs-common config compile time options flags:
 #   -DPDLFS_MERCURY_RPC=ON                 -- compile in mercury rpc code
+#   -DPDLFS_RADOS=ON                       -- compile in RADOS env
+#     - RADOS_INCLUDE_DIR: optional hint for finding rado/librados.h
+#     - RADOS_LIBRARY_DIR: optional hint for finding rados lib
+#
 #
 # note: package config files for external packages must be preinstalled in 
-#       CMAKE_INSTALL_PATH or CMAKE_PREFIX_PATH.
+#       CMAKE_INSTALL_PATH or on CMAKE_PREFIX_PATH, except as noted.
 #
 
 #
@@ -64,8 +68,21 @@ set (PDLFS_OS "${CMAKE_SYSTEM_NAME}" CACHE
 #
 # external packages
 #
+set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
+     "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 if (PDLFS_MERCURY_RPC)
     find_package(mercury CONFIG REQUIRED)
+    message ("-- mercury enabled")
+endif ()
+
+if (PDLFS_RADOS)
+    find_package(Rados MODULE REQUIRED)
+    if (NOT RADOS_FOUND)
+        message (FATAL_ERROR
+        "-- rados not found try setting -D RADOS_{INCLUDE,LIBRARY}_DIR")
+    endif ()
+    message ("-- rados enabled")
 endif ()
 
 add_subdirectory (src)

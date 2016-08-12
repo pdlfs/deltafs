@@ -119,28 +119,27 @@ class FileSet {
   std::string name;
   HashSet files;
 
-  // Tx
+  // File set logging
+
   WritableFile* xfile;  // The file backing the write-ahead log
-  log::Writer* xlog;    // The write-ahead logger
+  log::Writer* xlog;    // Write-ahead logger
 
   static std::string LogRecord(const Slice& fname, RecordType type);
 
  private:
   // No copying allowed
-  FileSet(const FileSet&);
   void operator=(const FileSet&);
+  FileSet(const FileSet&);
 };
 
-struct OSDEnv::ResolvedPath {
-  Slice mntptr;
-  Slice base;
-};
-
-class OSDEnv::InternalImpl {
+class OSDEnv::Impl {
  public:
-  explicit InternalImpl(OSD* osd) : osd_(osd) {}
+  explicit Impl(OSD* osd) : osd_(osd) {}
 
-  ~InternalImpl() { assert(mtable_.Empty()); }
+  ~Impl() {
+    // All file sets should be unmounted
+    assert(mtable_.Empty());
+  }
 
   bool HasFileSet(const Slice& mntptr);
   Status LinkFileSet(const Slice& mntptr, FileSet* fset);
@@ -167,12 +166,12 @@ class OSDEnv::InternalImpl {
   static std::string InternalObjectName(const FileSet*, const Slice& name);
 
   // No copying allowed
-  InternalImpl(const InternalImpl&);
-  void operator=(const InternalImpl&);
+  void operator=(const Impl&);
+  Impl(const Impl&);
 };
 
-inline std::string OSDEnv::InternalImpl::InternalObjectName(const FileSet* fset,
-                                                            const Slice& name) {
+inline std::string OSDEnv::Impl::InternalObjectName(const FileSet* fset,
+                                                    const Slice& name) {
   std::string result;
   const std::string& set_name = fset->name;
   result.reserve(set_name.size() + 1 + name.size());
@@ -193,12 +192,8 @@ inline void PutOpRecord(std::string* dst, const Slice& fname,
 
 inline std::string FileSet::LogRecord(const Slice& fname,
                                       FileSet::RecordType type) {
-  size_t record_size = 0;
-  record_size += 8 +  // timestamp
-                 4 +  // num_ops
-                 1 +  // op_type
-                 4 +  // fname length
-                 fname.size();
+  // record_timestamp(8) + num_ops(4) + op_type(1) + fname_length(1-4)
+  size_t record_size = 8 + 4 + 1 + 4 + fname.size();
   std::string record;
   record.reserve(record_size);
   PutFixed64(&record, Env::Default()->NowMicros());

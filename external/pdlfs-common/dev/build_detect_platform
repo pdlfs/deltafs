@@ -126,7 +126,7 @@ COMMON_FLAGS="$COMMON_FLAGS -DPDLFS_MAKEFILE"
 # except for the test and benchmark files. By default, find will output a list
 # of all files matching either rule, so we need to append -print to make the
 # prune take effect.
-DIRS="$PREFIX/src $PREFIX/modules"
+DIRS="$PREFIX/src"
 
 set -f # temporarily disable globbing so that our patterns aren't expanded
 PRUNE_TEST="-name *test*.cc -prune"

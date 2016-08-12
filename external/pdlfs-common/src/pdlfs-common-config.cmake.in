@@ -1,5 +1,9 @@
 
 set (PDLFS_REQUIRED_PACKAGES "@PDLFS_REQUIRED_PACKAGES@")
+set (PDLFS_EXTRA_COMPONENTS "@PDLFS_EXTRA_COMPONENTS@")
+
+set (PDLFS_ALL_COMPONENTS ${PDLFS_REQUIRED_PACKAGES} 
+                          ${PDLFS_EXTRA_COMPONENTS})
 
 include (CMakeFindDependencyMacro)
 
@@ -12,7 +16,7 @@ endforeach ()
 
 # check for user requested components (which we map to linked in packages)
 foreach (comp ${@PDLFS_NAME@_FIND_COMPONENTS})
-    if (NOT ";${PDLFS_REQUIRED_PACKAGES};" MATCHES ";${comp};")
+    if (NOT ";${PDLFS_ALL_COMPONENTS};" MATCHES ";${comp};")
         set(@PDLFS_NAME@_FOUND False)
         set(@PDLFS_NAME@_NOTFOUND_MESSAGE 
             "Specified unsupported component: ${comp}")

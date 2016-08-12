@@ -13,10 +13,11 @@
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/map.h"
 #include "pdlfs-common/mutexlock.h"
+#include "pdlfs-common/pdlfs_config.h"
+#include "pdlfs-common/rados/rados_ld.h"
 #include "pdlfs-common/strutil.h"
 
-#include "rados_api.h"
-#include "rados_dl.h"
+#include "rados_conn.h"
 
 #if defined(__cplusplus)
 extern "C" {
@@ -76,7 +77,7 @@ static void ParseOptions(std::map<std::string, std::string>* options,
   // TODO
 }
 
-void* pdlfs_load_rados_env(const char* conf_str) {
+void* PDLFS_Load_rados_env(const char* conf_str) {
   pdlfs::Env* env = NULL;
 #if defined(RADOS)
   std::map<std::string, std::string> options;
@@ -94,7 +95,7 @@ void* pdlfs_load_rados_env(const char* conf_str) {
   return env;
 }
 
-void* pdlfs_load_rados_fio(const char* conf_str) {
+void* PDLFS_Load_rados_fio(const char* conf_str) {
   pdlfs::Fio* fio = NULL;
 #if defined(RADOS)
   std::map<std::string, std::string> options;

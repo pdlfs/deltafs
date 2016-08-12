@@ -11,7 +11,7 @@
 
 #include "pdlfs-common/osd_env.h"
 
-#include "rados_api.h"
+#include "rados_conn.h"
 
 namespace pdlfs {
 namespace rados {

@@ -7,8 +7,10 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "rados_api.h"
+#include "pdlfs-common/pdlfs_config.h"
+
 #include "rados_common.h"
+#include "rados_conn.h"
 #include "rados_env.h"
 #include "rados_fio.h"
 #include "rados_osd.h"
@@ -98,6 +100,7 @@ Status RadosConn::OpenOsd(OSD** result, const std::string& pool_name,
     s = RadosError("rados_ioctx_create", r);
   } else {
     RadosOsd* osd = new RadosOsd;
+    osd->pool_name_ = pool_name;
     osd->force_sync_ = force_sync;
     osd->mutex_ = &mutex_;
     osd->cluster_ = cluster_;
@@ -121,6 +124,7 @@ Status RadosConn::OpenFio(Fio** result, const std::string& pool_name,
     s = RadosError("rados_ioctx_create", r);
   } else {
     RadosFio* fio = new RadosFio;
+    fio->pool_name_ = pool_name;
     fio->force_sync_ = force_sync;
     fio->mutex_ = &mutex_;
     fio->cluster_ = cluster_;

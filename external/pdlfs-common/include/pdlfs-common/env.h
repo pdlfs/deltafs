@@ -40,11 +40,18 @@ class Env {
   Env() {}
   virtual ~Env();
 
+  // Load a specific environment implementation as is requested by the caller.
+  // If the implementation is not available,
+  // NULL is returned.
+  //
+  // The result should be deleted when it is no longer needed.
+  static Env* Open(const Slice& env_name, const Slice& env_conf);
+
   // Return a default environment suitable for the current operating
   // system.  Sophisticated users may wish to provide their own Env
   // implementation instead of relying on this default environment.
   //
-  // The result of Default() is a shared global instance and cannot be deleted.
+  // The result of Default() is a global instance and cannot be deleted.
   static Env* Default();
 
   // Create a brand new sequentially-readable file with the specified name.

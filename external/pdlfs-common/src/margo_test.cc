@@ -7,12 +7,12 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "margo_rpc.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 
 #if defined(MARGO) && defined(MERCURY)
+#include "margo_rpc.h"
 namespace pdlfs {
 namespace rpc {
 

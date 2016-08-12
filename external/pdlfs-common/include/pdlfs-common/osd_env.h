@@ -154,14 +154,17 @@ class OSDEnv {
   std::string TEST_LookupFile(const Slice& fname);
 
  private:
-  class InternalImpl;
-  InternalImpl* impl_;
-
-  struct ResolvedPath;
-
   // No copying allowed
-  OSDEnv(const OSDEnv&);
   void operator=(const OSDEnv&);
+  OSDEnv(const OSDEnv&);
+
+  struct ResolvedPath {
+    Slice mntptr;
+    Slice base;
+  };
+
+  class Impl;
+  Impl* impl_;
 };
 
 }  // namespace pdlfs

@@ -8,15 +8,17 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#if defined(GLOG)
-#include <glog/logging.h>
-#endif
 #include <stdio.h>
 
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
+#include "pdlfs-common/rados/rados_ld.h"
 #if defined(PDLFS_PLATFORM_POSIX)
 #include "posix_logger.h"
+#endif
+#if defined(GLOG)
+#include <glog/logging.h>
 #endif
 
 namespace pdlfs {
@@ -38,6 +40,14 @@ FileLock::~FileLock() {}
 ThreadPool::~ThreadPool() {}
 
 EnvWrapper::~EnvWrapper() {}
+
+Env* Env::Open(const Slice& env_name, const Slice& env_conf) {
+  if (env_name == "rados") {
+    return reinterpret_cast<Env*>(PDLFS_Load_rados_env(env_conf.c_str()));
+  } else {
+    return NULL;
+  }
+}
 
 static void EmitLog(Logger* info_log, const char* fmt, va_list ap) {
   info_log->Logv("pdlfs-common*.cc", 0, 0, 3, fmt, ap);

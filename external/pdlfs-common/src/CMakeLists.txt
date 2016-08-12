@@ -8,9 +8,40 @@
 # file if we are being embedded within another project.
 #
 
-# configure/load in standard modules we plan to use
+#
+# list of source files and tests
+#
+
+# main directory sources and tests
+set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c.cc dbfiles.cc
+     dbfiles.cc dcntl.cc env.cc fio.cc fstypes.cc gigaplus.cc hash.cc
+     histogram.cc index_cache.cc lease.cc log_reader.cc log_writer.cc
+     logging.cc lookup_cache.cc mdb.cc mercury_rpc.cc
+     osd.cc osd_internal.cc port_posix.cc posix_env.cc rpc.cc
+     slice.cc status.cc strutil.cc testharness.cc testutil.cc xxhash.cc)
+set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
+     crc32c_test.cc dbfiles_test.cc env_test.cc fstypes_test.cc
+     gigaplus_test.cc hash_test.cc log_test.cc mercury_test.cc osd_test.cc)
+
+# leveldb directory sources and tests
+set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
+     db/builder.cc db/db.cc db/db_impl.cc db/db_iter.cc db/dbformat.cc
+     db/memtable.cc db/options.cc db/repair.cc db/table_cache.cc
+     db/version_edit.cc db/version_set.cc db/write_batch.cc filter_block.cc
+     filter_policy.cc format.cc iterator.cc merger.cc table.cc
+     table_builder.cc table_stats.cc two_level_iterator.cc )
+set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
+     db/bulk_test.cc db/corruption_test.cc db/db_table_test.cc db/db_test.cc
+     db/dbformat_test.cc db/version_edit_test.cc db/version_set_test.cc
+     db/write_batch_test.cc filter_block_test.cc skiplist_test.cc
+     table_test.cc)
+
+#
+# configure/load in standard modules we plan to use and probe the enviroment
+#
 include (CMakePackageConfigHelpers)
 include (CheckCXXCompilerFlag)
+
 set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set (THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package (Threads REQUIRED)
@@ -21,6 +52,11 @@ if (TARGET mercury AND PDLFS_MERCURY_RPC)
     # XXX: mercury doesn't set its INTERFACE_INCLUDE_DIRECTORIES property
     # XXX: so we have to do it here...
     list (APPEND pdlfs-xtra-incs ${MERCURY_INCLUDE_DIR})
+endif ()
+
+if (TARGET rados AND PDLFS_RADOS)
+    list (APPEND pdlfs-xtra-libs rados)
+    list (APPEND PDLFS_EXTRA_COMPONENTS rados)
 endif ()
 
 #
@@ -48,34 +84,6 @@ if (NOT DEFINED PDLFS_COMMON_VERSION_MAJOR)
 endif ()
 set (pdlfs-vers "${PDLFS_COMMON_VERSION_MAJOR}.${PDLFS_COMMON_VERSION_MINOR}")
 set (PDLFS_COMMON_VERSION "${pdlfs-vers}.${PDLFS_COMMON_VERSION_PATCH}")
-
-#
-# list of source files and tests
-#
-
-# main directory sources and tests
-set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c.cc dbfiles.cc
-     dbfiles.cc dcntl.cc env.cc fio.cc fstypes.cc gigaplus.cc hash.cc
-     histogram.cc index_cache.cc lease.cc log_reader.cc log_writer.cc
-     logging.cc lookup_cache.cc mdb.cc mercury_rpc.cc
-     osd.cc osd_internal.cc port_posix.cc posix_env.cc rpc.cc
-     slice.cc status.cc strutil.cc testharness.cc testutil.cc xxhash.cc)
-set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
-     crc32c_test.cc dbfiles_test.cc env_test.cc fstypes_test.cc 
-     gigaplus_test.cc hash_test.cc log_test.cc mercury_test.cc osd_test.cc)
-
-# leveldb directory sources and tests
-set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
-     db/builder.cc db/db.cc db/db_impl.cc db/db_iter.cc db/dbformat.cc
-     db/memtable.cc db/options.cc db/repair.cc db/table_cache.cc
-     db/version_edit.cc db/version_set.cc db/write_batch.cc filter_block.cc
-     filter_policy.cc format.cc iterator.cc merger.cc table.cc
-     table_builder.cc table_stats.cc two_level_iterator.cc )
-set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
-     db/bulk_test.cc db/corruption_test.cc db/db_table_test.cc db/db_test.cc
-     db/dbformat_test.cc db/version_edit_test.cc db/version_set_test.cc
-     db/write_batch_test.cc filter_block_test.cc skiplist_test.cc
-     table_test.cc)
 
 #
 # provide reasonable defaults for platform/os

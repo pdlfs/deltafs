@@ -11,10 +11,11 @@
 #include <vector>
 
 #include "pdlfs-common/osd_env.h"
+#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/testharness.h"
 
-#include "rados_api.h"
+#include "rados_conn.h"
 
 // The following tests are paired with "$top_srcdir/dev/rados.sh".
 // Run "sh $top_srcdir/dev/rados.sh start" to create a new rados cluster
@@ -33,7 +34,7 @@ static const bool FLAGS_useposixosd = true;
 namespace pdlfs {
 namespace rados {
 
-static int kVerbose = 5;
+static const int kVerbose = 5;
 
 static void TestRWEnvFile(Env* env, const Slice& dirname, const Slice& fname) {
   const char data[] = "xxxxxxxyyyyzz";
@@ -65,12 +66,6 @@ static void OpenRadosConn() {
 
 class RadosTest {
  public:
-  std::string root_;
-  OSD* osd_;
-  Env* env_;
-
-  std::string WorkingDir() { return root_ + "/dbhome"; }
-
   RadosTest() {
     Status s;
     std::string pool_name = "metadata";
@@ -111,6 +106,14 @@ class RadosTest {
     ASSERT_OK(env_->AttachDir(WorkingDir()));
     ASSERT_TRUE(env_->FileExists(f));
   }
+
+  std::string WorkingDir() {
+    return root_ + "/dbhome";  // emulating a leveldb home
+  }
+
+  std::string root_;
+  OSD* osd_;
+  Env* env_;
 };
 
 TEST(RadosTest, OSD_PutAndExists) {

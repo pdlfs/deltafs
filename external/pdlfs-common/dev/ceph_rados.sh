@@ -52,11 +52,11 @@ prepare_rados() {
 }
 
 fix_pools() {
-  for pool in 'metadata'; do
+  for pool in 'metadata' 'data'; do
     ceph -c $CEPH_CONF osd pool set $pool min_size 1
     ceph -c $CEPH_CONF osd pool set $pool size 1
   done
-  for pool in 'data' 'rbd'; do
+  for pool in 'rbd'; do
     ceph -c $CEPH_CONF osd pool delete $pool $pool --yes-i-really-really-mean-it
   done
 }

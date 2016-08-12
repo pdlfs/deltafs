@@ -214,7 +214,7 @@ void MercuryRPC::Unref() {
 MercuryRPC::MercuryRPC(bool listen, const RPCOptions& options)
     : listen_(listen),
       lookup_cv_(&mutex_),
-      addr_cache_(128),
+      addr_cache_(options.addr_cache_size),
       refs_(0),
       rpc_timeout_(options.rpc_timeout),
       pool_(options.extra_workers),
