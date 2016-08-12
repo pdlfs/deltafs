@@ -12,9 +12,9 @@
 # to switch between compilation modes.
 
 # (A) Production use (optimized mode)
-OPT ?= -O2 -DNDEBUG -DVERBOSE=1
+# OPT ?= -O2 -DNDEBUG -DVERBOSE=1
 # (B) Debug mode, w/ full line-level debugging symbols
-# OPT ?= -g2 -DVERBOSE=10
+OPT ?= -g2 -DVERBOSE=10
 # (C) Profiling mode: opt, but w/debugging symbols
 # OPT ?= -O2 -g2 -DNDEBUG -DVERBOSE=1
 #-----------------------------------------------
@@ -51,30 +51,24 @@ TESTUTIL := $(STATIC_OUTDIR)/external/pdlfs-common/src/testutil.o
 TESTHARNESS := $(STATIC_OUTDIR)/external/pdlfs-common/src/testharness.o $(TESTUTIL)
 
 STATIC_PDLFS_COMMON_LIBOBJECTS := $(addprefix $(STATIC_OUTDIR)/, $(LIBPDLFS_COMMON_SOURCES:.cc=.o))
-STATIC_PDLFS_MODULE_RADOS_LIBOBJECTS := $(addprefix $(STATIC_OUTDIR)/, $(LIBPDLFS_MODULE_RADOS_SOURCES:.cc=.o))
 STATIC_LIBOBJECTS := $(addprefix $(STATIC_OUTDIR)/, $(LIBDELTAFS_SOURCES:.cc=.o))
 
 STATIC_TESTOBJS := $(addprefix $(STATIC_OUTDIR)/, $(addsuffix .o, $(TESTS)))
 STATIC_BINOBJS := $(addprefix $(STATIC_OUTDIR)/, $(addsuffix .o, $(BINS)))
 STATIC_ALLOBJS := $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) \
-	$(STATIC_PDLFS_MODULE_RADOS_LIBOBJECTS) \
 	$(STATIC_TESTOBJS) $(STATIC_BINOBJS) \
 	$(TESTHARNESS)
 
 SHARED_OUTDIR=out-shared
 
 SHARED_PDLFS_COMMON_LIBOBJECTS := $(addprefix $(SHARED_OUTDIR)/, $(LIBPDLFS_COMMON_SOURCES:.cc=.o))
-SHARED_PDLFS_MODULE_RADOS_LIBOBJECTS := $(addprefix $(SHARED_OUTDIR)/, $(LIBPDLFS_MODULE_RADOS_SOURCES:.cc=.o))
 SHARED_LIBOBJECTS := $(addprefix $(SHARED_OUTDIR)/, $(LIBDELTAFS_SOURCES:.cc=.o))
 
-SHARED_ALLOBJS := $(SHARED_LIBOBJECTS) $(SHARED_PDLFS_COMMON_LIBOBJECTS) \
-	$(SHARED_PDLFS_MODULE_RADOS_LIBOBJECTS)
+SHARED_ALLOBJS := $(SHARED_LIBOBJECTS) $(SHARED_PDLFS_COMMON_LIBOBJECTS)
 
 ALL = \
 	$(STATIC_OUTDIR)/libdeltafs-common-static.a \
 	$(SHARED_OUTDIR)/libdeltafs-common.$(PLATFORM_SHARED_EXT) \
-	$(STATIC_OUTDIR)/libdeltafs-rados-static.a \
-	$(SHARED_OUTDIR)/libdeltafs-rados.$(PLATFORM_SHARED_EXT) \
 	$(STATIC_OUTDIR)/libdeltafs-static.a \
 	$(SHARED_OUTDIR)/libdeltafs.$(PLATFORM_SHARED_EXT) \
 	$(BIN_PROGRAMS)
@@ -108,7 +102,7 @@ $(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb: | $(STATIC_OUTDIR)
 $(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb/db: | $(STATIC_OUTDIR)
 	mkdir -p $@
 
-$(STATIC_OUTDIR)/external/pdlfs-common/modules/rados: | $(STATIC_OUTDIR)
+$(STATIC_OUTDIR)/external/pdlfs-common/src/rados: | $(STATIC_OUTDIR)
 	mkdir -p $@
 
 $(STATIC_OUTDIR)/src/libdeltafs: | $(STATIC_OUTDIR)
@@ -125,7 +119,7 @@ STATIC_OBJDIRS: \
 	$(STATIC_OUTDIR)/external/pdlfs-common/src \
 	$(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb \
 	$(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb/db \
-	$(STATIC_OUTDIR)/external/pdlfs-common/modules/rados \
+	$(STATIC_OUTDIR)/external/pdlfs-common/src/rados \
 	$(STATIC_OUTDIR)/src/libdeltafs \
 	$(STATIC_OUTDIR)/src/cmds \
 	$(STATIC_OUTDIR)/src/server
@@ -144,7 +138,7 @@ $(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb: | $(SHARED_OUTDIR)
 $(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb/db: | $(SHARED_OUTDIR)
 	mkdir -p $@
 
-$(SHARED_OUTDIR)/external/pdlfs-common/modules/rados: | $(SHARED_OUTDIR)
+$(SHARED_OUTDIR)/external/pdlfs-common/src/rados: | $(SHARED_OUTDIR)
 	mkdir -p $@
 
 $(SHARED_OUTDIR)/src/libdeltafs: | $(SHARED_OUTDIR)
@@ -155,7 +149,7 @@ SHARED_OBJDIRS: \
 	$(SHARED_OUTDIR)/external/pdlfs-common/src \
 	$(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb \
 	$(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb/db \
-	$(SHARED_OUTDIR)/external/pdlfs-common/modules/rados \
+	$(SHARED_OUTDIR)/external/pdlfs-common/src/rados \
 	$(SHARED_OUTDIR)/src/libdeltafs
 
 $(SHARED_ALLOBJS): | SHARED_OBJDIRS
@@ -167,14 +161,6 @@ $(STATIC_OUTDIR)/libdeltafs-common-static.a:$(STATIC_PDLFS_COMMON_LIBOBJECTS)
 $(SHARED_OUTDIR)/libdeltafs-common.$(PLATFORM_SHARED_EXT): $(SHARED_PDLFS_COMMON_LIBOBJECTS)
 	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libdeltafs-common.$(PLATFORM_SHARED_EXT) \
 		$(SHARED_PDLFS_COMMON_LIBOBJECTS) -o $@ $(LIBS)
-
-$(STATIC_OUTDIR)/libdeltafs-rados-static.a:$(STATIC_PDLFS_MODULE_RADOS_LIBOBJECTS)
-	rm -f $@
-	$(AR) -rs $@ $(STATIC_PDLFS_MODULE_RADOS_LIBOBJECTS)
-
-$(SHARED_OUTDIR)/libdeltafs-rados.$(PLATFORM_SHARED_EXT): $(SHARED_PDLFS_MODULE_RADOS_LIBOBJECTS)
-	$(CXX) $(LDFLAGS) $(PLATFORM_SHARED_LDFLAGS)libdeltafs-rados.$(PLATFORM_SHARED_EXT) \
-		$(SHARED_PDLFS_MODULE_RADOS_LIBOBJECTS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/libdeltafs-static.a:$(STATIC_LIBOBJECTS)
 	rm -f $@

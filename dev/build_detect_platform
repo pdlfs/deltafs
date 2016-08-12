@@ -137,13 +137,9 @@ COMMON_FLAGS="$COMMON_FLAGS -DPDLFS_MAKEFILE"
 # prune take effect.
 PDLFS_COMMON_DIR="$PREFIX/external/pdlfs-common/src"
 
-PDLFS_MODULE_RADOS_DIR="$PREFIX/external/pdlfs-common/modules/rados"
-
 set -f # temporarily disable globbing so that our patterns aren't expanded
 PRUNE_TEST="-name *test*.cc -prune"
 LIBPDLFS_COMMON_SOURCE_FILES=`find $PDLFS_COMMON_DIR $PRUNE_TEST \
-    -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
-LIBPDLFS_MODULE_RADOS_SOURCE_FILES=`find $PDLFS_MODULE_RADOS_DIR $PRUNE_TEST \
     -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
 LIBDELTAFS_SOURCE_FILES=`find $PREFIX/src/libdeltafs $PRUNE_TEST \
     -o -name '*.cc' -print | sort | sed "s,^$PREFIX/,," | tr "\n" " "`
