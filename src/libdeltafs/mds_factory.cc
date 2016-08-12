@@ -53,7 +53,7 @@ Status MDSFactoryImpl::Stop() {
 void MDSFactoryImpl::AddTarget(const std::string& target_uri, bool trace) {
   StubInfo info;
   assert(rpc_ != NULL);
-  info.stub = rpc_->OpenClientStub(target_uri);
+  info.stub = rpc_->OpenClientFor(target_uri);
   info.wrapper = new MDSWrapper(info.stub);
   if (trace) {
     info.mds = new MDSTracer(info.wrapper);
