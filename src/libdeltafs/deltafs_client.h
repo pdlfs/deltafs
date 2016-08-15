@@ -46,7 +46,7 @@ class Client {
   // No copying allowed
   void operator=(const Client&);
   Client(const Client&);
-  Client() {}
+  Client();
 
   struct File {
     Fio::Handle* fh;
@@ -69,9 +69,10 @@ class Client {
   size_t Append(File*);
   void Remove(size_t idx);
   size_t OpenFile(const Slice& fentry_encoding, Fio::Handle*);
+  Fio::Handle* FetchFileHandle(const Slice& fentry_encoding);
   bool Unref(File*);
   HashTable<File> file_table_;
-  File** open_files_;  // Length == max_open_files_ + 1
+  File** open_files_;
   size_t num_open_files_;
   size_t next_file_;
 

@@ -20,8 +20,17 @@
 
 namespace pdlfs {
 
+static const int kMaxOpenFiles = 1000;
+
 static inline Status BadDescriptor() {
   return Status::InvalidFileDescriptor(Slice());
+}
+
+Client::Client() {
+  max_open_files_ = kMaxOpenFiles;
+  open_files_ = new File*[max_open_files_ + 1];
+  num_open_files_ = 0;
+  next_file_ = 0;
 }
 
 Client::~Client() {
@@ -68,9 +77,22 @@ size_t Client::OpenFile(const Slice& encoding, Fio::Handle* fh) {
     file_table_.Insert(file);
     file->fh = fh;
   } else {
+    assert(file->fh == fh);
+    assert(file->refs > 0);
     file->refs++;
   }
   return Append(file);
+}
+
+// REQUIRES: mutex_ has been locked.
+Fio::Handle* Client::FetchFileHandle(const Slice& encoding) {
+  uint32_t hash = Hash(encoding.data(), encoding.size(), 0);
+  File* file = file_table_.Lookup(encoding, hash);
+  if (file != NULL) {
+    return file->fh;
+  } else {
+    return NULL;
+  }
 }
 
 // Return true iff the file has been released.
@@ -97,6 +119,8 @@ bool Client::Unref(File* file) {
 // to represent the file. The current length of the file is also returned along
 // with the file descriptor.
 // Only a fixed amount of file can be opened simultaneously.
+// It is also possible that a process may open a same file multiple times
+// and obtain multiple file descriptors.
 Status Client::Fopen(const Slice& path, int flags, int mode, FileInfo* info) {
   Status s;
   MutexLock ml(&mutex_);
@@ -113,35 +137,58 @@ Status Client::Fopen(const Slice& path, int flags, int mode, FileInfo* info) {
       s = mdscli_->Fstat(path, &fentry);
     }
 
+    mutex_.Lock();
     char tmp[100];
     Fio::Handle* fh = NULL;
     uint64_t mtime = 0;
     uint64_t size = 0;
     Slice fentry_encoding;
     if (s.ok()) {
-      fentry_encoding = fentry.EncodeTo(tmp);
-      if (fentry.stat.ChangeTime() >= my_time) {
-        // File doesn't exist before so we explicit create it
-        s = fio_->Creat(fentry_encoding, &fh);
+      if (num_open_files_ >= max_open_files_) {
+        s = Status::TooManyOpens(Slice());
       } else {
-        const bool create_if_missing = true;  // Allow lazy object creation
-        const bool truncate_if_exists =
-            (flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC) == O_TRUNC;
-        s = fio_->Open(fentry_encoding, create_if_missing, truncate_if_exists,
-                       &mtime, &size, &fh);
+        fentry_encoding = fentry.EncodeTo(tmp);
+        fh = FetchFileHandle(fentry_encoding);
       }
-#if 0
+
       if (s.ok()) {
-        if (size != fentry.stat.FileSize()) {
-          // FIXME
+        mutex_.Unlock();
+        if (fh != NULL) {
+          bool dirty;
+          s = fio_->GetInfo(fentry_encoding, fh, &dirty, &mtime, &size);
+          fh = NULL;
+        } else {
+          if (fentry.stat.ChangeTime() >= my_time) {
+            // File doesn't exist before so we explicit create it
+            s = fio_->Creat(fentry_encoding, &fh);
+          } else {
+            const bool create_if_missing = true;  // Allow lazy object creation
+            const bool truncate_if_exists =
+                (flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC) == O_TRUNC;
+            s = fio_->Open(fentry_encoding, create_if_missing,
+                           truncate_if_exists, &mtime, &size, &fh);
+          }
+#if 0
+          if (s.ok()) {
+            if (size != fentry.stat.FileSize()) {
+              // FIXME
+            }
+          }
+#endif
+        }
+        mutex_.Lock();
+        if (s.ok()) {
+          if (num_open_files_ >= max_open_files_) {
+            s = Status::TooManyOpens(Slice());
+            if (fh != NULL) {
+              fio_->Close(fentry_encoding, fh);
+            }
+          } else {
+            info->fd = OpenFile(fentry_encoding, fh);
+            info->size = size;
+          }
         }
       }
-#endif
-    }
-    mutex_.Lock();
-    if (s.ok()) {
-      info->fd = OpenFile(fentry_encoding, fh);
-      info->size = size;
     }
   }
   return s;
