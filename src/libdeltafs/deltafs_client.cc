@@ -28,9 +28,9 @@ static inline Status BadDescriptor() {
 
 Client::Client() {
   max_open_files_ = kMaxOpenFiles;
-  open_files_ = new File*[max_open_files_ + 1]();
+  open_files_ = new File*[max_open_files_]();
   num_open_files_ = 0;
-  next_file_ = 0;
+  file_cursor_ = 0;
 }
 
 Client::~Client() {
@@ -42,15 +42,13 @@ Client::~Client() {
 // REQUIRES: less than "max_open_files_" files have been opened.
 // REQUIRES: mutex_ has been locked.
 size_t Client::Append(File* file) {
-  size_t result = next_file_;
-  assert(open_files_[next_file_] == NULL);
   assert(num_open_files_ < max_open_files_);
-  open_files_[next_file_] = file;
-  num_open_files_++;
-  while (open_files_[next_file_++] != NULL) {
-    next_file_ %= max_open_files_ + 1;
+  while (open_files_[file_cursor_] != NULL) {
+    file_cursor_ = (1 + file_cursor_) % max_open_files_;
   }
-  return result;
+  open_files_[file_cursor_] = file;
+  num_open_files_++;
+  return file_cursor_;
 }
 
 // REQUIRES: mutex_ has been locked.
@@ -94,17 +92,16 @@ Fio::Handle* Client::FetchFileHandle(const Slice& encoding) {
   }
 }
 
-// Return true iff the file has been released.
 // REQUIRES: mutex_ has been locked.
-bool Client::Unref(File* file) {
+void Client::Unref(File* file) {
   assert(file->refs > 0);
   file->refs--;
   if (file->refs == 0) {
     file_table_.Remove(file->key(), file->hash);
+    mutex_.Unlock();
+    fio_->Close(file->fentry_encoding(), file->fh);
     free(file);
-    return true;
-  } else {
-    return false;
+    mutex_.Lock();
   }
 }
 
@@ -265,31 +262,29 @@ Status Client::Fdatasync(int fd) {
   }
 }
 
-Status Client::Pread(int fd, Slice* r, uint64_t off, uint64_t size,
-                     char* scratch) {
+Status Client::Pread(int fd, Slice* r, uint64_t off, uint64_t size, char* buf) {
   mutex_.Lock();
   File* file = FetchFile(fd);
   mutex_.Unlock();
-  if (file != NULL) {
+  if (file == NULL) {
+    return BadDescriptor();
+  } else {
     assert(file->fh != NULL);
     assert(file->refs > 0);
-    return fio_->Pread(file->fentry_encoding(), file->fh, r, off, size,
-                       scratch);
-  } else {
-    return BadDescriptor();
+    return fio_->Pread(file->fentry_encoding(), file->fh, r, off, size, buf);
   }
 }
 
-Status Client::Read(int fd, Slice* r, uint64_t size, char* scratch) {
+Status Client::Read(int fd, Slice* r, uint64_t size, char* buf) {
   mutex_.Lock();
   File* file = FetchFile(fd);
   mutex_.Unlock();
-  if (file != NULL) {
+  if (file == NULL) {
+    return BadDescriptor();
+  } else {
     assert(file->fh != NULL);
     assert(file->refs > 0);
-    return fio_->Read(file->fentry_encoding(), file->fh, r, size, scratch);
-  } else {
-    return BadDescriptor();
+    return fio_->Read(file->fentry_encoding(), file->fh, r, size, buf);
   }
 }
 
@@ -345,14 +340,8 @@ Status Client::Close(int fd) {
         break;
       }
     }
-    Fio::Handle* fh = file->fh;
-    std::string fentry_encoding = file->fentry_encoding().ToString();
     Remove(fd);
-    if (Unref(file)) {
-      mutex_.Unlock();
-      fio_->Close(fentry_encoding, fh);
-      mutex_.Lock();
-    }
+    Unref(file);
     return Status::OK();
   }
 }

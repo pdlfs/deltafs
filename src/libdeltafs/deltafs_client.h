@@ -70,11 +70,11 @@ class Client {
   void Remove(size_t idx);
   size_t OpenFile(const Slice& fentry_encoding, Fio::Handle*);
   Fio::Handle* FetchFileHandle(const Slice& fentry_encoding);
-  bool Unref(File*);
+  void Unref(File*);
   HashTable<File> file_table_;
   File** open_files_;
   size_t num_open_files_;
-  size_t next_file_;
+  size_t file_cursor_;
 
   // Constant after construction
   size_t max_open_files_;
