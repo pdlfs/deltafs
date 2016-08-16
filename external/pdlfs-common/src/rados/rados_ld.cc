@@ -73,8 +73,17 @@ static conn_t* OpenRadosConn(
 #endif
 
 static void ParseOptions(std::map<std::string, std::string>* options,
-                         const char* input) {
-  // TODO
+                         const char* conf_str) {
+  std::vector<std::string> confs;
+  pdlfs::SplitString(conf_str, ';', &confs);
+  for (std::vector<std::string>::iterator it = confs.begin(); it != confs.end();
+       ++it) {
+    std::vector<std::string> pair;
+    pdlfs::SplitString(*it, '=', &pair);
+    if (pair.size() == 2) {
+      (*options)[pair[0]] = pair[1];
+    }
+  }
 }
 
 void* PDLFS_Load_rados_env(const char* conf_str) {
@@ -84,13 +93,26 @@ void* PDLFS_Load_rados_env(const char* conf_str) {
   ParseOptions(&options, conf_str);
   conn_t* conn = OpenRadosConn(options);
   if (conn != NULL) {
-    pdlfs::Status s = conn->OpenEnv(&env);
+    std::string rados_root = "/";
+    std::string pool_name = "metadata";
+    for (std::map<std::string, std::string>::iterator it = options.begin();
+         it != options.end(); ++it) {
+      pdlfs::Slice key = it->first;
+      if (key == "rados_root") {
+        rados_root = it->second;
+      } else if (key == "pool_name") {
+        pool_name = it->second;
+      }
+    }
+    pdlfs::Status s = conn->OpenEnv(&env, rados_root, pool_name);
     if (!s.ok()) {
       pdlfs::Error(__LOG_ARGS__, "cannot open rados env: %s",
                    s.ToString().c_str());
       env = NULL;
     }
   }
+#else
+  pdlfs::Error(__LOG_ARGS__, "rados not built");
 #endif
   return env;
 }
@@ -102,13 +124,23 @@ void* PDLFS_Load_rados_fio(const char* conf_str) {
   ParseOptions(&options, conf_str);
   conn_t* conn = OpenRadosConn(options);
   if (conn != NULL) {
-    pdlfs::Status s = conn->OpenFio(&fio);
+    std::string pool_name = "data";
+    for (std::map<std::string, std::string>::iterator it = options.begin();
+         it != options.end(); ++it) {
+      pdlfs::Slice key = it->first;
+      if (key == "pool_name") {
+        pool_name = it->second;
+      }
+    }
+    pdlfs::Status s = conn->OpenFio(&fio, pool_name);
     if (!s.ok()) {
       pdlfs::Error(__LOG_ARGS__, "cannot open rados fio: %s",
                    s.ToString().c_str());
       fio = NULL;
     }
   }
+#else
+  pdlfs::Error(__LOG_ARGS__, "rados not built");
 #endif
   return fio;
 }

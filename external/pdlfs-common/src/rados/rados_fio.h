@@ -10,6 +10,7 @@
  */
 
 #include "pdlfs-common/pdlfs_config.h"
+#include "pdlfs-common/rwlock.h"
 
 #if defined(RADOS)
 #include "rados_common.h"
@@ -17,7 +18,7 @@
 
 namespace pdlfs {
 namespace rados {
-class RadosFio;  // File I/O implementation atop rados.
+class RadosFio;  // File I/O implementation using rados.
 
 class RadosFobj {
  public:
@@ -27,8 +28,8 @@ class RadosFobj {
   uint64_t mtime;  // Cached last file modification time
   uint64_t size;   // Cached file size
   uint64_t off;    // Current read/write position
-  int nrefs;
-  int err;
+  int bg_err;
+  int refs;
 };
 
 class RadosFio : public Fio {
@@ -38,8 +39,8 @@ class RadosFio : public Fio {
   virtual Status Open(const Slice& fentry, bool create_if_missing,
                       bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
                       Handle** fh);
-  virtual Status GetInfo(const Slice& fentry, Handle* fh, bool* dirty,
-                         uint64_t* mtime, uint64_t* size);
+  virtual Status Stat(const Slice& fentry, Handle* fh, uint64_t* mtime,
+                      uint64_t* size, bool skip_cache = false);
   virtual Status Write(const Slice& fentry, Handle* fh, const Slice& data);
   virtual Status Pwrite(const Slice& fentry, Handle* fh, const Slice& data,
                         uint64_t off);
@@ -47,6 +48,7 @@ class RadosFio : public Fio {
                       uint64_t size, char* scratch);
   virtual Status Pread(const Slice& fentry, Handle* fh, Slice* result,
                        uint64_t off, uint64_t size, char* scratch);
+  virtual Status Truncate(const Slice& fentry, Handle* fh, uint64_t size);
   virtual Status Flush(const Slice& fentry, Handle* fh,
                        bool force_sync = false);
   virtual Status Close(const Slice& fentry, Handle* fh);
@@ -58,11 +60,12 @@ class RadosFio : public Fio {
   static void IO_safe(rados_completion_t, void*);
   void Unref(RadosFobj*);
 
-  RadosFio() {}
+  RadosFio(port::Mutex* mu) : mutex_(mu), rwl_(mu) {}
   friend class RadosConn;
   port::Mutex* mutex_;
+  RWLock rwl_;  // Enforce serialized execution on some operations
   std::string pool_name_;
-  bool force_sync_;  // If async I/O should be disabled
+  bool force_sync_;  // If async I/O should be avoided
   rados_ioctx_t ioctx_;
   rados_t cluster_;
 };

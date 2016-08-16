@@ -123,10 +123,9 @@ Status RadosConn::OpenFio(Fio** result, const std::string& pool_name,
   if (r != 0) {
     s = RadosError("rados_ioctx_create", r);
   } else {
-    RadosFio* fio = new RadosFio;
+    RadosFio* fio = new RadosFio(&mutex_);
     fio->pool_name_ = pool_name;
     fio->force_sync_ = force_sync;
-    fio->mutex_ = &mutex_;
     fio->cluster_ = cluster_;
     fio->ioctx_ = ioctx;
     *result = fio;

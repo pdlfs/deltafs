@@ -38,8 +38,8 @@ class Fio {
   virtual Status Open(const Slice& fentry, bool create_if_missing,
                       bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
                       Handle** fh) = 0;
-  virtual Status GetInfo(const Slice& fentry, Handle* fh, bool* dirty,
-                         uint64_t* mtime, uint64_t* size) = 0;
+  virtual Status Stat(const Slice& fentry, Handle* fh, uint64_t* mtime,
+                      uint64_t* size, bool skip_cache = false) = 0;
   virtual Status Write(const Slice& fentry, Handle* fh, const Slice& data) = 0;
   virtual Status Pwrite(const Slice& fentry, Handle* fh, const Slice& data,
                         uint64_t off) = 0;
@@ -47,6 +47,7 @@ class Fio {
                       uint64_t size, char* scratch) = 0;
   virtual Status Pread(const Slice& fentry, Handle* fh, Slice* result,
                        uint64_t off, uint64_t size, char* scratch) = 0;
+  virtual Status Truncate(const Slice& fentry, Handle* fh, uint64_t size) = 0;
   virtual Status Flush(const Slice& fentry, Handle* fh,
                        bool force_sync = false) = 0;
   virtual Status Close(const Slice& fentry, Handle* fh) = 0;

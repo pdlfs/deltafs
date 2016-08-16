@@ -42,17 +42,17 @@ void RadosFio::IO_safe(rados_completion_t comp, void* arg) {
 
 void RadosFio::UpdateAndUnref(RadosFobj* fobj, int err) {
   MutexLock ml(mutex_);
-  if (fobj->err == 0 && err != 0) {
-    fobj->err = err;
+  if (fobj->bg_err == 0 && err != 0) {
+    fobj->bg_err = err;
   }
   Unref(fobj);
 }
 
 // REQUIRES: mutex_ has been locked.
 void RadosFio::Unref(RadosFobj* fobj) {
-  assert(fobj->nrefs > 0);
-  fobj->nrefs--;
-  if (fobj->nrefs == 0) {
+  assert(fobj->refs > 0);
+  fobj->refs--;
+  if (fobj->refs == 0) {
     if (fobj->fctx != NULL) {
       rados_ioctx_destroy(fobj->fctx);
     }
@@ -72,10 +72,10 @@ Status RadosFio::Creat(const Slice& fentry_encoding, Handle** fh) {
   if (s.ok()) {
     RadosFobj* fobj = new RadosFobj(this);
     fobj->fctx = fctx;
-    fobj->nrefs = 2;  // One for the handle, one for the next async op
+    fobj->refs = 2;  // One for the handle, one for the next async op
     fobj->mtime = Env::Default()->NowMicros();
     fobj->size = 0;
-    fobj->err = 0;
+    fobj->bg_err = 0;
     fobj->off = 0;
 
     rados_completion_t comp;
@@ -128,10 +128,10 @@ Status RadosFio::Open(const Slice& fentry_encoding, bool create_if_missing,
   if (s.ok()) {
     RadosFobj* fobj = new RadosFobj(this);
     fobj->fctx = fctx;
-    fobj->nrefs = need_trunc ? 2 : 1;
+    fobj->refs = need_trunc ? 2 : 1;
     fobj->mtime = 1000LLU * 1000LLU * obj_mtime;
     fobj->size = obj_size;
-    fobj->err = 0;
+    fobj->bg_err = 0;
     fobj->off = 0;
 
     if (need_trunc) {
@@ -160,44 +160,65 @@ Status RadosFio::Drop(const Slice& fentry_encoding) {
   }
 }
 
-Status RadosFio::GetInfo(const Slice& fentry_encoding, Handle* fh, bool* dirty,
-                         uint64_t* mtime, uint64_t* size) {
+Status RadosFio::Stat(const Slice& fentry_encoding, Handle* fh, uint64_t* mtime,
+                      uint64_t* size, bool skip_cache) {
   Status s;
   assert(fh != NULL);
-  const RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
+  RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
   MutexLock ml(mutex_);
-  if (fobj->err != 0) {
-    s = RadosError("rados_bg_io", fobj->err);
-    Error(__LOG_ARGS__, s);
+  if (fobj->bg_err != 0) {
+    s = RadosError("rados_bg_io", fobj->bg_err);
+    fobj->bg_err = 0;
   } else {
-    *mtime = fobj->mtime;
-    *size = fobj->size;
-    *dirty = false;
+    if (skip_cache) {
+      ExclusiveLock el(&rwl_);
+      rados_ioctx_t fctx = fobj->fctx;
+      if (fctx == NULL) {
+        fctx = ioctx_;
+      }
+      mutex_->Unlock();
+      uint64_t obj_size;
+      time_t obj_mtime;
+      std::string oid = ToOid(fentry_encoding);
+      int r = rados_stat(fctx, oid.c_str(), &obj_size, &obj_mtime);
+      if (r != 0) {
+        s = RadosError("rados_stat", r);
+      }
+      mutex_->Lock();
+      if (s.ok()) {
+        fobj->mtime = 1000LLU * 1000LLU * obj_mtime;
+        fobj->size = obj_size;
+      }
+    }
+    if (s.ok()) {
+      *mtime = fobj->mtime;
+      *size = fobj->size;
+    }
+  }
+  if (!s.ok()) {
+    Error(__LOG_ARGS__, s);
   }
   return s;
 }
 
 Status RadosFio::Close(const Slice& fentry_encoding, Handle* fh) {
-  Status s;
   assert(fh != NULL);
   RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
-  MutexLock ml(mutex_);
-  if (fobj->err != 0) {
-    s = RadosError("rados_bg_io", fobj->err);
-    Error(__LOG_ARGS__, s);
-  }
+  mutex_->Lock();
   Unref(fobj);
-  return s;
+  mutex_->Unlock();
+  return Status::OK();
 }
 
 Status RadosFio::Flush(const Slice& fentry_encoding, Handle* fh,
                        bool force_sync) {
   Status s;
   assert(fh != NULL);
-  const RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
+  RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
   mutex_->Lock();
-  if (fobj->err != 0) {
-    s = RadosError("rados_bg_io", fobj->err);
+  if (fobj->bg_err != 0) {
+    s = RadosError("rados_bg_io", fobj->bg_err);
+    fobj->bg_err = 0;
   }
   rados_ioctx_t fctx = fobj->fctx;
   if (fctx == NULL) {
@@ -210,11 +231,50 @@ Status RadosFio::Flush(const Slice& fentry_encoding, Handle* fh,
     if (force_sync) {
       rados_aio_flush(fctx);
       MutexLock ml(mutex_);
-      if (fobj->err != 0) {
-        s = RadosError("rados_bg_io", fobj->err);
-        Error(__LOG_ARGS__, s);
+      if (fobj->bg_err != 0) {
+        s = RadosError("rados_bg_io", fobj->bg_err);
+        fobj->bg_err = 0;
       }
     }
+  }
+  if (!s.ok()) {
+    Error(__LOG_ARGS__, s);
+  }
+  return s;
+}
+
+Status RadosFio::Truncate(const Slice& fentry_encoding, Handle* fh,
+                          uint64_t size) {
+  Status s;
+  assert(fh != NULL);
+  RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
+  MutexLock ml(mutex_);
+  if (fobj->bg_err != 0) {
+    s = RadosError("rados_bg_io", fobj->bg_err);
+    fobj->bg_err = 0;
+  } else {
+    ExclusiveLock el(&rwl_);
+    rados_ioctx_t fctx = fobj->fctx;
+    if (fctx == NULL) {
+      fctx = ioctx_;
+    }
+    mutex_->Unlock();
+    std::string oid = ToOid(fentry_encoding);
+    int r = rados_trunc(fctx, oid.c_str(), size);
+    if (r != 0) {
+      s = RadosError("rados_trunc", r);
+    }
+    mutex_->Lock();
+    if (s.ok()) {
+      uint64_t mtime = Env::Default()->NowMicros();
+      if (mtime > fobj->mtime) {
+        fobj->mtime = mtime;
+      }
+      fobj->size = size;
+    }
+  }
+  if (!s.ok()) {
+    Error(__LOG_ARGS__, s);
   }
   return s;
 }
@@ -225,9 +285,11 @@ Status RadosFio::Write(const Slice& fentry_encoding, Handle* fh,
   assert(fh != NULL);
   RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
   MutexLock ml(mutex_);
-  if (fobj->err != 0) {
-    s = RadosError("rados_bg_io", fobj->err);
+  if (fobj->bg_err != 0) {
+    s = RadosError("rados_bg_io", fobj->bg_err);
+    fobj->bg_err = 0;
   } else {
+    SharedLock sl(&rwl_);
     uint64_t off = fobj->off;
     uint64_t end = off + buf.size();
     rados_ioctx_t fctx = fobj->fctx;
@@ -235,7 +297,7 @@ Status RadosFio::Write(const Slice& fentry_encoding, Handle* fh,
       fctx = ioctx_;
     }
     if (!force_sync_) {
-      fobj->nrefs++;
+      fobj->refs++;
     }
     mutex_->Unlock();
     std::string oid = ToOid(fentry_encoding);
@@ -274,16 +336,18 @@ Status RadosFio::Pwrite(const Slice& fentry_encoding, Handle* fh,
   assert(fh != NULL);
   RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
   MutexLock ml(mutex_);
-  if (fobj->err != 0) {
-    s = RadosError("rados_bg_io", fobj->err);
+  if (fobj->bg_err != 0) {
+    s = RadosError("rados_bg_io", fobj->bg_err);
+    fobj->bg_err = 0;
   } else {
+    SharedLock sl(&rwl_);
     uint64_t end = off + buf.size();
     rados_ioctx_t fctx = fobj->fctx;
     if (fctx == NULL) {
       fctx = ioctx_;
     }
     if (!force_sync_) {
-      fobj->nrefs++;
+      fobj->refs++;
     }
     mutex_->Unlock();
     std::string oid = ToOid(fentry_encoding);
@@ -321,9 +385,11 @@ Status RadosFio::Read(const Slice& fentry_encoding, Handle* fh, Slice* result,
   assert(fh != NULL);
   RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
   MutexLock ml(mutex_);
-  if (fobj->err != 0) {
-    s = RadosError("rados_bg_io", fobj->err);
+  if (fobj->bg_err != 0) {
+    s = RadosError("rados_bg_io", fobj->bg_err);
+    fobj->bg_err = 0;
   } else {
+    SharedLock sl(&rwl_);
     uint64_t off = fobj->off;
     rados_ioctx_t fctx = fobj->fctx;
     if (fctx == NULL) {
@@ -359,9 +425,11 @@ Status RadosFio::Pread(const Slice& fentry_encoding, Handle* fh, Slice* result,
   assert(fh != NULL);
   RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
   MutexLock ml(mutex_);
-  if (fobj->err != 0) {
-    s = RadosError("rados_bg_io", fobj->err);
+  if (fobj->bg_err != 0) {
+    s = RadosError("rados_bg_io", fobj->bg_err);
+    fobj->bg_err = 0;
   } else {
+    SharedLock sl(&rwl_);
     rados_ioctx_t fctx = fobj->fctx;
     if (fctx == NULL) {
       fctx = ioctx_;
