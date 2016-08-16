@@ -168,8 +168,10 @@ Status Client::Fopen(const Slice& path, int flags, int mode, FileInfo* info) {
             fio_->Close(fentry_encoding, fh);
           }
         } else {
+          fentry.stat.SetFileSize(size);
+          fentry.stat.SetModifyTime(mtime);
           info->fd = OpenFile(fentry_encoding, fh);
-          info->size = size;
+          info->stat = fentry.stat;
         }
       }
     }
@@ -344,6 +346,16 @@ Status Client::Close(int fd) {
     Unref(file);
     return Status::OK();
   }
+}
+
+Status Client::Getattr(const Slice& path, Stat* statbuf) {
+  Status s;
+  Fentry ent;
+  s = mdscli_->Fstat(path, &ent);
+  if (s.ok()) {
+    *statbuf = ent.stat;
+  }
+  return s;
 }
 
 Status Client::Mkfile(const Slice& path, int mode) {

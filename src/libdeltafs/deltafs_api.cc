@@ -18,6 +18,10 @@
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 static pdlfs::port::OnceType once = PDLFS_ONCE_INIT;
 // global Deltafs client instance shared by all threads within a process
 static pdlfs::Client* client;
@@ -65,7 +69,12 @@ int deltafs_open(const char* __path, int __oflags, mode_t __mode,
     pdlfs::Status s;
     s = client->Fopen(__path, __oflags, __mode, &info);
     if (s.ok()) {
-      __buf->st_size = info.size;
+      __buf->st_mode = info.stat.FileMode();
+      __buf->st_size = info.stat.FileSize();
+      __buf->st_mtim.tv_sec = info.stat.ModifyTime() / 1000000;
+      __buf->st_mtim.tv_nsec = 0;
+      __buf->st_gid = info.stat.GroupId();
+      __buf->st_uid = info.stat.UserId();
       return info.fd;
     } else {
       pdlfs::SetErrno(s);
@@ -92,6 +101,24 @@ ssize_t deltafs_pread(int __fd, void* __buf, size_t __sz, off_t __off) {
   }
 }
 
+ssize_t deltafs_read(int __fd, void* __buf, size_t __sz) {
+  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  if (client == NULL) {
+    errno = ENODEV;
+    return -1;
+  } else {
+    pdlfs::Slice result;
+    pdlfs::Status s =
+        client->Read(__fd, &result, __sz, static_cast<char*>(__buf));
+    if (s.ok()) {
+      return result.size();
+    } else {
+      pdlfs::SetErrno(s);
+      return -1;
+    }
+  }
+}
+
 ssize_t deltafs_pwrite(int __fd, const void* __buf, size_t __sz, off_t __off) {
   pdlfs::port::InitOnce(&once, pdlfs::InitClient);
   if (client == NULL) {
@@ -100,6 +127,23 @@ ssize_t deltafs_pwrite(int __fd, const void* __buf, size_t __sz, off_t __off) {
   } else {
     pdlfs::Status s = client->Pwrite(
         __fd, pdlfs::Slice(static_cast<const char*>(__buf), __sz), __off);
+    if (s.ok()) {
+      return __sz;
+    } else {
+      pdlfs::SetErrno(s);
+      return -1;
+    }
+  }
+}
+
+ssize_t deltafs_write(int __fd, const void* __buf, size_t __sz) {
+  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  if (client == NULL) {
+    errno = ENODEV;
+    return -1;
+  } else {
+    pdlfs::Status s = client->Write(
+        __fd, pdlfs::Slice(static_cast<const char*>(__buf), __sz));
     if (s.ok()) {
       return __sz;
     } else {
@@ -131,9 +175,31 @@ int deltafs_close(int __fd) {
     errno = ENODEV;
     return -1;
   } else {
-    client->Flush(__fd);  // error ignored
     client->Close(__fd);
     return 0;
+  }
+}
+
+int deltafs_stat(const char* __path, struct stat* __buf) {
+  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  if (client == NULL) {
+    errno = ENODEV;
+    return -1;
+  } else {
+    pdlfs::Stat stat;
+    pdlfs::Status s = client->Getattr(__path, &stat);
+    if (s.ok()) {
+      __buf->st_mode = stat.FileMode();
+      __buf->st_size = stat.FileSize();
+      __buf->st_mtim.tv_sec = stat.ModifyTime() / 1000000;
+      __buf->st_mtim.tv_nsec = 0;
+      __buf->st_gid = stat.GroupId();
+      __buf->st_uid = stat.UserId();
+      return 0;
+    } else {
+      pdlfs::SetErrno(s);
+      return -1;
+    }
   }
 }
 
@@ -168,3 +234,7 @@ int deltafs_mkdir(const char* __path, mode_t __mode) {
     }
   }
 }
+
+#ifdef __cplusplus
+}
+#endif

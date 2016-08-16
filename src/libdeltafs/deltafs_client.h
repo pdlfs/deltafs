@@ -25,7 +25,7 @@ class Client {
   ~Client();
 
   struct FileInfo {
-    uint64_t size;
+    Stat stat;
     int fd;
   };
 
@@ -38,6 +38,7 @@ class Client {
   Status Flush(int fd);
   Status Close(int fd);
 
+  Status Getattr(const Slice& path, Stat*);
   Status Mkfile(const Slice& path, int mode);
   Status Mkdir(const Slice& path, int mode);
 
