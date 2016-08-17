@@ -54,6 +54,9 @@ class Client {
     File* next;
     File* prev;
     Fio::Handle* fh;
+    mode_t mode;
+    uid_t uid;
+    gid_t gid;
     int flags;
     uint32_t seq_write;
     uint32_t seq_flush;
@@ -70,10 +73,11 @@ class Client {
   File* FetchFile(int fd);
   size_t Alloc(File*);
   File* Free(size_t idx);
-  size_t OpenFile(const Slice& fentry_encoding, int flags, Fio::Handle*);
-  Fio::Handle* FetchFileHandle(const Slice& fentry_encoding);
+  size_t Open(const Slice& encoding, int flags, const Stat&, Fio::Handle*);
+  bool IsWriteOk(const File*);
+  bool IsReadOk(const File*);
   void Unref(File*);
-  File files_;
+  File dummy_;
   File** fds_;
   size_t num_open_fds_;
   size_t fd_cursor_;

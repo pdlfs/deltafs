@@ -8,6 +8,7 @@
  */
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -31,8 +32,8 @@ static inline Status PermissionDenied() {
 }
 
 Client::Client() {
-  files_.prev = &files_;
-  files_.next = &files_;
+  dummy_.prev = &dummy_;
+  dummy_.next = &dummy_;
   max_open_fds_ = kMaxOpenFileDescriptors;
   fds_ = new File*[max_open_fds_]();
   num_open_fds_ = 0;
@@ -70,12 +71,16 @@ Client::File* Client::Free(size_t index) {
 
 // REQUIRES: less than "max_open_files_" files have been opened.
 // REQUIRES: mutex_ has been locked.
-size_t Client::OpenFile(const Slice& encoding, int flags, Fio::Handle* fh) {
+size_t Client::Open(const Slice& encoding, int flags, const Stat& stat,
+                    Fio::Handle* fh) {
   File* file = static_cast<File*>(malloc(sizeof(File) + encoding.size() - 1));
   memcpy(file->encoding_data, encoding.data(), encoding.size());
   file->encoding_length = encoding.size();
-  file->next = &files_;
-  file->prev = files_.prev;
+  file->mode = stat.FileMode();
+  file->gid = stat.GroupId();
+  file->uid = stat.UserId();
+  file->next = &dummy_;
+  file->prev = dummy_.prev;
   file->prev->next = file;
   file->next->prev = file;
   file->seq_write = 0;
@@ -155,12 +160,44 @@ Status Client::Fopen(const Slice& path, int flags, int mode, FileInfo* info) {
       } else {
         fentry.stat.SetFileSize(size);
         fentry.stat.SetModifyTime(mtime);
-        info->fd = OpenFile(fentry_encoding, flags, fh);
+        info->fd = Open(fentry_encoding, flags, fentry.stat, fh);
         info->stat = fentry.stat;
       }
     }
   }
   return s;
+}
+
+bool Client::IsReadOk(const File* f) {
+  if ((f->flags & O_ACCMODE) == O_WRONLY) {
+    return false;
+  } else if (mdscli_->uid() == 0) {
+    return true;
+  } else if (mdscli_->uid() == f->uid && (f->mode & S_IRUSR) == S_IRUSR) {
+    return true;
+  } else if (mdscli_->gid() == f->gid && (f->mode & S_IRGRP) == S_IRGRP) {
+    return true;
+  } else if ((f->mode & S_IROTH) == S_IROTH) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool Client::IsWriteOk(const File* f) {
+  if ((f->flags & O_ACCMODE) == O_RDONLY) {
+    return false;
+  } else if (mdscli_->uid() == 0) {
+    return true;
+  } else if (mdscli_->uid() == f->uid && (f->mode & S_IWUSR) == S_IWUSR) {
+    return true;
+  } else if (mdscli_->gid() == f->gid && (f->mode & S_IWGRP) == S_IWGRP) {
+    return true;
+  } else if ((f->mode & S_IWOTH) == S_IWOTH) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 // REQUIRES: mutex_ has been locked.
@@ -178,17 +215,16 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
-  } else if ((file->flags & O_ACCMODE) == O_RDONLY) {
+  } else if (!IsWriteOk(file)) {
     return PermissionDenied();
   } else {
     assert(file->fh != NULL);
-    assert(file->refs > 0);
+    file->refs++;
     mutex_.Unlock();
     Status s = fio_->Pwrite(file->fentry_encoding(), file->fh, data, off);
     mutex_.Lock();
-    if (s.ok()) {
-      file->seq_write++;
-    }
+    file->seq_write++;
+    Unref(file);
     return s;
   }
 }
@@ -198,17 +234,16 @@ Status Client::Write(int fd, const Slice& data) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
-  } else if ((file->flags & O_ACCMODE) == O_RDONLY) {
+  } else if (!IsWriteOk(file)) {
     return PermissionDenied();
   } else {
     assert(file->fh != NULL);
-    assert(file->refs > 0);
+    file->refs++;
     mutex_.Unlock();
     Status s = fio_->Write(file->fentry_encoding(), file->fh, data);
     mutex_.Lock();
-    if (s.ok()) {
-      file->seq_write++;
-    }
+    file->seq_write++;
+    Unref(file);
     return s;
   }
 }
@@ -221,9 +256,9 @@ Status Client::Fdatasync(int fd) {
     s = BadDescriptor();
   } else if ((file->flags & O_ACCMODE) != O_RDONLY) {
     assert(file->fh != NULL);
-    assert(file->refs > 0);
     uint32_t seq_write = file->seq_write;
     uint32_t seq_flush = file->seq_flush;
+    file->refs++;
     mutex_.Unlock();
     const bool force_sync = true;
     s = fio_->Flush(file->fentry_encoding(), file->fh, force_sync);
@@ -249,39 +284,49 @@ Status Client::Fdatasync(int fd) {
         file->seq_flush = seq_write;
       }
     }
+    Unref(file);
   }
   return s;
 }
 
 Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
                      char* scratch) {
-  mutex_.Lock();
+  MutexLock ml(&mutex_);
   File* file = FetchFile(fd);
-  mutex_.Unlock();
   if (file == NULL) {
     return BadDescriptor();
-  } else if ((file->flags & O_ACCMODE) == O_WRONLY) {
+  } else if (!IsReadOk(file)) {
     return PermissionDenied();
   } else {
+    Status s;
     assert(file->fh != NULL);
-    assert(file->refs > 0);
-    return fio_->Pread(file->fentry_encoding(), file->fh, result, off, size,
-                       scratch);
+    file->refs++;
+    mutex_.Unlock();
+    Slice e = file->fentry_encoding();
+    s = fio_->Pread(e, file->fh, result, off, size, scratch);
+    mutex_.Lock();
+    Unref(file);
+    return s;
   }
 }
 
 Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
-  mutex_.Lock();
+  MutexLock ml(&mutex_);
   File* file = FetchFile(fd);
-  mutex_.Unlock();
   if (file == NULL) {
     return BadDescriptor();
-  } else if ((file->flags & O_ACCMODE) == O_WRONLY) {
+  } else if (!IsReadOk(file)) {
     return PermissionDenied();
   } else {
+    Status s;
     assert(file->fh != NULL);
-    assert(file->refs > 0);
-    return fio_->Read(file->fentry_encoding(), file->fh, result, size, scratch);
+    file->refs++;
+    mutex_.Unlock();
+    Slice e = file->fentry_encoding();
+    s = fio_->Read(e, file->fh, result, size, scratch);
+    mutex_.Lock();
+    Unref(file);
+    return s;
   }
 }
 
@@ -293,9 +338,9 @@ Status Client::Flush(int fd) {
     s = BadDescriptor();
   } else if ((file->flags & O_ACCMODE) != O_RDONLY) {
     assert(file->fh != NULL);
-    assert(file->refs > 0);
     uint32_t seq_write = file->seq_write;
     uint32_t seq_flush = file->seq_flush;
+    file->refs++;
     mutex_.Unlock();
     s = fio_->Flush(file->fentry_encoding(), file->fh);
     if (s.ok() && seq_flush < seq_write) {
@@ -318,6 +363,7 @@ Status Client::Flush(int fd) {
         file->seq_flush = seq_write;
       }
     }
+    Unref(file);
   }
   return s;
 }

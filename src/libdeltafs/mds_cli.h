@@ -54,6 +54,9 @@ class MDS::CLI {
 
   Status Listdir(const Slice& path, std::vector<std::string>* names);
 
+  int uid() const { return uid_; }
+  int gid() const { return gid_; }
+
  private:
   CLI(const MDSCliOptions&);
 
