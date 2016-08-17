@@ -71,8 +71,7 @@ int deltafs_open(const char* __path, int __oflags, mode_t __mode,
     if (s.ok()) {
       __buf->st_mode = info.stat.FileMode();
       __buf->st_size = info.stat.FileSize();
-      __buf->st_mtim.tv_sec = info.stat.ModifyTime() / 1000000;
-      __buf->st_mtim.tv_nsec = 0;
+      __buf->st_mtime = info.stat.ModifyTime() / 1000000;
       __buf->st_gid = info.stat.GroupId();
       __buf->st_uid = info.stat.UserId();
       return info.fd;
@@ -191,8 +190,7 @@ int deltafs_stat(const char* __path, struct stat* __buf) {
     if (s.ok()) {
       __buf->st_mode = stat.FileMode();
       __buf->st_size = stat.FileSize();
-      __buf->st_mtim.tv_sec = stat.ModifyTime() / 1000000;
-      __buf->st_mtim.tv_nsec = 0;
+      __buf->st_mtime = stat.ModifyTime() / 1000000;
       __buf->st_gid = stat.GroupId();
       __buf->st_uid = stat.UserId();
       return 0;
