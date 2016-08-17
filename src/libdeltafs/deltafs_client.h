@@ -50,35 +50,36 @@ class Client {
   Client();
 
   struct File {
+    size_t encoding_length;
+    File* next;
+    File* prev;
     Fio::Handle* fh;
-    File* next_hash;
-    size_t key_length;
-    uint32_t hash;
-    uint32_t refs;
+    int flags;
     uint32_t seq_write;
     uint32_t seq_flush;
-    char key_data[1];  // Beginning of key
-    Slice fentry_encoding() const { return key(); }
-    Slice key() const {
-      return Slice(key_data, key_length);  //
+    int refs;
+
+    char encoding_data[1];  // Beginning of fentry encoding
+    Slice fentry_encoding() const {
+      return Slice(encoding_data, encoding_length);
     }
   };
 
   // State below are protected by mutex_
   port::Mutex mutex_;
   File* FetchFile(int fd);
-  size_t Append(File*);
-  void Remove(size_t idx);
-  size_t OpenFile(const Slice& fentry_encoding, Fio::Handle*);
+  size_t Alloc(File*);
+  File* Free(size_t idx);
+  size_t OpenFile(const Slice& fentry_encoding, int flags, Fio::Handle*);
   Fio::Handle* FetchFileHandle(const Slice& fentry_encoding);
   void Unref(File*);
-  HashTable<File> file_table_;
-  File** open_files_;
-  size_t num_open_files_;
-  size_t file_cursor_;
+  File files_;
+  File** fds_;
+  size_t num_open_fds_;
+  size_t fd_cursor_;
 
   // Constant after construction
-  size_t max_open_files_;
+  size_t max_open_fds_;
   MDSFactoryImpl* mdsfty_;
   MDSClient* mdscli_;
   Fio* fio_;
