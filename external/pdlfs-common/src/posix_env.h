@@ -28,9 +28,9 @@ inline Status IOError(const Slice& err_context, int err_number) {
   if (err_number != ENOENT && err_number != EEXIST) {
     return Status::IOError(err_context, strerror(err_number));
   } else if (err_number == EEXIST) {
-    return Status::AlreadyExists(Slice());
+    return Status::AlreadyExists(err_context);
   } else {
-    return Status::NotFound(Slice());
+    return Status::NotFound(err_context);
   }
 }
 
