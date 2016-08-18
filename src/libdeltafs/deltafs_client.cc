@@ -210,28 +210,35 @@ Client::File* Client::FetchFile(int fd) {
   }
 }
 
-Status Client::Fstat(int fd, Stat* stat) {
+Status Client::Fstat(int fd, Stat* statbuf) {
   MutexLock ml(&mutex_);
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
   } else {
     Status s;
-    assert(file->fh != NULL);
-    file->refs++;
-    mutex_.Unlock();
-    uint64_t mtime;
-    uint64_t size;
-    s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size);
-    mutex_.Lock();
-    if (s.ok()) {
-      stat->SetFileMode(file->mode);
-      stat->SetGroupId(file->gid);
-      stat->SetUserId(file->uid);
-      stat->SetModifyTime(mtime);
-      stat->SetFileSize(size);
+    Fentry ent;
+    Slice encoding = file->fentry_encoding();
+    if (!ent.DecodeFrom(&encoding)) {
+      s = Status::Corruption(Slice());
+    } else {
+      ent.stat.SetFileMode(file->mode);
+      ent.stat.SetGroupId(file->gid);
+      ent.stat.SetUserId(file->uid);
+      assert(file->fh != NULL);
+      file->refs++;
+      mutex_.Unlock();
+      uint64_t mtime;
+      uint64_t size;
+      s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size);
+      mutex_.Lock();
+      if (s.ok()) {
+        ent.stat.SetModifyTime(mtime);
+        ent.stat.SetFileSize(size);
+        *statbuf = ent.stat;
+      }
+      Unref(file);
     }
-    Unref(file);
     return s;
   }
 }
