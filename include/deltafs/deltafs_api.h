@@ -24,6 +24,8 @@ ssize_t deltafs_pread(int __fd, void* __buf, size_t __sz, off_t __off);
 ssize_t deltafs_read(int __fd, void* __buf, size_t __sz);
 ssize_t deltafs_pwrite(int __fd, const void* __buf, size_t __sz, off_t __off);
 ssize_t deltafs_write(int __fd, const void* __buf, size_t __sz);
+int deltafs_fstat(int __fd, struct stat*);
+int deltafs_ftruncate(int __fd, off_t __len);
 int deltafs_fdatasync(int __fd);
 int deltafs_close(int __fd);
 

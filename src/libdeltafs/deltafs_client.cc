@@ -210,6 +210,32 @@ Client::File* Client::FetchFile(int fd) {
   }
 }
 
+Status Client::Fstat(int fd, Stat* stat) {
+  MutexLock ml(&mutex_);
+  File* file = FetchFile(fd);
+  if (file == NULL) {
+    return BadDescriptor();
+  } else {
+    Status s;
+    assert(file->fh != NULL);
+    file->refs++;
+    mutex_.Unlock();
+    uint64_t mtime;
+    uint64_t size;
+    s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size);
+    mutex_.Lock();
+    if (s.ok()) {
+      stat->SetFileMode(file->mode);
+      stat->SetGroupId(file->gid);
+      stat->SetUserId(file->uid);
+      stat->SetModifyTime(mtime);
+      stat->SetFileSize(size);
+    }
+    Unref(file);
+    return s;
+  }
+}
+
 Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   MutexLock ml(&mutex_);
   File* file = FetchFile(fd);
@@ -218,12 +244,15 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   } else if (!IsWriteOk(file)) {
     return PermissionDenied();
   } else {
+    Status s;
     assert(file->fh != NULL);
     file->refs++;
     mutex_.Unlock();
-    Status s = fio_->Pwrite(file->fentry_encoding(), file->fh, data, off);
+    s = fio_->Pwrite(file->fentry_encoding(), file->fh, data, off);
     mutex_.Lock();
-    file->seq_write++;
+    if (s.ok()) {
+      file->seq_write++;
+    }
     Unref(file);
     return s;
   }
@@ -237,12 +266,37 @@ Status Client::Write(int fd, const Slice& data) {
   } else if (!IsWriteOk(file)) {
     return PermissionDenied();
   } else {
+    Status s;
     assert(file->fh != NULL);
     file->refs++;
     mutex_.Unlock();
-    Status s = fio_->Write(file->fentry_encoding(), file->fh, data);
+    s = fio_->Write(file->fentry_encoding(), file->fh, data);
     mutex_.Lock();
-    file->seq_write++;
+    if (s.ok()) {
+      file->seq_write++;
+    }
+    Unref(file);
+    return s;
+  }
+}
+
+Status Client::Ftruncate(int fd, uint64_t len) {
+  MutexLock ml(&mutex_);
+  File* file = FetchFile(fd);
+  if (file == NULL) {
+    return BadDescriptor();
+  } else if (!IsWriteOk(file)) {
+    return PermissionDenied();
+  } else {
+    Status s;
+    assert(file->fh != NULL);
+    file->refs++;
+    mutex_.Unlock();
+    s = fio_->Truncate(file->fentry_encoding(), file->fh, len);
+    mutex_.Lock();
+    if (s.ok()) {
+      file->seq_write++;
+    }
     Unref(file);
     return s;
   }

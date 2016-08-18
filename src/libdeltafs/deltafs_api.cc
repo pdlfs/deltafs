@@ -152,6 +152,44 @@ ssize_t deltafs_write(int __fd, const void* __buf, size_t __sz) {
   }
 }
 
+int deltafs_fstat(int __fd, struct stat* __buf) {
+  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  if (client == NULL) {
+    errno = ENODEV;
+    return -1;
+  } else {
+    pdlfs::Stat stat;
+    pdlfs::Status s = client->Fstat(__fd, &stat);
+    if (s.ok()) {
+      __buf->st_mode = stat.FileMode();
+      __buf->st_size = stat.FileSize();
+      __buf->st_mtime = stat.ModifyTime() / 1000000;
+      __buf->st_gid = stat.GroupId();
+      __buf->st_uid = stat.UserId();
+      return 0;
+    } else {
+      pdlfs::SetErrno(s);
+      return -1;
+    }
+  }
+}
+
+int deltafs_ftruncate(int __fd, off_t __len) {
+  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  if (client == NULL) {
+    errno = ENODEV;
+    return -1;
+  } else {
+    pdlfs::Status s = client->Ftruncate(__fd, __len);
+    if (s.ok()) {
+      return 0;
+    } else {
+      pdlfs::SetErrno(s);
+      return -1;
+    }
+  }
+}
+
 int deltafs_fdatasync(int __fd) {
   pdlfs::port::InitOnce(&once, pdlfs::InitClient);
   if (client == NULL) {

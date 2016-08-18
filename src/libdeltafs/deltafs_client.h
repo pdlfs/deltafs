@@ -34,6 +34,8 @@ class Client {
   Status Pwrite(int fd, const Slice& data, uint64_t off);
   Status Read(int fd, Slice* result, uint64_t size, char* buf);
   Status Pread(int fd, Slice* result, uint64_t off, uint64_t size, char* buf);
+  Status Ftruncate(int fd, uint64_t len);
+  Status Fstat(int fd, Stat*);
   Status Fdatasync(int fd);
   Status Flush(int fd);
   Status Close(int fd);
