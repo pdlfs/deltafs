@@ -23,19 +23,36 @@ extern "C" {
 #endif
 
 static pdlfs::port::OnceType once = PDLFS_ONCE_INIT;
-// global Deltafs client instance shared by all threads within a process
 static pdlfs::Client* client;
-
 namespace pdlfs {
 typedef Client::FileInfo FileInfo;
+}
+static inline int NoClient() {
+  errno = ENODEV;
+  return -1;
+}
+
 static void InitClient() {
-  Status s = Client::Open(&client);
+  pdlfs::Status s = pdlfs::Client::Open(&client);
   if (!s.ok()) {
-    Error(__LOG_ARGS__, "Fail to open client :%s", s.ToString().c_str());
+    Error(__LOG_ARGS__, "cannot open deltafs client :%s", s.ToString().c_str());
     client = NULL;
   }
 }
-static void SetErrno(const Status& s) {
+
+static inline void CopyStat(const pdlfs::Stat& stat, struct stat* buf) {
+  buf->st_ino = stat.InodeNo();
+  buf->st_size = stat.FileSize();
+  buf->st_mode = stat.FileMode();
+  buf->st_gid = stat.GroupId();
+  buf->st_uid = stat.UserId();
+  time_t time = stat.ModifyTime() / 1000000;
+  buf->st_mtime = time;
+  buf->st_atime = time;
+  buf->st_ctime = time;
+}
+
+static void SetErrno(const pdlfs::Status& s) {
   if (s.IsNotFound()) {
     errno = ENOENT;
   } else if (s.IsAlreadyExists()) {
@@ -56,161 +73,138 @@ static void SetErrno(const Status& s) {
     errno = EIO;  // TODO: map more error types
   }
 }
-}  // namespace pdlfs
 
 int deltafs_open(const char* __path, int __oflags, mode_t __mode,
                  struct stat* __buf) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
+  }
+  pdlfs::FileInfo info;
+  pdlfs::Status s;
+  s = client->Fopen(__path, __oflags, __mode, &info);
+  if (s.ok()) {
+    CopyStat(info.stat, __buf);
+    return info.fd;
   } else {
-    pdlfs::FileInfo info;
-    pdlfs::Status s;
-    s = client->Fopen(__path, __oflags, __mode, &info);
-    if (s.ok()) {
-      __buf->st_mode = info.stat.FileMode();
-      __buf->st_size = info.stat.FileSize();
-      __buf->st_mtime = info.stat.ModifyTime() / 1000000;
-      __buf->st_gid = info.stat.GroupId();
-      __buf->st_uid = info.stat.UserId();
-      return info.fd;
-    } else {
-      pdlfs::SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 
 ssize_t deltafs_pread(int __fd, void* __buf, size_t __sz, off_t __off) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
+  }
+  pdlfs::Slice result;
+  pdlfs::Status s;
+  s = client->Pread(__fd, &result, __off, __sz, (char*)__buf);
+  if (s.ok()) {
+    return result.size();
   } else {
-    pdlfs::Slice result;
-    pdlfs::Status s =
-        client->Pread(__fd, &result, __off, __sz, static_cast<char*>(__buf));
-    if (s.ok()) {
-      return result.size();
-    } else {
-      pdlfs::SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 
 ssize_t deltafs_read(int __fd, void* __buf, size_t __sz) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
+  }
+  pdlfs::Slice result;
+  pdlfs::Status s;
+  s = client->Read(__fd, &result, __sz, (char*)__buf);
+  if (s.ok()) {
+    return result.size();
   } else {
-    pdlfs::Slice result;
-    pdlfs::Status s =
-        client->Read(__fd, &result, __sz, static_cast<char*>(__buf));
-    if (s.ok()) {
-      return result.size();
-    } else {
-      pdlfs::SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 
 ssize_t deltafs_pwrite(int __fd, const void* __buf, size_t __sz, off_t __off) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
+  }
+  pdlfs::Status s;
+  s = client->Pwrite(__fd, pdlfs::Slice((const char*)__buf, __sz), __off);
+  if (s.ok()) {
+    return __sz;
   } else {
-    pdlfs::Status s = client->Pwrite(
-        __fd, pdlfs::Slice(static_cast<const char*>(__buf), __sz), __off);
-    if (s.ok()) {
-      return __sz;
-    } else {
-      pdlfs::SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 
 ssize_t deltafs_write(int __fd, const void* __buf, size_t __sz) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
+  }
+  pdlfs::Status s;
+  s = client->Write(__fd, pdlfs::Slice((const char*)__buf, __sz));
+  if (s.ok()) {
+    return __sz;
   } else {
-    pdlfs::Status s = client->Write(
-        __fd, pdlfs::Slice(static_cast<const char*>(__buf), __sz));
-    if (s.ok()) {
-      return __sz;
-    } else {
-      pdlfs::SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 
 int deltafs_fstat(int __fd, struct stat* __buf) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
+  }
+  pdlfs::Stat stat;
+  pdlfs::Status s;
+  s = client->Fstat(__fd, &stat);
+  if (s.ok()) {
+    CopyStat(stat, __buf);
+    return 0;
   } else {
-    pdlfs::Stat stat;
-    pdlfs::Status s = client->Fstat(__fd, &stat);
-    if (s.ok()) {
-      __buf->st_mode = stat.FileMode();
-      __buf->st_size = stat.FileSize();
-      __buf->st_mtime = stat.ModifyTime() / 1000000;
-      __buf->st_gid = stat.GroupId();
-      __buf->st_uid = stat.UserId();
-      return 0;
-    } else {
-      pdlfs::SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 
 int deltafs_ftruncate(int __fd, off_t __len) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
+  }
+  pdlfs::Status s;
+  s = client->Ftruncate(__fd, __len);
+  if (s.ok()) {
+    return 0;
   } else {
-    pdlfs::Status s = client->Ftruncate(__fd, __len);
-    if (s.ok()) {
-      return 0;
-    } else {
-      pdlfs::SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 
 int deltafs_fdatasync(int __fd) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
+  }
+  pdlfs::Status s;
+  s = client->Fdatasync(__fd);
+  if (s.ok()) {
+    return 0;
   } else {
-    pdlfs::Status s = client->Fdatasync(__fd);
-    if (s.ok()) {
-      return 0;
-    } else {
-      pdlfs::SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 
 int deltafs_close(int __fd) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
   } else {
     client->Close(__fd);
     return 0;
@@ -218,56 +212,49 @@ int deltafs_close(int __fd) {
 }
 
 int deltafs_stat(const char* __path, struct stat* __buf) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
+  }
+  pdlfs::Stat stat;
+  pdlfs::Status s;
+  s = client->Getattr(__path, &stat);
+  if (s.ok()) {
+    CopyStat(stat, __buf);
+    return 0;
   } else {
-    pdlfs::Stat stat;
-    pdlfs::Status s = client->Getattr(__path, &stat);
-    if (s.ok()) {
-      __buf->st_mode = stat.FileMode();
-      __buf->st_size = stat.FileSize();
-      __buf->st_mtime = stat.ModifyTime() / 1000000;
-      __buf->st_gid = stat.GroupId();
-      __buf->st_uid = stat.UserId();
-      return 0;
-    } else {
-      pdlfs::SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 
 int deltafs_mkfile(const char* __path, mode_t __mode) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
+  }
+  pdlfs::Status s;
+  s = client->Mkfile(__path, __mode);
+  if (s.ok()) {
+    return 0;
   } else {
-    pdlfs::Status s = client->Mkfile(__path, __mode);
-    if (s.ok()) {
-      return 0;
-    } else {
-      pdlfs::SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 
 int deltafs_mkdir(const char* __path, mode_t __mode) {
-  pdlfs::port::InitOnce(&once, pdlfs::InitClient);
+  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    errno = ENODEV;
-    return -1;
+    return NoClient();
+  }
+  pdlfs::Status s;
+  s = client->Mkdir(__path, __mode);
+  if (s.ok()) {
+    return 0;
   } else {
-    pdlfs::Status s = client->Mkdir(__path, __mode);
-    if (s.ok()) {
-      return 0;
-    } else {
-      pdlfs::SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 
