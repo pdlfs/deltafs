@@ -11,6 +11,7 @@
 
 #include "mds_api.h"
 #include "pdlfs-common/fio.h"
+#include "pdlfs-common/guard.h"
 #include "pdlfs-common/index_cache.h"
 #include "pdlfs-common/lookup_cache.h"
 #include "pdlfs-common/port.h"
@@ -50,7 +51,8 @@ class MDS::CLI {
   Status Fstat(const Slice& path, Fentry*);
   Status Fcreat(const Slice& path, bool error_if_exists, int mode, Fentry*);
   Status Ftruncate(const Fentry&, uint64_t mtime, uint64_t size);
-  Status Mkdir(const Slice& path, int mode);
+  Status Mkdir(const Slice& path, int mode, Fentry*);
+  Status Chmod(const Slice& path, int mode, Fentry*);
 
   Status Listdir(const Slice& path, std::vector<std::string>* names);
 
@@ -67,6 +69,7 @@ class MDS::CLI {
   HELPER(Fstat);
   HELPER(Fcreat);
   HELPER(Mkdir);
+  HELPER(Chmod);
 
 #undef HELPER
 
@@ -84,6 +87,7 @@ class MDS::CLI {
                 LookupHandle**);
   typedef IndexCache::Handle IndexHandle;
   Status FetchIndex(const DirId&, int zserver, IndexHandle**);
+  typedef RefGuard<IndexCache, IndexHandle> IndexGuard;
 
   Env* env_;
   MDSFactory* factory_;

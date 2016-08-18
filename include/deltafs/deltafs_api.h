@@ -19,6 +19,7 @@ extern "C" {
 int deltafs_open(const char* __path, int __oflags, mode_t __mode, struct stat*);
 int deltafs_mkfile(const char* __path, mode_t __mode);
 int deltafs_mkdir(const char* __path, mode_t __mode);
+int deltafs_chmod(const char* __path, mode_t __mode);
 int deltafs_stat(const char* __path, struct stat*);
 ssize_t deltafs_pread(int __fd, void* __buf, size_t __sz, off_t __off);
 ssize_t deltafs_read(int __fd, void* __buf, size_t __sz);

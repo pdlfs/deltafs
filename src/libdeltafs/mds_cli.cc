@@ -62,17 +62,15 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
   uint64_t now = env_->NowMicros();
   LookupHandle* h = lookup_cache_->Lookup(pid, nhash);
 
-  // Ask for a new lookup state lease
-  // if we don't have one yet or
+  // Ask for a new lookup state lease only if
+  // we don't have one yet or
   // the one we current have has expired
   if (h == NULL || (now + 10) > lookup_cache_->Value(h)->LeaseDue()) {
     IndexHandle* idxh = NULL;
     s = FetchIndex(pid, zserver, &idxh);
     if (s.ok()) {
       assert(idxh != NULL);
-      const DirIndex* idx = index_cache_->Value(idxh);
-      assert(idx != NULL);
-
+      IndexGuard idxg(index_cache_, idxh);
       LookupOptions options;
       options.op_due = atomic_path_resolution_ ? op_due : kMaxMicros;
       options.session_id = session_id_;
@@ -80,9 +78,7 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
       options.name_hash = nhash;
       if (paranoid_checks_) options.name = name;
       LookupRet ret;
-      s = DoLookup(idx, options, &ret);
-      index_cache_->Release(idxh);
-
+      s = DoLookup(index_cache_->Value(idxh), options, &ret);
       if (s.ok()) {
         LookupStat* stat = new LookupStat(ret.stat);
         h = lookup_cache_->Insert(pid, nhash, stat);
@@ -100,7 +96,9 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
 Status MDS::CLI::DoLookup(const DirIndex* idx, const LookupOptions& options,
                           LookupRet* ret) {
   Status s;
+  mutex_.AssertHeld();
   DirIndex* tmp_idx = NULL;
+  assert(idx != NULL);
   const DirIndex* latest_idx = idx;
   int redirects_allowed = max_redirects_allowed_;
   mutex_.Unlock();
@@ -205,8 +203,7 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
     s = FetchIndex(path.pid, path.zserver, &idxh);
     if (s.ok()) {
       assert(idxh != NULL);
-      const DirIndex* idx = index_cache_->Value(idxh);
-      assert(idx != NULL);
+      IndexGuard idxg(index_cache_, idxh);
       FstatOptions options;
       options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
       options.session_id = session_id_;
@@ -214,8 +211,7 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
       options.name_hash = DirIndex::Hash(path.name, tmp);
       if (paranoid_checks_) options.name = path.name;
       FstatRet ret;
-      s = DoFstat(idx, options, &ret);
-      index_cache_->Release(idxh);
+      s = DoFstat(index_cache_->Value(idxh), options, &ret);
       if (s.ok()) {
         if (ent != NULL) {
           ent->pid = path.pid;
@@ -233,7 +229,9 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
 Status MDS::CLI::DoFstat(const DirIndex* idx, const FstatOptions& options,
                          FstatRet* ret) {
   Status s;
+  mutex_.AssertHeld();
   DirIndex* tmp_idx = NULL;
+  assert(idx != NULL);
   const DirIndex* latest_idx = idx;
   int redirects_allowed = max_redirects_allowed_;
   mutex_.Unlock();
@@ -283,8 +281,7 @@ Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, int mode,
     s = FetchIndex(path.pid, path.zserver, &idxh);
     if (s.ok()) {
       assert(idxh != NULL);
-      const DirIndex* idx = index_cache_->Value(idxh);
-      assert(idx != NULL);
+      IndexGuard idxg(index_cache_, idxh);
       FcreatOptions options;
       options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
       options.session_id = session_id_;
@@ -296,8 +293,7 @@ Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, int mode,
       options.name_hash = DirIndex::Hash(path.name, tmp);
       options.name = path.name;
       FcreatRet ret;
-      s = DoFcreat(idx, options, &ret);
-      index_cache_->Release(idxh);
+      s = DoFcreat(index_cache_->Value(idxh), options, &ret);
       if (s.ok()) {
         if (ent != NULL) {
           ent->pid = path.pid;
@@ -315,7 +311,9 @@ Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, int mode,
 Status MDS::CLI::DoFcreat(const DirIndex* idx, const FcreatOptions& options,
                           FcreatRet* ret) {
   Status s;
+  mutex_.AssertHeld();
   DirIndex* tmp_idx = NULL;
+  assert(idx != NULL);
   const DirIndex* latest_idx = idx;
   int redirects_allowed = max_redirects_allowed_;
   mutex_.Unlock();
@@ -361,7 +359,7 @@ Status MDS::CLI::DoFcreat(const DirIndex* idx, const FcreatOptions& options,
   return s;
 }
 
-Status MDS::CLI::Mkdir(const Slice& p, int mode) {
+Status MDS::CLI::Mkdir(const Slice& p, int mode, Fentry* ent) {
   Status s;
   char tmp[20];
   PathInfo path;
@@ -372,8 +370,7 @@ Status MDS::CLI::Mkdir(const Slice& p, int mode) {
     s = FetchIndex(path.pid, path.zserver, &idxh);
     if (s.ok()) {
       assert(idxh != NULL);
-      const DirIndex* idx = index_cache_->Value(idxh);
-      assert(idx != NULL);
+      IndexGuard idxg(index_cache_, idxh);
       MkdirOptions options;
       options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
       options.session_id = session_id_;
@@ -384,8 +381,15 @@ Status MDS::CLI::Mkdir(const Slice& p, int mode) {
       options.name_hash = DirIndex::Hash(path.name, tmp);
       options.name = path.name;
       MkdirRet ret;
-      s = DoMkdir(idx, options, &ret);
-      index_cache_->Release(idxh);
+      s = DoMkdir(index_cache_->Value(idxh), options, &ret);
+      if (s.ok()) {
+        if (ent != NULL) {
+          ent->pid = path.pid;
+          ent->nhash = options.name_hash.ToString();
+          ent->zserver = path.zserver;
+          ent->stat = ret.stat;
+        }
+      }
     }
   }
 
@@ -395,7 +399,9 @@ Status MDS::CLI::Mkdir(const Slice& p, int mode) {
 Status MDS::CLI::DoMkdir(const DirIndex* idx, const MkdirOptions& options,
                          MkdirRet* ret) {
   Status s;
+  mutex_.AssertHeld();
   DirIndex* tmp_idx = NULL;
+  assert(idx != NULL);
   const DirIndex* latest_idx = idx;
   int redirects_allowed = max_redirects_allowed_;
   mutex_.Unlock();
@@ -426,6 +432,84 @@ Status MDS::CLI::DoMkdir(const DirIndex* idx, const MkdirOptions& options,
       }
     }
   }
+
+  mutex_.Lock();
+  if (tmp_idx != NULL) {
+    if (s.ok()) {
+      const DirId& pid = options.dir_id;
+      IndexHandle* h = index_cache_->Insert(pid, tmp_idx);
+      index_cache_->Release(h);
+    } else {
+      delete tmp_idx;
+    }
+  }
+
+  return s;
+}
+
+Status MDS::CLI::Chmod(const Slice& p, int mode, Fentry* ent) {
+  Status s;
+  char tmp[20];
+  PathInfo path;
+  MutexLock ml(&mutex_);
+  s = ResolvePath(p, &path);
+  if (s.ok()) {
+    IndexHandle* idxh = NULL;
+    s = FetchIndex(path.pid, path.zserver, &idxh);
+    if (s.ok()) {
+      assert(idxh != NULL);
+      IndexGuard idxg(index_cache_, idxh);
+      ChmodOptions options;
+      options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+      options.session_id = session_id_;
+      options.dir_id = path.pid;
+      options.mode = mode;
+      options.name_hash = DirIndex::Hash(path.name, tmp);
+      if (paranoid_checks_) options.name = path.name;
+      ChmodRet ret;
+      s = DoChmod(index_cache_->Value(idxh), options, &ret);
+      if (s.ok()) {
+        if (ent != NULL) {
+          ent->pid = path.pid;
+          ent->nhash = options.name_hash.ToString();
+          ent->zserver = path.zserver;
+          ent->stat = ret.stat;
+        }
+      }
+    }
+  }
+
+  return s;
+}
+
+Status MDS::CLI::DoChmod(const DirIndex* idx, const ChmodOptions& options,
+                         ChmodRet* ret) {
+  Status s;
+  mutex_.AssertHeld();
+  DirIndex* tmp_idx = NULL;
+  assert(idx != NULL);
+  const DirIndex* latest_idx = idx;
+  int redirects_allowed = max_redirects_allowed_;
+  mutex_.Unlock();
+
+  do {
+    try {
+      size_t server = latest_idx->HashToServer(options.name_hash);
+      assert(server < giga_.num_servers);
+      s = factory_->Get(server)->Chmod(options, ret);
+    } catch (Redirect& re) {
+      if (tmp_idx == NULL) {
+        tmp_idx = new DirIndex(&giga_);
+        tmp_idx->Update(*idx);
+      }
+      if (--redirects_allowed == 0 || !tmp_idx->Update(re)) {
+        s = Status::Corruption(Slice());
+      } else {
+        s = Status::TryAgain(Slice());
+      }
+      latest_idx = tmp_idx;
+    }
+  } while (s.IsTryAgain());
 
   mutex_.Lock();
   if (tmp_idx != NULL) {

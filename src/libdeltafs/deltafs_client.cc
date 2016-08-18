@@ -463,15 +463,20 @@ Status Client::Getattr(const Slice& path, Stat* statbuf) {
 
 Status Client::Mkfile(const Slice& path, int mode) {
   Status s;
-  Fentry ent;
   const bool error_if_exists = true;
-  s = mdscli_->Fcreat(path, error_if_exists, mode, &ent);
+  s = mdscli_->Fcreat(path, error_if_exists, mode, NULL);
   return s;
 }
 
 Status Client::Mkdir(const Slice& path, int mode) {
   Status s;
-  s = mdscli_->Mkdir(path, mode);
+  s = mdscli_->Mkdir(path, mode, NULL);
+  return s;
+}
+
+Status Client::Chmod(const Slice& path, int mode) {
+  Status s;
+  s = mdscli_->Chmod(path, mode, NULL);
   return s;
 }
 
