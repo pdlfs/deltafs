@@ -19,7 +19,6 @@
 #endif
 #if defined(MERCURY)
 #include "mercury_rpc.h"
-#include "pdlfs-common/arena.h"
 #endif
 
 namespace pdlfs {
