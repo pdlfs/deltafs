@@ -60,6 +60,16 @@ class MDS::CLI {
  private:
   CLI(const MDSCliOptions&);
 
+#define HELPER(OP) \
+  Status Do##OP(const DirIndex*, const OP##Options& opts, OP##Ret* ret)
+
+  HELPER(Lookup);
+  HELPER(Fstat);
+  HELPER(Fcreat);
+  HELPER(Mkdir);
+
+#undef HELPER
+
   struct PathInfo {
     uint64_t lease_due;
     DirId pid;
