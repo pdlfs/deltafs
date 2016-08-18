@@ -19,12 +19,14 @@
 #endif
 #if defined(MERCURY)
 #include "mercury_rpc.h"
+#include "pdlfs-common/arena.h"
 #endif
 
 namespace pdlfs {
 
 RPCOptions::RPCOptions()
-    : mode(kServerClient),
+    : impl(kMercuryRPC),
+      mode(kServerClient),
       rpc_timeout(5000000LLU),
       num_io_threads(1),
       extra_workers(NULL),
@@ -135,32 +137,68 @@ class MercuryRPCImpl : public RPC {
 
 }  // namespace rpc
 
+#if defined(MERCURY)
+/* clang-format off */
+
+// plugin | protocol          | initialization format       | lookup format
+// ------ | --------          | ---------------------       | -------------
+// bmi    | tcp               | `bmi+tcp://<port>`          | `[bmi+]tcp://<hostname>:<port>`
+// cci    | tcp, verbs, gni   | `cci+<protocol>[://<port>]` | `[cci+]<protocol>://<hostname>:<port>`
+// cci    | sm                | `cci+sm[://<id>/<id>]`      | `[cci+]sm://<cci shmem path>/<id>/<id>`
+// mpi    | dynamic, static   | `mpi+<protocol>`            | `[mpi+]<protocol>://<port>`
+
+/* clang-format on */
+// Convert from a lookup format to its initialization format.
+static void ConvertUri(RPCOptions* options) {
+  // XXX: current implementation only works for bmi-based uri strings
+  std::string new_url;
+  size_t pos1 = options->uri.find("://");
+  new_url += options->uri.substr(0, pos1 + 3);
+  size_t pos2 = options->uri.rfind(":");
+  new_url += options->uri.substr(pos2 + 1);
+  options->uri = new_url;
+}
+#endif
+
 RPC* RPC::Open(const RPCOptions& raw_options) {
+  assert(raw_options.uri.size() != 0);
   assert(raw_options.mode != kServerClient || raw_options.fs != NULL);
-  assert(!raw_options.uri.empty());
   RPCOptions options(raw_options);
   if (options.env == NULL) {
     options.env = Env::Default();
   }
+#if defined(MERCURY)
+  if (options.impl == kMercuryRPC || options.impl == kMargoRPC) {
+    ConvertUri(&options);
+  }
+#endif
 #if VERBOSE >= 1
-  Verbose(__LOG_ARGS__, 1, "rpc.uri=%s", options.uri.c_str());
-  Verbose(__LOG_ARGS__, 1, "rpc.timeout=%llu",
+  Verbose(__LOG_ARGS__, 1, "rpc.uri -> %s", options.uri.c_str());
+  Verbose(__LOG_ARGS__, 1, "rpc.timeout -> %llu (microseconds)",
           (unsigned long long)options.rpc_timeout);
-  Verbose(__LOG_ARGS__, 1, "rpc.num_io_threads=%d", options.num_io_threads);
-  Verbose(__LOG_ARGS__, 1, "rpc.extra_workers=%s",
+  Verbose(__LOG_ARGS__, 1, "rpc.num_io_threads -> %d", options.num_io_threads);
+  Verbose(__LOG_ARGS__, 1, "rpc.extra_workers -> [%s]",
           options.extra_workers != NULL
               ? options.extra_workers->ToDebugString().c_str()
               : "NULL");
 #endif
+  RPC* rpc = NULL;
 #if defined(MARGO) && defined(MERCURY)
-  return new rpc::MargoRPCImpl(options);  // Use Margo if we have it built
+  if (options.impl == kMargoRPC) {
+    rpc = new rpc::MargoRPCImpl(options);
+  }
 #elif defined(MERCURY)
-  return new rpc::MercuryRPCImpl(options);  // Use Mercury otherwise
-#else
-  char msg[] = "No rpc implementation is available\n";
-  fwrite(msg, 1, sizeof(msg), stderr);
-  abort();
+  if (options.impl == kMercuryRPC) {
+    rpc = new rpc::MercuryRPCImpl(options);
+  }
 #endif
+  if (rpc == NULL) {
+    char msg[] = "No rpc implementation is available\n";
+    fwrite(msg, 1, sizeof(msg), stderr);
+    abort();
+  } else {
+    return rpc;
+  }
 }
 
 }  // namespace pdlfs

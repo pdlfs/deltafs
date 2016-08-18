@@ -22,13 +22,13 @@ namespace rpc {
 class If;
 }
 
-enum RPCMode {
-  kServerClient,  // Will listen incoming client requests
-  kClientOnly
-};
+enum RPCImpl { kMargoRPC, kMercuryRPC, kThriftRPC };
+
+enum RPCMode { kServerClient, kClientOnly };
 
 struct RPCOptions {
   RPCOptions();
+  RPCImpl impl;  // Default: kMercuryRPC
   RPCMode mode;  // Default: kServerClient
   std::string uri;
   uint64_t rpc_timeout;  // In microseconds, Default: 5 secs
