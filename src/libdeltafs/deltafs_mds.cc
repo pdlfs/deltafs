@@ -166,7 +166,7 @@ void MetadataServer::Builder::LoadMDSTopology() {
       status_ = config::LoadNumOfMetadataSrvs(&num_srvs);
       if (ok()) {
         if (srv_id_ >= num_srvs) {
-          status_ = Status::InvalidArgument("Bad instance id");
+          status_ = Status::InvalidArgument("bad instance id");
         }
       }
     }
@@ -178,15 +178,15 @@ void MetadataServer::Builder::LoadMDSTopology() {
     if (num_addrs == 0) {
       std::string uri = GetLocalUri(srv_id_);
       if (uri.empty()) {
-        status_ = Status::IOError("Fail to obtain local IP address");
+        status_ = Status::IOError("cannot obtain local IP address");
       } else {
         mdstopo_.srv_addrs = std::vector<std::string>(num_srvs);
         mdstopo_.srv_addrs[srv_id_] = uri;
       }
     } else if (num_addrs < num_srvs) {
-      status_ = Status::InvalidArgument("Not enough addrs");
+      status_ = Status::InvalidArgument("not enough addrs");
     } else if (num_addrs > num_srvs) {
-      status_ = Status::InvalidArgument("Too many addrs");
+      status_ = Status::InvalidArgument("too many addrs");
     }
   }
 
@@ -208,7 +208,10 @@ void MetadataServer::Builder::LoadMDSEnv() {
   if (ok()) {
     myenv_->env_name = config::EnvName();
     myenv_->env_conf = config::EnvConf();
-    myenv_->env = Env::Default();  // FIXME
+    myenv_->env = Env::Open(myenv_->env_name, myenv_->env_conf);
+    if (myenv_->env == NULL) {
+      status_ = Status::IOError("cannot load MDS env");
+    }
   }
 
   if (ok()) {
@@ -223,8 +226,10 @@ void MetadataServer::Builder::OpenDB() {
 
   if (ok()) {
     output_root = myenv_->outputs;
-    // ignore error since the directory may already exist
-    myenv_->env->CreateDir(output_root);
+    // The output root must exist in the local file system but not
+    // necessarily in the underlying object storage.
+    // Error is ignored since the directory may exist.
+    Env::Default()->CreateDir(output_root);
   }
 
   if (ok()) {
