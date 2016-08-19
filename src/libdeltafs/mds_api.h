@@ -203,7 +203,7 @@ class MDSTracer : public MDSWrapper {
              const std::string& hash, const std::string& name,
              const Status& status) {
 #if VERBOSE >= 1
-    Verbose(__LOG_ARGS__, 1, "%s %s) %s) %sN[%s]H[%s]: %s", type, uri_.c_str(),
+    Verbose(__LOG_ARGS__, 1, "%s %s) %s) %sN[%s]H[%s] - %s", type, uri_.c_str(),
             op, pid.c_str(), name.c_str(), hash.c_str(),
             status.ToString().c_str());
 #endif
