@@ -561,7 +561,7 @@ void Client::Builder::LoadMDSTopology() {
   }
 
   if (ok()) {
-    status_ = config::LoadRPCTracing(&mdstopo_.rpc_tracing);
+    status_ = config::LoadMDSTracing(&mdstopo_.mds_tracing);
   }
 
   if (ok()) {

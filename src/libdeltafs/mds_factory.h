@@ -14,7 +14,7 @@
 namespace pdlfs {
 
 struct MDSTopology {
-  bool rpc_tracing;
+  bool mds_tracing;
   std::string rpc_proto;
   std::vector<std::string> srv_addrs;
   int num_vir_srvs;

@@ -21,11 +21,11 @@ static std::string LoadFromEnv(const char* key) {
 #include <gflags/gflags.h>
 #define DEFINE_FLAG_PORT(n, v)                                               \
   static std::string FLAGS_load_##n() { return LoadFromEnv("DELTAFS_" #n); } \
-  DEFINE_string(n, v, "deltafs");
+  DEFINE_string(D##n, v, "deltafs");
 #else
 #define DEFINE_FLAG_PORT(n, v)                                               \
   static std::string FLAGS_load_##n() { return LoadFromEnv("DELTAFS_" #n); } \
-  static std::string FLAGS_##n = v;
+  static std::string FLAGS_D##n = v;
 #endif
 #include <ctype.h>
 static void ToLowerCase(std::string* str) {
@@ -39,7 +39,7 @@ static void ToLowerCase(std::string* str) {
   std::string n() {                        \
     std::string result = FLAGS_load_##n(); \
     if (result.empty()) {                  \
-      result = FLAGS_##n;                  \
+      result = FLAGS_D##n;                 \
     }                                      \
     ToLowerCase(&result);                  \
     return result;                         \
@@ -53,7 +53,7 @@ DEFINE_FLAG(NumOfMetadataSrvs, "1")
 DEFINE_FLAG(NumOfVirMetadataSrvs, "1")
 DEFINE_FLAG(InstanceId, "0")
 DEFINE_FLAG(RPCProto, "bmi+tcp")
-DEFINE_FLAG(RPCTracing, "false")
+DEFINE_FLAG(MDSTracing, "false")
 DEFINE_FLAG(MetadataSrvAddrs, "")
 DEFINE_FLAG(SizeOfSrvLeaseTable, "4k")
 DEFINE_FLAG(SizeOfSrvDirTable, "1k")
@@ -62,8 +62,8 @@ DEFINE_FLAG(SizeOfCliIndexCache, "1k")
 DEFINE_FLAG(AtomicPathRes, "false")
 DEFINE_FLAG(ParanoidChecks, "false")
 DEFINE_FLAG(VerifyChecksums, "false")
-DEFINE_FLAG(Inputs, "/tmp/deltafs/inputs")
-DEFINE_FLAG(Outputs, "/tmp/deltafs/outputs")
+DEFINE_FLAG(Inputs, "/tmp/deltafs_inputs")
+DEFINE_FLAG(Outputs, "/tmp/deltafs_outputs")
 DEFINE_FLAG(EnvName, "posix")
 DEFINE_FLAG(EnvConf, "")
 

@@ -191,7 +191,7 @@ void MetadataServer::Builder::LoadMDSTopology() {
   }
 
   if (ok()) {
-    status_ = config::LoadRPCTracing(&mdstopo_.rpc_tracing);
+    status_ = config::LoadMDSTracing(&mdstopo_.mds_tracing);
   }
 
   if (ok()) {
@@ -292,10 +292,10 @@ void MetadataServer::Builder::OpenRPC() {
     Slice srv_addr = mdstopo_.srv_addrs[srv_id_];
     Slice proto = mdstopo_.rpc_proto;
     if (!srv_addr.starts_with(proto)) {
-      AppendSliceTo(&uri, proto);
+      uri += proto.c_str();
       uri += "://";
     }
-    AppendSliceTo(&uri, srv_addr);
+    uri += srv_addr.c_str();
   }
 
   if (ok()) {

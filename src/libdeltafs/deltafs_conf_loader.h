@@ -39,7 +39,7 @@ namespace config {
 CONF_LOADER_UI64(NumOfMetadataSrvs)
 CONF_LOADER_UI64(NumOfVirMetadataSrvs)
 CONF_LOADER_UI64(InstanceId)
-CONF_LOADER_BOOL(RPCTracing)
+CONF_LOADER_BOOL(MDSTracing)
 CONF_LOADER_UI64(SizeOfSrvLeaseTable)
 CONF_LOADER_UI64(SizeOfSrvDirTable)
 CONF_LOADER_UI64(SizeOfCliLookupCache)

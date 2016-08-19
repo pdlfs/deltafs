@@ -33,7 +33,7 @@ Status MDSFactoryImpl::Init(const MDSTopology& topo) {
       full_uri.append(*it);
       uri = &full_uri;
     }
-    AddTarget(*uri, topo.rpc_tracing);
+    AddTarget(*uri, topo.mds_tracing);
   }
   return s;
 }

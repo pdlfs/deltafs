@@ -26,9 +26,9 @@ extern std::string InstanceId();
 // Return the name of the RPC proto.
 // e.g. bmi+tcp, cci, mpi
 extern std::string RPCProto();
-// Indicate if deltafs should trace every RPC message.
+// Indicate if deltafs should trace calls to metadata server.
 // e.g. true, yes
-extern std::string RPCTracing();
+extern std::string MDSTracing();
 // Return an ordered array of server addrs. Addrs associated with
 // different servers are separated by semicolons; addrs associated with
 // a same server are separated by commas. We are assuming each metadata

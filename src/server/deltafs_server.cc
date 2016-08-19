@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
   }
   delete srv;
   if (!s.ok()) {
-    pdlfs::Error(__LOG_ARGS__, "Failed - %s", s.ToString().c_str());
+    pdlfs::Error(__LOG_ARGS__, s);
     return 1;
   } else {
     pdlfs::Info(__LOG_ARGS__, "Bye!");
