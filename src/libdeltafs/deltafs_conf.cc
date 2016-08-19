@@ -66,6 +66,8 @@ DEFINE_FLAG(Inputs, "/tmp/deltafs_inputs")
 DEFINE_FLAG(Outputs, "/tmp/deltafs_outputs")
 DEFINE_FLAG(EnvName, "posix")
 DEFINE_FLAG(EnvConf, "")
+DEFINE_FLAG(FioName, "posix")
+DEFINE_FLAG(FioConf, "")
 
 }  // namespace config
 }  // namespace pdlfs

@@ -42,6 +42,10 @@ Status MetadataServer::Dispose() {
     mds_ = NULL;
   }
   if (myenv_ != NULL) {
+    delete myenv_->fio;
+    if (myenv_->env != Env::Default()) {
+      delete myenv_->env;
+    }
     delete myenv_;
     myenv_ = NULL;
   }
@@ -206,6 +210,9 @@ void MetadataServer::Builder::LoadMDSEnv() {
   myenv_ = new MDSEnv;
 
   if (ok()) {
+    myenv_->fio = NULL;
+    myenv_->fio_name = config::FioName();
+    myenv_->fio_conf = config::FioConf();
     myenv_->env_name = config::EnvName();
     myenv_->env_conf = config::EnvConf();
     myenv_->env = Env::Open(myenv_->env_name, myenv_->env_conf);
@@ -215,8 +222,8 @@ void MetadataServer::Builder::LoadMDSEnv() {
   }
 
   if (ok()) {
-    myenv_->outputs = config::Outputs();
-    myenv_->inputs = config::Inputs();
+    myenv_->output_conf = config::Outputs();
+    myenv_->input_conf = config::Inputs();
   }
 }
 
@@ -225,7 +232,7 @@ void MetadataServer::Builder::OpenDB() {
   std::string output_root;
 
   if (ok()) {
-    output_root = myenv_->outputs;
+    output_root = myenv_->output_conf;
     // The output root must exist in the local file system but not
     // necessarily in the underlying object storage.
     // Error is ignored since the directory may exist.
@@ -238,6 +245,7 @@ void MetadataServer::Builder::OpenDB() {
 
   if (ok()) {
     dbopts_.create_if_missing = true;
+    dbopts_.error_if_exists = true;
     dbopts_.compression = kSnappyCompression;
     dbopts_.disable_compaction = true;
     dbopts_.env = myenv_->env;

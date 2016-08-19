@@ -24,14 +24,18 @@ namespace pdlfs {
 static const uint64_t kMaxMicros = ((0x1ull << 63) - 1);
 
 class Env;
+class Fio;
 class MDB;
 
 struct MDSEnv {
+  std::string output_conf;
+  std::string input_conf;
   std::string env_name;
   std::string env_conf;
-  std::string outputs;
-  std::string inputs;
+  std::string fio_name;
+  std::string fio_conf;
   Env* env;
+  Fio* fio;
 };
 
 struct MDSOptions {

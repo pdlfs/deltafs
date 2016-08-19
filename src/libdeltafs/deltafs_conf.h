@@ -56,19 +56,23 @@ extern std::string ParanoidChecks();
 // Indicate if deltafs should always verify checksums.
 // e.g. true, yes
 extern std::string VerifyChecksums();
-// Return the name of the underlying storage provider.
-// TODO: maybe there will be a need to access multiple
-// underlying storage providers within a single run.
-// e.g. posix, rados, hdfs
+// Return the name of the Env implementation to use.
+// XXX: support running deltafs on multiple Env instances.
+// e.g. rados, hdfs
 extern std::string EnvName();
 // Return the conf string that should be passed to Env loaders.
-// e.g. "rados_conf=/etc/ceph.conf;rados_osd_timeouts=5"
+// e.g. "rados_conf=/etc/ceph.conf;pool_name=metadata"
 extern std::string EnvConf();
-// Return the location info of input delta sets.
-// e.g. "/tmp/deltafs/run3"
+// Return the name of the Fio implementation to use.
+// XXX: support running deltafs on multiple Fio instances.
+// e.g. rados, hdfs
+extern std::string FioName();
+// Return the conf string that should be passed to Fio loaders.
+// e.g. "rados_conf=/etc/ceph.conf;pool_name=data"
+extern std::string FioConf();
+// Return the conf string for input snapshots
 extern std::string Inputs();
-// Return the location info of output deltas.
-// e.g. "/tmp/deltafs/run4"
+// Return the conf string for output snapshots
 extern std::string Outputs();
 
 }  // namespace config
