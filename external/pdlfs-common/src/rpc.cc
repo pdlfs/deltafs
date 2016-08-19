@@ -168,7 +168,9 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
   }
 #if defined(MERCURY)
   if (options.impl == kMercuryRPC || options.impl == kMargoRPC) {
-    ConvertUri(&options);
+    if (options.mode == kServerClient) {
+      ConvertUri(&options);
+    }
   }
 #endif
 #if VERBOSE >= 1
