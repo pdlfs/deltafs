@@ -58,11 +58,13 @@ class RadosOpCtx {
 
 inline Status RadosError(const char* err_ctx, int err_num) {
   char tmp[100];
-  if (err_num == -ENOENT) {
-    return Status::NotFound(Slice());
-  } else {
-    snprintf(tmp, sizeof(tmp), "%s: %s", err_ctx, strerror(-err_num));
+  snprintf(tmp, sizeof(tmp), "%s: %s", err_ctx, strerror(-err_num));
+  if (err_num != -ENOENT && err_num != -EEXIST) {
     return Status::IOError(tmp);
+  } else if (err_num == -EEXIST) {
+    return Status::AlreadyExists(tmp);
+  } else {
+    return Status::NotFound(tmp);
   }
 }
 

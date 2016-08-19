@@ -11,6 +11,7 @@
 #include <stdio.h>
 
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/rados/rados_ld.h"
@@ -42,15 +43,26 @@ ThreadPool::~ThreadPool() {}
 EnvWrapper::~EnvWrapper() {}
 
 Env* Env::Open(const Slice& env_name, const Slice& env_conf) {
+  assert(env_name.size() != 0);
+#if VERBOSE >= 1
+  Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name.c_str());
+  Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf.c_str());
+#endif
   if (env_name == "rados") {
     return reinterpret_cast<Env*>(PDLFS_Load_rados_env(env_conf.c_str()));
+  } else if (env_name == "posix") {
+#if defined(PDLFS_PLATFORM_POSIX)
+    return Env::Default();
+#else
+    return NULL;
+#endif
   } else {
     return NULL;
   }
 }
 
 static void EmitLog(Logger* info_log, const char* fmt, va_list ap) {
-  info_log->Logv("pdlfs-common*.cc", 0, 0, 3, fmt, ap);
+  info_log->Logv("pdlfs-xxx.cc", 0, 0, 3, fmt, ap);
 }
 
 void Log(Logger* info_log, const char* fmt, ...) {
