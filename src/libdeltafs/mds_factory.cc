@@ -56,7 +56,7 @@ void MDSFactoryImpl::AddTarget(const std::string& target_uri, bool trace) {
   info.stub = rpc_->OpenClientFor(target_uri);
   info.wrapper = new MDSWrapper(info.stub);
   if (trace) {
-    info.mds = new MDSTracer(info.wrapper);
+    info.mds = new MDSTracer(target_uri, info.wrapper);
   } else {
     info.mds = info.wrapper;
   }

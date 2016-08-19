@@ -199,31 +199,42 @@ class MDSWrapper : public MDS {
 
 // Log every RPC message to assist debugging.
 class MDSTracer : public MDSWrapper {
- public:
-  explicit MDSTracer(MDS* base) : MDSWrapper(base) {}
-  virtual ~MDSTracer();
-
+  void Trace(const char* type, const char* op, const std::string& pid,
+             const std::string& hash, const std::string& name,
+             const Status& status) {
 #if VERBOSE >= 1
-#define DEF_OP(OP)                                                           \
-  virtual Status OP(const OP##Options& options, OP##Ret* ret) {              \
-    std::string pid = options.dir_id.DebugString();                          \
-    std::string h = EscapeString(options.name_hash);                         \
-    std::string n = options.name.ToString();                                 \
-    Verbose(__LOG_ARGS__, 5, ">> %s %s/N[%s]H[%s]", #OP, pid.c_str(),        \
-            n.c_str(), h.c_str());                                           \
-    Status s;                                                                \
-    try {                                                                    \
-      s = base_->OP(options, ret);                                           \
-    } catch (Redirect & re) {                                                \
-      Verbose(__LOG_ARGS__, 3, "<< %s %s/N[%s]H[%s]: %s", #OP, pid.c_str(),  \
-              n.c_str(), h.c_str(), "Redirected");                           \
-      throw re;                                                              \
-    }                                                                        \
-    Verbose(__LOG_ARGS__, (!s.ok()) ? 1 : 3, "<< %s %s/N[%s]H[%s]: %s", #OP, \
-            pid.c_str(), n.c_str(), h.c_str(), s.ToString().c_str());        \
-    return s;                                                                \
+    Verbose(__LOG_ARGS__, 1, "%s %s) %s) %sN[%s]H[%s]: %s", type, uri_.c_str(),
+            op, pid.c_str(), name.c_str(), hash.c_str(),
+            status.ToString().c_str());
+#endif
   }
 
+ public:
+  explicit MDSTracer(const std::string& uri, MDS* base)
+      : MDSWrapper(base), uri_(uri) {}
+  virtual ~MDSTracer();
+
+#define DEF_OP(OP)                                              \
+  virtual Status OP(const OP##Options& options, OP##Ret* ret) { \
+    Status s;                                                   \
+    std::string pid = options.dir_id.DebugString();             \
+    std::string h = EscapeString(options.name_hash);            \
+    std::string n = options.name.ToString();                    \
+    Trace(">>", #OP, pid, h, n, s);                             \
+    try {                                                       \
+      s = base_->OP(options, ret);                              \
+    } catch (Redirect & re) {                                   \
+      s = Status::TryAgain("redirected");                       \
+      Trace("<<", #OP, pid, h, n, s);                           \
+      throw re;                                                 \
+    }                                                           \
+    Trace("<<", #OP, pid, h, n, s);                             \
+    return s;                                                   \
+  }
+
+  DEF_OP(Opensession)
+  DEF_OP(Getinput)
+  DEF_OP(Getoutput)
   DEF_OP(Fstat)
   DEF_OP(Fcreat)
   DEF_OP(Mkdir)
@@ -233,12 +244,11 @@ class MDSTracer : public MDSWrapper {
   DEF_OP(Lookup)
   DEF_OP(Listdir)
   DEF_OP(Readidx)
-  DEF_OP(Opensession)
-  DEF_OP(Getinput)
-  DEF_OP(Getoutput)
 
 #undef DEF_OP
-#endif
+
+ private:
+  std::string uri_;
 };
 
 // RPC adaptors
