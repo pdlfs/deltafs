@@ -814,13 +814,19 @@ Status MDS::RPC::CLI::Opensession(const OpensessionOptions& options,
       Slice msg = out.contents;
       Slice env_name;
       Slice env_conf;
+      Slice fio_name;
+      Slice fio_conf;
       uint32_t id;
       if (!GetLengthPrefixedSlice(&msg, &env_name) ||
-          !GetLengthPrefixedSlice(&msg, &env_conf) || !GetVarint32(&msg, &id)) {
+          !GetLengthPrefixedSlice(&msg, &env_conf) ||
+          !GetLengthPrefixedSlice(&msg, &fio_name) ||
+          !GetLengthPrefixedSlice(&msg, &fio_conf) || !GetVarint32(&msg, &id)) {
         s = Status::Corruption(Slice());
       } else {
         ret->env_name = env_name.ToString();
         ret->env_conf = env_conf.ToString();
+        ret->fio_name = fio_name.ToString();
+        ret->fio_conf = fio_conf.ToString();
         ret->session_id = id;
       }
     }
@@ -837,6 +843,8 @@ void MDS::RPC::SRV::OPSES(Msg& in, Msg& out) {
   if (s.ok()) {
     PutLengthPrefixedSlice(&out.extra_buf, ret.env_name);
     PutLengthPrefixedSlice(&out.extra_buf, ret.env_conf);
+    PutLengthPrefixedSlice(&out.extra_buf, ret.fio_name);
+    PutLengthPrefixedSlice(&out.extra_buf, ret.fio_conf);
     PutVarint32(&out.extra_buf, ret.session_id);
     out.contents = Slice(out.extra_buf);
     out.err = 0;

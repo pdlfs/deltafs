@@ -138,6 +138,8 @@ class MDS {
   MDS_OP_RET(Opensession) {
     std::string env_name;
     std::string env_conf;
+    std::string fio_name;
+    std::string fio_conf;
     uint32_t session_id;
   };
   MDS_OP(Opensession)

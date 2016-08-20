@@ -41,14 +41,6 @@ Status MetadataServer::Dispose() {
     delete mds_;
     mds_ = NULL;
   }
-  if (myenv_ != NULL) {
-    delete myenv_->fio;
-    if (myenv_->env != Env::Default()) {
-      delete myenv_->env;
-    }
-    delete myenv_;
-    myenv_ = NULL;
-  }
   if (mdb_ != NULL) {
     delete mdb_;
     mdb_ = NULL;
@@ -59,6 +51,14 @@ Status MetadataServer::Dispose() {
     s = db_->FlushMemTable(options);
     delete db_;
     db_ = NULL;
+  }
+  if (myenv_ != NULL) {
+    delete myenv_->fio;
+    if (myenv_->env != Env::Default()) {
+      delete myenv_->env;
+    }
+    delete myenv_;
+    myenv_ = NULL;
   }
   return s;
 }

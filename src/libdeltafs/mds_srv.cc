@@ -1042,6 +1042,8 @@ Status MDS::SRV::Opensession(const OpensessionOptions&, OpensessionRet* ret) {
   Status s;
   ret->env_name = mds_env_->env_name;
   ret->env_conf = mds_env_->env_conf;
+  ret->fio_name = mds_env_->fio_name;
+  ret->fio_conf = mds_env_->fio_conf;
   mutex_.Lock();
   ret->session_id = NextSession();
   mutex_.Unlock();
@@ -1051,17 +1053,15 @@ Status MDS::SRV::Opensession(const OpensessionOptions&, OpensessionRet* ret) {
 // Obtain location info on input delta sets
 // Return OK on success.
 Status MDS::SRV::Getinput(const GetinputOptions&, GetinputRet* ret) {
-  Status s;
-  ret->info = mds_env_->inputs;
-  return s;
+  ret->info = mds_env_->input_conf;
+  return Status::OK();
 }
 
 // Obtain location info on output deltas.
 // Return OK on success.
 Status MDS::SRV::Getoutput(const GetoutputOptions&, GetoutputRet* ret) {
-  Status s;
-  ret->info = mds_env_->outputs;
-  return s;
+  ret->info = mds_env_->output_conf;
+  return Status::OK();
 }
 
 }  // namespace pdlfs
