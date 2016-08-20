@@ -30,6 +30,7 @@ struct Fentry {
 class Fio {
  public:
   Fio() {}
+  static Fio* Open(const Slice& fio_name, const Slice& fio_conf);
   // Opaque file handle
   struct Handle {};
   virtual ~Fio();

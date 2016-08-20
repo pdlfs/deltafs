@@ -8,11 +8,36 @@
  */
 
 #include "pdlfs-common/fio.h"
+#include "pdlfs-common/blkdb.h"
 #include "pdlfs-common/coding.h"
+#include "pdlfs-common/logging.h"
+#include "pdlfs-common/pdlfs_config.h"
+#include "pdlfs-common/rados/rados_ld.h"
+
+#include "posix_fio.h"
 
 namespace pdlfs {
 
 Fio::~Fio() {}
+
+Fio* Fio::Open(const Slice& fio_name, const Slice& fio_conf) {
+  assert(fio_name.size() != 0);
+#if VERBOSE >= 1
+  Verbose(__LOG_ARGS__, 1, "fio.name -> %s", fio_name.c_str());
+  Verbose(__LOG_ARGS__, 1, "fio.conf -> %s", fio_conf.c_str());
+#endif
+  if (fio_name == "rados") {
+    return reinterpret_cast<Fio*>(PDLFS_Load_rados_fio(fio_conf.c_str()));
+  } else if (fio_name == "posix") {
+#if defined(PDLFS_PLATFORM_POSIX)
+    return new PosixFio("/tmp/deltafs_data");  // XXX: Hard coded
+#else
+    return NULL;
+#endif
+  } else {
+    return NULL;
+  }
+}
 
 Slice Fentry::ExtractUntypedKeyPrefix(const Slice& encoding) {
   Slice key_prefix;
