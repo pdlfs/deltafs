@@ -15,6 +15,7 @@
 #include "deltafs_client.h"
 #include "deltafs_conf_loader.h"
 #include "pdlfs-common/blkdb.h"
+#include "pdlfs-common/lazy_env.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/rpc.h"
 #include "pdlfs-common/strutil.h"
@@ -523,6 +524,7 @@ class Client::Builder {
   DB* db_;
   BlkDBOptions blkdbopts_;
   BlkDB* blkdb_;
+  Fio* fio_;
   int cli_id_;
   int session_id_;
   int uid_;
@@ -552,9 +554,9 @@ void Client::Builder::LoadMDSTopology() {
         std::string addrs = config::MetadataSrvAddrs();
         size_t num_addrs = SplitString(addrs, ';', &mdstopo_.srv_addrs);
         if (num_addrs < num_srvs) {
-          status_ = Status::InvalidArgument("Not enough addrs");
+          status_ = Status::InvalidArgument("not enough addrs");
         } else if (num_addrs > num_srvs) {
-          status_ = Status::InvalidArgument("Too many addrs");
+          status_ = Status::InvalidArgument("too many addrs");
         }
       }
     }
@@ -587,9 +589,6 @@ void Client::Builder::LoadMDSTopology() {
 
 // REQUIRES: both LoadIds() and LoadMDSTopology() have been called.
 void Client::Builder::OpenSession() {
-  std::string env_name;
-  std::string env_conf;
-
   if (ok()) {
     assert(mdsfty_ != NULL);
     MDS* mds = mdsfty_->Get(cli_id_ % mdstopo_.num_srvs);
@@ -600,18 +599,20 @@ void Client::Builder::OpenSession() {
     status_ = mds->Opensession(options, &ret);
     if (ok()) {
       session_id_ = ret.session_id;
-      env_name = ret.env_name;
-      env_conf = ret.env_conf;
+      env_ = new LazyEnv(ret.env_name, ret.env_conf);
+      fio_ = Fio::Open(ret.fio_name, ret.fio_conf);
+      if (fio_ == NULL) {
+        status_ = Status::IOError("cannot open fio");
+      }
     }
-  }
-
-  if (ok()) {
-    env_ = Env::Default();  // FIXME
   }
 }
 
 // REQUIRES: OpenSession() has been called.
 void Client::Builder::OpenDB() {
+  blkdb_ = NULL;
+  db_ = NULL;
+#if 0
   std::string output_root;
 
   if (ok()) {
@@ -652,6 +653,7 @@ void Client::Builder::OpenDB() {
       db_ = NULL;
     }
   }
+#endif
 }
 
 // REQUIRES: OpenSession() has been called.
@@ -702,13 +704,15 @@ Client* Client::Builder::BuildClient() {
     Client* cli = new Client;
     cli->mdscli_ = mdscli_;
     cli->mdsfty_ = mdsfty_;
-    cli->fio_ = blkdb_;
+    cli->fio_ = fio_;
     return cli;
   } else {
     delete mdscli_;
     delete mdsfty_;
+    delete fio_;
     delete blkdb_;
     delete db_;
+    delete env_;
     return NULL;
   }
 }

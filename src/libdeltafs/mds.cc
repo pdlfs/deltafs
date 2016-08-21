@@ -137,19 +137,20 @@ MDS::CLI::~CLI() {
 }
 
 MDS::CLI* MDS::CLI::Open(const MDSCliOptions& options) {
-  assert(options.env != NULL && options.factory != NULL);
+  assert(options.env != NULL);
+  assert(options.factory != NULL);
 #if VERBOSE >= 1
-  Verbose(__LOG_ARGS__, 1, "mds.num_virtual_servers=%d",
+  Verbose(__LOG_ARGS__, 1, "mds.num_virtual_servers -> %d",
           options.num_virtual_servers);
-  Verbose(__LOG_ARGS__, 1, "mds.num_servers=%d", options.num_servers);
-  Verbose(__LOG_ARGS__, 1, "mds.cli.index_cache_size=%zu",
+  Verbose(__LOG_ARGS__, 1, "mds.num_servers -> %d", options.num_servers);
+  Verbose(__LOG_ARGS__, 1, "mds.cli.index_cache_size -> %zu",
           options.index_cache_size);
-  Verbose(__LOG_ARGS__, 1, "mds.cli.lookup_cache_size=%zu",
+  Verbose(__LOG_ARGS__, 1, "mds.cli.lookup_cache_size -> %zu",
           options.lookup_cache_size);
-  Verbose(__LOG_ARGS__, 1, "mds.cli.uid=%d", options.uid);
-  Verbose(__LOG_ARGS__, 1, "mds.cli.gid=%d", options.gid);
-  Verbose(__LOG_ARGS__, 1, "mds.cli.session_id=%d", options.session_id);
-  Verbose(__LOG_ARGS__, 1, "mds.cli.cli_id=%d", options.cli_id);
+  Verbose(__LOG_ARGS__, 1, "mds.cli.session_id -> %d", options.session_id);
+  Verbose(__LOG_ARGS__, 1, "mds.cli.cli_id -> %d", options.cli_id);
+  Verbose(__LOG_ARGS__, 1, "mds.cli.uid -> %d", options.uid);
+  Verbose(__LOG_ARGS__, 1, "mds.cli.gid -> %d", options.gid);
 #endif
   MDS::CLI* cli = new MDS::CLI(options);
   return cli;

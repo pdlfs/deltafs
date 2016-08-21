@@ -59,7 +59,7 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
   Slice nhash = DirIndex::Hash(name, tmp);
   mutex_.AssertHeld();
 
-  uint64_t now = env_->NowMicros();
+  uint64_t now = Env::Default()->NowMicros();
   LookupHandle* h = lookup_cache_->Lookup(pid, nhash);
 
   // Ask for a new lookup state lease only if
