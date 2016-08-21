@@ -7,7 +7,7 @@
 SUDO="sudo"
 
 if test $# -lt 1; then
-  echo "* Usage: $0 [start|stop|status|kill|check|watch|ls|stat]
+  echo "* Usage: $0 [start|stop|stat|kill|check|watch|ls|head]
 
 =====================================================================
   start  | create a new rados cluster                  |   sudo
@@ -19,7 +19,7 @@ if test $# -lt 1; then
 ---------------------------------------------------------------------
   watch  | monitor the status of a running cluster     |
   ls     | list ALL objects in the cluster             |
-  stat   | check the existence of a particular object  |
+  head   | check the existence of a particular object  |
 =====================================================================
 
 * On Ubuntu, ceph rados could be installed by:
@@ -27,7 +27,7 @@ if test $# -lt 1; then
     sudo apt-get install ceph librados-dev
 
 * Please use `basename $0` only for local testing and debugging 
-* `basename $0` only works with ceph 0.80.x"
+* `basename $0` currently only works with ceph 0.80.x"
   exit 1
 fi
 
@@ -75,9 +75,11 @@ COMMAND=$1
 case $COMMAND in
   ls)
     rados -c $CEPH_CONF -p metadata ls
+    rados -c $CEPH_CONF -p data ls
     ;;
-  stat)
+  head)
     rados -c $CEPH_CONF -p metadata stat $2
+    rados -c $CEPH_CONF -p data stat $2
     ;;
   check)
     ceph --version
@@ -85,7 +87,7 @@ case $COMMAND in
   watch)
     ceph -c $CEPH_CONF -w
     ;;
-  status)
+  stat|status)
     ceph -c $CEPH_CONF -s
     ;;
   start)
