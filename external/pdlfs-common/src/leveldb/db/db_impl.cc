@@ -158,10 +158,6 @@ DBImpl::~DBImpl() {
   }
   mutex_.Unlock();
 
-  if (db_lock_ != NULL) {
-    env_->UnlockFile(db_lock_);
-  }
-
   delete versions_;
   if (mem_ != NULL) mem_->Unref();
   if (imm_ != NULL) imm_->Unref();
@@ -176,6 +172,13 @@ DBImpl::~DBImpl() {
   if (owns_cache_) {
     delete options_.block_cache;
   }
+
+  // Remove LOCK file and detach db directory so other
+  // processes may mount the directory.
+  if (db_lock_ != NULL) {
+    env_->UnlockFile(db_lock_);
+  }
+  env_->DetachDir(dbname_);
 }
 
 Status DBImpl::NewDB() {
