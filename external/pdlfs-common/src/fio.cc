@@ -14,7 +14,9 @@
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/rados/rados_ld.h"
 
+#if defined(PDLFS_PLATFORM_POSIX)
 #include "posix_fio.h"
+#endif
 
 namespace pdlfs {
 
