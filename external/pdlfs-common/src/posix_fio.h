@@ -143,6 +143,9 @@ class PosixFio : public Fio {
       fname += ToFileName(fentry);
       s = IOError(fname, errno);
     }
+    if (s.ok()) {
+      *result = Slice(scratch, n);
+    }
 
     return s;
   }
@@ -156,6 +159,9 @@ class PosixFio : public Fio {
       std::string fname = root_ + "/";
       fname += ToFileName(fentry);
       s = IOError(fname, errno);
+    }
+    if (s.ok()) {
+      *result = Slice(scratch, n);
     }
 
     return s;
