@@ -80,17 +80,17 @@ MDS* MDS::Open(const MDSOptions& options) {
   assert(options.mds_env != NULL && options.mds_env->env != NULL);
   assert(options.mdb != NULL);
 #if VERBOSE >= 1
-  Verbose(__LOG_ARGS__, 1, "mds.num_virtual_servers=%d",
+  Verbose(__LOG_ARGS__, 1, "mds.num_virtual_servers -> %d",
           options.num_virtual_servers);
-  Verbose(__LOG_ARGS__, 1, "mds.num_servers=%d", options.num_servers);
-  Verbose(__LOG_ARGS__, 1, "mds.dir_table_size=%zu", options.dir_table_size);
-  Verbose(__LOG_ARGS__, 1, "mds.lease_table_size=%zu",
+  Verbose(__LOG_ARGS__, 1, "mds.num_servers -> %d", options.num_servers);
+  Verbose(__LOG_ARGS__, 1, "mds.dir_table_size -> %zu", options.dir_table_size);
+  Verbose(__LOG_ARGS__, 1, "mds.lease_table_size -> %zu",
           options.lease_table_size);
-  Verbose(__LOG_ARGS__, 1, "mds.reg_id=%llu",
+  Verbose(__LOG_ARGS__, 1, "mds.reg_id -> %llu",
           (unsigned long long)options.reg_id);
-  Verbose(__LOG_ARGS__, 1, "mds.snap_id=%llu",
+  Verbose(__LOG_ARGS__, 1, "mds.snap_id -> %llu",
           (unsigned long long)options.snap_id);
-  Verbose(__LOG_ARGS__, 1, "mds.srv_id=%d", options.srv_id);
+  Verbose(__LOG_ARGS__, 1, "mds.srv_id -> %d", options.srv_id);
 #endif
   MDS* mds = new SRV(options);
   return mds;
