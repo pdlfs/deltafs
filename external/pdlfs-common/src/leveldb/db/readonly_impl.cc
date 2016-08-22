@@ -47,6 +47,8 @@ ReadonlyDBImpl::~ReadonlyDBImpl() {
   delete log_;
   delete logfile_;
   delete table_cache_;
+
+  env_->DetachDir(dbname_);
 }
 
 Status ReadonlyDBImpl::Load() {
@@ -55,6 +57,7 @@ Status ReadonlyDBImpl::Load() {
     return Reload();
   }
 
+  env_->AttachDir(dbname_);
   // Read "CURRENT" file, which contains a pointer to the current manifest file
   std::string current;
   Status s = ReadFileToString(env_, CurrentFileName(dbname_), &current);
@@ -94,6 +97,8 @@ Status ReadonlyDBImpl::Reload() {
     return Load();
   }
 
+  env_->DetachDir(dbname_);
+  env_->AttachDir(dbname_);
   Status s;
   Slice record;
   std::string scratch;
@@ -113,7 +118,7 @@ Status ReadonlyDBImpl::Reload() {
 Status ReadonlyDBImpl::InternalGet(const ReadOptions& options, const Slice& key,
                                    Buffer* value) {
   Status s;
-  MutexLock l(&mutex_);
+  MutexLock ml(&mutex_);
   SequenceNumber snapshot;
   if (options.snapshot != NULL) {
     snapshot = reinterpret_cast<const SnapshotImpl*>(options.snapshot)->number_;
