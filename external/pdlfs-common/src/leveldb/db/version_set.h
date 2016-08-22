@@ -175,6 +175,16 @@ class VersionSet {
              TableCache* table_cache, const InternalKeyComparator*);
   ~VersionSet();
 
+  // Apply a foreign *edit to the current version without touching any
+  // descriptor files. The applied version only exists in memory.
+  //
+  // Usually, this is called at a readonly db instance that follows the changes
+  // made by primary db instance, and the primary is the one that is
+  // responsible for writing the descriptor file.
+  //
+  // REQUIRES: no other thread concurrently calls ForeighApply()
+  Status ForeighApply(VersionEdit* edit);
+
   // Apply *edit to the current version to form a new descriptor that
   // is both saved to persistent state and installed as the new
   // current version.  Will release *mu while actually writing to the file.

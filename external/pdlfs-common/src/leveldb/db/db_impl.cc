@@ -111,7 +111,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       internal_comparator_(raw_options.comparator),
       internal_filter_policy_(raw_options.filter_policy),
       options_(SanitizeOptions(dbname, &internal_comparator_,
-                               &internal_filter_policy_, raw_options)),
+                               &internal_filter_policy_, raw_options, true)),
       owns_info_log_(options_.info_log != raw_options.info_log),
       owns_cache_(options_.block_cache != raw_options.block_cache),
       allow_seek_compaction_(!options_.disable_seek_compaction),

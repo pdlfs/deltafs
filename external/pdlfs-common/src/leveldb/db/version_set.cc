@@ -805,6 +805,58 @@ void VersionSet::AppendVersion(Version* v) {
   v->next_->prev_ = v;
 }
 
+Status VersionSet::ForeighApply(VersionEdit* edit) {
+  if (edit->has_comparator_ &&
+      edit->comparator_ != icmp_.user_comparator()->Name()) {
+    return Status::InvalidArgument(
+        edit->comparator_ + " does not match existing comparator ",
+        icmp_.user_comparator()->Name());
+  }
+
+  uint64_t next_file_number = next_file_number_;
+  uint64_t last_sequence = last_sequence_;
+  uint64_t log_number = log_number_;
+  uint64_t prev_log_number = prev_log_number_;
+
+  if (edit->has_log_number_) {
+    assert(log_number <= edit->log_number_);
+    log_number = edit->log_number_;
+  }
+
+  if (edit->has_prev_log_number_) {
+    assert(prev_log_number <= edit->prev_log_number_);
+    prev_log_number = edit->prev_log_number_;
+  }
+
+  if (edit->has_next_file_number_) {
+    assert(next_file_number <= edit->next_file_number_);
+    next_file_number = edit->next_file_number_;
+  }
+
+  if (edit->has_last_sequence_) {
+    assert(last_sequence <= edit->last_sequence_);
+    last_sequence = edit->last_sequence_;
+  }
+
+  assert(log_number < next_file_number);
+  Version* v = new Version(this);
+  {
+    Builder builder(this, current_);
+    builder.Apply(edit);
+    builder.SaveTo(v);
+  }
+  // No need to finalize the new version since we are not going to
+  // do any compaction.
+
+  // Install the new version
+  AppendVersion(v);
+  log_number_ = log_number;
+  prev_log_number_ = prev_log_number;
+  next_file_number_ = next_file_number;
+  last_sequence_ = last_sequence;
+  return Status::OK();
+}
+
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   if (edit->has_log_number_) {
     assert(edit->log_number_ >= log_number_);

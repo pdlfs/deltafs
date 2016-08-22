@@ -68,7 +68,7 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
 DBOptions SanitizeOptions(const std::string& dbname,
                           const InternalKeyComparator* icmp,
                           const InternalFilterPolicy* ipolicy,
-                          const DBOptions& src) {
+                          const DBOptions& src, bool create_infolog) {
   DBOptions result = src;
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
@@ -76,7 +76,7 @@ DBOptions SanitizeOptions(const std::string& dbname,
               50000);
   ClipToRange(&result.write_buffer_size, 64 << 10, 1 << 30);
   ClipToRange(&result.block_size, 1 << 10, 4 << 20);
-  if (result.info_log == NULL) {
+  if (create_infolog && result.info_log == NULL) {
     // Open a log file in the same directory as the db
     src.env->CreateDir(dbname);  // In case it does not exist
     src.env->RenameFile(InfoLogFileName(dbname), OldInfoLogFileName(dbname));

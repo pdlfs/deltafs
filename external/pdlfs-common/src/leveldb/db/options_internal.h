@@ -39,9 +39,9 @@ static const int kNumNonTableCacheFiles = 10;
 
 // Sanitize db options.  The caller should delete result.info_log if
 // it is not equal to src.info_log.
-extern DBOptions SanitizeOptions(const std::string& db,
+extern DBOptions SanitizeOptions(const std::string& dbname,
                                  const InternalKeyComparator* icmp,
                                  const InternalFilterPolicy* ipolicy,
-                                 const DBOptions& src);
+                                 const DBOptions& src, bool create_infolog);
 
 }  // namespace pdlfs

@@ -38,10 +38,10 @@ class DB {
   typedef DBOptions Options;
 
  public:
-  // Open the database with the specified "name".
-  // Stores a pointer to a heap-allocated database in *dbptr and returns
-  // OK on success.
-  // Stores NULL in *dbptr and returns a non-OK status on error.
+  // Open a db instance on a named image with full access.
+  // Stores a pointer to the db in *dbptr and returns OK on success.
+  // Otherwise, stores NULL in *dbptr and returns a non-OK status.
+  // Only a single db instance can be opened on a specified db image.
   // Caller should delete *dbptr when it is no longer needed.
   static Status Open(const Options& options, const std::string& name,
                      DB** dbptr);

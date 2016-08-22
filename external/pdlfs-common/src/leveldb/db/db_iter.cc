@@ -131,7 +131,9 @@ inline bool DBIter::ParseKey(ParsedInternalKey* ikey) {
   bytes_counter_ -= n;
   while (bytes_counter_ < 0) {
     bytes_counter_ += RandomPeriod();
-    db_->RecordReadSample(k);
+    if (db_ != NULL) {
+      db_->RecordReadSample(k);
+    }
   }
   if (!ParseInternalKey(k, ikey)) {
     status_ = Status::Corruption("corrupted internal key in DBIter");
