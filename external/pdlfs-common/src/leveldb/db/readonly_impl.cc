@@ -252,4 +252,19 @@ Status ReadonlyDBImpl::Dump(const DumpOptions&, const Range& range,
   return Status::NotSupported(Slice());
 }
 
+Status ReadonlyDB::Open(const Options& options, const std::string& dbname,
+                        DB** dbptr) {
+  *dbptr = NULL;
+
+  ReadonlyDBImpl* impl = new ReadonlyDBImpl(options, dbname);
+  Status s = impl->Load();
+  if (s.ok()) {
+    *dbptr = impl;
+  } else {
+    delete impl;
+  }
+
+  return s;
+}
+
 }  // namespace pdlfs
