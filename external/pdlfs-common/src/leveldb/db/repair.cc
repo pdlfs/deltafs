@@ -59,22 +59,23 @@ class Repairer {
         options_(SanitizeOptions(dbname, &icmp_, &ipolicy_, options, true)),
         owns_info_log_(options_.info_log != options.info_log),
         owns_cache_(options_.block_cache != options.block_cache),
+        owns_table_cache_(options_.table_cache != options.table_cache),
         next_file_number_(1) {
-    // TableCache can be small since we expect each table to be opened once.
-    table_cache_ = new TableCache(dbname_, &options_, 10);
+    table_cache_ = new TableCache(dbname_, &options_, options_.table_cache);
     if (options_.info_log == Logger::Default()) {
       owns_info_log_ = false;
     }
+    env_->AttachDir(dbname_);
   }
 
   ~Repairer() {
     delete table_cache_;
-    if (owns_info_log_) {
-      delete options_.info_log;
-    }
-    if (owns_cache_) {
-      delete options_.block_cache;
-    }
+
+    if (owns_info_log_) delete options_.info_log;
+    if (owns_cache_) delete options_.block_cache;
+    if (owns_table_cache_) delete options_.table_cache;
+
+    env_->DetachDir(dbname_);
   }
 
   Status Run() {
@@ -112,6 +113,7 @@ class Repairer {
   Options const options_;
   bool owns_info_log_;
   bool owns_cache_;
+  bool owns_table_cache_;
   TableCache* table_cache_;
   VersionEdit edit_;
 

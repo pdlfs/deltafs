@@ -114,6 +114,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
                                &internal_filter_policy_, raw_options, true)),
       owns_info_log_(options_.info_log != raw_options.info_log),
       owns_cache_(options_.block_cache != raw_options.block_cache),
+      owns_table_cache_(options_.table_cache != raw_options.table_cache),
       allow_seek_compaction_(!options_.disable_seek_compaction),
       allow_compaction_(!options_.disable_compaction),
       dbname_(dbname),
@@ -132,11 +133,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       manual_compaction_(NULL) {
   mem_->Ref();
   has_imm_.Release_Store(NULL);
-
-  // Reserve ten files or so for other uses and give the rest to TableCache.
-  const int table_cache_size =
-      options_.max_open_files - config::kNumNonTableCacheFiles;
-  table_cache_ = new TableCache(dbname_, &options_, table_cache_size);
+  table_cache_ = new TableCache(dbname_, &options_, options_.table_cache);
 
   versions_ =
       new VersionSet(dbname_, &options_, table_cache_, &internal_comparator_);
@@ -171,6 +168,9 @@ DBImpl::~DBImpl() {
   }
   if (owns_cache_) {
     delete options_.block_cache;
+  }
+  if (owns_table_cache_) {
+    delete options_.table_cache;
   }
 
   // Remove LOCK file and detach db directory so other

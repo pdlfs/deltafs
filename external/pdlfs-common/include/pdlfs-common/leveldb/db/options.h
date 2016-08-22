@@ -89,12 +89,15 @@ struct DBOptions {
   // Default: 4MB
   size_t write_buffer_size;
 
-  // Number of open files that can be used by the DB.  You may need to
-  // increase this if your database has a large working set (budget
-  // one open file per 2MB of working set).
+  // Control over open tables (max number of tables that can be opened).
+  // You may need to increase this if your database has a large working set (
+  // budget one open file per 2MB of working set).
   //
-  // Default: 1000
-  int max_open_files;
+  // If non-NULL, use the specified cache for tables.
+  // If NULL, leveldb will automatically create and use an internal cache
+  // capable of holding 1000 tables.
+  // Default: NULL
+  Cache* table_cache;
 
   // Control over blocks (user data is stored in a set of blocks, and
   // a block is the unit of reading from disk).

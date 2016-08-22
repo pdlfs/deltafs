@@ -32,16 +32,17 @@ static const int kMaxMemCompactLevel = 2;
 
 // Approximate gap in bytes between samples of data read during iteration.
 static const int kReadBytesPeriod = 1048576;
-
-// Number of files reserved from the limit of max open files.
-static const int kNumNonTableCacheFiles = 10;
 }  // namespace config
 
 // Sanitize db options.  The caller should delete result.info_log if
-// it is not equal to src.info_log.
+// it is not equal to raw_options.info_log.  The caller should also delete
+// result.block_cache if it is not equal to raw_options.block_cache.
+// Finally, the caller should delete result.table_cache if it is not equal to
+// raw_options.table_cache.
 extern DBOptions SanitizeOptions(const std::string& dbname,
                                  const InternalKeyComparator* icmp,
                                  const InternalFilterPolicy* ipolicy,
-                                 const DBOptions& src, bool create_infolog);
+                                 const DBOptions& raw_options,
+                                 bool create_infolog);
 
 }  // namespace pdlfs

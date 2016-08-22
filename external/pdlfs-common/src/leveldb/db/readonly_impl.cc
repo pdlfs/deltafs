@@ -29,14 +29,12 @@ ReadonlyDBImpl::ReadonlyDBImpl(const Options& raw_options,
       internal_filter_policy_(raw_options.filter_policy),
       options_(SanitizeOptions(dbname, &internal_comparator_,
                                &internal_filter_policy_, raw_options, false)),
+      owns_cache_(options_.block_cache != raw_options.block_cache),
+      owns_table_cache_(options_.table_cache != raw_options.table_cache),
       dbname_(dbname),
       logfile_(NULL),
       log_(NULL) {
-  // Reserve a few files for other uses and give the rest to TableCache.
-  const int table_cache_size =
-      options_.max_open_files - config::kNumNonTableCacheFiles;
-
-  table_cache_ = new TableCache(dbname_, &options_, table_cache_size);
+  table_cache_ = new TableCache(dbname_, &options_, options_.table_cache);
 
   versions_ =
       new VersionSet(dbname_, &options_, table_cache_, &internal_comparator_);
@@ -48,11 +46,18 @@ ReadonlyDBImpl::~ReadonlyDBImpl() {
   delete logfile_;
   delete table_cache_;
 
+  if (owns_cache_) {
+    delete options_.block_cache;
+  }
+  if (owns_table_cache_) {
+    delete options_.table_cache;
+  }
+
   env_->DetachDir(dbname_);
 }
 
 Status ReadonlyDBImpl::Load() {
-  MutexLock ml(&mutex_);
+  mutex_.AssertHeld();
   if (log_ != NULL) {
     return Reload();
   }
@@ -92,7 +97,7 @@ Status ReadonlyDBImpl::Load() {
 }
 
 Status ReadonlyDBImpl::Reload() {
-  MutexLock ml(&mutex_);
+  mutex_.AssertHeld();
   if (log_ == NULL) {
     return Load();
   }
@@ -257,7 +262,9 @@ Status ReadonlyDB::Open(const Options& options, const std::string& dbname,
   *dbptr = NULL;
 
   ReadonlyDBImpl* impl = new ReadonlyDBImpl(options, dbname);
+  impl->mutex_.Lock();
   Status s = impl->Load();
+  impl->mutex_.Unlock();
   if (s.ok()) {
     *dbptr = impl;
   } else {

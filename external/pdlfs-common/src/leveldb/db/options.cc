@@ -26,7 +26,7 @@ DBOptions::DBOptions()
       env(Env::Default()),
       info_log(NULL),
       write_buffer_size(4 << 20),
-      max_open_files(1000),
+      table_cache(NULL),
       block_cache(NULL),
       block_size(4096),
       block_restart_interval(16),
@@ -65,6 +65,7 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
   if (static_cast<V>(*ptr) > maxvalue) *ptr = maxvalue;
   if (static_cast<V>(*ptr) < minvalue) *ptr = minvalue;
 }
+
 DBOptions SanitizeOptions(const std::string& dbname,
                           const InternalKeyComparator* icmp,
                           const InternalFilterPolicy* ipolicy,
@@ -72,8 +73,6 @@ DBOptions SanitizeOptions(const std::string& dbname,
   DBOptions result = src;
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
-  ClipToRange(&result.max_open_files, 64 + config::kNumNonTableCacheFiles,
-              50000);
   ClipToRange(&result.write_buffer_size, 64 << 10, 1 << 30);
   ClipToRange(&result.block_size, 1 << 10, 4 << 20);
   if (create_infolog && result.info_log == NULL) {
@@ -88,6 +87,9 @@ DBOptions SanitizeOptions(const std::string& dbname,
   }
   if (result.block_cache == NULL) {
     result.block_cache = NewLRUCache(8 << 20);
+  }
+  if (result.table_cache == NULL) {
+    result.table_cache = NewLRUCache(1000);
   }
   return result;
 }

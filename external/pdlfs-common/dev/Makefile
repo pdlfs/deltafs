@@ -55,6 +55,7 @@ TESTS = \
 	src/leveldb/db/autocompact_test \
 	src/leveldb/db/corruption_test \
 	src/leveldb/db/bulk_test \
+	src/leveldb/db/readonly_test \
 	src/rados/rados_env_test \
 	src/rados/rados_fio_test
 
@@ -83,7 +84,7 @@ default: all
 
 all: $(STATIC_LIBOBJECTS)
 
-tests: $(STATIC_PROGRAMS)
+tests: $(STATIC_LIBOBJECTS) $(STATIC_PROGRAMS)
 
 check: tests
 	for t in $(notdir $(TESTS)); do echo "***** Running $$t"; $(STATIC_OUTDIR)/$$t || exit 1; done
@@ -199,6 +200,9 @@ $(STATIC_OUTDIR)/autocompact_test:src/leveldb/db/autocompact_test.cc $(STATIC_LI
 
 $(STATIC_OUTDIR)/bulk_test:src/leveldb/db/bulk_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/leveldb/db/bulk_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/readonly_test:src/leveldb/db/readonly_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/leveldb/db/readonly_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/rados_env_test:src/rados/rados_env_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/rados/rados_env_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)

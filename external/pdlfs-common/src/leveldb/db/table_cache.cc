@@ -44,12 +44,12 @@ static void UnrefEntry(void* arg1, void* arg2) {
 }
 
 TableCache::TableCache(const std::string& dbname, const Options* options,
-                       size_t entries)
-    : env_(options->env), dbname_(dbname), options_(options) {
-  cache_ = NewLRUCache(entries);
+                       Cache* cache)
+    : env_(options->env), dbname_(dbname), options_(options), cache_(cache) {
+  id_ = cache_->NewId();
 }
 
-TableCache::~TableCache() { delete cache_; }
+TableCache::~TableCache() {}
 
 Status TableCache::LoadTable(uint64_t fnum, uint64_t fsize, Table** table,
                              RandomAccessFile** file) {
@@ -80,9 +80,10 @@ Status TableCache::LoadTable(uint64_t fnum, uint64_t fsize, Table** table,
 Status TableCache::FindTable(uint64_t fnum, uint64_t fsize, SequenceOff off,
                              Cache::Handle** handle) {
   Status s;
-  char buf[8];
-  EncodeFixed64(buf, fnum);
-  Slice key(buf, 8);
+  char buf[16];
+  EncodeFixed64(buf, id_);
+  EncodeFixed64(buf + 8, fnum);
+  Slice key(buf, 16);
 
   *handle = cache_->Lookup(key);
   if (*handle == NULL) {
@@ -335,9 +336,10 @@ Status TableCache::Get(const ReadOptions& options, uint64_t fnum,
 }
 
 void TableCache::Evict(uint64_t fnum) {
-  char buf[8];
-  EncodeFixed64(buf, fnum);
-  Slice key(buf, 8);
+  char buf[16];
+  EncodeFixed64(buf, id_);
+  EncodeFixed64(buf + 8, fnum);
+  Slice key(buf, 16);
   cache_->Erase(key);
 }
 
