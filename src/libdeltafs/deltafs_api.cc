@@ -76,9 +76,11 @@ static void SetErrno(const pdlfs::Status& s) {
 
 int deltafs_open(const char* __path, int __oflags, mode_t __mode,
                  struct stat* __buf) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::FileInfo info;
   pdlfs::Status s;
@@ -93,9 +95,11 @@ int deltafs_open(const char* __path, int __oflags, mode_t __mode,
 }
 
 ssize_t deltafs_pread(int __fd, void* __buf, size_t __sz, off_t __off) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::Slice result;
   pdlfs::Status s;
@@ -109,9 +113,11 @@ ssize_t deltafs_pread(int __fd, void* __buf, size_t __sz, off_t __off) {
 }
 
 ssize_t deltafs_read(int __fd, void* __buf, size_t __sz) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::Slice result;
   pdlfs::Status s;
@@ -125,9 +131,11 @@ ssize_t deltafs_read(int __fd, void* __buf, size_t __sz) {
 }
 
 ssize_t deltafs_pwrite(int __fd, const void* __buf, size_t __sz, off_t __off) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::Status s;
   s = client->Pwrite(__fd, pdlfs::Slice((const char*)__buf, __sz), __off);
@@ -140,9 +148,11 @@ ssize_t deltafs_pwrite(int __fd, const void* __buf, size_t __sz, off_t __off) {
 }
 
 ssize_t deltafs_write(int __fd, const void* __buf, size_t __sz) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::Status s;
   s = client->Write(__fd, pdlfs::Slice((const char*)__buf, __sz));
@@ -155,9 +165,11 @@ ssize_t deltafs_write(int __fd, const void* __buf, size_t __sz) {
 }
 
 int deltafs_fstat(int __fd, struct stat* __buf) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::Stat stat;
   pdlfs::Status s;
@@ -172,9 +184,11 @@ int deltafs_fstat(int __fd, struct stat* __buf) {
 }
 
 int deltafs_ftruncate(int __fd, off_t __len) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::Status s;
   s = client->Ftruncate(__fd, __len);
@@ -187,9 +201,11 @@ int deltafs_ftruncate(int __fd, off_t __len) {
 }
 
 int deltafs_fdatasync(int __fd) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::Status s;
   s = client->Fdatasync(__fd);
@@ -202,7 +218,9 @@ int deltafs_fdatasync(int __fd) {
 }
 
 int deltafs_close(int __fd) {
-  pdlfs::port::InitOnce(&once, InitClient);
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+  }
   if (client == NULL) {
     return NoClient();
   } else {
@@ -212,9 +230,11 @@ int deltafs_close(int __fd) {
 }
 
 int deltafs_stat(const char* __path, struct stat* __buf) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::Stat stat;
   pdlfs::Status s;
@@ -229,9 +249,11 @@ int deltafs_stat(const char* __path, struct stat* __buf) {
 }
 
 int deltafs_mkfile(const char* __path, mode_t __mode) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::Status s;
   s = client->Mkfile(__path, __mode);
@@ -244,9 +266,11 @@ int deltafs_mkfile(const char* __path, mode_t __mode) {
 }
 
 int deltafs_mkdir(const char* __path, mode_t __mode) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::Status s;
   s = client->Mkdir(__path, __mode);
@@ -259,9 +283,11 @@ int deltafs_mkdir(const char* __path, mode_t __mode) {
 }
 
 int deltafs_chmod(const char* __path, mode_t __mode) {
-  pdlfs::port::InitOnce(&once, InitClient);
   if (client == NULL) {
-    return NoClient();
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
   }
   pdlfs::Status s;
   s = client->Chmod(__path, __mode);
