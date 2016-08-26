@@ -48,9 +48,12 @@ Env* Env::Open(const Slice& env_name, const Slice& env_conf) {
   Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name.c_str());
   Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf.c_str());
 #endif
+#ifdef RADOS
   if (env_name == "rados") {
     return reinterpret_cast<Env*>(PDLFS_Load_rados_env(env_conf.c_str()));
-  } else if (env_name == "posix") {
+  }
+#endif
+  if (env_name == "posix") {
 #if defined(PDLFS_PLATFORM_POSIX)
     return Env::Default();
 #else

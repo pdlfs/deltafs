@@ -201,5 +201,6 @@ TEST(RadosFioTest, FileWithHoles) {
 #endif
 
 int main(int argc, char** argv) {
+  setenv("TESTS", "X", 0);  // XXX: don't run any tests by default
   return ::pdlfs::test::RunAllTests(&argc, &argv);
 }

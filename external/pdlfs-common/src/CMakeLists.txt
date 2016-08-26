@@ -13,28 +13,38 @@
 #
 
 # main directory sources and tests
-set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c.cc dbfiles.cc
-     dbfiles.cc dcntl.cc env.cc fio.cc fstypes.cc gigaplus.cc hash.cc
-     histogram.cc index_cache.cc lease.cc log_reader.cc log_writer.cc
-     logging.cc lookup_cache.cc mdb.cc mercury_rpc.cc
+set (pdlfs-common-srcs arena.cc blkdb.cc cache.cc coding.cc crc32c.cc
+     dbfiles.cc dbfiles.cc dcntl.cc env.cc fio.cc fstypes.cc gigaplus.cc
+     hash.cc histogram.cc index_cache.cc lease.cc log_reader.cc log_writer.cc
+     logging.cc lookup_cache.cc mdb.cc margo_rpc.cc mercury_rpc.cc
      osd.cc osd_internal.cc port_posix.cc posix_env.cc rpc.cc
      slice.cc status.cc strutil.cc testharness.cc testutil.cc xxhash.cc)
-set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
-     crc32c_test.cc dbfiles_test.cc env_test.cc fstypes_test.cc
-     gigaplus_test.cc hash_test.cc log_test.cc mercury_test.cc osd_test.cc)
+set (pdlfs-common-tests arena_test.cc blkdb_test.cc cache_test.cc
+     coding_test.cc crc32c_test.cc dbfiles_test.cc env_test.cc fstypes_test.cc
+     gigaplus_test.cc hash_test.cc log_test.cc margo_test.cc
+     mercury_test.cc osd_test.cc strutil_test.cc)
 
 # leveldb directory sources and tests
 set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
      db/builder.cc db/db.cc db/db_impl.cc db/db_iter.cc db/dbformat.cc
-     db/memtable.cc db/options.cc db/repair.cc db/table_cache.cc
-     db/version_edit.cc db/version_set.cc db/write_batch.cc filter_block.cc
-     filter_policy.cc format.cc iterator.cc merger.cc table.cc
-     table_builder.cc table_stats.cc two_level_iterator.cc )
+     db/memtable.cc db/options.cc db/readonly.cc db/readonly_impl.cc
+     db/repair.cc db/table_cache.cc db/version_edit.cc db/version_set.cc
+     db/write_batch.cc filter_block.cc filter_policy.cc format.cc
+     iterator.cc merger.cc table.cc table_builder.cc table_stats.cc
+     two_level_iterator.cc )
 set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
      db/bulk_test.cc db/corruption_test.cc db/db_table_test.cc db/db_test.cc
-     db/dbformat_test.cc db/version_edit_test.cc db/version_set_test.cc
-     db/write_batch_test.cc filter_block_test.cc skiplist_test.cc
-     table_test.cc)
+     db/dbformat_test.cc db/readonly_test.cc db/version_edit_test.cc
+     db/version_set_test.cc db/write_batch_test.cc filter_block_test.cc
+     skiplist_test.cc table_test.cc)
+
+# rados directory and tests
+if (PDLFS_RADOS)
+    set (pdlfs-rados-srcs rados_common.cc rados_conn.cc rados_env.cc
+         rados_fio.cc rados_ld.cc rados_osd.cc)
+    set (pdlfs-rados-tests rados_env_test.cc rados_fio_test.cc)
+endif ()
+
 
 #
 # configure/load in standard modules we plan to use and probe the enviroment
@@ -46,6 +56,11 @@ set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set (THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package (Threads REQUIRED)
 
+if (TARGET margo AND PDLFS_MARGO_RPC)
+    list (APPEND PDLFS_REQUIRED_XPKGIMPORTS margo)  # for *-config.cmake
+    list (APPEND pdlfs-xtra-libs margo)             # for build
+endif ()
+
 if (TARGET mercury AND PDLFS_MERCURY_RPC)
     list (APPEND PDLFS_REQUIRED_PACKAGES mercury)   # for *-config.cmake
     list (APPEND pdlfs-xtra-libs mercury)           # for build
@@ -55,12 +70,12 @@ if (TARGET mercury AND PDLFS_MERCURY_RPC)
 endif ()
 
 if (TARGET rados AND PDLFS_RADOS)
+    list (APPEND PDLFS_REQUIRED_PACKAGES RADOS)
     list (APPEND pdlfs-xtra-libs rados)
-    list (APPEND PDLFS_EXTRA_COMPONENTS rados)
 endif ()
 
 #
-# we allow the library binary to be installed and "find_package"'d 
+# we allow the library binary to be installed and "find_package"'d
 # under an alternate name (though header files are still under pdlfs-common).
 # we set "PDLFS_NAME" to the name we are going to use.
 #
@@ -130,12 +145,19 @@ string(REGEX REPLACE "([^;]+)" "leveldb/\\1" pdlfs-leveldb-srcs
                                           "${pdlfs-leveldb-srcs}")
 string(REGEX REPLACE "([^;]+)" "leveldb/\\1" pdlfs-leveldb-tests
                                           "${pdlfs-leveldb-tests}")
+string(REGEX REPLACE "([^;]+)" "rados/\\1" pdlfs-rados-srcs
+                                          "${pdlfs-rados-srcs}")
+string(REGEX REPLACE "([^;]+)" "rados/\\1" pdlfs-rados-tests
+                                          "${pdlfs-rados-tests}")
+
 
 #
 # generate complete list of files and tests from the parts
 #
-set (pdlfs-all-srcs ${pdlfs-common-srcs} ${pdlfs-leveldb-srcs})
-set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-leveldb-tests})
+set (pdlfs-all-srcs ${pdlfs-common-srcs} ${pdlfs-leveldb-srcs}
+                    ${pdlfs-rados-srcs})
+set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-leveldb-tests}
+                     ${pdlfs-rados-tests})
 
 #
 # create the library target (user can specify shared vs. static
@@ -227,6 +249,8 @@ install (EXPORT pdlfs-targets
 install (FILES "${CMAKE_CURRENT_BINARY_DIR}/${PDLFS_NAME}-config.cmake"
                "${CMAKE_CURRENT_BINARY_DIR}/${PDLFS_NAME}-config-version.cmake"
          DESTINATION ${pdlfs-pkg-loc} )
+install (FILES "../cmake/xpkg-import.cmake" "../cmake/FindRADOS.cmake"
+         DESTINATION ${pdlfs-pkg-loc})
 install (DIRECTORY ../include/pdlfs-common
          DESTINATION include
          FILES_MATCHING PATTERN "*.h")
@@ -237,7 +261,7 @@ install (FILES
 
 #
 # tests... we EXCLUDE_FROM_ALL the tests and add a custom target
-# "pdl-build-tests" to build tests (we prefix with "pdl-" since 
+# "pdl-build-tests" to build tests (we prefix with "pdl-" since
 # custom targets must be globally unique).   if the top-level
 # CMakeLists.txt calls enable_testing (), then you can "make pdl-build-tests"
 # and then "make test" (or run ctest directly).

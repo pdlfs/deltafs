@@ -16,10 +16,14 @@
 #define PDLFS_COMMON_VERSION "@PDLFS_COMMON_VERSION@"
 #define PDLFS_COMMON_LIBNAME "@PDLFS_NAME@"
 
+#cmakedefine PDLFS_MARGO_RPC
 #cmakedefine PDLFS_MERCURY_RPC
 #cmakedefine PDLFS_RADOS
 
-#ifdef PDLFS_MERCURY_RPC
+#ifdef PDLFS_MARGO_RPC
+#define MARGO   /* XXXCDC: backward compat hack */
+#endif
+#if defined(PDLFS_MERCURY_RPC) || defined(PDLFS_MARGO_RPC)
 #define MERCURY   /* XXXCDC: backward compat hack */
 #endif
 #ifdef PDLFS_RADOS

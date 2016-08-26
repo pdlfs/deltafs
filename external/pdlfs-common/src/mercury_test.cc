@@ -16,6 +16,9 @@
 namespace pdlfs {
 namespace rpc {
 
+// True if multiple client threads can call RPC simultaneously
+static const bool kAllowConcurrentRPC = true;
+
 class MercuryServer : public If {
  public:
   MercuryServer() {
@@ -30,7 +33,7 @@ class MercuryServer : public If {
     bool listen = true;
     rpc_ = new MercuryRPC(listen, options);
     looper_ = new MercuryRPC::LocalLooper(rpc_, options);
-    self_ = new MercuryRPC::Client(rpc_, "bmi+tcp://localhost:10101");
+    self_ = new MercuryRPC::Client(rpc_, "bmi+tcp://127.0.0.1:10101");
     looper_->Start();
     rpc_->Ref();
   }
@@ -78,7 +81,13 @@ class MercuryTest {
       input.op = rnd.Uniform(128);
       input.err = rnd.Uniform(128);
       If::Message output;
+      if (!kAllowConcurrentRPC) {
+        mu_.Lock();
+      }
       server_->self_->Call(input, output);
+      if (!kAllowConcurrentRPC) {
+        mu_.Unlock();
+      }
       ASSERT_EQ(input.contents, output.contents);
       ASSERT_EQ(input.op, output.op);
       ASSERT_EQ(input.err, output.err);

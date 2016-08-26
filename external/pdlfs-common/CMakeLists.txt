@@ -32,6 +32,7 @@
 #   -DPDLFS_COMMON_LIBNAME=pdlfs-common    -- name for binary lib files
 #
 # pdlfs-common config compile time options flags:
+#   -DPDLFS_MARGO_RPC=ON                   -- compile in margo rpc code
 #   -DPDLFS_MERCURY_RPC=ON                 -- compile in mercury rpc code
 #   -DPDLFS_RADOS=ON                       -- compile in RADOS env
 #     - RADOS_INCLUDE_DIR: optional hint for finding rado/librados.h
@@ -70,14 +71,20 @@ set (PDLFS_OS "${CMAKE_SYSTEM_NAME}" CACHE
 #
 set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
      "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include (xpkg-import)
 
 if (PDLFS_MERCURY_RPC)
     find_package(mercury CONFIG REQUIRED)
-    message ("-- mercury enabled")
+    message ("-- mercury rpc enabled")
+endif ()
+
+if (PDLFS_MARGO_RPC)
+    xpkg_import_module (margo REQUIRED margo)
+    message ("-- margo rpc enabled")
 endif ()
 
 if (PDLFS_RADOS)
-    find_package(Rados MODULE REQUIRED)
+    find_package(RADOS MODULE REQUIRED)
     if (NOT RADOS_FOUND)
         message (FATAL_ERROR
         "-- rados not found try setting -D RADOS_{INCLUDE,LIBRARY}_DIR")

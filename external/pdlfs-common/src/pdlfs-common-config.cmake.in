@@ -1,14 +1,32 @@
+#
+# pdlfs-common-config.cmake.in
+#
 
+#
+# PDLFS_REQUIRED_PACKAGES: pkg depends to find with find_dependency()
+# PLDFS_REQUIRED_XPKGIMPORTS: pkg depends to find with xpkg_import_module()
+# PDLFS_EXTRA_COMPONENTS: compiled-in features (w/o any external depends)
+#
 set (PDLFS_REQUIRED_PACKAGES "@PDLFS_REQUIRED_PACKAGES@")
+set (PDLFS_REQUIRED_XPKGIMPORTS "@PDLFS_REQUIRED_XPKGIMPORTS@")
 set (PDLFS_EXTRA_COMPONENTS "@PDLFS_EXTRA_COMPONENTS@")
 
-set (PDLFS_ALL_COMPONENTS ${PDLFS_REQUIRED_PACKAGES} 
+set (PDLFS_ALL_COMPONENTS ${PDLFS_REQUIRED_PACKAGES}
+                          ${PDLFS_REQUIRED_XPKGIMPORTS}
                           ${PDLFS_EXTRA_COMPONENTS})
 
+# adjust module path to make it easy to pick up files from the config directory
+set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_LIST_DIR}")
+
 include (CMakeFindDependencyMacro)
+include (xpkg-import)
 
 foreach (lcv ${PDLFS_REQUIRED_PACKAGES})
     find_dependency (${lcv})
+endforeach ()
+
+foreach (lcv ${PDLFS_REQUIRED_XPKGIMPORTS})
+    xpkg_import_module (${lcv} REQUIRED ${lcv})
 endforeach ()
 
 # XXX: as long as we hide mercury behind our API we don't need to worry
