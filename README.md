@@ -69,6 +69,22 @@ After all software dependencies are installed, please use the following to build
 sh ./dev/rebuild_project.sh
 ```
 
+## Local testing
+
+To test Deltafs on a local machine using the local file system to store file system metadata and file data, we can run two Deltafs server instances and then use a Deltafs shell to access the namespace.
+
+```
+mpirun -n 2 ./build/deltafs_server -logtostderr
+```
+
+This will start two Deltafs server instances that store file system metadata in /tmp/deltafs_outputs and file data in /tmp/deltafs_data. Please remove these two folders if they exist before running Deltafs. The two Deltafs server instances will begin listening on tcp port 10101 and 10102.
+
+```
+./build/deltafs_shell -logtostderr -DMetadataSrvAddrs=127.0.0.1:10101;127.0.0.1:10102
+```
+
+This will start a Deltafs shell and instruct it to connect to Deltafs servers we previously started. Currently, this is just a simple shell that allows us to create directories, copy files from the local file system to Deltafs, and cat files in Deltafs.
+
 # Deltafs app
 
 Currently, applications have to explicitly link Deltafs (include/deltafs_api.h) in order to use Deltafs. Alternatively, Deltafs may be implicitly called by preloading fs calls made by an application and redirecting these calls to Deltafs. We have developped one such library and it is available here, https://github.com/pdlfs/pdlfs-preload. 
