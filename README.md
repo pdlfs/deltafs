@@ -48,13 +48,20 @@ sudo apt-get install -y librados-dev ceph
 
 Deltafs requires an RPC library to communicate among distributed Deltafs client and server instances. Currently, we use [Mercury](https://mercury-hpc.github.io/) and Mercury itself supports multiple network backends, such as MPI, bmi on tcp, and cci on a variety of underlying network abstractions including verbs, tcp, sock, and raw eth.
 
-Please follow online Merury [documentation](https://github.com/mercury-hpc/mercury) to install Mercury and one of its backends. To start, we suggest bmi as the network backend.
+Please follow online Merury [documentation](https://github.com/mercury-hpc/mercury) to install Mercury and one of its backends. To start, we suggest using bmi as the network backend.
+
+Both the Mercury and bmi odebase are linked by Deltafs as git submodules. Compiling Mercury may also require the installation of openpa.
+
+```
+git submodule update --init deps/bmi
+git submodule update --init deps/mercury
+git submodule update --init deps/openpa
+```
 
 # Building
 
 After all software dependencies are installed, please use the following to build Deltafs.
 
 ```
-make -f ./dev/Makefile
+sh ./dev/rebuild_project.sh
 ```
-
