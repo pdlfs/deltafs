@@ -35,10 +35,11 @@ sudo apt-get install -y autoconf automake libtool
 sudo apt-get install -y cmake cmake-curses-gui
 sudo apt-get install -y libmpich2-dev mpich
 ```
+## Object store
 
 Deltafs assumes an underlying object storage service to store file system metadata and file data. This underlying object store may just be a shared parallel file system such as Lustre, GPFS, PanFS, and HDFS. However, a scalable object storage service is suggested to ensure optimal performance and currently Deltafs supports Rados.
 
-## Rados
+### Rados
 
 On Ubuntu (14.04+), rados can be installed directly through apt-get.
 
@@ -46,11 +47,13 @@ On Ubuntu (14.04+), rados can be installed directly through apt-get.
 sudo apt-get install -y librados-dev ceph
 ```
 
+## RPC
+
 Deltafs requires an RPC library to communicate among distributed Deltafs client and server instances. Currently, we use [Mercury](https://mercury-hpc.github.io/) and Mercury itself supports multiple network backends, such as MPI, bmi on tcp, and cci on a variety of underlying network abstractions including verbs, tcp, sock, and raw eth.
 
-Please follow online Merury [documentation](https://github.com/mercury-hpc/mercury) to install Mercury and one of its backends. To start, we suggest using bmi as the network backend.
+### Mercury
 
-Both the Mercury and bmi odebase are linked by Deltafs as git submodules. Compiling Mercury may also require the installation of openpa.
+Please follow online Merury [documentation](https://github.com/mercury-hpc/mercury) to install Mercury and one of its backends. To start, we suggest using bmi as the network backend. Both the Mercury and bmi codebase are linked by Deltafs as git submodules. Compiling Mercury may also require the installation of openpa.
 
 ```
 git submodule update --init deps/bmi
@@ -65,3 +68,7 @@ After all software dependencies are installed, please use the following to build
 ```
 sh ./dev/rebuild_project.sh
 ```
+
+# Deltafs app
+
+Currently, applications have to explicitly link Deltafs (include/deltafs_api.h) in order to use Deltafs. Alternatively, Deltafs may be implicitly called by preloading fs calls made by an application and redirecting these calls to Deltafs. We have developped one such library and it is available here, https://github.com/pdlfs/pdlfs-preload. 
