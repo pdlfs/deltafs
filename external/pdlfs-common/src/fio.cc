@@ -13,6 +13,7 @@
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/rados/rados_ld.h"
+#include "pdlfs-common/strutil.h"
 
 #if defined(PDLFS_PLATFORM_POSIX)
 #include "posix_fio.h"
@@ -21,6 +22,25 @@
 namespace pdlfs {
 
 Fio::~Fio() {}
+
+static std::string FetchRoot(const Slice& conf_str) {
+  std::string root = "/tmp/deltafs_data";
+  std::vector<std::string> confs;
+  SplitString(conf_str, ';', &confs);
+  for (size_t i = 0; i < confs.size(); i++) {
+    Slice input = confs[i];
+    if (input.size() != 0) {
+      if (input.starts_with("root=")) {
+        input.remove_prefix(5);
+        root = input.ToString();
+      }
+    }
+  }
+#if VERBOSE >= 2
+  Verbose(__LOG_ARGS__, 2, "fio.posix.root -> %s", root.c_str());
+#endif
+  return root;
+}
 
 Fio* Fio::Open(const Slice& fio_name, const Slice& fio_conf) {
   assert(fio_name.size() != 0);
@@ -35,7 +55,7 @@ Fio* Fio::Open(const Slice& fio_name, const Slice& fio_conf) {
 #endif
   if (fio_name == "posix") {
 #if defined(PDLFS_PLATFORM_POSIX)
-    return new PosixFio("/tmp/deltafs_data");  // XXX: Hard coded
+    return new PosixFio(FetchRoot(fio_conf));
 #else
     return NULL;
 #endif
