@@ -135,7 +135,7 @@ Status Client::Fopen(const Slice& path, int flags, int mode, FileInfo* info) {
     }
 #if VERBOSE >= 10
     if (s.ok()) {
-      Verbose(__LOG_ARGS__, 10, "open (%s) -> ino=%llu", path.c_str(),
+      Verbose(__LOG_ARGS__, 10, "open: %s -> ino=%llu", path.c_str(),
               (long long unsigned)fentry.stat.InodeNo());
     }
 #endif

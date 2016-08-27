@@ -26,10 +26,10 @@ class PosixFio : public Fio {
   static std::string ToFileName(const Slice& encoding) {
     Slice key_prefix = Fentry::ExtractUntypedKeyPrefix(encoding);
     char tmp[200];
-    int n = snprintf(tmp, sizeof(tmp), "F_");
-    char* p = tmp + n;
+    sprintf(tmp, "F_");
+    char* p = tmp + 2;
     for (size_t i = 0; i < key_prefix.size(); i++) {
-      snprintf(p, sizeof(tmp) - (p - tmp), "%02x", (unsigned)key_prefix[i]);
+      sprintf(p, "%02X", key_prefix[i]);
       p += 2;
     }
     return tmp;
@@ -53,7 +53,14 @@ class PosixFio : public Fio {
     } else {
       s = IOError(fname, errno);
     }
-
+#if VERBOSE >= 10
+    Slice encoding = fentry;
+    Fentry ent;
+    if (s.ok() && ent.DecodeFrom(&encoding)) {
+      Verbose(__LOG_ARGS__, 10, "fio_creat: ino=%llu -> %s",
+              (long long unsigned)ent.stat.InodeNo(), fname.c_str());
+    }
+#endif
     return s;
   }
 
@@ -84,7 +91,14 @@ class PosixFio : public Fio {
     } else {
       s = IOError(fname, errno);
     }
-
+#if VERBOSE >= 10
+    Slice encoding = fentry;
+    Fentry ent;
+    if (s.ok() && ent.DecodeFrom(&encoding)) {
+      Verbose(__LOG_ARGS__, 10, "fio_open: ino=%llu -> %s",
+              (long long unsigned)ent.stat.InodeNo(), fname.c_str());
+    }
+#endif
     return s;
   }
 
