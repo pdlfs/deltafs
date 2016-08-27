@@ -167,22 +167,24 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
   for (; p != NULL; p = strchr(input.data(), '/')) {
     const char* q = input.data();
     input.remove_prefix(p - q + 1);
-    result->depth++;
-    LookupHandle* lh = NULL;
     Slice name = Slice(q, p - q);
-    s = Lookup(result->pid, name, result->zserver, result->lease_due, &lh);
-    if (s.ok()) {
-      assert(lh != NULL);
-      LookupStat* stat = lookup_cache_->Value(lh);
-      assert(stat != NULL);
-      result->pid = DirId(stat->RegId(), stat->SnapId(), stat->InodeNo());
-      result->zserver = stat->ZerothServer();
-      if (stat->LeaseDue() < result->lease_due) {
-        result->lease_due = stat->LeaseDue();
+    if (!name.empty()) {
+      result->depth++;
+      LookupHandle* lh = NULL;
+      s = Lookup(result->pid, name, result->zserver, result->lease_due, &lh);
+      if (s.ok()) {
+        assert(lh != NULL);
+        LookupStat* stat = lookup_cache_->Value(lh);
+        assert(stat != NULL);
+        result->pid = DirId(stat->RegId(), stat->SnapId(), stat->InodeNo());
+        result->zserver = stat->ZerothServer();
+        if (stat->LeaseDue() < result->lease_due) {
+          result->lease_due = stat->LeaseDue();
+        }
+        lookup_cache_->Release(lh);
+      } else {
+        break;
       }
-      lookup_cache_->Release(lh);
-    } else {
-      break;
     }
   }
 
