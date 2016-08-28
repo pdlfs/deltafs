@@ -136,7 +136,7 @@ Status Client::Fopen(const Slice& path, int flags, int mode, FileInfo* info) {
 
 #if VERBOSE >= 10
     if (s.ok()) {
-      Verbose(__LOG_ARGS__, 10, "open: %s -> reg=%llu, snap=%llu, ino=%llu",
+      Verbose(__LOG_ARGS__, 10, "deltafs_open: %s -> [%llu:%llu:%llu]",
               path.c_str(), (unsigned long long)fentry.stat.RegId(),
               (unsigned long long)fentry.stat.SnapId(),
               (unsigned long long)fentry.stat.InodeNo());

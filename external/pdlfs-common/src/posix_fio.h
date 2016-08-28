@@ -59,7 +59,7 @@ class PosixFio : public Fio {
       Slice encoding = fentry;
       Fentry ent;
       if (ent.DecodeFrom(&encoding)) {
-        Verbose(__LOG_ARGS__, 10, "creat: reg=%llu, snap=%llu, ino=%llu -> %s",
+        Verbose(__LOG_ARGS__, 10, "posix_creat: [%llu:%llu:%llu] -> %s",
                 (unsigned long long)ent.stat.RegId(),
                 (unsigned long long)ent.stat.SnapId(),
                 (unsigned long long)ent.stat.InodeNo(), fname.c_str());
@@ -103,7 +103,7 @@ class PosixFio : public Fio {
       Slice encoding = fentry;
       Fentry ent;
       if (ent.DecodeFrom(&encoding)) {
-        Verbose(__LOG_ARGS__, 10, "open: reg=%llu, snap=%llu, ino=%llu -> %s",
+        Verbose(__LOG_ARGS__, 10, "posix_open: [%llu:%llu:%llu] -> %s",
                 (unsigned long long)ent.stat.RegId(),
                 (unsigned long long)ent.stat.SnapId(),
                 (unsigned long long)ent.stat.InodeNo(), fname.c_str());
