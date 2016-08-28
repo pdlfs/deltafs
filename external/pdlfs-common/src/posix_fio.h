@@ -29,7 +29,7 @@ class PosixFio : public Fio {
     sprintf(tmp, "F_");
     char* p = tmp + 2;
     for (size_t i = 0; i < key_prefix.size(); i++) {
-      sprintf(p, "%02X", key_prefix[i]);
+      sprintf(p, "%02X", (unsigned char)key_prefix[i]);
       p += 2;
     }
     return tmp;
@@ -53,14 +53,20 @@ class PosixFio : public Fio {
     } else {
       s = IOError(fname, errno);
     }
+
 #if VERBOSE >= 10
-    Slice encoding = fentry;
-    Fentry ent;
-    if (s.ok() && ent.DecodeFrom(&encoding)) {
-      Verbose(__LOG_ARGS__, 10, "fio_creat: ino=%llu -> %s",
-              (long long unsigned)ent.stat.InodeNo(), fname.c_str());
+    if (s.ok()) {
+      Slice encoding = fentry;
+      Fentry ent;
+      if (ent.DecodeFrom(&encoding)) {
+        Verbose(__LOG_ARGS__, 10, "creat: reg=%llu, snap=%llu, ino=%llu -> %s",
+                (unsigned long long)ent.stat.RegId(),
+                (unsigned long long)ent.stat.SnapId(),
+                (unsigned long long)ent.stat.InodeNo(), fname.c_str());
+      }
     }
 #endif
+
     return s;
   }
 
@@ -91,14 +97,20 @@ class PosixFio : public Fio {
     } else {
       s = IOError(fname, errno);
     }
+
 #if VERBOSE >= 10
-    Slice encoding = fentry;
-    Fentry ent;
-    if (s.ok() && ent.DecodeFrom(&encoding)) {
-      Verbose(__LOG_ARGS__, 10, "fio_open: ino=%llu -> %s",
-              (long long unsigned)ent.stat.InodeNo(), fname.c_str());
+    if (s.ok()) {
+      Slice encoding = fentry;
+      Fentry ent;
+      if (ent.DecodeFrom(&encoding)) {
+        Verbose(__LOG_ARGS__, 10, "open: reg=%llu, snap=%llu, ino=%llu -> %s",
+                (unsigned long long)ent.stat.RegId(),
+                (unsigned long long)ent.stat.SnapId(),
+                (unsigned long long)ent.stat.InodeNo(), fname.c_str());
+      }
     }
 #endif
+
     return s;
   }
 

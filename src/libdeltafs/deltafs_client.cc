@@ -133,12 +133,16 @@ Status Client::Fopen(const Slice& path, int flags, int mode, FileInfo* info) {
     } else {
       s = mdscli_->Fstat(path, &fentry);
     }
+
 #if VERBOSE >= 10
     if (s.ok()) {
-      Verbose(__LOG_ARGS__, 10, "open: %s -> ino=%llu", path.c_str(),
-              (long long unsigned)fentry.stat.InodeNo());
+      Verbose(__LOG_ARGS__, 10, "open: %s -> reg=%llu, snap=%llu, ino=%llu",
+              path.c_str(), (unsigned long long)fentry.stat.RegId(),
+              (unsigned long long)fentry.stat.SnapId(),
+              (unsigned long long)fentry.stat.InodeNo());
     }
 #endif
+
     Fio::Handle* fh = NULL;
     uint64_t mtime = fentry.stat.ModifyTime();
     uint64_t size = fentry.stat.FileSize();
