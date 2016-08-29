@@ -42,7 +42,8 @@ static void HandleSignal(int signal) {
 
 int main(int argc, char* argv[]) {
 #if defined(PDLFS_WITH_MPI)
-  int r = MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, NULL);
+  int ignored_return;
+  int r = MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &ignored_return);
   if (r == MPI_SUCCESS) {
     r = MPI_Comm_rank(MPI_COMM_WORLD, &srv_id);
     if (r == MPI_SUCCESS) {
