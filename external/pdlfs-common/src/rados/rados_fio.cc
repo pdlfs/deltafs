@@ -18,10 +18,10 @@ namespace rados {
 static std::string ToOid(const Slice& encoding) {
   Slice key_prefix = Fentry::ExtractUntypedKeyPrefix(encoding);
   char tmp[200];
-  int n = snprintf(tmp, sizeof(tmp), "f-");
-  char* p = tmp + n;
+  sprintf(tmp, "o_");
+  char* p = tmp + 2;
   for (size_t i = 0; i < key_prefix.size(); i++) {
-    snprintf(p, sizeof(tmp) - (p - tmp), "%02X", (unsigned)key_prefix[i]);
+    sprintf(p, "%02x", (unsigned char)key_prefix[i]);
     p += 2;
   }
   return tmp;
