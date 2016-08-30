@@ -69,6 +69,8 @@ static void SetErrno(const pdlfs::Status& s) {
     errno = EACCES;
   } else if (s.IsReadOnly()) {
     errno = EROFS;
+  } else if (s.IsNotSupported()) {
+    errno = EPERM;
   } else if (!s.ok()) {
     errno = EIO;  // TODO: map more error types
   }

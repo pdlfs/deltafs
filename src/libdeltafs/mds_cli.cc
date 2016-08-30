@@ -201,25 +201,29 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path);
   if (s.ok()) {
-    IndexHandle* idxh = NULL;
-    s = FetchIndex(path.pid, path.zserver, &idxh);
-    if (s.ok()) {
-      assert(idxh != NULL);
-      IndexGuard idxg(index_cache_, idxh);
-      FstatOptions options;
-      options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
-      options.session_id = session_id_;
-      options.dir_id = path.pid;
-      options.name_hash = DirIndex::Hash(path.name, tmp);
-      if (paranoid_checks_) options.name = path.name;
-      FstatRet ret;
-      s = DoFstat(index_cache_->Value(idxh), options, &ret);
+    if (path.depth == 0) {
+      s = Status::NotSupported(Slice());  // XXX: FIXME
+    } else {
+      IndexHandle* idxh = NULL;
+      s = FetchIndex(path.pid, path.zserver, &idxh);
       if (s.ok()) {
-        if (ent != NULL) {
-          ent->pid = path.pid;
-          ent->nhash = options.name_hash.ToString();
-          ent->zserver = path.zserver;
-          ent->stat = ret.stat;
+        assert(idxh != NULL);
+        IndexGuard idxg(index_cache_, idxh);
+        FstatOptions options;
+        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.session_id = session_id_;
+        options.dir_id = path.pid;
+        options.name_hash = DirIndex::Hash(path.name, tmp);
+        if (paranoid_checks_) options.name = path.name;
+        FstatRet ret;
+        s = DoFstat(index_cache_->Value(idxh), options, &ret);
+        if (s.ok()) {
+          if (ent != NULL) {
+            ent->pid = path.pid;
+            ent->nhash = options.name_hash.ToString();
+            ent->zserver = path.zserver;
+            ent->stat = ret.stat;
+          }
         }
       }
     }
@@ -279,29 +283,33 @@ Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, int mode,
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path);
   if (s.ok()) {
-    IndexHandle* idxh = NULL;
-    s = FetchIndex(path.pid, path.zserver, &idxh);
-    if (s.ok()) {
-      assert(idxh != NULL);
-      IndexGuard idxg(index_cache_, idxh);
-      FcreatOptions options;
-      options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
-      options.session_id = session_id_;
-      options.dir_id = path.pid;
-      options.flags = error_if_exists ? O_EXCL : 0;
-      options.mode = mode;
-      options.uid = uid_;
-      options.gid = gid_;
-      options.name_hash = DirIndex::Hash(path.name, tmp);
-      options.name = path.name;
-      FcreatRet ret;
-      s = DoFcreat(index_cache_->Value(idxh), options, &ret);
+    if (path.depth == 0) {
+      s = Status::AlreadyExists(Slice());
+    } else {
+      IndexHandle* idxh = NULL;
+      s = FetchIndex(path.pid, path.zserver, &idxh);
       if (s.ok()) {
-        if (ent != NULL) {
-          ent->pid = path.pid;
-          ent->nhash = options.name_hash.ToString();
-          ent->zserver = path.zserver;
-          ent->stat = ret.stat;
+        assert(idxh != NULL);
+        IndexGuard idxg(index_cache_, idxh);
+        FcreatOptions options;
+        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.session_id = session_id_;
+        options.dir_id = path.pid;
+        options.flags = error_if_exists ? O_EXCL : 0;
+        options.mode = mode;
+        options.uid = uid_;
+        options.gid = gid_;
+        options.name_hash = DirIndex::Hash(path.name, tmp);
+        options.name = path.name;
+        FcreatRet ret;
+        s = DoFcreat(index_cache_->Value(idxh), options, &ret);
+        if (s.ok()) {
+          if (ent != NULL) {
+            ent->pid = path.pid;
+            ent->nhash = options.name_hash.ToString();
+            ent->zserver = path.zserver;
+            ent->stat = ret.stat;
+          }
         }
       }
     }
@@ -368,28 +376,32 @@ Status MDS::CLI::Mkdir(const Slice& p, int mode, Fentry* ent) {
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path);
   if (s.ok()) {
-    IndexHandle* idxh = NULL;
-    s = FetchIndex(path.pid, path.zserver, &idxh);
-    if (s.ok()) {
-      assert(idxh != NULL);
-      IndexGuard idxg(index_cache_, idxh);
-      MkdirOptions options;
-      options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
-      options.session_id = session_id_;
-      options.dir_id = path.pid;
-      options.mode = mode;
-      options.uid = uid_;
-      options.gid = gid_;
-      options.name_hash = DirIndex::Hash(path.name, tmp);
-      options.name = path.name;
-      MkdirRet ret;
-      s = DoMkdir(index_cache_->Value(idxh), options, &ret);
+    if (path.depth == 0) {
+      s = Status::AlreadyExists(Slice());
+    } else {
+      IndexHandle* idxh = NULL;
+      s = FetchIndex(path.pid, path.zserver, &idxh);
       if (s.ok()) {
-        if (ent != NULL) {
-          ent->pid = path.pid;
-          ent->nhash = options.name_hash.ToString();
-          ent->zserver = path.zserver;
-          ent->stat = ret.stat;
+        assert(idxh != NULL);
+        IndexGuard idxg(index_cache_, idxh);
+        MkdirOptions options;
+        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.session_id = session_id_;
+        options.dir_id = path.pid;
+        options.mode = mode;
+        options.uid = uid_;
+        options.gid = gid_;
+        options.name_hash = DirIndex::Hash(path.name, tmp);
+        options.name = path.name;
+        MkdirRet ret;
+        s = DoMkdir(index_cache_->Value(idxh), options, &ret);
+        if (s.ok()) {
+          if (ent != NULL) {
+            ent->pid = path.pid;
+            ent->nhash = options.name_hash.ToString();
+            ent->zserver = path.zserver;
+            ent->stat = ret.stat;
+          }
         }
       }
     }
@@ -456,26 +468,30 @@ Status MDS::CLI::Chmod(const Slice& p, int mode, Fentry* ent) {
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path);
   if (s.ok()) {
-    IndexHandle* idxh = NULL;
-    s = FetchIndex(path.pid, path.zserver, &idxh);
-    if (s.ok()) {
-      assert(idxh != NULL);
-      IndexGuard idxg(index_cache_, idxh);
-      ChmodOptions options;
-      options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
-      options.session_id = session_id_;
-      options.dir_id = path.pid;
-      options.mode = mode;
-      options.name_hash = DirIndex::Hash(path.name, tmp);
-      if (paranoid_checks_) options.name = path.name;
-      ChmodRet ret;
-      s = DoChmod(index_cache_->Value(idxh), options, &ret);
+    if (path.depth == 0) {
+      s = Status::NotSupported(Slice());  // XXX: FIXME
+    } else {
+      IndexHandle* idxh = NULL;
+      s = FetchIndex(path.pid, path.zserver, &idxh);
       if (s.ok()) {
-        if (ent != NULL) {
-          ent->pid = path.pid;
-          ent->nhash = options.name_hash.ToString();
-          ent->zserver = path.zserver;
-          ent->stat = ret.stat;
+        assert(idxh != NULL);
+        IndexGuard idxg(index_cache_, idxh);
+        ChmodOptions options;
+        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.session_id = session_id_;
+        options.dir_id = path.pid;
+        options.mode = mode;
+        options.name_hash = DirIndex::Hash(path.name, tmp);
+        if (paranoid_checks_) options.name = path.name;
+        ChmodRet ret;
+        s = DoChmod(index_cache_->Value(idxh), options, &ret);
+        if (s.ok()) {
+          if (ent != NULL) {
+            ent->pid = path.pid;
+            ent->nhash = options.name_hash.ToString();
+            ent->zserver = path.zserver;
+            ent->stat = ret.stat;
+          }
         }
       }
     }
