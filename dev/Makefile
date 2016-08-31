@@ -26,6 +26,37 @@ $(shell CC="$(CC)" CXX="$(CXX)" TARGET_OS="$(TARGET_OS)" \
 include build_config.mk
 
 TESTS = \
+	external/pdlfs-common/src/arena_test \
+	external/pdlfs-common/src/blkdb_test \
+	external/pdlfs-common/src/coding_test \
+	external/pdlfs-common/src/crc32c_test \
+	external/pdlfs-common/src/dbfiles_test \
+	external/pdlfs-common/src/hash_test \
+	external/pdlfs-common/src/cache_test \
+	external/pdlfs-common/src/log_test \
+	external/pdlfs-common/src/env_test \
+	external/pdlfs-common/src/osd_test \
+	external/pdlfs-common/src/gigaplus_test \
+	external/pdlfs-common/src/fstypes_test \
+	external/pdlfs-common/src/margo_test \
+	external/pdlfs-common/src/mercury_test \
+	external/pdlfs-common/src/strutil_test \
+	external/pdlfs-common/src/leveldb/bloom_test \
+	external/pdlfs-common/src/leveldb/filter_block_test \
+	external/pdlfs-common/src/leveldb/skiplist_test \
+	external/pdlfs-common/src/leveldb/table_test \
+	external/pdlfs-common/src/leveldb/db/write_batch_test \
+	external/pdlfs-common/src/leveldb/db/version_edit_test \
+	external/pdlfs-common/src/leveldb/db/version_set_test \
+	external/pdlfs-common/src/leveldb/db/dbformat_test \
+	external/pdlfs-common/src/leveldb/db/db_test \
+	external/pdlfs-common/src/leveldb/db/db_table_test \
+	external/pdlfs-common/src/leveldb/db/autocompact_test \
+	external/pdlfs-common/src/leveldb/db/corruption_test \
+	external/pdlfs-common/src/leveldb/db/bulk_test \
+	external/pdlfs-common/src/leveldb/db/readonly_test \
+	external/pdlfs-common/src/rados/rados_env_test \
+	external/pdlfs-common/src/rados/rados_fio_test \
 	src/libdeltafs/mds_api_test \
 	src/libdeltafs/mds_srv_test
 
@@ -174,6 +205,99 @@ $(STATIC_OUTDIR)/deltafs_shell:src/cmds/deltafs_shell.cc $(STATIC_LIBOBJECTS) $(
 
 $(STATIC_OUTDIR)/deltafs_server:src/server/deltafs_server.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/server/deltafs_server.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/arena_test:external/pdlfs-common/src/arena_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/arena_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/blkdb_test:external/pdlfs-common/src/blkdb_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/blkdb_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/coding_test:external/pdlfs-common/src/coding_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/coding_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/crc32c_test:external/pdlfs-common/src/crc32c_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/crc32c_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/dbfiles_test:external/pdlfs-common/src/dbfiles_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/dbfiles_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/hash_test:external/pdlfs-common/src/hash_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/hash_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/cache_test:external/pdlfs-common/src/cache_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/cache_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/log_test:external/pdlfs-common/src/log_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/log_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/env_test:external/pdlfs-common/src/env_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/env_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/osd_test:external/pdlfs-common/src/osd_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/osd_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/gigaplus_test:external/pdlfs-common/src/gigaplus_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/gigaplus_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/fstypes_test:external/pdlfs-common/src/fstypes_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/fstypes_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/margo_test:external/pdlfs-common/src/margo_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/margo_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/mercury_test:external/pdlfs-common/src/mercury_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/mercury_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/strutil_test:external/pdlfs-common/src/strutil_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/strutil_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/bloom_test:external/pdlfs-common/src/leveldb/bloom_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/bloom_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/filter_block_test:external/pdlfs-common/src/leveldb/filter_block_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/filter_block_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/skiplist_test:external/pdlfs-common/src/leveldb/skiplist_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/skiplist_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/table_test:external/pdlfs-common/src/leveldb/table_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/table_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/write_batch_test:external/pdlfs-common/src/leveldb/db/write_batch_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/db/write_batch_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/version_edit_test:external/pdlfs-common/src/leveldb/db/version_edit_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/db/version_edit_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/version_set_test:external/pdlfs-common/src/leveldb/db/version_set_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/db/version_set_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/dbformat_test:external/pdlfs-common/src/leveldb/db/dbformat_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/db/dbformat_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/db_test:external/pdlfs-common/src/leveldb/db/db_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/db/db_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/db_table_test:external/pdlfs-common/src/leveldb/db/db_table_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/db/db_table_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/corruption_test:external/pdlfs-common/src/leveldb/db/corruption_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/db/corruption_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/autocompact_test:external/pdlfs-common/src/leveldb/db/autocompact_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/db/autocompact_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/bulk_test:external/pdlfs-common/src/leveldb/db/bulk_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/db/bulk_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/readonly_test:external/pdlfs-common/src/leveldb/db/readonly_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/leveldb/db/readonly_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/rados_env_test:external/pdlfs-common/src/rados/rados_env_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/rados/rados_env_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/rados_fio_test:external/pdlfs-common/src/rados/rados_fio_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) external/pdlfs-common/src/rados/rados_fio_test.cc $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/mds_api_test:src/libdeltafs/mds_api_test.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/libdeltafs/mds_api_test.cc $(STATIC_LIBOBJECTS) $(STATIC_PDLFS_COMMON_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
