@@ -10,13 +10,13 @@ Please see the accompanying COPYING file for license details.
   * Serverless design featuring zero dedicated metadata servers, no global file system namespace, and no ground truth.
   * Client-funded metadata service harnessing compute nodes to handle metadata and achieve highly agile scalability.
   * Freedom from unjustified synchronization among HPC applications that do not need to use the file system to communicate.
-  * Write-optimized LSM-based metadata representation with file system namespace snapshots as the basis of interjob data sharing and workflow execution.
+  * Write-optimized LSM-based metadata representation with file system namespace snapshots as the basis of inter-job data sharing and workflow execution.
   * A file system as no more than a thin service composed by each application at runtime to provide a temporary view of a private namespace backed by a stack of immutable snapshots and a collection of shared data objects.
   * Simplified data center storage consisting of multiple independent underlying object stores, providing flat namespaces of data objects, and oblivious of file system semantics.
 
 # Platform
 
-Deltafs supports Linux, Mac, and most UNIX platforms for development and local testing. To run Deltafs, we currently assume it is always Linux. Deltafs is mainly written by C++. C++11 is not required to compile and run Deltafs, but is used when the compiler supports it.
+Deltafs supports Linux, Mac, and most UNIX platforms for development and local testing. To run Deltafs, we currently assume it is always a Linux box. Deltafs is mainly written by C++. C++11 is not required to compile Deltafs code, but will be used when the compiler supports it.
 
 # Documentation
 
@@ -24,24 +24,24 @@ Not ready now but here is a short paper [deltafs_pdsw15]( http://www.cs.cmu.edu/
 
 # Software requirements
 
-Compiling and running Deltafs requires recent versions of a C++ compiler, cmake, mpi, snappy, glog, and gflags. Compiling Deltafs requirements usually requires recent versions of autoconf, automake, and libtool.
+Compiling and running Deltafs requires recent versions of C++ compiler, cmake, mpi, snappy, glog, and gflags. Compiling Deltafs requirements usually require recent versions of autoconf, automake, and libtool.
 
-On Ubuntu (14.04+), use the following to prepare the envrionment for Deltafs.
+On Ubuntu 14.04 LTS, please use the following to prepare the envrionment for Deltafs.
 
 ```
 sudo apt-get install -y gcc g++ make pkg-config
 sudo apt-get install -y libsnappy-dev libgflags-dev libgoogle-glog-dev
 sudo apt-get install -y autoconf automake libtool
 sudo apt-get install -y cmake cmake-curses-gui
-sudo apt-get install -y libmpich2-dev mpich
+sudo apt-get install -y libmpich-dev mpich
 ```
 ## Object store
 
-Deltafs assumes an underlying object storage service to store file system metadata and file data. This underlying object store may just be a shared parallel file system such as Lustre, GPFS, PanFS, and HDFS. However, a scalable object storage service is suggested to ensure optimal performance and currently Deltafs supports Rados.
+Deltafs assumes an underlying object storage service to store file system metadata and file data. This underlying object store may just be a shared parallel file system such as Lustre, GPFS, PanFS, and HDFS. However, a scalable object storage service is suggested to ensure high performance and currently Deltafs supports Rados.
 
 ### Rados
 
-On Ubuntu (14.04+), rados can be installed directly through apt-get.
+On Ubuntu 14.04 LTS, rados may be installed directly through apt-get.
 
 ```
 sudo apt-get install -y librados-dev ceph
@@ -49,11 +49,11 @@ sudo apt-get install -y librados-dev ceph
 
 ## RPC
 
-Deltafs requires an RPC library to communicate among distributed Deltafs client and server instances. Currently, we use [Mercury](https://mercury-hpc.github.io/) and Mercury itself supports multiple network backends, such as MPI, bmi on tcp, and cci on a variety of underlying network abstractions including verbs, tcp, sock, and raw eth.
+Distributed deltafs instances requires an RPC library to communicate with each other. Currently, we use [Mercury](https://mercury-hpc.github.io/) and Mercury itself supports multiple network backends, such as MPI, bmi on tcp, and cci on a variety of underlying network abstractions including verbs, tcp, sock, and raw eth.
 
 ### Mercury
 
-Please follow online Merury [documentation](https://github.com/mercury-hpc/mercury) to install Mercury and one of its backends. To start, we suggest using bmi as the network backend. Both the Mercury and bmi codebase are linked by Deltafs as git submodules. Compiling Mercury may also require the installation of openpa.
+Please follow online Merury [documentation](https://github.com/mercury-hpc/mercury) to install Mercury and one or more of its backends. To start, we suggest using bmi as the network backend. Both the Mercury and bmi codebase are linked by Deltafs as git submodules. Compiling Mercury may also require the installation of openpa.
 
 ```
 git submodule update --init deps/bmi
@@ -87,4 +87,4 @@ This will start a Deltafs shell and instruct it to connect to Deltafs servers we
 
 # Deltafs app
 
-Currently, applications have to explicitly link Deltafs (include/deltafs_api.h) in order to use Deltafs. Alternatively, Deltafs may be implicitly called by preloading fs calls made by an application and redirecting these calls to Deltafs. We have developped one such library and it is available here, https://github.com/pdlfs/pdlfs-preload. 
+Currently, applications have to explicitly link to Deltafs user libbrary (include/deltafs_api.h) in order to call Deltafs. Alternatively, Deltafs may be implicitly invoked by preloading fs calls made by an application and redirecting them to Deltafs. We have developped one such library and it is available here, https://github.com/pdlfs/pdlfs-preload. 
