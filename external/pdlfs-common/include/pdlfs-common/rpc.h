@@ -61,8 +61,10 @@ class RPC {
   // are thread-safe so that no explicit synchronization is needed
   // to make RPC calls.
   static RPC* Open(const RPCOptions&);
+
   // The result should be deleted when it is no longer needed.
   virtual rpc::If* OpenClientFor(const std::string& addr) = 0;
+  virtual Status status() const { return Status::OK(); }
 
   // RPC implementation must not use the caller thread to process
   // RPC events. Instead, one or more background looping threads should
@@ -86,6 +88,7 @@ class RPCServer {
   };
 
  public:
+  Status status() const;
   Status Start();
   Status Stop();
 

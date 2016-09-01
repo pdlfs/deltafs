@@ -55,10 +55,24 @@ void RPCServer::AddChannel(const std::string& listening_uri, int workers) {
   rpcs_.push_back(info);
 }
 
+Status RPCServer::status() const {
+  Status s;
+  std::vector<RPCInfo>::const_iterator it;
+  for (it = rpcs_.begin(); it != rpcs_.end(); ++it) {
+    assert(it->rpc != NULL);
+    s = it->rpc->status();
+    if (!s.ok()) {
+      break;
+    }
+  }
+  return s;
+}
+
 Status RPCServer::Start() {
   Status s;
   std::vector<RPCInfo>::iterator it;
   for (it = rpcs_.begin(); it != rpcs_.end(); ++it) {
+    assert(it->rpc != NULL);
     s = it->rpc->Start();
     if (!s.ok()) {
       break;
@@ -71,6 +85,7 @@ Status RPCServer::Stop() {
   Status s;
   std::vector<RPCInfo>::iterator it;
   for (it = rpcs_.begin(); it != rpcs_.end(); ++it) {
+    assert(it->rpc != NULL);
     s = it->rpc->Stop();
     if (!s.ok()) {
       break;
@@ -113,6 +128,7 @@ class MercuryRPCImpl : public RPC {
   MercuryRPC* rpc_;
 
  public:
+  virtual Status status() const { return looper_->status(); }
   virtual Status Start() { return looper_->Start(); }
   virtual Status Stop() { return looper_->Stop(); }
 
