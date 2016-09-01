@@ -130,6 +130,7 @@ class MercuryRPC::LocalLooper {
   int bg_loops_;
   int bg_id_;
 
+  Status status_;
   // Constant after construction
   bool ignore_rpc_error_;  // Keep looping even if we receive rpc errors
   int max_bg_loops_;
@@ -142,6 +143,8 @@ class MercuryRPC::LocalLooper {
   }
 
  public:
+  Status status() const { return status_; }
+
   LocalLooper(MercuryRPC* rpc, const RPCOptions& options)
       : shutting_down_(NULL),
         bg_cv_(&mutex_),
@@ -163,7 +166,6 @@ class MercuryRPC::LocalLooper {
   Status Start() {
     mutex_.Lock();
     while (bg_loops_ < max_bg_loops_) {
-      assert(bg_loops_ >= 0);
       bg_loops_++;
       rpc_->env_->StartThread(BGLoopWrapper, this);
     }
