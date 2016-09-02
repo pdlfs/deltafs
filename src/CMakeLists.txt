@@ -4,5 +4,6 @@
 #
 
 add_subdirectory (libdeltafs)
+add_subdirectory (cmds)
 add_subdirectory (server)
 
