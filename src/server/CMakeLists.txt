@@ -70,15 +70,9 @@ install (TARGETS deltafs-srvr
          RUNTIME DESTINATION bin)
 
 #
-# tests... we EXCLUDE_FROM_ALL the tests and add a custom target
-# "pdl-build-tests" to build tests (we prefix with "pdl-" since
-# custom targets must be globally unique).   if the top-level
-# CMakeLists.txt calls enable_testing (), then you can "make pdl-build-tests"
-# and then "make test" (or run ctest directly).
+# tests... we EXCLUDE_FROM_ALL the tests and use pdlfs-common's
+# pdl-build-tests target for building.
 #
-if (NOT TARGET pdl-build-tests)           # can only define it once
-    add_custom_target (pdl-build-tests)
-endif ()
 foreach (lcv ${deltafs-all-tests})
 
     # need a test name... use regex to extract the file basename into ${id}
