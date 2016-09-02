@@ -10,7 +10,6 @@
 
 # configure/load in standard modules we plan to use
 include (CMakePackageConfigHelpers)
-include (CheckCXXCompilerFlag)
 set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set (THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package (Threads REQUIRED)
@@ -63,16 +62,8 @@ set_target_properties(deltafs
 
 #
 # here's the compiler/machine/os dependent stuff...
+# this likely isn't that useful (carryover from leveldb)
 #
-
-set (deltafs-try-common-flags -Wpedantic -Wno-long-long -Wall
-                              -Wno-sign-compare -pthread)
-foreach (lcv ${deltafs-try-common-flags})
-    CHECK_CXX_COMPILER_FLAG (${lcv} flag${lcv})
-    if (${flag${lcv}})
-        target_compile_options (deltafs PRIVATE ${lcv})
-    endif ()
-endforeach ()
 
 # "-pthread" should take care of all thread related options.
 # but if we don't have it, fall back to -D_REENTRANT
