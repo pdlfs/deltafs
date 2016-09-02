@@ -55,6 +55,12 @@ enable_testing ()
 add_definitions (-DDELTAFS)
 set (PDLFS_COMMON_LIBNAME "deltafs-common")
 
+if (NOT CMAKE_BUILD_TYPE)
+    set (CMAKE_BUILD_TYPE Release
+         CACHE STRING "Choose the type of build." FORCE)
+    set_property (CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS 
+                  "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
+endif ()
 set (CMAKE_PREFIX_PATH "" CACHE STRING "External dependencies path")
 set (BUILD_SHARED_LIBS "OFF" CACHE BOOL "Build a shared library")
 set (BUILD_TESTS "OFF" CACHE BOOL "Build test programs")
