@@ -267,7 +267,11 @@ install (FILES
 # and then "make test" (or run ctest directly).
 #
 if (NOT TARGET pdl-build-tests)           # can only define it once
-    add_custom_target (pdl-build-tests)
+    if (BUILD_TESTS)
+        add_custom_target (pdl-build-tests ALL)
+    else ()
+        add_custom_target (pdl-build-tests)
+    endif ()
 endif ()
 foreach (lcv ${pdlfs-all-tests})
 

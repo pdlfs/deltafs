@@ -53,18 +53,20 @@ find_package(PkgConfig REQUIRED)
 #   xpkg_import_module(Avahi::GObject REQUIRED avahi-gobject)
 #
 function(xpkg_import_module name)
-    # put results of pkg_check_modules in "_" namespace by prepending "_"
-    set(prefix _${name})
-    pkg_check_modules("${prefix}" ${ARGN})
+    if (NOT TARGET ${name})
+        # put results of pkg_check_modules in "_" namespace by prepending "_"
+        set(prefix _${name})
+        pkg_check_modules("${prefix}" ${ARGN})
 
-    _xpkg_import_module_add_imported_target(
-        ${name}
-        "${${prefix}_CFLAGS_OTHER}"
-        "${${prefix}_INCLUDE_DIRS}"
-        "${${prefix}_LIBRARY_DIRS}"
-        "${${prefix}_LIBRARIES}"
-        "${${prefix}_STATIC_LIBRARIES}"
-        )
+        _xpkg_import_module_add_imported_target(
+            ${name}
+            "${${prefix}_CFLAGS_OTHER}"
+            "${${prefix}_INCLUDE_DIRS}"
+            "${${prefix}_LIBRARY_DIRS}"
+            "${${prefix}_LIBRARIES}"
+            "${${prefix}_STATIC_LIBRARIES}"
+            )
+    endif ()
 endfunction()
 
 #
@@ -121,6 +123,7 @@ function(_xpkg_import_module_find_libraries output_var prefix library_names libr
         # variable name for each library that we look for.
         set(library_path_var "${prefix}_LIBRARY_${libname}")
         find_library(${library_path_var} ${libname} PATHS ${library_dirs})
+        mark_as_advanced (${library_path_var})
         list(APPEND library_paths "${${library_path_var}}")
     endforeach()
     set(${output_var} ${library_paths} PARENT_SCOPE)

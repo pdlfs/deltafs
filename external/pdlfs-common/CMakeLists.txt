@@ -62,9 +62,19 @@ set (CMAKE_MACOSX_RPATH 1)
 
 enable_testing ()
 
+set (CMAKE_PREFIX_PATH "" CACHE STRING "External dependencies path")
+set (BUILD_SHARED_LIBS "OFF" CACHE BOOL "Build a shared library")
+set (BUILD_TESTS "OFF" CACHE BOOL "Build test programs")
+
 set (PDLFS_PLATFORM "POSIX" CACHE STRING "Select platform (e.g. POSIX)")
 set (PDLFS_OS "${CMAKE_SYSTEM_NAME}" CACHE 
               STRING "Select operating system (uname -s)")
+set (PDLFS_MARGO_RPC "OFF" CACHE
+     BOOL "Compile in Margo/abt-snoozer/argobots RPC interface")
+set (PDLFS_MERCURY_RPC "OFF" CACHE
+     BOOL "Compile in Mercury RPC interface")
+set (PDLFS_RADOS "OFF" CACHE
+     BOOL "Compile in RADOS object store")
 
 #
 # external packages
