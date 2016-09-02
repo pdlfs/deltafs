@@ -63,7 +63,7 @@ Status MetadataServer::Dispose() {
   return s;
 }
 
-Status MetadataServer::RunTillInterruption() {
+Status MetadataServer::RunTillInterruptionOrError() {
   Status s;
   MutexLock ml(&mutex_);
   if (!running_ && rpc_ != NULL) {
@@ -72,11 +72,18 @@ Status MetadataServer::RunTillInterruption() {
     if (s.ok()) {
       running_ = true;
       while (!interrupted_.Acquire_Load()) {
-        cv_.Wait();
+        const uint64_t seconds = 5;
+        cv_.TimedWait(seconds * 1000 * 1000);
+        if (rpc_ != NULL) {
+          s = rpc_->status();
+          if (!s.ok()) {
+            break;
+          }
+        }
       }
       if (rpc_ != NULL) {
         Info(__LOG_ARGS__, "Deltafs is shutting down ...");
-        s = rpc_->Stop();
+        rpc_->Stop();
       }
     }
     if (running_) {

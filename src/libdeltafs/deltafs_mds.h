@@ -23,7 +23,7 @@ class MetadataServer {
   ~MetadataServer();
   Status Dispose();
 
-  Status RunTillInterruption();
+  Status RunTillInterruptionOrError();
   void Interrupt();
 
  private:

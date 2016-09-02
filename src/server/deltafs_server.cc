@@ -36,11 +36,18 @@ static void Shutdown() {
 static void HandleSignal(int signal) {
   if (signal == SIGINT) {
     pdlfs::Info(__LOG_ARGS__, "SIGINT received");
+    Shutdown();
   }
-  Shutdown();
 }
 
 int main(int argc, char* argv[]) {
+#if defined(GFLAGS)
+  google::ParseCommandLineFlags(&argc, &argv, true);
+#endif
+#if defined(GLOG)
+  google::InitGoogleLogging(argv[0]);
+  google::InstallFailureSignalHandler();
+#endif
 #if defined(PDLFS_WITH_MPI)
   int ignored_return;
   int r = MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &ignored_return);
@@ -51,29 +58,22 @@ int main(int argc, char* argv[]) {
     }
     MPI_Finalize();  // MPI no longer needed
   }
-  if (r != MPI_SUCCESS) {
-    fprintf(stderr, "MPI initialization failed");
-    abort();
-  } else {
+  if (r == MPI_SUCCESS) {
     char tmp[20];
     snprintf(tmp, sizeof(tmp), "%d", srv_id);
-    setenv("DELTAFS_InstanceId", tmp, 0);  // Do not override
+    setenv("DELTAFS_InstanceId", tmp, 0);
     snprintf(tmp, sizeof(tmp), "%d", num_srvs);
-    setenv("DELTAFS_NumOfMetadataSrvs", tmp, 0);  // Do not override
+    setenv("DELTAFS_NumOfMetadataSrvs", tmp, 0);
+  } else {
+    fprintf(stderr, "MPI_init failed\n");
+    abort();
   }
-#endif
-#if defined(GFLAGS)
-  google::ParseCommandLineFlags(&argc, &argv, true);
-#endif
-#if defined(GLOG)
-  google::InitGoogleLogging(argv[0]);
-  google::InstallFailureSignalHandler();
 #endif
   pdlfs::Info(__LOG_ARGS__, "Deltafs is initializing ...");
   pdlfs::Status s = pdlfs::MetadataServer::Open(&srv);
   if (s.ok()) {
     signal(SIGINT, HandleSignal);
-    s = srv->RunTillInterruption();
+    s = srv->RunTillInterruptionOrError();
     srv->Dispose();
   }
   delete srv;
