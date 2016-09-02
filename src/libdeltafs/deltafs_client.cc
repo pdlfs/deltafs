@@ -106,6 +106,21 @@ void Client::Unref(File* f) {
   }
 }
 
+static Status SanitizePath(Slice* input, std::string* scratch) {
+  if (input->size() > 1 && (*input)[input->size() - 1] == '/') {
+    scratch->assign(input->c_str(), input->size() - 1);
+    while (scratch->size() > 1 && (*scratch)[scratch->size() - 1] == '/') {
+      scratch->resize(scratch->size() - 1);
+    }
+    *input = *scratch;
+  }
+  if (input->empty() || (*input)[0] != '/') {
+    return Status::InvalidArgument(Slice());
+  } else {
+    return Status::OK();
+  }
+}
+
 // Open a file for I/O operations. Return OK on success.
 // If O_CREAT is specified and the file does not exist, it will be created.
 // If both O_CREAT and O_EXCL are specified and the file exists,
@@ -118,8 +133,15 @@ void Client::Unref(File* f) {
 // Only a fixed amount of file can be opened simultaneously.
 // It is also possible that a process may open a same file multiple times
 // and obtain multiple file descriptors.
-Status Client::Fopen(const Slice& path, int flags, int mode, FileInfo* info) {
+Status Client::Fopen(const Slice& p, int flags, int mode, FileInfo* info) {
   Status s;
+  Slice path = p;
+  std::string tmp;
+  s = SanitizePath(&path, &tmp);
+  if (!s.ok()) {
+    return s;
+  }
+
   MutexLock ml(&mutex_);
   if (num_open_fds_ >= max_open_fds_) {
     s = Status::TooManyOpens(Slice());
@@ -462,32 +484,52 @@ Status Client::Close(int fd) {
   }
 }
 
-Status Client::Getattr(const Slice& path, Stat* statbuf) {
+Status Client::Getattr(const Slice& p, Stat* statbuf) {
   Status s;
-  Fentry ent;
-  s = mdscli_->Fstat(path, &ent);
+  Slice path = p;
+  std::string tmp;
+  s = SanitizePath(&path, &tmp);
   if (s.ok()) {
-    *statbuf = ent.stat;
+    Fentry ent;
+    s = mdscli_->Fstat(path, &ent);
+    if (s.ok()) {
+      *statbuf = ent.stat;
+    }
   }
   return s;
 }
 
-Status Client::Mkfile(const Slice& path, int mode) {
+Status Client::Mkfile(const Slice& p, int mode) {
   Status s;
-  const bool error_if_exists = true;
-  s = mdscli_->Fcreat(path, error_if_exists, mode, NULL);
+  Slice path = p;
+  std::string tmp;
+  s = SanitizePath(&path, &tmp);
+  if (s.ok()) {
+    const bool error_if_exists = true;
+    s = mdscli_->Fcreat(path, error_if_exists, mode, NULL);
+  }
   return s;
 }
 
-Status Client::Mkdir(const Slice& path, int mode) {
+Status Client::Mkdir(const Slice& p, int mode) {
   Status s;
-  s = mdscli_->Mkdir(path, mode, NULL);
+  Slice path = p;
+  std::string tmp;
+  s = SanitizePath(&path, &tmp);
+  if (s.ok()) {
+    s = mdscli_->Mkdir(path, mode, NULL);
+  }
   return s;
 }
 
-Status Client::Chmod(const Slice& path, int mode) {
+Status Client::Chmod(const Slice& p, int mode) {
   Status s;
-  s = mdscli_->Chmod(path, mode, NULL);
+  Slice path = p;
+  std::string tmp;
+  s = SanitizePath(&path, &tmp);
+  if (s.ok()) {
+    s = mdscli_->Chmod(path, mode, NULL);
+  }
   return s;
 }
 

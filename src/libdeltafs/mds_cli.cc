@@ -163,9 +163,9 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
   input.remove_prefix(1);
   result->depth++;
   assert(!input.ends_with("/"));
-  const char* p = strchr(input.data(), '/');
-  for (; p != NULL; p = strchr(input.data(), '/')) {
-    const char* q = input.data();
+  const char* p = strchr(input.c_str(), '/');
+  for (; p != NULL; p = strchr(input.c_str(), '/')) {
+    const char* q = input.c_str();
     input.remove_prefix(p - q + 1);
     Slice name = Slice(q, p - q);
     if (!name.empty()) {
