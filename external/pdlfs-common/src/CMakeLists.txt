@@ -54,6 +54,10 @@ include (CheckCXXCompilerFlag)
 
 set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set (THREADS_PREFER_PTHREAD_FLAG TRUE)
+
+# XXX: cmake 3.1 and newer define a Threads::Threads imported target
+# that we should switch too when we are ready to require 3.1 or better.
+# (3.1 was released late 2014)
 find_package (Threads REQUIRED)
 
 if (TARGET margo AND PDLFS_MARGO_RPC)
@@ -160,6 +164,19 @@ set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-leveldb-tests}
                      ${pdlfs-rados-tests})
 
 #
+# additional compiler flags to be applied for this directory
+# (must come before any add_library/add_executable calls)
+#
+set (pdlfs-try-common-flags -Wpedantic -Wno-long-long -Wall
+                            -Wno-sign-compare -pthread)
+foreach (lcv ${pdlfs-try-common-flags})
+    CHECK_CXX_COMPILER_FLAG (${lcv} flag${lcv})
+    if (${flag${lcv}})
+        add_compile_options (${lcv})     # directory property
+    endif ()
+endforeach ()
+
+#
 # create the library target (user can specify shared vs. static
 # using BUILD_SHARED_LIBS).   arrange for users of our lib to
 # get the correct -Is for our include directories.  (for building
@@ -198,15 +215,7 @@ if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
     endif ()
 endif ()
 
-set (pdlfs-try-common-flags -Wpedantic -Wno-long-long -Wall
-                            -Wno-sign-compare -pthread)
-foreach (lcv ${pdlfs-try-common-flags})
-    CHECK_CXX_COMPILER_FLAG (${lcv} flag${lcv})
-    if (${flag${lcv}})
-        target_compile_options (pdlfs-common PRIVATE ${lcv})
-    endif ()
-endforeach ()
-
+# we checked for "-pthread" earlier (before add_library).
 # "-pthread" should take care of all thread related options.
 # but if we don't have it, fall back to -D_REENTRANT
 if (NOT flag-pthread)
