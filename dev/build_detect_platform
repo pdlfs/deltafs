@@ -156,12 +156,19 @@ if [ "$CROSS_COMPILE" = "true" ]; then
 else
     CXXOUTPUT="${TMPDIR}/deltafs_build_detect_platform.$$"
 
-    # Add -std=c++0x if that works
-    $CXX $CXXFLAGS -std=c++0x -x c++ - -o $CXXOUTPUT 2>/dev/null  <<EOF
+    # Add -std=c++11 or -std=c++0x if either one works
+    $CXX $CXXFLAGS -std=c++11 -x c++ - -o $CXXOUTPUT 2>/dev/null  <<EOF
       int main() {}
 EOF
     if [ "$?" = 0 ]; then
-        PLATFORM_CXXFLAGS="-std=c++0x"
+        PLATFORM_CXXFLAGS="-std=c++11"
+    else
+        $CXX $CXXFLAGS -std=c++0x -x c++ - -o $CXXOUTPUT 2>/dev/null  <<EOF
+          int main() {}
+EOF
+        if [ "$?" = 0 ]; then
+            PLATFORM_CXXFLAGS="-std=c++0x"
+        fi
     fi
 
     # Test whether glog is installed
