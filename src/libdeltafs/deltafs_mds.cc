@@ -76,9 +76,10 @@ Status MetadataServer::RunTillInterruptionOrError() {
         cv_.TimedWait(seconds * 1000 * 1000);
         if (rpc_ != NULL) {
           s = rpc_->status();
-          if (!s.ok()) {
-            break;
-          }
+        }
+        Info(__LOG_ARGS__, "Deltafs status: %s", s.ToString().c_str());
+        if (!s.ok()) {
+          break;
         }
       }
       if (rpc_ != NULL) {
