@@ -238,7 +238,7 @@ EOF
 
     # If MPI has been installed, build deltafs with it
     $MPICXX $CXXFLAGS -x c++ - -o $CXXOUTPUT 2>/dev/null <<EOF
-      #include <mpi/mpi.h>
+      #include <mpi.h>
       int main() {}
 EOF
     if [ "$?" = 0 ]; then

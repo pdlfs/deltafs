@@ -10,7 +10,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #if defined(PDLFS_WITH_MPI)
-#include <mpi/mpi.h>
+#include <mpi.h>
 #endif
 
 #include "../libdeltafs/deltafs_mds.h"
