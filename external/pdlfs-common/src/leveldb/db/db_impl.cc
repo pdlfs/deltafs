@@ -302,15 +302,17 @@ void DBImpl::DeleteObsoleteFiles() {
 
 Status DBImpl::Recover(VersionEdit* edit) {
   mutex_.AssertHeld();
-
+  Status s;
   // Ignore error from CreateDir since the creation of the DB is
   // committed only when the descriptor is created, and this directory
   // may already exist from a previous failed creation attempt.
   env_->CreateDir(dbname_);
   assert(db_lock_ == NULL);
-  Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
-  if (!s.ok()) {
-    return s;
+  if (!options_.skip_lock_file) {
+    s = env_->LockFile(LockFileName(dbname_), &db_lock_);
+    if (!s.ok()) {
+      return s;
+    }
   }
 
   if (!env_->FileExists(CurrentFileName(dbname_))) {

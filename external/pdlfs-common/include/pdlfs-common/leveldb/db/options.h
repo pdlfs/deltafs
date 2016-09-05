@@ -152,6 +152,11 @@ struct DBOptions {
   // Default: false
   bool gc_skip_deletion;
 
+  // Set to true to skip the use of an exclusive LOCK file that protects
+  // the DB from concurrent accesses from other processes.
+  // Default: false
+  bool skip_lock_file;
+
   // If true, no background compaction will be performed except for
   // those triggered by MemTable dumps.
   // All Tables will stay in Level-0 forever.

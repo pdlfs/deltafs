@@ -33,6 +33,7 @@ DBOptions::DBOptions()
       compression(kSnappyCompression),
       filter_policy(NULL),
       gc_skip_deletion(false),
+      skip_lock_file(false),
       disable_compaction(false),
       disable_seek_compaction(false),
       table_file_size(2 * 1048576),
