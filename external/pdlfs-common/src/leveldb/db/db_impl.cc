@@ -297,7 +297,9 @@ void DBImpl::DeleteObsoleteFiles() {
         Log(options_.info_log, "Drop type=%d #%lld\n", int(type),
             static_cast<unsigned long long>(number));
         if (!options_.gc_skip_deletion) {
-          env_->DeleteFile(dbname_ + "/" + filenames[i]);
+          std::string f = dbname_ + "/" + filenames[i];
+          Log(options_.info_log, "Delete %s", f.c_str());
+          env_->DeleteFile(f);
         }
       }
     }

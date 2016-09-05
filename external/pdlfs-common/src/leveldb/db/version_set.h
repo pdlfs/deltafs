@@ -192,7 +192,8 @@ class VersionSet {
   // REQUIRES: no other thread concurrently calls LogAndApply()
   Status LogAndApply(VersionEdit* edit, port::Mutex* mu);
 
-  // Recover the last saved descriptor from persistent storage.
+  // Recover the last saved descriptor from a set of candidates in the
+  // persistent storage and determine the next descriptor number.
   Status Recover();
 
   // Return the current version.
