@@ -211,15 +211,19 @@ class DBImpl : public DB {
   CompactionStats stats_[config::kNumLevels];
 
   // No copying allowed
-  DBImpl(const DBImpl&);
   void operator=(const DBImpl&);
+  DBImpl(const DBImpl&);
 
   const Comparator* user_comparator() const {
     return internal_comparator_.user_comparator();
   }
+
   bool BeforeUserLimit(const Slice& ikey, const Slice& limit) {
-    if (limit.empty()) return true;
-    return user_comparator()->Compare(ExtractUserKey(ikey), limit) < 0;
+    if (!limit.empty()) {
+      return user_comparator()->Compare(ExtractUserKey(ikey), limit) < 0;
+    } else {
+      return true;
+    }
   }
 };
 

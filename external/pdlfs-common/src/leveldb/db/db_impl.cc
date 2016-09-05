@@ -188,7 +188,9 @@ Status DBImpl::NewDB() {
   new_db.SetNextFile(4);
   new_db.SetLastSequence(0);
 
-  const uint64_t dscfile_number = 3;
+  // Descriptor numbers begin with 3 if we are not set to use
+  // odd/even MANIFEST files.
+  uint64_t dscfile_number = options_.rotating_manifest ? 1 : 3;
   const std::string manifest = DescriptorFileName(dbname_, dscfile_number);
   WritableFile* file;
   Status s = env_->NewWritableFile(manifest, &file);
@@ -206,8 +208,10 @@ Status DBImpl::NewDB() {
   }
   delete file;
   if (s.ok()) {
-    // Make "CURRENT" file that points to the new manifest file.
-    s = SetCurrentFile(env_, dbname_, dscfile_number);
+    if (!options_.rotating_manifest) {
+      // Make "CURRENT" file that points to the new manifest file.
+      s = SetCurrentFile(env_, dbname_, dscfile_number);
+    }
   } else {
     env_->DeleteFile(manifest);
   }
@@ -315,20 +319,20 @@ Status DBImpl::Recover(VersionEdit* edit) {
     }
   }
 
-  if (!env_->FileExists(CurrentFileName(dbname_))) {
+  if (!env_->FileExists(DescriptorFileName(dbname_, 1)) &&
+      !env_->FileExists(DescriptorFileName(dbname_, 2)) &&
+      !env_->FileExists(CurrentFileName(dbname_))) {
     if (options_.create_if_missing) {
       s = NewDB();
       if (!s.ok()) {
         return s;
       }
     } else {
-      return Status::InvalidArgument(
-          dbname_, "does not exist (create_if_missing is false)");
+      return Status::InvalidArgument(dbname_, "does not exist");
     }
   } else {
     if (options_.error_if_exists) {
-      return Status::InvalidArgument(dbname_,
-                                     "exists (error_if_exists is true)");
+      return Status::InvalidArgument(dbname_, "exists");
     }
   }
 

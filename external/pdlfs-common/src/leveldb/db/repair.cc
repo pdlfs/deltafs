@@ -60,7 +60,7 @@ class Repairer {
         owns_info_log_(options_.info_log != options.info_log),
         owns_cache_(options_.block_cache != options.block_cache),
         owns_table_cache_(options_.table_cache != options.table_cache),
-        next_file_number_(1) {
+        next_file_number_(4) {
     table_cache_ = new TableCache(dbname_, &options_, options_.table_cache);
     if (options_.info_log == Logger::Default()) {
       owns_info_log_ = false;
@@ -375,7 +375,8 @@ class Repairer {
   }
 
   Status WriteDescriptor() {
-    std::string tmp = TempFileName(dbname_, 1);
+    const uint64_t dsc_number = 3;
+    std::string tmp = TempFileName(dbname_, dsc_number);
     WritableFile* file;
     Status status = env_->NewWritableFile(tmp, &file);
     if (!status.ok()) {
@@ -422,9 +423,9 @@ class Repairer {
       }
 
       // Install new manifest
-      status = env_->RenameFile(tmp, DescriptorFileName(dbname_, 1));
+      status = env_->RenameFile(tmp, DescriptorFileName(dbname_, dsc_number));
       if (status.ok()) {
-        status = SetCurrentFile(env_, dbname_, 1);
+        status = SetCurrentFile(env_, dbname_, 3);
       } else {
         env_->DeleteFile(tmp);
       }

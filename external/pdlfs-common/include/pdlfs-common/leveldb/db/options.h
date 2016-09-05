@@ -157,6 +157,11 @@ struct DBOptions {
   // Default: false
   bool skip_lock_file;
 
+  // Set to true to avoid the use of "CURRENT" and instead the DB will assume
+  // odd/even MANIFEST files.
+  // Default: false
+  bool rotating_manifest;
+
   // If true, no background compaction will be performed except for
   // those triggered by MemTable dumps.
   // All Tables will stay in Level-0 forever.
