@@ -148,6 +148,10 @@ struct DBOptions {
   // -------------------
   // Dangerous zone - parameters for experts
 
+  // Set to true to skip garbage collection at the end of each compaction run.
+  // Default: false
+  bool gc_skip_deletion;
+
   // If true, no background compaction will be performed except for
   // those triggered by MemTable dumps.
   // All Tables will stay in Level-0 forever.

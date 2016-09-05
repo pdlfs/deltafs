@@ -290,9 +290,11 @@ void DBImpl::DeleteObsoleteFiles() {
         if (type == kTableFile) {
           table_cache_->Evict(number);
         }
-        Log(options_.info_log, "Delete type=%d #%lld\n", int(type),
+        Log(options_.info_log, "Drop type=%d #%lld\n", int(type),
             static_cast<unsigned long long>(number));
-        env_->DeleteFile(dbname_ + "/" + filenames[i]);
+        if (!options_.gc_skip_deletion) {
+          env_->DeleteFile(dbname_ + "/" + filenames[i]);
+        }
       }
     }
   }
