@@ -63,37 +63,43 @@ Status ReadonlyDBImpl::Load() {
   }
 
   env_->AttachDir(dbname_);
-  // Read "CURRENT" file, which contains a pointer to the current manifest file
-  std::string current;
-  Status s = ReadFileToString(env_, CurrentFileName(dbname_), &current);
-  if (!s.ok()) {
-    return s;
-  }
-  if (current.empty() || current[current.size() - 1] != '\n') {
-    return Status::Corruption("CURRENT file does not end with newline");
-  }
-  current.resize(current.size() - 1);
-
-  assert(logfile_ == NULL);
-  std::string fname = dbname_ + "/" + current;
-  s = env_->NewSequentialFile(fname, &logfile_);
-  if (!s.ok()) {
-    return s;
-  }
-
-  log_ =
-      new log::Reader(logfile_, NULL, true /*checksum*/, 0 /*initial_offset*/);
-  Slice record;
-  std::string scratch;
-  while (log_->ReadRecord(&record, &scratch) && s.ok()) {
-    VersionEdit edit;
-    s = edit.DecodeFrom(record);
-    if (s.ok()) {
-      s = versions_->ForeighApply(&edit);
+  std::string fname;
+  if (env_->FileExists(DescriptorFileName(dbname_, 1))) {
+    fname = DescriptorFileName(dbname_, 1);
+  } else if (env_->FileExists(DescriptorFileName(dbname_, 2))) {
+    fname = DescriptorFileName(dbname_, 2);
+  } else {
+    // Use "CURRENT" file to obtain the current manifest file
+    std::string current;
+    Status s = ReadFileToString(env_, CurrentFileName(dbname_), &current);
+    if (s.ok() && !current.empty()) {
+      if (current[current.size() - 1] == '\n') {
+        current.resize(current.size() - 1);
+        fname = dbname_ + "/" + current;
+      }
     }
   }
 
-  return s;
+  if (fname.empty()) {
+    return Status::Corruption(dbname_, "no valid manifest available");
+  } else {
+    assert(logfile_ == NULL);
+    Status s = env_->NewSequentialFile(fname, &logfile_);
+    if (s.ok()) {
+      log_ = new log::Reader(logfile_, NULL, true /*checksum*/,
+                             0 /*initial_offset*/);
+      Slice record;
+      std::string scratch;
+      while (log_->ReadRecord(&record, &scratch) && s.ok()) {
+        VersionEdit edit;
+        s = edit.DecodeFrom(record);
+        if (s.ok()) {
+          s = versions_->ForeighApply(&edit);
+        }
+      }
+    }
+    return s;
+  }
 }
 
 Status ReadonlyDBImpl::Reload() {
