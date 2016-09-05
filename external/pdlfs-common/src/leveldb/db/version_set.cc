@@ -911,17 +911,25 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
         s = descriptor_file_->Sync();
       }
       if (!s.ok()) {
-        Log(options_->info_log, "MANIFEST write: %s\n", s.ToString().c_str());
+        Log(options_->info_log, "MANIFEST write: %s", s.ToString().c_str());
       }
     }
 
-    // If we just created a new descriptor file, install it by writing a
-    // new CURRENT file that points to it.
+    // If we just created a new descriptor file, install it by either writing a
+    // new CURRENT file that points to it or removing the alternative
+    // descriptor file to speedup the next recovery.
     if (s.ok() && !new_manifest_file.empty()) {
       if (!options_->rotating_manifest) {
         s = SetCurrentFile(env_, dbname_, manifest_file_number_);
       } else {
-        env_->DeleteFile(CurrentFileName(dbname_));
+        std::string names[2];
+        assert(manifest_file_number_ < 3);
+        names[0] = DescriptorFileName(dbname_, 3 - manifest_file_number_);
+        names[1] = CurrentFileName(dbname_);
+        for (size_t i = 0; i < 2; i++) {
+          Log(options_->info_log, "Delete %s", names[i].c_str());
+          env_->DeleteFile(names[i]);
+        }
       }
     }
 
