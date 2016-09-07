@@ -63,9 +63,12 @@ class Reader {
   // Undefined before the first call to ReadRecord.
   uint64_t LastRecordOffset();
 
+  // Install a new reporter. May use NULL to disable error reporting.
+  void SetReporter(Reporter* reporter);
+
  private:
   SequentialFile* const file_;
-  Reporter* const reporter_;
+  Reporter* reporter_;
   bool const checksum_;
   char* const backing_store_;
   Slice buffer_;

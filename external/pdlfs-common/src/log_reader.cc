@@ -187,6 +187,8 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch, bool clean_eof) {
   return false;
 }
 
+void Reader::SetReporter(Reporter* reporter) { reporter_ = reporter; }
+
 uint64_t Reader::LastRecordOffset() { return last_record_offset_; }
 
 void Reader::ReportCorruption(uint64_t bytes, const char* reason) {
