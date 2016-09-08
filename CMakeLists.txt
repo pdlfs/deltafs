@@ -61,6 +61,9 @@ if (NOT CMAKE_BUILD_TYPE)
     set_property (CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS 
                   "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
 endif ()
+set (DEBUG_SANITIZER Off CACHE STRING "Sanitizer for debug builds")
+set_property (CACHE DEBUG_SANITIZER PROPERTY STRINGS
+              "Off" "Address" "Thread")
 set (CMAKE_PREFIX_PATH "" CACHE STRING "External dependencies path")
 set (BUILD_SHARED_LIBS "OFF" CACHE BOOL "Build a shared library")
 set (BUILD_TESTS "OFF" CACHE BOOL "Build test programs")
@@ -97,6 +100,22 @@ if (PDLFS_RADOS)
         "-- rados not found try setting -D RADOS_{INCLUDE,LIBRARY}_DIR")
     endif ()
     message ("-- rados enabled")
+endif ()
+
+#
+# sanitizer config (XXX: does not probe compiler to see if sanitizer flags
+# are supported... )
+#
+set (as_flags "-fsanitize=address -O1 -fno-omit-frame-pointer")
+set (ts_flags "-fsanitize=thread  -O1 -fno-omit-frame-pointer")
+if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    if (${DEBUG_SANITIZER} STREQUAL "Address")
+        set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
+        set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
+    elseif (${DEBUG_SANITIZER} STREQUAL "Thread")
+        set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
+        set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
+    endif ()
 endif ()
 
 add_subdirectory (external/pdlfs-common/src)
