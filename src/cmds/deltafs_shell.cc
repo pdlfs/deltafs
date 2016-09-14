@@ -7,6 +7,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/pdlfs_config.h"
 #include "deltafs/deltafs_api.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/strutil.h"

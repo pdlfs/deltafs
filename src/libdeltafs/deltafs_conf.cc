@@ -9,6 +9,9 @@
 
 #include <stdlib.h>
 #include <string>
+
+#include "pdlfs-common/pdlfs_config.h"
+
 static std::string LoadFromEnv(const char* key) {
   const char* v = getenv(key);
   if (v == NULL) {
