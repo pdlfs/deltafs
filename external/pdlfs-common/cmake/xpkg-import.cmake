@@ -105,11 +105,21 @@ function(_xpkg_import_module_add_imported_target name compile_options include_di
         add_library(${name} SHARED IMPORTED)
     endif ()
 
+    #
+    # gen INTERFACE_LINK_LIBRARIES, it doesn't need the first entry on
+    # the list since that is already in ${imported_location}
+    #
+    set (if_link_libs ${libraries_full_paths})
+    list (LENGTH if_link_libs n_iflinks)
+    if (n_iflinks GREATER 0)
+        list (REMOVE_AT if_link_libs 0)   # remove item 0 from list
+    endif ()
+
     set_target_properties(${name} PROPERTIES
         IMPORTED_LOCATION ${imported_location}
         INTERFACE_COMPILE_OPTIONS "${compile_options}"
         INTERFACE_INCLUDE_DIRECTORIES "${include_dirs}"
-        INTERFACE_LINK_LIBRARIES "${libraries_full_paths}"
+        INTERFACE_LINK_LIBRARIES "${if_link_libs}"
         )
 endfunction()
 

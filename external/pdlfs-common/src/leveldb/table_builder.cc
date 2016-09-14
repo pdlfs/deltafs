@@ -8,6 +8,8 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/pdlfs_config.h"
+
 #include "block_builder.h"
 #include "filter_block.h"
 #include "format.h"

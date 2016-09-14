@@ -11,6 +11,8 @@
 #include <map>
 #include <string>
 
+#include "pdlfs-common/pdlfs_config.h"
+
 #include "../block.h"
 #include "../block_builder.h"
 #include "../format.h"

@@ -60,6 +60,16 @@ set (THREADS_PREFER_PTHREAD_FLAG TRUE)
 # (3.1 was released late 2014)
 find_package (Threads REQUIRED)
 
+if (TARGET gflags AND PDLFS_GFLAGS)
+    list (APPEND PDLFS_REQUIRED_PACKAGES GFlags)
+    list (APPEND pdlfs-xtra-libs gflags)
+endif ()
+
+if (TARGET libglog AND PDLFS_GLOG)
+    list (APPEND PDLFS_REQUIRED_XPKGIMPORTS libglog)
+    list (APPEND pdlfs-xtra-libs libglog)
+endif ()
+
 if (TARGET margo AND PDLFS_MARGO_RPC)
     list (APPEND PDLFS_REQUIRED_XPKGIMPORTS margo)  # for *-config.cmake
     list (APPEND pdlfs-xtra-libs margo)             # for build
@@ -76,6 +86,11 @@ endif ()
 if (TARGET rados AND PDLFS_RADOS)
     list (APPEND PDLFS_REQUIRED_PACKAGES RADOS)
     list (APPEND pdlfs-xtra-libs rados)
+endif ()
+
+if (TARGET snappy AND PDLFS_SNAPPY)
+    list (APPEND PDLFS_REQUIRED_PACKAGES Snappy)
+    list (APPEND pdlfs-xtra-libs snappy)
 endif ()
 
 #
@@ -259,6 +274,7 @@ install (FILES "${CMAKE_CURRENT_BINARY_DIR}/${PDLFS_NAME}-config.cmake"
                "${CMAKE_CURRENT_BINARY_DIR}/${PDLFS_NAME}-config-version.cmake"
          DESTINATION ${pdlfs-pkg-loc} )
 install (FILES "../cmake/xpkg-import.cmake" "../cmake/FindRADOS.cmake"
+         "../cmake/FindGFlags.cmake" "../cmake/FindSnappy.cmake"
          DESTINATION ${pdlfs-pkg-loc})
 install (DIRECTORY ../include/pdlfs-common
          DESTINATION include

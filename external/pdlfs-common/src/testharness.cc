@@ -10,6 +10,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/pdlfs_config.h"
 #if defined(GFLAGS)
 #include <gflags/gflags.h>
 #endif

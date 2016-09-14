@@ -16,10 +16,19 @@
 #define PDLFS_COMMON_VERSION "@PDLFS_COMMON_VERSION@"
 #define PDLFS_COMMON_LIBNAME "@PDLFS_NAME@"
 
+#cmakedefine PDLFS_GFLAGS
+#cmakedefine PDLFS_GLOG
 #cmakedefine PDLFS_MARGO_RPC
 #cmakedefine PDLFS_MERCURY_RPC
 #cmakedefine PDLFS_RADOS
+#cmakedefine PDLFS_SNAPPY
 
+#ifdef PDLFS_GFLAGS
+#define GFLAGS    /* XXXCDC: backward compat hack */
+#endif
+#ifdef PDLFS_GLOG
+#define GLOG    /* XXXCDC: backward compat hack */
+#endif
 #ifdef PDLFS_MARGO_RPC
 #define MARGO   /* XXXCDC: backward compat hack */
 #endif
@@ -28,4 +37,7 @@
 #endif
 #ifdef PDLFS_RADOS
 #define RADOS     /* XXXCDC: backward compat hack */
+#endif
+#ifdef PDLFS_SNAPPY
+#define SNAPPY     /* XXXCDC: backward compat hack */
 #endif
