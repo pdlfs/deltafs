@@ -25,11 +25,18 @@
 #      -DCMAKE_PREFIX_PATH='/dir1;/dir2;/dir3'
 #
 # config compile time options flags:
+#   -DPDLFS_GFLAGS=ON                      -- use gflags for arg parsing
+#     - GFLAGS_INCLUDE_DIR: optional hint for finding gflags/gflags.h
+#     - GFLAGS_LIBRARY_DIR: optional hint for finding gflags lib
+#   -DPDLFS_GLOG=ON                        -- use glog for logging
 #   -DPDLFS_MARGO_RPC=ON                   -- compile in margo rpc code
 #   -DPDLFS_MERCURY_RPC=ON                 -- compile in mercury rpc code
 #   -DPDLFS_RADOS=ON                       -- compile in RADOS env
 #     - RADOS_INCLUDE_DIR: optional hint for finding rado/librados.h
 #     - RADOS_LIBRARY_DIR: optional hint for finding rados lib
+#   -DPDLFS_SNAPPY=ON                      -- compile in snappy compression
+#     - SNAPPY_INCLUDE_DIR: optional hint for finding snappy.h
+#     - SNAPPY_LIBRARY_DIR: optional hint for finding snappy lib
 #
 #
 # note: package config files for external packages must be preinstalled in
@@ -69,12 +76,18 @@ set (BUILD_SHARED_LIBS "OFF" CACHE BOOL "Build a shared library")
 set (BUILD_TESTS "OFF" CACHE BOOL "Build test programs")
 
 # user hooks to configure pdlfs-common
+set (PDLFS_GFLAGS "OFF" CACHE
+     BOOL "Use GFLAGS (libgflags-dev) for arg parsing")
+set (PDLFS_GLOG "OFF" CACHE
+     BOOL "Use GLOG (libgoogle-glog-dev) for logging")
 set (PDLFS_MARGO_RPC "OFF" CACHE
      BOOL "Compile in Margo/abt-snoozer/argobots RPC interface")
 set (PDLFS_MERCURY_RPC "OFF" CACHE
      BOOL "Compile in Mercury RPC interface")
 set (PDLFS_RADOS "OFF" CACHE
      BOOL "Compile in RADOS object store")
+set (PDLFS_SNAPPY "OFF" CACHE
+     BOOL "Enable SNAPPY (libsnappy-dev) for compression")
 
 #
 # external packages
@@ -82,6 +95,20 @@ set (PDLFS_RADOS "OFF" CACHE
 set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
      "${CMAKE_CURRENT_SOURCE_DIR}/external/pdlfs-common/cmake")
 include (xpkg-import)
+
+if (PDLFS_GFLAGS)
+    find_package(GFlags MODULE REQUIRED)
+    if (NOT GFLAGS_FOUND)
+        message (FATAL_ERROR
+        "-- gflags not found try setting -D GFLAGS_{INCLUDE,LIBRARY}_DIR")
+    endif ()
+    message ("-- gflags enabled")
+endif ()
+
+if (PDLFS_GLOG)
+    xpkg_import_module (libglog REQUIRED libglog)
+    message ("-- glog enabled")
+endif ()
 
 if (PDLFS_MERCURY_RPC)
     find_package(mercury CONFIG REQUIRED)
@@ -100,6 +127,15 @@ if (PDLFS_RADOS)
         "-- rados not found try setting -D RADOS_{INCLUDE,LIBRARY}_DIR")
     endif ()
     message ("-- rados enabled")
+endif ()
+
+if (PDLFS_SNAPPY)
+    find_package(Snappy MODULE REQUIRED)
+    if (NOT SNAPPY_FOUND)
+        message (FATAL_ERROR
+        "-- snappy not found try setting -D SNAPPY_{INCLUDE,LIBRARY}_DIR")
+    endif ()
+    message ("-- snappy enabled")
 endif ()
 
 #
