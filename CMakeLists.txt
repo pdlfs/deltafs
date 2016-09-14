@@ -47,7 +47,8 @@ cmake_minimum_required (VERSION 2.8) # uses target_include_directories from 2.8
 
 project (DELTAFS)
 
-# link shared lib with rpath
+# link shared lib with full rpath
+set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # quiet CMP0042 warning
