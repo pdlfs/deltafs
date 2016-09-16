@@ -8,11 +8,29 @@
 # file if we are being embedded within another project.
 #
 
+#
+# list of source files and tests
+#
+
+# main directory sources and tests
+set (deltafs-srcs deltafs_api.cc deltafs_client.cc deltafs_conf.cc
+     deltafs_mds.cc mds.cc mds_api.cc mds_cli.cc mds_factory.cc mds_srv.cc)
+set (deltafs-tests mds_api_test.cc mds_srv_test.cc)
+
 # configure/load in standard modules we plan to use
 include (CMakePackageConfigHelpers)
 set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set (THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package (Threads REQUIRED)
+
+# common lib is always required
+set (DELTAFS_REQUIRED_PACKAGES "deltafs-common")
+
+if (DELTAFS_MPI)
+    list (APPEND DELTAFS_REQUIRED_PACKAGES MPI)
+    # MPI isn't a normal imported target, so sadly it requires special
+    # handling...  see below.
+endif ()
 
 # where the cmake package files get installed (for find_package)
 set (dfs-pkg-loc "share/cmake/deltafs")
@@ -26,14 +44,9 @@ set (DELTAFS_VERSION_PATCH 0)
 set (dfs-vers "${DELTAFS_VERSION_MAJOR}.${DELTAFS_VERSION_MINOR}")
 set (dfs-vers "${dfs-vers}.${DELTAFS_VERSION_PATCH}")
 
-#
-# list of source files and tests
-#
-
-# main directory sources and tests
-set (deltafs-srcs deltafs_api.cc deltafs_client.cc deltafs_conf.cc
-     deltafs_mds.cc mds.cc mds_api.cc mds_cli.cc mds_factory.cc mds_srv.cc)
-set (deltafs-tests mds_api_test.cc mds_srv_test.cc)
+# setup and configure deltafs_config.h.in
+configure_file ("../../include/deltafs/deltafs_config_expand.h.in"
+                "../../include/deltafs/deltafs_config_expand.h" @ONLY)
 
 #
 # generate complete list of files and tests from the parts
@@ -53,6 +66,29 @@ target_include_directories (deltafs PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../../include>
     $<INSTALL_INTERFACE:include>)
 target_link_libraries (deltafs pdlfs-common)
+# special handling for MPI, where the config comes in via MPI_<lang>_ vars.
+# we only add to the build interface so that we don't put hardcoded paths
+# in the config files.
+#
+if (DELTAFS_MPI)
+    target_compile_options (deltafs PUBLIC
+        $<BUILD_INTERFACE:${MPI_CXX_COMPILE_FLAGS}>)
+    # XXX: have to do this one dir at a time otherwise, otherwise I get
+    # error: target 'deltafs' INTERFACE_INCLUDE_DIRECTORIES contains path
+    #         prefixed in the source directory
+    foreach (lcv ${MPI_CXX_INCLUDE_PATH})
+        target_include_directories (deltafs PUBLIC $<BUILD_INTERFACE:${lcv}>)
+    endforeach ()
+    foreach (lcv ${MPI_CXX_LIBRARIES})
+        target_link_libraries(deltafs $<BUILD_INTERFACE:${lcv}>)
+    endforeach ()
+    # XXX: this doesn't propagate to lib users, is that a problem?
+    # XXX: prob ok.
+    set_property (TARGET deltafs APPEND PROPERTY LINK_FLAGS
+                  ${MPI_CXX_LINK_FLAGS})
+    get_property (link_flags TARGET deltafs PROPERTY LINK_FLAGS)
+endif ()
+
 if (CMAKE_THREAD_LIBS_INIT)
   target_link_libraries (deltafs "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
@@ -60,6 +96,7 @@ set_target_properties(deltafs
                       PROPERTIES VERSION ${dfs-vers}
                       SOVERSION ${DELTAFS_VERSION_MAJOR})
 
+#
 #
 # here's the compiler/machine/os dependent stuff...
 # this likely isn't that useful (carryover from leveldb)
@@ -107,6 +144,9 @@ install (FILES "${CMAKE_CURRENT_BINARY_DIR}/deltafs-config.cmake"
 install (DIRECTORY ../../include/deltafs
          DESTINATION include
          FILES_MATCHING PATTERN "*.h")
+install (FILES
+   "${CMAKE_CURRENT_BINARY_DIR}/../../include/deltafs/deltafs_config_expand.h"
+   DESTINATION include/deltafs)
 
 #
 # tests... we EXCLUDE_FROM_ALL the tests and use pdlfs-common's
