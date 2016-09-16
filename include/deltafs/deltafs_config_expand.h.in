@@ -1,0 +1,16 @@
+
+/*
+ * deltafs_config_expand.h.in  configuration and options from cmake
+ * 15-Sep-2016  chuck@ece.cmu.edu
+ */
+
+/*
+ * this file should only be included by deltafs_config.h.
+ */
+
+#cmakedefine DELTAFS_MPI
+
+#ifdef DELTAFS_MPI
+#define PDLFS_WITH_MPI 1   /* XXXCDC: backward compat */
+#endif
+
