@@ -24,7 +24,7 @@
 #     note that CMAKE_PREFIX_PATH can be a list of directories:
 #      -DCMAKE_PREFIX_PATH='/dir1;/dir2;/dir3'
 #
-# config compile time options flags:
+# general PDLFS config compile time options flags:
 #   -DPDLFS_GFLAGS=ON                      -- use gflags for arg parsing
 #     - GFLAGS_INCLUDE_DIR: optional hint for finding gflags/gflags.h
 #     - GFLAGS_LIBRARY_DIR: optional hint for finding gflags lib
@@ -38,12 +38,20 @@
 #     - SNAPPY_INCLUDE_DIR: optional hint for finding snappy.h
 #     - SNAPPY_LIBRARY_DIR: optional hint for finding snappy lib
 #
+# DELTAFS specific compile time options flags:
+#   -DDELTAFS_MPI=ON                       -- enable MPI
 #
+#    If you want to force a particular MPI compiler other than what we
+#    autodetect (e.g. if you want to compile regular stuff with GNU and
+#    parallel stuff with Intel), you can set your favorite
+#    MPI_<lang>_COMPILER explicitly).
+#
+
 # note: package config files for external packages must be preinstalled in
 #       CMAKE_INSTALL_PATH or on CMAKE_PREFIX_PATH, except as noted.
 #
 
-cmake_minimum_required (VERSION 2.8) # uses target_include_directories from 2.8
+cmake_minimum_required (VERSION 3.0)
 
 project (DELTAFS)
 
@@ -89,6 +97,9 @@ set (PDLFS_RADOS "OFF" CACHE
      BOOL "Compile in RADOS object store")
 set (PDLFS_SNAPPY "OFF" CACHE
      BOOL "Enable SNAPPY (libsnappy-dev) for compression")
+
+set (DELTAFS_MPI "OFF" CACHE
+     BOOL "Enable DELTAFS MPI-based communication")
 
 #
 # external packages
@@ -137,6 +148,11 @@ if (PDLFS_SNAPPY)
         "-- snappy not found try setting -D SNAPPY_{INCLUDE,LIBRARY}_DIR")
     endif ()
     message ("-- snappy enabled")
+endif ()
+
+if (DELTAFS_MPI)
+    find_package(MPI REQUIRED MODULE)
+    message("-- MPI enabled")
 endif ()
 
 #
