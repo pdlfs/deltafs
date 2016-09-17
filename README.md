@@ -57,16 +57,49 @@ Please follow online Merury [documentation](https://github.com/mercury-hpc/mercu
 
 ```
 git submodule update --init deps/bmi
+cd deps/bmi
+./prepare && ./configure --enable-shared --enable-bmi-only
+make && make install
+```
+```
 git submodule update --init deps/mercury
 git submodule update --init deps/openpa
 ```
 
 # Building
 
-After all software dependencies are installed, please use the following to build Deltafs.
+After all software dependencies are installed, we can proceed to build Deltafs.
+Deltafs uses CMake and requires you to do an out-of-source build. To do that, create a dedicated build directory and run 'ccmake' command from it:
 
 ```
-sh ./dev/rebuild_project.sh
+cd deltafs
+mkdir build
+cd build
+ccmake ..
+```
+
+Type 'c' multiple times and choose suitable options. Recommended options are:
+
+```
+ BUILD_SHARED_LIBS                ON
+ BUILD_TESTS                      ON
+ CMAKE_BUILD_TYPE                 RelWithDebInfo
+ CMAKE_INSTALL_PREFIX             /usr/local
+ CMAKE_PREFIX_PATH
+ DEBUG_SANITIZER                  Off
+ DELTAFS_MPI                      ON
+ PDLFS_GFLAGS                     ON
+ PDLFS_GLOG                       ON
+ PDLFS_MARGO_RPC                  OFF
+ PDLFS_MERCURY_RPC                ON
+ PDLFS_RADOS                      ON
+ PDLFS_SNAPPY                     ON
+```
+
+Once you exit the CMake configuration screen and are ready to build the targets, do:
+
+```
+make
 ```
 
 ## Local testing
@@ -74,13 +107,13 @@ sh ./dev/rebuild_project.sh
 To test Deltafs on a local machine using the local file system to store file system metadata and file data, we can run two Deltafs server instances and then use a Deltafs shell to access the namespace.
 
 ```
-mpirun -n 2 ./build/deltafs_server -logtostderr
+mpirun -n 2 ./build/src/server/deltafs-srvr -logtostderr
 ```
 
 This will start two Deltafs server instances that store file system metadata in /tmp/deltafs_outputs and file data in /tmp/deltafs_data. Please remove these two folders if they exist before running Deltafs. The two Deltafs server instances will begin listening on tcp port 10101 and 10102.
 
 ```
-./build/deltafs_shell -logtostderr -DMetadataSrvAddrs="127.0.0.1:10101;127.0.0.1:10102"
+./build/src/cmds/deltafs_shell -logtostderr -DMetadataSrvAddrs="127.0.0.1:10101;127.0.0.1:10102"
 ```
 
 This will start a Deltafs shell and instruct it to connect to Deltafs servers we previously started. Currently, this is just a simple shell that allows us to create directories, copy files from the local file system to Deltafs, and cat files in Deltafs.
