@@ -20,13 +20,13 @@ Deltafs supports Linux, Mac, and most UNIX platforms for development and local t
 
 # Documentation
 
-Not ready now but here is a short paper [deltafs_pdsw15]( http://www.cs.cmu.edu/~qingzhen/files/deltafs_pdsw15.pdf) that provides an overview of Deltafs.
+We have a short paper [deltafs_pdsw15]( http://www.cs.cmu.edu/~qingzhen/files/deltafs_pdsw15.pdf) that provides an overview of Deltafs.
 
 # Software requirements
 
 Compiling and running Deltafs requires recent versions of C++ compiler, cmake, mpi, snappy, glog, and gflags. Compiling Deltafs requirements usually require recent versions of autoconf, automake, and libtool.
 
-On Ubuntu 14.04 LTS, please use the following to prepare the envrionment for Deltafs.
+On Ubuntu 16.04+ LTS, please use the following to prepare the envrionment for Deltafs.
 
 ```
 sudo apt-get install -y gcc g++ make pkg-config
@@ -35,13 +35,14 @@ sudo apt-get install -y autoconf automake libtool
 sudo apt-get install -y cmake cmake-curses-gui
 sudo apt-get install -y libmpich-dev mpich
 ```
+
 ## Object store
 
 Deltafs assumes an underlying object storage service to store file system metadata and file data. This underlying object store may just be a shared parallel file system such as Lustre, GPFS, PanFS, and HDFS. However, a scalable object storage service is suggested to ensure high performance and currently Deltafs supports Rados.
 
 ### Rados
 
-On Ubuntu 14.04 LTS, rados may be installed directly through apt-get.
+On Ubuntu 16.04+ LTS, rados may be installed directly through apt-get.
 
 ```
 sudo apt-get install -y librados-dev ceph
@@ -69,7 +70,7 @@ git submodule update --init deps/openpa
 # Building
 
 After all software dependencies are installed, we can proceed to build Deltafs.
-Deltafs uses CMake and requires you to do an out-of-source build. To do that, create a dedicated build directory and run 'ccmake' command from it:
+Deltafs uses CMake (v3.0+) and requires you to do an out-of-source build. To do that, create a dedicated build directory and run 'ccmake' command from it:
 
 ```
 cd deltafs
