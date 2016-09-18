@@ -51,7 +51,7 @@
 #       CMAKE_INSTALL_PATH or on CMAKE_PREFIX_PATH, except as noted.
 #
 
-cmake_minimum_required (VERSION 3.0)
+cmake_minimum_required (VERSION 2.8.12)
 
 project (DELTAFS)
 
