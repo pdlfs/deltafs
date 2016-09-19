@@ -67,9 +67,12 @@ enable_testing ()
 #
 # we compile everything with -DDELTAFS.  we also set the common library's
 # name to deltafs-common (since we may add deltafs-specific code to it).
+# we request (but don't require) C++ 11 standard for possible performance
+# improvements due it its move semantics.
 #
 add_definitions (-DDELTAFS)
 set (PDLFS_COMMON_LIBNAME "deltafs-common")
+set (CMAKE_CXX_STANDARD 11)
 
 if (NOT CMAKE_BUILD_TYPE)
     set (CMAKE_BUILD_TYPE Release
