@@ -54,14 +54,9 @@ class Slice {
   // Return the ith byte in the referenced data.
   // REQUIRES: -size() <= n < size()
   const char& operator[](ssize_t n) const {
-    if (n >= 0) {
-      assert(n < size_);
-      return data_[n];
-    } else {
-      n += size_;
-      assert(n < size_);
-      return data_[n];
-    }
+    if (n < 0) n += size_;
+    assert(n >= 0 && n < size_);
+    return data_[n];
   }
 
   // Change this slice to refer to an empty array

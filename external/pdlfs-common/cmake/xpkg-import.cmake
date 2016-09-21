@@ -54,6 +54,14 @@ find_package(PkgConfig REQUIRED)
 #
 function(xpkg_import_module name)
     if (NOT TARGET ${name})
+
+        # PkgConfig only adds PREFIX_PATH to PKG_CONFIG_PATH.
+        # seems like it should add INSTALL_PREFIX too, so we append
+        # it here (doesn't impact parent scope).
+        if (CMAKE_INSTALL_PREFIX)
+            list (APPEND CMAKE_PREFIX_PATH ${CMAKE_INSTALL_PREFIX})
+        endif ()
+
         # put results of pkg_check_modules in "_" namespace by prepending "_"
         set(prefix _${name})
         pkg_check_modules("${prefix}" ${ARGN})

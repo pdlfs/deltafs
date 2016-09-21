@@ -343,7 +343,7 @@ struct DirIndex::Rep {
     assert(bitmap_capacity_ <= kMaxPartitions / 8);
 
     if (old != static_buf_) {
-      delete old;
+      delete[] old;
     }
   }
 

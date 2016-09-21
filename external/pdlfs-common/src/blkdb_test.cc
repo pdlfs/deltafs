@@ -82,7 +82,7 @@ class BlkDBTest {
     Slice result;
     ASSERT_OK(blk_->Pread(f->fentry_encoding, f->fh, &result, off, size, tmp));
     std::string data = result.ToString();
-    delete tmp;
+    delete[] tmp;
     std::string::iterator it = data.begin();
     for (; it != data.end(); ++it) {
       if (*it == 0) {

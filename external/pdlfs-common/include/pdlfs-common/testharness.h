@@ -166,12 +166,12 @@ inline bool Between(uint64_t val, uint64_t low, uint64_t high) {
             static_cast<unsigned long long>(val),
             static_cast<unsigned long long>(low),
             static_cast<unsigned long long>(high));
+    exit(1);
   }
   return r;
 }
 
 #define BETWEEN(a, b, c) ::pdlfs::test::Between(a, b, c)
-
 #define TCONCAT(a, b) TCONCAT1(a, b)
 #define TCONCAT1(a, b) a##b
 #define TEST(base, name)                                            \
