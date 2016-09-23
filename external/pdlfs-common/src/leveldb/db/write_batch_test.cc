@@ -29,7 +29,7 @@ static std::string PrintContents(WriteBatch* b) {
   Iterator* iter = mem->NewIterator();
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     ParsedInternalKey ikey;
-    ikey.sequence = 0;  /* XXX: quiet gcc5.4 maybe-uninitialized warning */
+    ikey.sequence = 0; /* XXX: quiet gcc5.4 maybe-uninitialized warning */
     ASSERT_TRUE(ParseInternalKey(iter->key(), &ikey));
     switch (ikey.type) {
       case kTypeValue:

@@ -55,6 +55,7 @@ class EntropyCodedTrie : public ECT {
 };
 
 class TwoLevelBucketingTrie : public ECT {
+ private:
   static const size_t kSkipBits = 0;
   static const size_t kDestBase = 0;
   static const size_t kDestKeysPerBlock = 1;
@@ -66,7 +67,6 @@ class TwoLevelBucketingTrie : public ECT {
     size_t pending_key_count_;
   };
 
- private:
   typedef ectrie::bit_vector<> bitvec_t;
   bitvec_t bitvector_;
   typedef ectrie::trie<> trie_t;
@@ -75,12 +75,12 @@ class TwoLevelBucketingTrie : public ECT {
   bucket_t bucketing_;
   const size_t default_bucket_size_;
   const size_t key_len_;
-  size_t n_;
 
   // Initialized lazily
+  size_t bucket_count_;
   size_t bucket_bits_;
   size_t bucket_size_;
-  size_t bucket_count_;
+  size_t n_;
 
  public:
   TwoLevelBucketingTrie(size_t key_len, size_t bucket_size)

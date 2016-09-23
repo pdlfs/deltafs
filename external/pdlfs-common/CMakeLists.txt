@@ -164,30 +164,5 @@ if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
     endif ()
 endif ()
 
-if (PDLFS_SNAPPY)
-    find_package(Snappy MODULE REQUIRED)
-    if (NOT SNAPPY_FOUND)
-        message (FATAL_ERROR
-        "-- snappy not found try setting -D SNAPPY_{INCLUDE,LIBRARY}_DIR")
-    endif ()
-    message ("-- snappy enabled")
-endif ()
-
-#
-# sanitizer config (XXX: does not probe compiler to see if sanitizer flags
-# are supported... )
-#
-set (as_flags "-fsanitize=address -O1 -fno-omit-frame-pointer")
-set (ts_flags "-fsanitize=thread  -O1 -fno-omit-frame-pointer")
-if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-    if (${DEBUG_SANITIZER} STREQUAL "Address")
-        set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
-        set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
-    elseif (${DEBUG_SANITIZER} STREQUAL "Thread")
-        set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
-        set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
-    endif ()
-endif ()
-
 add_subdirectory (src)
 
