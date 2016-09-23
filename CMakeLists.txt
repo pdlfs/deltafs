@@ -120,7 +120,7 @@ if (PDLFS_GFLAGS)
 endif ()
 
 if (PDLFS_GLOG)
-    xpkg_import_module (libglog REQUIRED libglog)
+    xdual_import (glog::glog,glog,libglog REQUIRED)
 endif ()
 
 if (PDLFS_MERCURY_RPC)
