@@ -10,9 +10,8 @@
 #include <signal.h>
 #include <stdlib.h>
 
-#include "pdlfs-common/pdlfs_config.h"
 #include "deltafs/deltafs_config.h"
-
+#include "pdlfs-common/pdlfs_config.h"
 #if defined(PDLFS_WITH_MPI)
 #include <mpi.h>
 #endif

@@ -8,9 +8,10 @@
  */
 
 #include "pdlfs-common/pdlfs_config.h"
-#include "deltafs/deltafs_api.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/strutil.h"
+
+#include "deltafs/deltafs_api.h"
 
 #include <fcntl.h>
 #include <signal.h>
