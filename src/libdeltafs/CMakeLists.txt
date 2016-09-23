@@ -71,10 +71,14 @@ target_link_libraries (deltafs pdlfs-common)
 # in the config files.
 #
 if (DELTAFS_MPI)
-    foreach (lcv ${MPI_CXX_COMPILE_FLAGS})
+    foreach (lcvs ${MPI_CXX_COMPILE_FLAGS})
         # mpich on ub14 gives a leading space that we need to trim off
-        string (STRIP ${lcv} lcv)
-        target_compile_options (deltafs PUBLIC $<BUILD_INTERFACE:${lcv}>)
+        string (REPLACE " " ";" lcvl ${lcvs})
+        foreach (lcv ${lcvl})
+            if (NOT ${lcv} STREQUAL "")
+                target_compile_options (deltafs PUBLIC $<BUILD_INTERFACE:${lcv}>)
+            endif ()
+        endforeach ()
     endforeach ()
     # XXX: have to do this one dir at a time otherwise, otherwise I get
     # error: target 'deltafs' INTERFACE_INCLUDE_DIRECTORIES contains path
