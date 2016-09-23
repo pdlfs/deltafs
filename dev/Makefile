@@ -135,6 +135,9 @@ $(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb/db: | $(STATIC_OUTDIR)
 $(STATIC_OUTDIR)/external/pdlfs-common/src/rados: | $(STATIC_OUTDIR)
 	mkdir -p $@
 
+$(STATIC_OUTDIR)/external/pdlfs-common/src/ectrie: | $(STATIC_OUTDIR)
+	mkdir -p $@
+
 $(STATIC_OUTDIR)/src/libdeltafs: | $(STATIC_OUTDIR)
 	mkdir -p $@
 
@@ -150,6 +153,7 @@ STATIC_OBJDIRS: \
 	$(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb \
 	$(STATIC_OUTDIR)/external/pdlfs-common/src/leveldb/db \
 	$(STATIC_OUTDIR)/external/pdlfs-common/src/rados \
+	$(STATIC_OUTDIR)/external/pdlfs-common/src/ectrie \
 	$(STATIC_OUTDIR)/src/libdeltafs \
 	$(STATIC_OUTDIR)/src/cmds \
 	$(STATIC_OUTDIR)/src/server
@@ -171,6 +175,9 @@ $(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb/db: | $(SHARED_OUTDIR)
 $(SHARED_OUTDIR)/external/pdlfs-common/src/rados: | $(SHARED_OUTDIR)
 	mkdir -p $@
 
+$(SHARED_OUTDIR)/external/pdlfs-common/src/ectrie: | $(SHARED_OUTDIR)
+	mkdir -p $@
+
 $(SHARED_OUTDIR)/src/libdeltafs: | $(SHARED_OUTDIR)
 	mkdir -p $@
 
@@ -180,6 +187,7 @@ SHARED_OBJDIRS: \
 	$(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb \
 	$(SHARED_OUTDIR)/external/pdlfs-common/src/leveldb/db \
 	$(SHARED_OUTDIR)/external/pdlfs-common/src/rados \
+	$(SHARED_OUTDIR)/external/pdlfs-common/src/ectrie \
 	$(SHARED_OUTDIR)/src/libdeltafs
 
 $(SHARED_ALLOBJS): | SHARED_OBJDIRS
