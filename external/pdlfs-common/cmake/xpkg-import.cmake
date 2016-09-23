@@ -5,7 +5,7 @@
 
 #
 # have PkgConfig use CMAKE_PREFIX_PATH for searching for pkg config files.
-# this is the default for cmake 3.1 and above, on some older versions 
+# this is the default for cmake 3.1 and above, on some older versions
 # you can turn it on.   otherwise you'll have to manually set PKG_CONFIG_PATH
 #
 if (${CMAKE_MINIMUM_REQUIRED_VERSION} VERSION_LESS 3.1)
@@ -107,8 +107,8 @@ function(_xpkg_import_module_add_imported_target name compile_options include_di
         _xpkg_import_module_find_libraries(libraries_full_paths
             ${name} "${staticlibraries}" "${library_dirs}")
     else ()
-        # FIXME: we should really detect whether it's SHARED or STATIC, 
-        # instead of assuming SHARED. We can't just use UNKNOWN because 
+        # FIXME: we should really detect whether it's SHARED or STATIC,
+        # instead of assuming SHARED. We can't just use UNKNOWN because
         # nothing can link against it then.
         add_library(${name} SHARED IMPORTED)
     endif ()
@@ -176,7 +176,7 @@ function(xadd_object_library_dependencies object_library)
             $<TARGET_PROPERTY:${dependency},INTERFACE_INCLUDE_DIRECTORIES>)
     endforeach()
 
-    set_property(TARGET ${object_library} 
+    set_property(TARGET ${object_library}
                  APPEND PROPERTY LINK_LIBRARIES ${dependencies})
 endfunction()
 
@@ -185,3 +185,70 @@ endfunction()
 # by Sam Thursfield <sam.thursfield@codethink.co.uk>
 # END
 #
+
+#
+# some of the packages we want to import come with either "pkg-config"
+# .pc files or with cmake config files, depending on how they were
+# installed.   for example, glog installed with "apt-get install" on
+# "libgoogle-glog-dev" puts in a "libglog.pc" while installing glog
+# from source via github installs a cmake config file for glog.
+#
+# this is complicated by the fact that the pkg-config .pc file names
+# the package "libglog" while the cmake config file from github defines
+# a library target "glog::glog" that you load with find_package(glog).
+#
+# we'd like to be able to use either mechanism to find glog, and we'd
+# like the resulting target name to match between the two mechanisms
+# (i.e. we just want to use "glog::glog" for both cases).
+#
+# to address this we add a wrapper function that trys both way.
+# we first use "find_package()" in hopes of picking up a cmake config.
+# if that fails, we fall back to "xpkg_import_module()"...
+
+#
+#     xdual_import(names)
+#
+# Where "names" is: target-name,find-package-name,xpkg-names
+#
+# names can be omitted (target-name will be used)
+#
+# Example usage:
+#
+#   xdual_import (foo REQUIRED)
+#   xdual_import (glog::glog,glog,libglog REQUIRED)
+#
+#
+
+function (xdual_import names)
+
+    # parse spec
+    set (resid ${names})
+    foreach (var target cm_pkg)
+        string (FIND "${resid}" "," slash)
+        if (${slash} EQUAL -1)
+            set (${var} ${resid})
+            set (resid "")
+        else ()
+            math (EXPR slashplus ${slash}+1)
+            string (SUBSTRING "${resid}" 0 ${slash} ${var})
+            string (SUBSTRING "${resid}" ${slashplus} -1 resid)
+        endif ()
+        if ("${${var}}" STREQUAL "")
+            set (${var} ${target})
+        endif ()
+    endforeach ()
+    if ("${resid}" STREQUAL "")
+        set (xpkg ${target})
+    else ()
+        set (xpkg ${resid})
+    endif ()
+
+    # try to find it both ways
+    if (NOT TARGET ${target})
+        find_package (${cm_pkg} QUIET)
+        if (NOT TARGET ${target})
+            string (REPLACE "," " " xpkg "${xpkg}")
+            xpkg_import_module (${target} ${ARGN} ${xpkg})
+        endif ()
+    endif ()
+endfunction ()

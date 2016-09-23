@@ -9,10 +9,12 @@
 #
 set (PDLFS_REQUIRED_PACKAGES "@PDLFS_REQUIRED_PACKAGES@")
 set (PDLFS_REQUIRED_XPKGIMPORTS "@PDLFS_REQUIRED_XPKGIMPORTS@")
+set (PDLFS_REQUIRED_XDUALIMPORTS "@PDLFS_REQUIRED_XDUALIMPORTS@")
 set (PDLFS_EXTRA_COMPONENTS "@PDLFS_EXTRA_COMPONENTS@")
 
 set (PDLFS_ALL_COMPONENTS ${PDLFS_REQUIRED_PACKAGES}
                           ${PDLFS_REQUIRED_XPKGIMPORTS}
+                          ${PDLFS_REQUIRED_XDUALIMPORTS}
                           ${PDLFS_EXTRA_COMPONENTS})
 
 # adjust module path to make it easy to pick up files from the config directory
@@ -27,6 +29,10 @@ endforeach ()
 
 foreach (lcv ${PDLFS_REQUIRED_XPKGIMPORTS})
     xpkg_import_module (${lcv} REQUIRED ${lcv})
+endforeach ()
+
+foreach (lcv ${PDLFS_REQUIRED_XDUALIMPORTS})
+    xdual_import (${lcv} REQUIRED)
 endforeach ()
 
 # XXX: as long as we hide mercury behind our API we don't need to worry

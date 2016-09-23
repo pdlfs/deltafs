@@ -66,9 +66,9 @@ if (TARGET gflags AND PDLFS_GFLAGS)
     list (APPEND pdlfs-xtra-libs gflags)
 endif ()
 
-if (TARGET libglog AND PDLFS_GLOG)
-    list (APPEND PDLFS_REQUIRED_XPKGIMPORTS libglog)
-    list (APPEND pdlfs-xtra-libs libglog)
+if (TARGET glog::glog AND PDLFS_GLOG)
+    list (APPEND PDLFS_REQUIRED_XDUALIMPORTS glog::glog,glog,libglog)
+    list (APPEND pdlfs-xtra-libs glog::glog)
 endif ()
 
 if (TARGET margo AND PDLFS_MARGO_RPC)
