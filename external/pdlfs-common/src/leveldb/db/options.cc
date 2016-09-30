@@ -47,7 +47,7 @@ DBOptions::DBOptions()
 ReadOptions::ReadOptions()
     : verify_checksums(false),
       fill_cache(true),
-      limit(1 << 31),
+      limit(1 << 30),
       snapshot(NULL) {}
 
 WriteOptions::WriteOptions() : sync(false) {}

@@ -98,8 +98,8 @@ static inline int ToParentIndex(int index) {
 // Convert a variable-length string to a 8-byte hash.
 // Current implementation employs XXHash.
 // Alternatively, we could also use MurmurHash or CityHash.
-static inline void GIGAHash(const Slice& buffer, char* result) {
-  uint64_t h = XXH64(buffer.data(), buffer.size(), 0) - 17241709254077376921LLU;
+static inline void GIGAHash(const Slice& b, char* result) {
+  uint64_t h = XXH64(b.data(), b.size(), 0) - UINT64_C(17241709254077376921);
   memcpy(result, &h, 8);
 }
 

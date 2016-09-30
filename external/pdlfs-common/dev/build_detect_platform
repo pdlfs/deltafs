@@ -117,7 +117,13 @@ case "$TARGET_OS" in
         exit 1
 esac
 
-COMMON_FLAGS="-pedantic -Wall -Wno-long-long -Wno-sign-compare $COMMON_FLAGS"
+case "$CXX" in
+    g++*|clang++*)
+        COMMON_FLAGS="-pedantic -Wall -Wno-long-long -Wno-sign-compare $COMMON_FLAGS"
+        ;;
+    *)
+        ;;
+esac
 
 COMMON_FLAGS="$COMMON_FLAGS -DPDLFS_PLATFORM_POSIX"
 COMMON_FLAGS="$COMMON_FLAGS -DPDLFS_MAKEFILE"

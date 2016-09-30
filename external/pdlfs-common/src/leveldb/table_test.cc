@@ -178,7 +178,8 @@ static std::string RandomKey(Random* rnd) {
 
 static std::string RandomInternalKey(Random* rnd, uint64_t seq) {
   std::string encoded;
-  ParsedInternalKey ikey(RandomKey(rnd), seq, kTypeValue);
+  std::string rkey = RandomKey(rnd);
+  ParsedInternalKey ikey(rkey, seq, kTypeValue);
   AppendInternalKey(&encoded, ikey);
   return encoded;
 }

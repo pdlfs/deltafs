@@ -12,6 +12,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <ostream>
 #include <sstream>
 
 #include "pdlfs-common/env.h"
@@ -19,6 +20,11 @@
 #include "pdlfs-common/random.h"
 
 namespace pdlfs {
+// Append a slice to a given output stream.
+inline std::ostream& operator<<(std::ostream& stream, const Slice& slice) {
+  return (stream << slice.ToString());
+}
+
 namespace test {
 
 // Run some of the tests registered by the TEST() macro.  If the

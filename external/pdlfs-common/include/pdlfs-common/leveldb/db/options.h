@@ -221,7 +221,7 @@ struct ReadOptions {
   // or don't want the value at all.
   // If the total size of a value is smaller than specified limit, the
   // entire value will be returned.
-  // Default: 1 << 31
+  // Default: 1 << 30
   size_t limit;
 
   // If "snapshot" is non-NULL, read as of the supplied snapshot

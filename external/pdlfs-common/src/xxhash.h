@@ -65,8 +65,7 @@ XXH64       13.8 GB/s            1.9 GB/s
 XXH32        6.8 GB/s            6.0 GB/s
 */
 
-#ifndef XXHASH_H_5627135585666179
-#define XXHASH_H_5627135585666179 1
+#pragma once
 
 #if defined(__cplusplus)
 extern "C" {
@@ -291,5 +290,3 @@ struct XXH64_state_s {
 #if defined(__cplusplus)
 }
 #endif
-
-#endif /* XXHASH_H_5627135585666179 */

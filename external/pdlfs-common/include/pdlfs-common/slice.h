@@ -12,9 +12,8 @@
 
 #include <assert.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <string.h>
-#include <ostream>
+#include <unistd.h>
 #include <string>
 
 namespace pdlfs {
@@ -124,10 +123,6 @@ class Slice {
 
   // Intentionally copyable
 };
-
-inline std::ostream& operator<<(std::ostream& stream, const Slice& s) {
-  return (stream << s.ToString());
-}
 
 inline bool operator<(const Slice& x, const Slice& y) {
   return x.compare(y) < 0;
