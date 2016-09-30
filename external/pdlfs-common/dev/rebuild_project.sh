@@ -11,6 +11,13 @@ MAKE="make -f ./dev/Makefile"
 
 $MAKE clean
 $MAKE -j4
+
+echo "== Build tests in 5 seconds ..."
+sleep 5
 $MAKE -j4 tests
+
+echo "== Run tests in 5 seconds ..."
+sleep 5
+$MAKE check
 
 exit 0
