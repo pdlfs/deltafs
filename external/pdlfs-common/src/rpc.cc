@@ -26,7 +26,7 @@ namespace pdlfs {
 RPCOptions::RPCOptions()
     : impl(kMercuryRPC),
       mode(kServerClient),
-      rpc_timeout(5000000LLU),
+      rpc_timeout(5000000),
       num_io_threads(1),
       extra_workers(NULL),
       addr_cache_size(128),

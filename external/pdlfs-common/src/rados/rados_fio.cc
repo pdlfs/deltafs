@@ -129,7 +129,7 @@ Status RadosFio::Open(const Slice& fentry_encoding, bool create_if_missing,
     RadosFobj* fobj = new RadosFobj(this);
     fobj->fctx = fctx;
     fobj->refs = need_trunc ? 2 : 1;
-    fobj->mtime = 1000LLU * 1000LLU * obj_mtime;
+    fobj->mtime = 1000ULL * 1000ULL * obj_mtime;
     fobj->size = obj_size;
     fobj->bg_err = 0;
     fobj->off = 0;
@@ -186,7 +186,7 @@ Status RadosFio::Stat(const Slice& fentry_encoding, Handle* fh, uint64_t* mtime,
       }
       mutex_->Lock();
       if (s.ok()) {
-        fobj->mtime = 1000LLU * 1000LLU * obj_mtime;
+        fobj->mtime = 1000ULL * 1000ULL * obj_mtime;
         fobj->size = obj_size;
       }
     }

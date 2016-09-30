@@ -89,7 +89,7 @@ class PosixFio : public Fio {
       int r = fstat(fd, &buf);
       if (r == 0) {
         *fh = reinterpret_cast<Handle*>(fd);
-        *mtime = 1000LLU * 1000LLU * buf.st_mtime;
+        *mtime = 1000ULL * 1000ULL * buf.st_mtime;
         *size = buf.st_size;
       } else {
         s = IOError(fname, errno);
@@ -121,7 +121,7 @@ class PosixFio : public Fio {
     struct stat buf;
     int r = fstat(fd, &buf);
     if (r == 0) {
-      *mtime = 1000LLU * 1000LLU * buf.st_mtime;
+      *mtime = 1000ULL * 1000ULL * buf.st_mtime;
       *size = buf.st_size;
     } else {
       std::string fname = root_ + "/";
