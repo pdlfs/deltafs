@@ -15,6 +15,7 @@
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/leveldb/comparator.h"
+#include "pdlfs-common/leveldb/iterator.h"
 #include "pdlfs-common/strutil.h"
 
 #include "format.h"

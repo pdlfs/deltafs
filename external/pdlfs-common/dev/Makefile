@@ -31,7 +31,7 @@ TESTS = \
 	src/blkdb_test \
 	src/coding_test \
 	src/crc32c_test \
-	src/ectindex_test \
+	src/ect_test \
 	src/dbfiles_test \
 	src/hash_test \
 	src/cache_test \
@@ -134,8 +134,8 @@ $(STATIC_OUTDIR)/coding_test:src/coding_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNE
 $(STATIC_OUTDIR)/crc32c_test:src/crc32c_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/crc32c_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
-$(STATIC_OUTDIR)/ectindex_test:src/ectindex_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
-	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/ectindex_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+$(STATIC_OUTDIR)/ect_test:src/ect_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/ect_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/dbfiles_test:src/dbfiles_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/dbfiles_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)

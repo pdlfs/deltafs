@@ -304,5 +304,43 @@ class huffman {
   const huffman_rev_table<ref_type> rev_tbl_;
 };
 
+template <typename RefType = uint8_t>
+class huffman_buffer {
+ public:
+  explicit huffman_buffer(size_t limit = 16) : encoding_limit_(limit) {
+    huff_ = new huffman<RefType>*[encoding_limit_ - 1];
+    for (unsigned int n = 2; n <= encoding_limit_; n++) {
+      huffman_tree_generator<uint64_t> gen(n + 1);
+      uint64_t v = 1;
+      gen[0] = v;
+      for (unsigned int k = 1; k <= n; k++) {
+        gen[k] = v = v * (n - k + 1) / k;
+      }
+      huffman_tree<RefType> t(n + 1);
+      gen.generate(t);
+      huff_[n - 2] = new huffman<RefType>(t);
+    }
+  }
+
+  ~huffman_buffer() {
+    for (unsigned int n = 2; n <= encoding_limit_; n++) {
+      delete huff_[n - 2];
+      huff_[n - 2] = NULL;
+    }
+    delete[] huff_;
+  }
+
+  unsigned int encoding_limit() const { return encoding_limit_; }
+
+  huffman<RefType>* operator[](size_t n) {
+    assert(n >= 0 && n < encoding_limit_ - 1);
+    return huff_[n];
+  }
+
+ private:
+  unsigned int encoding_limit_;
+  huffman<RefType>** huff_;
+};
+
 }  // namespace ectrie
 }  // namespace pdlfs

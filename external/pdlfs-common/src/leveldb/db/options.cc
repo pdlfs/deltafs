@@ -30,6 +30,7 @@ DBOptions::DBOptions()
       block_cache(NULL),
       block_size(4096),
       block_restart_interval(16),
+      index_block_restart_interval(1),
       compression(kSnappyCompression),
       filter_policy(NULL),
       gc_skip_deletion(false),
@@ -76,6 +77,8 @@ DBOptions SanitizeOptions(const std::string& dbname,
   DBOptions result = src;
   result.comparator = icmp;
   result.filter_policy = (src.filter_policy != NULL) ? ipolicy : NULL;
+  ClipToRange(&result.block_restart_interval, 1, 1024);
+  ClipToRange(&result.index_block_restart_interval, 1, 1024);
   ClipToRange(&result.write_buffer_size, 64 << 10, 1 << 30);
   ClipToRange(&result.block_size, 1 << 10, 4 << 20);
   if (create_infolog && result.info_log == NULL) {

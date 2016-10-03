@@ -10,15 +10,15 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/leveldb/iterator.h"
-
 #include <stddef.h>
 #include <stdint.h>
 
 namespace pdlfs {
 
 struct BlockContents;
+
 class Comparator;
+class Iterator;
 
 class Block {
  public:
@@ -39,8 +39,8 @@ class Block {
   bool owned_;               // Block owns data_[]
 
   // No copying allowed
-  Block(const Block&);
   void operator=(const Block&);
+  Block(const Block&);
 
   class Iter;
 };

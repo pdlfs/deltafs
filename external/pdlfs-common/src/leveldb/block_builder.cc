@@ -9,13 +9,12 @@
  */
 
 #include "block_builder.h"
+#include "format.h"
 
 #include <assert.h>
 #include <algorithm>
 
 #include "pdlfs-common/coding.h"
-#include "pdlfs-common/leveldb/comparator.h"
-#include "pdlfs-common/leveldb/db/options.h"
 
 // BlockBuilder generates blocks where keys are prefix-compressed:
 //
@@ -42,12 +41,17 @@
 // restarts[i] contains the offset within the block of the ith restart point.
 namespace pdlfs {
 
-BlockBuilder::BlockBuilder(const Options* options, const Comparator* cmp)
-    : options_(options), cmp_(cmp), restarts_(), counter_(0), finished_(false) {
-  assert(options->block_restart_interval >= 1);
+BlockBuilder::BlockBuilder(int restart_interval, const Comparator* cmp)
+    : restart_interval_(restart_interval),
+      cmp_(cmp),
+      counter_(0),
+      finished_(false) {
   restarts_.push_back(0);  // First restart point is at offset 0
+  if (restart_interval_ < 1) {
+    restart_interval_ = 1;
+  }
   if (cmp_ == NULL) {
-    cmp_ = options_->comparator;
+    cmp_ = BytewiseComparator();
   }
 }
 
@@ -79,10 +83,10 @@ Slice BlockBuilder::Finish() {
 void BlockBuilder::Add(const Slice& key, const Slice& value) {
   Slice last_key_piece(last_key_);
   assert(!finished_);
-  assert(counter_ <= options_->block_restart_interval);
+  assert(counter_ <= restart_interval_);
   assert(buffer_.empty() || cmp_->Compare(key, last_key_piece) > 0);
   size_t shared = 0;
-  if (counter_ < options_->block_restart_interval) {
+  if (counter_ < restart_interval_) {
     // See how much sharing to do with previous string
     const size_t min_length = std::min(last_key_piece.size(), key.size());
     while ((shared < min_length) && (last_key_piece[shared] == key[shared])) {

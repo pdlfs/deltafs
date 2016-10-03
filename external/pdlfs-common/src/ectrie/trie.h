@@ -23,63 +23,8 @@ namespace ectrie {
 template <typename RefType = uint8_t>
 class trie {
  public:
-  explicit trie() {
-    if (kHuffmanEncoding) {
-      for (unsigned int n = 2; n <= kHuffmanCodingLimit; n++) {
-        if (!kWeakOrdering) {
-          huffman_tree_generator<uint64_t> gen(n + 1);
-
-          uint64_t v = 1;
-          gen[0] = v;
-          for (unsigned int k = 1; k <= n; k++)
-            gen[k] = v = v * (n - k + 1) / k;
-
-          huffman_tree<RefType> t(n + 1);
-          gen.generate(t);
-
-          huff_[n - 2] = new huffman<RefType>(t);
-        } else {
-          huffman_tree_generator<uint64_t> gen(n);
-
-          uint64_t v = 1;
-          gen[0] = v * 2;
-          for (unsigned int k = 1; k <= n - 1; k++)
-            gen[k] = v = v * (n - k + 1) / k;
-
-          huffman_tree<RefType> t(n);
-          gen.generate(t);
-
-          huff_[n - 2] = new huffman<RefType>(t);
-        }
-      }
-    }
-  }
-
-#if 0
-  template <typename DistType>
-  void recreate_huffman_from_dist(DistType& dist) {
-    assert(!kWeakOrdering);
-
-    for (unsigned int n = 2; n <= kHuffmanCodingLimit; n++) delete huff_[n - 2];
-    for (unsigned int n = 2; n <= kHuffmanCodingLimit; n++) {
-      huffman_tree_generator<uint64_t> gen(n + 1);
-      for (unsigned int k = 0; k <= n; k++) gen[k] = dist[n][k];
-      huffman_tree<RefType> t(n + 1);
-      gen.generate(t);
-
-      huff_[n - 2] = new huffman<RefType>(t);
-    }
-  }
-#endif
-
-  virtual ~trie() {
-    if (kHuffmanEncoding) {
-      for (unsigned int n = 2; n <= kHuffmanCodingLimit; n++) {
-        delete huff_[n - 2];
-        huff_[n - 2] = NULL;
-      }
-    }
-  }
+  explicit trie(huffman_buffer<RefType>* huff_buf = NULL)
+      : huff_buf_(huff_buf) {}
 
   template <typename Buffer, typename KeyArrayType>
   void encode(Buffer& out_buf, const KeyArrayType& arr, size_t key_len,
@@ -121,12 +66,9 @@ class trie {
         break;
     }
 
-    // replace (n, 0) split with (0, n) split if weak ordering is used
-    if (kWeakOrdering && left == n) left = 0;
-
     // encode the left tree size
-    if (kHuffmanEncoding && n <= kHuffmanCodingLimit) {
-      huff_[n - 2]->encode(out_buf, left);
+    if (huff_buf_ != NULL && n <= huff_buf_->encoding_limit()) {
+      (*huff_buf_)[n - 2]->encode(out_buf, left);
     } else {
       exp_golomb<>::encode<size_t>(
           out_buf, sign_interleave::encode<size_t>(left - n / 2));
@@ -156,8 +98,8 @@ class trie {
 
     // decode the left tree size
     size_t left;
-    if (kHuffmanEncoding && n <= kHuffmanCodingLimit) {
-      left = huff_[n - 2]->decode(in_buf, in_out_buf_iter);
+    if (huff_buf_ != NULL && n <= huff_buf_->encoding_limit()) {
+      left = (*huff_buf_)[n - 2]->decode(in_buf, in_out_buf_iter);
     } else {
       left = sign_interleave::decode<size_t>(
                  exp_golomb<>::decode<size_t>(in_buf, in_out_buf_iter)) +
@@ -168,8 +110,7 @@ class trie {
 
     // find the number of keys on the left to the key (considering weak
     // ordering)
-    if (!bit_access::get(key, depth) &&
-        (!kWeakOrdering || (kWeakOrdering && left != 0))) {
+    if (!bit_access::get(key, depth)) {
       return locate_rec(in_buf, in_out_buf_iter, key, key_len, off, left,
                         dest_base, dest_keys_per_block, depth + 1);
     } else {
@@ -197,8 +138,8 @@ class trie {
 
     // decode the left tree size
     size_t left;
-    if (kHuffmanEncoding && n <= kHuffmanCodingLimit) {
-      left = huff_[n - 2]->decode(in_buf, in_out_buf_iter);
+    if (huff_buf_ != NULL && n <= huff_buf_->encoding_limit()) {
+      left = (*huff_buf_)[n - 2]->decode(in_buf, in_out_buf_iter);
     } else {
       left = sign_interleave::decode<size_t>(
                  exp_golomb<>::decode<size_t>(in_buf, in_out_buf_iter)) +
@@ -213,11 +154,8 @@ class trie {
              dest_base, dest_keys_per_block, depth + 1);
   }
 
-  static const unsigned int kHuffmanCodingLimit = 16;
-  huffman<RefType>* huff_[kHuffmanCodingLimit - 1];
-
-  static const bool kHuffmanEncoding = false;
-  static const bool kWeakOrdering = false;
+  // non-NULL if huffman encoding has been enabled
+  huffman_buffer<RefType>* huff_buf_;
 };
 
 }  // namespace ectrie

@@ -11,6 +11,7 @@
 #include "block.h"
 #include "filter_block.h"
 #include "format.h"
+#include "index_block.h"
 #include "table_stats.h"
 #include "two_level_iterator.h"
 
@@ -20,6 +21,7 @@
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
+#include "pdlfs-common/leveldb/iterator.h"
 #include "pdlfs-common/leveldb/table.h"
 
 namespace pdlfs {
@@ -33,7 +35,7 @@ struct Table::Rep {
   const char* filter_data;
 
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
-  Block* index_block;
+  IndexReader* index_block;
 
   TableStats stats;  // All stats physically embedded in the table
   bool stats_valid;
@@ -65,7 +67,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
 
   // Read the index block
   BlockContents contents;
-  Block* index_block = NULL;
+  IndexReader* index_block = NULL;
   if (s.ok()) {
     ReadOptions opt;
     if (options.paranoid_checks) {
@@ -73,7 +75,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
     }
     s = ReadBlock(file, opt, footer.index_handle(), &contents);
     if (s.ok()) {
-      index_block = new Block(contents);
+      index_block = IndexReader::Create(contents, &options);
     }
   }
 
@@ -255,15 +257,15 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
 }
 
 Iterator* Table::NewIterator(const ReadOptions& options) const {
-  return NewTwoLevelIterator(
-      rep_->index_block->NewIterator(rep_->options.comparator),
-      &Table::BlockReader, const_cast<Table*>(this), options);
+  return NewTwoLevelIterator(rep_->index_block->NewIterator(),
+                             &Table::BlockReader, const_cast<Table*>(this),
+                             options);
 }
 
 Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
                           void (*saver)(void*, const Slice&, const Slice&)) {
   Status s;
-  Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+  Iterator* iiter = rep_->index_block->NewIterator();
   iiter->Seek(k);
   if (iiter->Valid()) {
     Slice handle_value = iiter->value();
@@ -291,8 +293,7 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
 }
 
 uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
-  Iterator* index_iter =
-      rep_->index_block->NewIterator(rep_->options.comparator);
+  Iterator* index_iter = rep_->index_block->NewIterator();
   index_iter->Seek(key);
   uint64_t result;
   if (index_iter->Valid()) {

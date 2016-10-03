@@ -13,6 +13,7 @@
 #include "block_builder.h"
 #include "filter_block.h"
 #include "format.h"
+#include "index_block.h"
 #include "table_stats.h"
 
 #include "pdlfs-common/coding.h"
@@ -29,12 +30,11 @@ namespace pdlfs {
 
 struct TableBuilder::Rep {
   Options options;
-  Options index_block_options;
   WritableFile* file;
   uint64_t offset;
   Status status;
   BlockBuilder data_block;
-  BlockBuilder index_block;
+  IndexBuilder* index_block;
   std::string last_key;
   int64_t num_entries;
   bool closed;  // Either Finish() or Abandon() has been called.
@@ -56,22 +56,20 @@ struct TableBuilder::Rep {
 
   std::string compressed_output;
 
-  Rep(const Options& opt, WritableFile* f)
-      : options(opt),
-        index_block_options(opt),
+  Rep(const Options& options, WritableFile* f)
+      : options(options),
         file(f),
         offset(0),
-        data_block(&options),
-        index_block(&index_block_options),
+        data_block(options.block_restart_interval, options.comparator),
+        index_block(IndexBuilder::Create(&options)),
         num_entries(0),
         closed(false),
-        filter_block(opt.filter_policy != NULL
-                         ? new FilterBlockBuilder(opt.filter_policy)
+        filter_block(options.filter_policy != NULL
+                         ? new FilterBlockBuilder(options.filter_policy)
                          : NULL),
         enable_stats_(true),
         pending_index_entry(false) {
     assert(options.comparator != NULL);
-    index_block_options.block_restart_interval = 1;
   }
 };
 
@@ -91,6 +89,7 @@ TableBuilder::TableBuilder(const Options& options, WritableFile* file)
 TableBuilder::~TableBuilder() {
   assert(rep_->closed);  // Catch errors where caller forgot to call Finish()
   delete rep_->filter_block;
+  delete rep_->index_block;
   delete rep_;
 }
 
@@ -102,11 +101,9 @@ Status TableBuilder::ChangeOptions(const Options& options) {
     return Status::InvalidArgument("changing comparator while building table");
   }
 
-  // Note that any live BlockBuilders point to rep_->options and therefore
-  // will automatically pick up the updated options.
   rep_->options = options;
-  rep_->index_block_options = options;
-  rep_->index_block_options.block_restart_interval = 1;
+  rep_->data_block.ChangeRestartInterval(rep_->options.block_restart_interval);
+  rep_->index_block->ChangeOptions(&rep_->options);
   return Status::OK();
 }
 
@@ -129,10 +126,7 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
 
   if (r->pending_index_entry) {
     assert(r->data_block.empty());
-    r->options.comparator->FindShortestSeparator(&r->last_key, key);
-    std::string handle_encoding;
-    r->pending_handle.EncodeTo(&handle_encoding);
-    r->index_block.Add(r->last_key, Slice(handle_encoding));
+    r->index_block->AddIndexEntry(&r->last_key, &key, r->pending_handle);
     r->pending_index_entry = false;
   }
 
@@ -142,8 +136,9 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
 
   r->last_key.assign(key.data(), key.size());
   r->num_entries++;
-  r->data_block.Add(key, value);
+  r->index_block->OnKeyAdded(key);
 
+  r->data_block.Add(key, value);
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
   if (estimated_block_size >= r->options.block_size) {
     Flush();
@@ -156,7 +151,7 @@ void TableBuilder::Flush() {
   if (!ok()) return;
   if (r->data_block.empty()) return;
   assert(!r->pending_index_entry);
-  WriteBlock(&r->data_block, &r->pending_handle);
+  AddBlock(&r->data_block, &r->pending_handle);
   if (ok()) {
     r->pending_index_entry = true;
     r->status = r->file->Flush();
@@ -166,57 +161,62 @@ void TableBuilder::Flush() {
   }
 }
 
-void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
+void TableBuilder::AddBlock(BlockBuilder* builder, BlockHandle* handle) {
+  WriteBlock(builder->Finish(), handle);
+  builder->Reset();
+}
+
+void TableBuilder::WriteBlock(const Slice& block_contents,
+                              BlockHandle* handle) {
   // File format contains a sequence of blocks where each block has:
   //    block_data: uint8[n]
   //    type: uint8
   //    crc: uint32
   assert(ok());
   Rep* r = rep_;
-  Slice raw = block->Finish();
-
-  Slice block_contents;
+  Slice raw_block_contents;
   CompressionType type = r->options.compression;
-  // TODO(postrelease): Support more compression options: zlib?
   switch (type) {
     case kNoCompression:
-      block_contents = raw;
+      raw_block_contents = block_contents;
       break;
 
     case kSnappyCompression: {
       std::string* compressed = &r->compressed_output;
-      if (port::Snappy_Compress(raw.data(), raw.size(), compressed) &&
-          compressed->size() < raw.size() - (raw.size() / 8u)) {
-        block_contents = *compressed;
+      if (port::Snappy_Compress(block_contents.data(), block_contents.size(),
+                                compressed) &&
+          compressed->size() <
+              block_contents.size() - (block_contents.size() / 8u)) {
+        raw_block_contents = *compressed;
       } else {
         // Snappy not supported, or compressed less than 12.5%, so just
         // store uncompressed form
-        block_contents = raw;
+        raw_block_contents = block_contents;
         type = kNoCompression;
       }
       break;
     }
   }
-  WriteRawBlock(block_contents, type, handle);
+  WriteRawBlock(raw_block_contents, type, handle);
   r->compressed_output.clear();
-  block->Reset();
 }
 
-void TableBuilder::WriteRawBlock(const Slice& block_contents,
+void TableBuilder::WriteRawBlock(const Slice& raw_block_contents,
                                  CompressionType type, BlockHandle* handle) {
   Rep* r = rep_;
   handle->set_offset(r->offset);
-  handle->set_size(block_contents.size());
-  r->status = r->file->Append(block_contents);
+  handle->set_size(raw_block_contents.size());
+  r->status = r->file->Append(raw_block_contents);
   if (r->status.ok()) {
     char trailer[kBlockTrailerSize];
     trailer[0] = type;
-    uint32_t crc = crc32c::Value(block_contents.data(), block_contents.size());
+    uint32_t crc =
+        crc32c::Value(raw_block_contents.data(), raw_block_contents.size());
     crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
     EncodeFixed32(trailer + 1, crc32c::Mask(crc));
     r->status = r->file->Append(Slice(trailer, kBlockTrailerSize));
     if (r->status.ok()) {
-      r->offset += block_contents.size() + kBlockTrailerSize;
+      r->offset += raw_block_contents.size() + kBlockTrailerSize;
     }
   }
 }
@@ -251,7 +251,7 @@ Status TableBuilder::Finish() {
 
   // Write metaindex block
   if (ok()) {
-    BlockBuilder meta_index_block(&r->options, BytewiseComparator());
+    BlockBuilder meta_index_block(1);
 
     if (r->filter_block != NULL) {
       // Add mapping from "filter.Name" to location of filter data
@@ -269,19 +269,17 @@ Status TableBuilder::Finish() {
       meta_index_block.Add(key, handle_encoding);
     }
 
-    WriteBlock(&meta_index_block, &metaindex_block_handle);
+    WriteRawBlock(meta_index_block.Finish(), kNoCompression,
+                  &metaindex_block_handle);
   }
 
   // Write index block
   if (ok()) {
     if (r->pending_index_entry) {
-      r->options.comparator->FindShortSuccessor(&r->last_key);
-      std::string handle_encoding;
-      r->pending_handle.EncodeTo(&handle_encoding);
-      r->index_block.Add(r->last_key, Slice(handle_encoding));
+      r->index_block->AddIndexEntry(&r->last_key, NULL, r->pending_handle);
       r->pending_index_entry = false;
     }
-    WriteBlock(&r->index_block, &index_block_handle);
+    WriteBlock(r->index_block->Finish(), &index_block_handle);
   }
 
   // Write footer

@@ -193,7 +193,7 @@ class BlockConstructor : public Constructor {
   virtual Status FinishImpl(const Options& options, const KVMap& data) {
     delete block_;
     block_ = NULL;
-    BlockBuilder builder(&options);
+    BlockBuilder builder(options.block_restart_interval, comparator_);
 
     for (KVMap::const_iterator it = data.begin(); it != data.end(); ++it) {
       builder.Add(it->first, it->second);

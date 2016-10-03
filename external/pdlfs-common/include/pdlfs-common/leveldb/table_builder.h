@@ -82,16 +82,20 @@ class TableBuilder {
   uint64_t FileSize() const;
 
  private:
+  void WriteBlock(const Slice& block_contents, BlockHandle* handle);
+  void WriteRawBlock(const Slice& raw_block_contents, CompressionType,
+                     BlockHandle* handle);
+
   bool ok() const { return status().ok(); }
-  void WriteBlock(BlockBuilder* block, BlockHandle* handle);
-  void WriteRawBlock(const Slice& data, CompressionType, BlockHandle* handle);
+
+  void AddBlock(BlockBuilder* builder, BlockHandle* handle);
 
   struct Rep;
   Rep* rep_;
 
   // No copying allowed
-  TableBuilder(const TableBuilder&);
   void operator=(const TableBuilder&);
+  TableBuilder(const TableBuilder&);
 };
 
 }  // namespace pdlfs

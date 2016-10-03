@@ -122,6 +122,14 @@ struct DBOptions {
   // Default: 16
   int block_restart_interval;
 
+  // Number of keys between restart points for delta encoding for keys
+  // in the index block.
+  // This parameter can be changed dynamically.  Most clients should
+  // leave this parameter alone.
+  //
+  // Default: 1
+  int index_block_restart_interval;
+
   // Compress blocks using the specified compression algorithm.  This
   // parameter can be changed dynamically.
   //
