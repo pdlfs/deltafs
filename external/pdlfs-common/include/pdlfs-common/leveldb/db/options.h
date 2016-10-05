@@ -34,6 +34,14 @@ enum CompressionType {
   kSnappyCompression = 0x1
 };
 
+// Type of index for each generated SSTables.
+enum IndexType {
+  // NOTE: do not change the values of existing entries, as these are
+  // part of the persistent format on disk.
+  kMultiwaySearchTree = 0x0,
+  kCompact = 0x1
+};
+
 // Options to control the behavior of a database (passed to DB::Open)
 struct DBOptions {
   // -------------------
@@ -114,6 +122,11 @@ struct DBOptions {
   //
   // Default: 4K
   size_t block_size;
+
+  // Type of index to use for each generated SSTable.
+  //
+  // Default: kMultiwaySearchTree
+  IndexType index_type;
 
   // Number of keys between restart points for delta encoding of keys.
   // This parameter can be changed dynamically.  Most clients should

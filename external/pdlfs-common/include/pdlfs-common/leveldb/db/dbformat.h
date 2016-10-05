@@ -15,6 +15,7 @@
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
+#include "pdlfs-common/leveldb/slice_transform.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/strutil.h"
 

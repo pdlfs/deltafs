@@ -15,6 +15,7 @@
 #include <string>
 
 #include "pdlfs-common/slice.h"
+#include "pdlfs-common/status.h"
 
 namespace pdlfs {
 
@@ -47,7 +48,7 @@ class IndexBuilder {
   virtual void OnKeyAdded(const Slice& key) = 0;
 
   // Update options.
-  virtual void ChangeOptions(const Options* options) = 0;
+  virtual Status ChangeOptions(const Options* options) = 0;
 
   // Returns an estimate of the current size of the index
   // block we are building.

@@ -19,7 +19,7 @@ set (pdlfs-common-srcs arena.cc blkdb.cc cache.cc coding.cc crc32c.cc
      hash.cc histogram.cc index_cache.cc lease.cc log_reader.cc log_writer.cc
      logging.cc lookup_cache.cc margo_rpc.cc mdb.cc mercury_rpc.cc
      osd.cc osd_internal.cc port_posix.cc posix_env.cc rpc.cc
-     slice.cc status.cc strutil.cc testharness.cc testutil.cc xxhash.cc)
+     slice.cc spooky.cc status.cc strutil.cc testharness.cc testutil.cc xxhash.cc)
 set (pdlfs-common-tests arena_test.cc blkdb_test.cc cache_test.cc
      coding_test.cc crc32c_test.cc dbfiles_test.cc ect_test.cc
      env_test.cc fstypes_test.cc gigaplus_test.cc hash_test.cc log_test.cc
@@ -31,13 +31,13 @@ set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
      db/memtable.cc db/options.cc db/readonly.cc db/readonly_impl.cc
      db/repair.cc db/table_cache.cc db/version_edit.cc db/version_set.cc
      db/write_batch.cc filter_block.cc filter_policy.cc format.cc
-     iterator.cc merger.cc table.cc table_builder.cc table_stats.cc
-     two_level_iterator.cc )
+     index_block.cc iterator.cc merger.cc table.cc table_builder.cc
+     table_stats.cc two_level_iterator.cc )
 set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
      db/bulk_test.cc db/corruption_test.cc db/db_table_test.cc db/db_test.cc
      db/dbformat_test.cc db/readonly_test.cc db/version_edit_test.cc
      db/version_set_test.cc db/write_batch_test.cc filter_block_test.cc
-     skiplist_test.cc table_test.cc)
+     index_block_test.cc skiplist_test.cc table_test.cc)
 
 # rados directory and tests
 if (PDLFS_RADOS)

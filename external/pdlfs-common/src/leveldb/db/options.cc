@@ -29,6 +29,7 @@ DBOptions::DBOptions()
       table_cache(NULL),
       block_cache(NULL),
       block_size(4096),
+      index_type(kMultiwaySearchTree),
       block_restart_interval(16),
       index_block_restart_interval(1),
       compression(kSnappyCompression),

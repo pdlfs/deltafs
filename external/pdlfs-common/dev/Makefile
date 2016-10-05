@@ -45,6 +45,7 @@ TESTS = \
 	src/strutil_test \
 	src/leveldb/bloom_test \
 	src/leveldb/filter_block_test \
+	src/leveldb/index_block_test \
 	src/leveldb/skiplist_test \
 	src/leveldb/table_test \
 	src/leveldb/db/write_batch_test \
@@ -175,6 +176,9 @@ $(STATIC_OUTDIR)/bloom_test:src/leveldb/bloom_test.cc $(STATIC_LIBOBJECTS) $(TES
 
 $(STATIC_OUTDIR)/filter_block_test:src/leveldb/filter_block_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/leveldb/filter_block_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/index_block_test:src/leveldb/index_block_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/leveldb/index_block_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/skiplist_test:src/leveldb/skiplist_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/leveldb/skiplist_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
