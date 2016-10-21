@@ -113,7 +113,7 @@ include (xpkg-import)
 
 if (PDLFS_GFLAGS)
     find_package(gflags REQUIRED)
-    if (NOT GFLAGS_FOUND)
+    if (NOT GFLAGS_FOUND AND NOT gflags_FOUND)
         message (FATAL_ERROR
         "-- gflags not found try setting -D GFLAGS_{INCLUDE,LIBRARY}_DIR")
     endif ()
