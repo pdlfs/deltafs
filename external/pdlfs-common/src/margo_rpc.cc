@@ -113,6 +113,25 @@ void MargoRPC::Client::Call(Message& in, Message& out) {
                               rpc_->rpc_timeout_ / 1000);
     if (ret == HG_SUCCESS) {
       ret = HG_Get_output(handle, &out);
+      if (ret == HG_SUCCESS) {
+        /*
+         * XXX: HG_Get_output() adds a reference to the handle.
+         * we need to call HG_Free_output() to drop this reference.
+         * this will also call the prog with the HG_FREE op.  that
+         * would free anything we malloc'd and attached to state->out.
+         * that would be a problem (since we are not finished with
+         * state->out yet), but we know that our proc function does
+         * not malloc anything (see RPCMessageCoder() above here).
+         * instead it copies all the data out of the handle into state->out.
+         * in fact, HG_FREE doesn't do anything in RPCMessageCoder().
+         * so for this special case, it is safe to call HG_Free_output()
+         * directly after calling HG_Get_output().  (longer term
+         * our RPC framework may need an additional call for clients
+         * to indicate they are done so anything malloc'd on the out
+         * structure can be freed...)
+         */
+        HG_Free_output(handle, &out);
+      }
     }
     HG_Destroy(handle);
   }

@@ -15,6 +15,7 @@
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/ect.h"
+#include "pdlfs-common/leveldb/iterator.h"
 
 namespace pdlfs {
 
@@ -76,13 +77,12 @@ class DefaultIndexReader : public IndexReader {
   Block block_;
 };
 
+#if 0
 namespace {
 
 // Metadata on a prefix group
 struct PgInfo {
   size_t first_prefix;  // Rank of the first prefix key in this
-                        // prefix group
-  size_t last_prefix;   // Rank of the last prefix key in this
                         // prefix group
   size_t first_block;   // Rank of the first block covered by this
                         // prefix group
@@ -92,22 +92,19 @@ struct PgInfo {
     PutVarint32(dst, num_blocks);
     PutVarint32(dst, first_block);
     PutVarint32(dst, first_prefix);
-    PutVarint32(dst, last_prefix);
   }
 
   bool DecodeFrom(Slice* input) {
-    uint32_t f;
-    uint32_t l;
-    uint32_t b;
-    uint32_t n;
-    if (!GetVarint32(input, &n) || !GetVarint32(input, &b) ||
-        !GetVarint32(input, &f) || !GetVarint32(input, &l)) {
+    uint32_t v1;
+    uint32_t v2;
+    uint32_t v3;
+    if (!GetVarint32(input, &v3) || !GetVarint32(input, &v2) ||
+        !GetVarint32(input, &v1)) {
       return false;
     } else {
-      num_blocks = n;
-      first_block = b;
-      first_prefix = f;
-      last_prefix = l;
+      num_blocks = v3;
+      first_block = v2;
+      first_prefix = v1;
       return true;
     }
   }
@@ -166,12 +163,10 @@ class ThreeLevelCompactIndexBuilder : public IndexBuilder {
     }
 
     PgInfo pg;
-    size_t r1 = buffer_.size() / prefix_len_;
-    pg.first_prefix = r1;
+    size_t r = buffer_.size() / prefix_len_;
+    pg.first_prefix = r;
     buffer_.append(starting_prefix_);
     starting_prefix_.clear();
-    size_t r2 = buffer_.size() / prefix_len_;
-    pg.last_prefix = r2;
     buffer_.append(ending_prefix_);
     ending_prefix_.clear();
     pg.first_block = starting_block_;
@@ -288,7 +283,6 @@ class ThreeLevelCompactIndexBuilder : public IndexBuilder {
     PgInfo pg;
     size_t r = buffer_.size() / prefix_len_;
     pg.first_prefix = r;
-    pg.last_prefix = r;
     pg.first_block = n_blocks_;
     pg.num_blocks = 0;
     pg.EncodeTo(&pg_info_);
@@ -348,12 +342,32 @@ class ThreeLevelCompactIndexBuilder : public IndexBuilder {
   size_t off_;
 };
 
-IndexBuilder* IndexBuilder::Create(const Options* options) {
-  if (options->index_type == kCompact) {
-    return new ThreeLevelCompactIndexBuilder(options);
-  } else {
-    return new DefaultIndexBuilder(options);
+namespace {
+
+class ECTBuilder {
+ public:
+  ECTBuilder(const Slice& prefix_array, size_t prefix_len) {
+    Slice input = prefix_array;
+    while (!input.empty()) {
+      assert(input.size() >= prefix_len);
+      prefix_.push_back(Slice(input.data(), prefix_len));
+      input.remove_prefix(prefix_len);
+    }
   }
+
+  // Caller should delete the result.
+  ECT* ToECT() {
+    return ECT::Default(prefix_[0].size(), prefix_.size(), &prefix_[0]);
+  }
+
+ private:
+  std::vector<Slice> prefix_;
+};
+}
+#endif
+
+IndexBuilder* IndexBuilder::Create(const Options* options) {
+  return new DefaultIndexBuilder(options);
 }
 
 IndexReader* IndexReader::Create(const BlockContents& contents,

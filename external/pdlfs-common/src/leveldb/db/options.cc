@@ -34,9 +34,11 @@ DBOptions::DBOptions()
       index_block_restart_interval(1),
       compression(kSnappyCompression),
       filter_policy(NULL),
+      no_memtable(false),
       gc_skip_deletion(false),
       skip_lock_file(false),
       rotating_manifest(false),
+      disable_write_ahead_log(false),
       disable_compaction(false),
       disable_seek_compaction(false),
       table_file_size(2 * 1048576),
@@ -91,6 +93,9 @@ DBOptions SanitizeOptions(const std::string& dbname,
       // No place suitable for logging
       result.info_log = NULL;
     }
+  }
+  if (result.disable_compaction) {
+    result.disable_seek_compaction = true;
   }
   if (result.block_cache == NULL) {
     result.block_cache = NewLRUCache(8 << 20);

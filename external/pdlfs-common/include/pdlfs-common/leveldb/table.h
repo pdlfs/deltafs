@@ -25,7 +25,7 @@ class Footer;
 class Iterator;
 class RandomAccessFile;
 class TableCache;
-class TableStats;
+class TableProperties;
 
 // A Table is a sorted map from strings to strings.  Tables are
 // immutable and persistent.  A Table may be safely accessed from
@@ -64,6 +64,10 @@ class Table {
   // be close to the file length.
   uint64_t ApproximateOffsetOf(const Slice& key) const;
 
+  // Return the properties associated with the table or NULL
+  // if no valid properties can be found.
+  const TableProperties* GetProperties() const;
+
  private:
   struct Rep;
   Rep* rep_;
@@ -79,12 +83,9 @@ class Table {
                      void (*handle_result)(void* arg, const Slice& k,
                                            const Slice& v));
 
-  friend class TableStats;
-  const TableStats* ObtainStats() const;
-
   void ReadMeta(const Footer& footer);
   void ReadFilter(const Slice& filter_handle_value);
-  void ReadStats(const Slice& stats_handle_value);
+  void ReadProps(const Slice& props_handle_value);
 
   // No copying allowed
   void operator=(const Table&);

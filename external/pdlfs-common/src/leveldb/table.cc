@@ -23,6 +23,7 @@
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/iterator.h"
 #include "pdlfs-common/leveldb/table.h"
+#include "pdlfs-common/leveldb/table_properties.h"
 
 namespace pdlfs {
 
@@ -37,8 +38,8 @@ struct Table::Rep {
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
   IndexReader* index_block;
 
-  TableStats stats;  // All stats physically embedded in the table
-  bool stats_valid;
+  TableProperties props;  // All properties embedded in the table
+  bool props_valid;
 
   explicit Rep() {}
   ~Rep() {
@@ -90,7 +91,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
     rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
     rep->filter_data = NULL;
     rep->filter = NULL;
-    rep->stats_valid = false;
+    rep->props_valid = false;
 
     *table = new Table(rep);
     (*table)->ReadMeta(footer);
@@ -117,10 +118,10 @@ void Table::ReadMeta(const Footer& footer) {
   Block* meta = new Block(contents);
   Iterator* iter = meta->NewIterator(BytewiseComparator());
 
-  Slice stats_key("internal.table_stats");
-  iter->Seek(stats_key);
-  if (iter->Valid() && iter->key() == stats_key) {
-    ReadStats(iter->value());
+  Slice props_key("table.properties");
+  iter->Seek(props_key);
+  if (iter->Valid() && iter->key() == props_key) {
+    ReadProps(iter->value());
   }
 
   if (r->options.filter_policy != NULL) {
@@ -160,7 +161,7 @@ void Table::ReadFilter(const Slice& handle_value) {
   }
 }
 
-void Table::ReadStats(const Slice& handle_value) {
+void Table::ReadProps(const Slice& handle_value) {
   Rep* r = rep_;
   Slice v = handle_value;
   BlockHandle handle;
@@ -176,8 +177,8 @@ void Table::ReadStats(const Slice& handle_value) {
   if (!ReadBlock(r->file, opt, handle, &block).ok()) {
     return;
   }
-  if (r->stats.DecodeFrom(block.data).ok()) {
-    r->stats_valid = true;
+  if (r->props.DecodeFrom(block.data).ok()) {
+    r->props_valid = true;
   }
   if (block.heap_allocated) {
     delete[] block.data.data();
@@ -320,10 +321,10 @@ uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
 
 Table::~Table() { delete rep_; }
 
-const TableStats* Table::ObtainStats() const {
+const TableProperties* Table::GetProperties() const {
   Rep* r = rep_;
-  if (r->stats_valid) {
-    return &r->stats;
+  if (r->props_valid) {
+    return &r->props;
   } else {
     return NULL;
   }

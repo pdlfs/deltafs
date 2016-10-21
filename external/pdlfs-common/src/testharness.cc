@@ -62,8 +62,14 @@ int RunAllTests(int* argc, char*** argv) {
         std::string name = t.base;
         name.push_back('.');
         name.append(t.name);
-        if (strstr(name.c_str(), matcher) == NULL) {
-          continue;
+        if (matcher[0] != '~') {
+          if (strstr(name.c_str(), matcher) == NULL) {
+            continue;
+          }
+        } else {
+          if (strstr(name.c_str(), matcher + 1) != NULL) {
+            continue;
+          }
         }
       }
       fprintf(stderr, "==== Test %s.%s\n", t.base, t.name);

@@ -1,5 +1,3 @@
-#include "pdlfs-common/log_writer.h"
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2016 Carnegie Mellon University.
@@ -10,6 +8,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/log_writer.h"
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/crc32c.h"
 #include "pdlfs-common/env.h"
@@ -107,6 +106,11 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr, size_t n) {
     }
   }
   block_offset_ += kHeaderSize + n;
+  return s;
+}
+
+Status Writer::Sync() {
+  Status s = dest_->Sync();
   return s;
 }
 
