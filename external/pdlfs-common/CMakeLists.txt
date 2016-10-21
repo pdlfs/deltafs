@@ -107,45 +107,45 @@ set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 include (xpkg-import)
 
 if (PDLFS_GFLAGS)
-    find_package(GFlags MODULE REQUIRED)
-    if (NOT GFLAGS_FOUND)
+    find_package(gflags REQUIRED)
+    if (NOT gflags_FOUND)
         message (FATAL_ERROR
-        "-- gflags not found try setting -D GFLAGS_{INCLUDE,LIBRARY}_DIR")
+        "gflags not found try setting -D GFLAGS_{INCLUDE,LIBRARY}_DIR")
     endif ()
-    message (STATUS "-- gflags enabled")
+    message (STATUS "gflags enabled")
 endif ()
 
 if (PDLFS_GLOG)
     xdual_import (glog::glog,glog,libglog REQUIRED)
-    message (STATUS "-- glog enabled")
+    message (STATUS "glog enabled")
 endif ()
 
 if (PDLFS_MERCURY_RPC)
     find_package(mercury CONFIG REQUIRED)
-    message (STATUS "-- mercury rpc enabled")
+    message (STATUS "mercury rpc enabled")
 endif ()
 
 if (PDLFS_MARGO_RPC)
     xpkg_import_module (margo REQUIRED margo)
-    message (STATUS "-- margo rpc enabled")
+    message (STATUS "margo rpc enabled")
 endif ()
 
 if (PDLFS_RADOS)
     find_package(RADOS MODULE REQUIRED)
     if (NOT RADOS_FOUND)
         message (FATAL_ERROR
-        "-- rados not found try setting -D RADOS_{INCLUDE,LIBRARY}_DIR")
+        "rados not found try setting -D RADOS_{INCLUDE,LIBRARY}_DIR")
     endif ()
-    message (STATUS "-- rados enabled")
+    message (STATUS "rados enabled")
 endif ()
 
 if (PDLFS_SNAPPY)
     find_package(Snappy MODULE REQUIRED)
-    if (NOT SNAPPY_FOUND)
+    if (NOT Snappy_FOUND)
         message (FATAL_ERROR
-        "-- snappy not found try setting -D SNAPPY_{INCLUDE,LIBRARY}_DIR")
+        "snappy not found try setting -D SNAPPY_{INCLUDE,LIBRARY}_DIR")
     endif ()
-    message (STATUS "-- snappy enabled")
+    message (STATUS "snappy enabled")
 endif ()
 
 #
@@ -165,4 +165,3 @@ if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
 endif ()
 
 add_subdirectory (src)
-

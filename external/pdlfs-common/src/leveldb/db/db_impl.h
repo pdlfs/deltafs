@@ -56,7 +56,10 @@ class DBImpl : public DB {
                       const std::string& dir, SequenceNumber* min_seq,
                       SequenceNumber* max_seq);
 
-  // Extra methods (for testing) that are not in the public DB interface
+  // Extra methods that are not in the public DB interface
+
+  // Bulk insert a list of pre-ordered and pre-sequenced updates.
+  Status BulkInsert(Iterator* updates);
 
   // Compact any files in the named level that overlap [*begin,*end]
   void TEST_CompactRange(int level, const Slice* begin, const Slice* end);
@@ -78,16 +81,18 @@ class DBImpl : public DB {
   // bytes.
   void RecordReadSample(Slice key);
 
+  Status Get(const ReadOptions&, const Slice& key, Buffer* buf);
+  // The snapshots specified in read options are ignored by the following calls
+  Status Get(const ReadOptions&, const LookupKey& lkey, Buffer* buf);
+  Iterator* NewInternalIterator(const ReadOptions&,
+                                SequenceNumber* latest_snapshot,
+                                uint32_t* seed);
+
  private:
   friend class DB;
   struct CompactionState;
   struct InsertionState;
   struct Writer;
-
-  Status InternalGet(const ReadOptions&, const Slice& key, Buffer* buf);
-  Iterator* NewInternalIterator(const ReadOptions&,
-                                SequenceNumber* latest_snapshot,
-                                uint32_t* seed);
 
   Status NewDB();
 
@@ -109,13 +114,17 @@ class DBImpl : public DB {
   Status RecoverLogFile(uint64_t log_number, VersionEdit* edit,
                         SequenceNumber* max_sequence);
 
-  Status WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base);
+  Status WriteMemTable(MemTable* mem, VersionEdit* edit, Version* base);
+  Status WriteLevel0Table(Iterator* iter, VersionEdit* edit, Version* base,
+                          SequenceNumber* min_seq, SequenceNumber* max_seq,
+                          bool force_level0);
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */);
   WriteBatch* BuildBatchGroup(Writer** last_writer);
 
   void RecordBackgroundError(const Status& s);
 
+  bool HasCompaction();
   void MaybeScheduleCompaction();
   static void BGWork(void* db);
   void BackgroundCall();
@@ -139,8 +148,6 @@ class DBImpl : public DB {
   bool owns_info_log_;
   bool owns_cache_;
   bool owns_table_cache_;
-  bool allow_seek_compaction_;
-  bool allow_compaction_;
   const std::string dbname_;
 
   // table_cache_ provides its own synchronization
@@ -165,7 +172,7 @@ class DBImpl : public DB {
   std::deque<Writer*> writers_;
   WriteBatch flush_memtable_;  // Dummy batch representing a compaction request
   WriteBatch sync_wal_;        // Dummy batch representing a WAL sync request
-  WriteBatch* tmp_batch_;
+  WriteBatch tmp_batch_;
 
   SnapshotList snapshots_;
 

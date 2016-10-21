@@ -14,7 +14,6 @@
 #include "filter_block.h"
 #include "format.h"
 #include "index_block.h"
-#include "table_stats.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/crc32c.h"
@@ -23,6 +22,7 @@
 #include "pdlfs-common/leveldb/db/dbformat.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/table_builder.h"
+#include "pdlfs-common/leveldb/table_properties.h"
 
 #include <assert.h>
 
@@ -37,10 +37,10 @@ struct TableBuilder::Rep {
   IndexBuilder* index_block;
   std::string last_key;
   int64_t num_entries;
+  int64_t num_blocks;
   bool closed;  // Either Finish() or Abandon() has been called.
   FilterBlockBuilder* filter_block;
-  bool enable_stats_;  // True if stats should be maintained for the table
-  TableStats stats_;
+  TableProperties props_;
 
   // We do not emit the index entry for a block until we have seen the
   // first key for the next data block.  This allows us to use shorter
@@ -63,11 +63,11 @@ struct TableBuilder::Rep {
         data_block(options.block_restart_interval, options.comparator),
         index_block(IndexBuilder::Create(&options)),
         num_entries(0),
+        num_blocks(0),
         closed(false),
         filter_block(options.filter_policy != NULL
                          ? new FilterBlockBuilder(options.filter_policy)
                          : NULL),
-        enable_stats_(true),
         pending_index_entry(false) {
     assert(options.comparator != NULL);
   }
@@ -77,7 +77,17 @@ Status TableBuilder::status() const { return rep_->status; }
 
 uint64_t TableBuilder::NumEntries() const { return rep_->num_entries; }
 
+uint64_t TableBuilder::NumBlocks() const { return rep_->num_blocks; }
+
 uint64_t TableBuilder::FileSize() const { return rep_->offset; }
+
+const TableProperties* TableBuilder::properties() const {
+  return &rep_->props_;
+}
+
+const IndexBuilder* TableBuilder::index_builder() const {
+  return rep_->index_block;
+}
 
 TableBuilder::TableBuilder(const Options& options, WritableFile* file)
     : rep_(new Rep(options, file)) {
@@ -113,14 +123,14 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
   if (!ok()) return;
   if (r->num_entries > 0) {
     assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);
-  } else if (r->enable_stats_) {
-    r->stats_.SetFirstKey(key);
+  } else {
+    r->props_.SetFirstKey(key);
   }
 
-  if (r->enable_stats_) {
+  {
     ParsedInternalKey parsed;
     if (ParseInternalKey(key, &parsed)) {
-      r->stats_.AddSeq(parsed.sequence);
+      r->props_.AddSeq(parsed.sequence);
     }
   }
 
@@ -155,9 +165,12 @@ void TableBuilder::Flush() {
   if (ok()) {
     r->pending_index_entry = true;
     r->status = r->file->Flush();
-  }
-  if (r->filter_block != NULL) {
-    r->filter_block->StartBlock(r->offset);
+    if (ok()) {
+      r->num_blocks++;
+      if (r->filter_block != NULL) {
+        r->filter_block->StartBlock(r->offset);
+      }
+    }
   }
 }
 
@@ -227,7 +240,7 @@ Status TableBuilder::Finish() {
   assert(!r->closed);
   r->closed = true;
   BlockHandle filter_block_handle;
-  BlockHandle stats_block_handle;
+  BlockHandle props_block_handle;
   BlockHandle metaindex_block_handle;
   BlockHandle index_block_handle;
 
@@ -241,12 +254,10 @@ Status TableBuilder::Finish() {
 
   // Write stats
   if (ok()) {
-    if (r->enable_stats_) {
-      r->stats_.SetLastKey(r->last_key);
-      std::string stats_encoding;
-      r->stats_.EncodeTo(&stats_encoding);
-      WriteRawBlock(stats_encoding, kNoCompression, &stats_block_handle);
-    }
+    r->props_.SetLastKey(r->last_key);
+    std::string props_encoding;
+    r->props_.EncodeTo(&props_encoding);
+    WriteRawBlock(props_encoding, kNoCompression, &props_block_handle);
   }
 
   // Write metaindex block
@@ -262,12 +273,10 @@ Status TableBuilder::Finish() {
       meta_index_block.Add(key, handle_encoding);
     }
 
-    if (r->enable_stats_) {
-      std::string key = "internal.table_stats";
-      std::string handle_encoding;
-      stats_block_handle.EncodeTo(&handle_encoding);
-      meta_index_block.Add(key, handle_encoding);
-    }
+    std::string key = "table.properties";
+    std::string handle_encoding;
+    props_block_handle.EncodeTo(&handle_encoding);
+    meta_index_block.Add(key, handle_encoding);
 
     WriteRawBlock(meta_index_block.Finish(), kNoCompression,
                   &metaindex_block_handle);

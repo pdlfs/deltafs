@@ -32,7 +32,7 @@ set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
      db/repair.cc db/table_cache.cc db/version_edit.cc db/version_set.cc
      db/write_batch.cc filter_block.cc filter_policy.cc format.cc
      index_block.cc iterator.cc merger.cc table.cc table_builder.cc
-     table_stats.cc two_level_iterator.cc )
+     table_properties.cc two_level_iterator.cc )
 set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
      db/bulk_test.cc db/corruption_test.cc db/db_table_test.cc db/db_test.cc
      db/dbformat_test.cc db/readonly_test.cc db/version_edit_test.cc
@@ -62,7 +62,7 @@ set (THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package (Threads REQUIRED)
 
 if (TARGET gflags AND PDLFS_GFLAGS)
-    list (APPEND PDLFS_REQUIRED_PACKAGES GFlags)
+    list (APPEND PDLFS_REQUIRED_PACKAGES gflags)
     list (APPEND pdlfs-xtra-libs gflags)
 endif ()
 
@@ -275,7 +275,7 @@ install (FILES "${CMAKE_CURRENT_BINARY_DIR}/${PDLFS_NAME}-config.cmake"
                "${CMAKE_CURRENT_BINARY_DIR}/${PDLFS_NAME}-config-version.cmake"
          DESTINATION ${pdlfs-pkg-loc} )
 install (FILES "../cmake/xpkg-import.cmake" "../cmake/FindRADOS.cmake"
-         "../cmake/FindGFlags.cmake" "../cmake/FindSnappy.cmake"
+         "../cmake/Findgflags.cmake" "../cmake/FindSnappy.cmake"
          DESTINATION ${pdlfs-pkg-loc})
 install (DIRECTORY ../include/pdlfs-common
          DESTINATION include

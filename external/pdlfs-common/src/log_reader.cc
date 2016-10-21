@@ -1,5 +1,3 @@
-#include "pdlfs-common/log_reader.h"
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2016 Carnegie Mellon University.
@@ -15,6 +13,7 @@
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/crc32c.h"
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/log_reader.h"
 
 namespace pdlfs {
 namespace log {

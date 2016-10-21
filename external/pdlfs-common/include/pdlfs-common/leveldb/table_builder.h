@@ -26,7 +26,9 @@ namespace pdlfs {
 
 class BlockBuilder;
 class BlockHandle;
+class IndexBuilder;
 class WritableFile;
+class TableProperties;
 
 class TableBuilder {
   typedef DBOptions Options;
@@ -59,6 +61,12 @@ class TableBuilder {
   // REQUIRES: Finish(), Abandon() have not been called
   void Flush();
 
+  // Return a reference to the embedded index builder.
+  const IndexBuilder* index_builder() const;
+
+  // Return the properties of the table being built.
+  const TableProperties* properties() const;
+
   // Return non-ok iff some error has been detected.
   Status status() const;
 
@@ -76,6 +84,9 @@ class TableBuilder {
 
   // Number of calls to Add() so far.
   uint64_t NumEntries() const;
+
+  // Number of data blocks generated so far.
+  uint64_t NumBlocks() const;
 
   // Size of the file generated so far.  If invoked after a successful
   // Finish() call, returns the size of the final generated file.

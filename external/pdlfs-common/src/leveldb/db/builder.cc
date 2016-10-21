@@ -9,74 +9,21 @@
  */
 
 #include "builder.h"
-#include "../table_stats.h"
 #include "table_cache.h"
 #include "version_edit.h"
 
 #include "pdlfs-common/dbfiles.h"
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
-#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/iterator.h"
 #include "pdlfs-common/leveldb/table_builder.h"
+#include "pdlfs-common/leveldb/table_properties.h"
 
 namespace pdlfs {
 
-namespace {
-typedef DBOptions Options;
-
-static Status CheckFirstKey(Table* table, const Options& options,
-                            const InternalKey& key) {
-  Slice reported = TableStats::FirstKey(table);
-  const InternalKeyComparator* icmp =
-      reinterpret_cast<const InternalKeyComparator*>(options.comparator);
-  if (icmp->Compare(reported, key.Encode()) != 0) {
-    return Status::Corruption("First key is reported wrong");
-  } else {
-    return Status::OK();
-  }
-}
-
-static Status CheckLastKey(Table* table, const Options& options,
-                           const InternalKey& key) {
-  Slice reported = TableStats::LastKey(table);
-  const InternalKeyComparator* icmp =
-      reinterpret_cast<const InternalKeyComparator*>(options.comparator);
-  if (icmp->Compare(reported, key.Encode()) != 0) {
-    return Status::Corruption("Last key is reported wrong");
-  } else {
-    return Status::OK();
-  }
-}
-
-static Status LoadAndCheckTable(const Options& options, TableCache* table_cache,
-                                const FileMetaData* meta) {
-  Status s;
-  Table* table;
-  Iterator* it = table_cache->NewIterator(
-      ReadOptions(), meta->number, meta->file_size, meta->seq_off, &table);
-
-  s = it->status();
-  const bool paranoid_checks = options.paranoid_checks;
-  if (s.ok() && paranoid_checks) {
-    if (TableStats::HasStats(table)) {
-      if (s.ok()) {
-        s = CheckFirstKey(table, options, meta->smallest);
-      }
-      if (s.ok()) {
-        s = CheckLastKey(table, options, meta->largest);
-      }
-    }
-  }
-
-  delete it;
-  return s;
-}
-}  // namespace
-
 Status BuildTable(const std::string& dbname, Env* env, const DBOptions& options,
-                  TableCache* table_cache, Iterator* iter, FileMetaData* meta) {
+                  TableCache* table_cache, Iterator* iter,
+                  SequenceNumber* min_seq, SequenceNumber* max_seq,
+                  FileMetaData* meta) {
   Status s;
   assert(meta->number != 0);
   meta->file_size = 0;
@@ -92,11 +39,8 @@ Status BuildTable(const std::string& dbname, Env* env, const DBOptions& options,
     }
 
     TableBuilder* builder = new TableBuilder(options, file);
-    meta->smallest.DecodeFrom(iter->key());
     for (; iter->Valid(); iter->Next()) {
-      Slice key = iter->key();
-      meta->largest.DecodeFrom(key);
-      builder->Add(key, iter->value());
+      builder->Add(iter->key(), iter->value());
     }
 
     // Finish and check for builder errors
@@ -109,8 +53,17 @@ Status BuildTable(const std::string& dbname, Env* env, const DBOptions& options,
     } else {
       builder->Abandon();
     }
-    delete builder;
 
+    // Obtain table properties
+    if (s.ok()) {
+      const TableProperties* props = builder->properties();
+      meta->smallest.DecodeFrom(props->first_key());
+      meta->largest.DecodeFrom(props->last_key());
+      *min_seq = props->min_seq();
+      *max_seq = props->max_seq();
+    }
+
+    delete builder;
     // Finish and check for file errors
     if (s.ok()) {
       s = file->Sync();
@@ -122,13 +75,34 @@ Status BuildTable(const std::string& dbname, Env* env, const DBOptions& options,
     file = NULL;
 
     if (s.ok()) {
-      s = LoadAndCheckTable(options, table_cache, meta);
+      Table* table;
+      // Verify that the table is usable
+      Iterator* it = table_cache->NewIterator(
+          ReadOptions(), meta->number, meta->file_size, meta->seq_off, &table);
+      s = it->status();
+
+#if 0
+      if (s.ok()) {
+        const TableProperties* props = table->GetProperties();
+        if (props != NULL) {
+          if (props->first_key() != meta->smallest.Encode() ||
+              props->last_key() != meta->largest.Encode()) {
+            s = Status::Corruption("Table properties fail to match MANIFEST");
+            table_cache->Evict(meta->number);
+          }
+        }
+      }
+#endif
+
+      delete it;
     }
   }
 
   // Check for input iterator errors
   if (!iter->status().ok()) {
-    s = iter->status();
+    if (s.ok()) {
+      s = iter->status();
+    }
   }
 
   if (s.ok() && meta->file_size > 0) {

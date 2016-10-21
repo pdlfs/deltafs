@@ -96,6 +96,7 @@ hg_return_t MercuryRPC::RPCCallback(hg_handle_t handle) {
   if (ret == HG_SUCCESS) {
     registered_data(handle)->fs_->Call(input, output);
     ret = HG_Respond(handle, NULL, NULL, &output);
+    HG_Free_input(handle, &input);
   }
   HG_Destroy(handle);
   return ret;
@@ -158,6 +159,25 @@ static hg_return_t SaveReply(const hg_cb_info* info) {
   state->ret = info->ret;
   if (state->ret == HG_SUCCESS) {
     state->ret = HG_Get_output(handle, state->out);
+    if (state->ret == HG_SUCCESS) {
+      /*
+       * XXX: HG_Get_output() adds a reference to the handle.
+       * we need to call HG_Free_output() to drop this reference.
+       * this will also call the prog with the HG_FREE op.  that
+       * would free anything we malloc'd and attached to state->out.
+       * that would be a problem (since we are not finished with
+       * state->out yet), but we know that our proc function does
+       * not malloc anything (see RPCMessageCoder() above here).
+       * instead it copies all the data out of the handle into state->out.
+       * in fact, HG_FREE doesn't do anything in RPCMessageCoder().
+       * so for this special case, it is safe to call HG_Free_output()
+       * directly after calling HG_Get_output().  (longer term
+       * our RPC framework may need an additional call for clients
+       * to indicate they are done so anything malloc'd on the out
+       * structure can be freed...)
+       */
+      HG_Free_output(handle, state->out);
+    }
   }
 
   state->rpc_mu->Lock();
@@ -183,21 +203,24 @@ void MercuryRPC::Client::Call(Message& in, Message& out) {
     state.rpc_cv = &cv_;
     state.out = &out;
     Timer timer;
-    rpc_->AddTimerFor(handle, &timer);
     ret = HG_Forward(handle, SaveReply, &state, &in);
-    rpc_->RemoveTimer(&timer);
+
     if (ret == HG_SUCCESS) {
+      rpc_->AddTimerFor(handle, &timer);
       MutexLock ml(&mu_);
       while (!state.rpc_done) {
         cv_.Wait();
       }
+      rpc_->RemoveTimer(&timer);
       ret = state.ret;
     }
+
     HG_Destroy(handle);
   }
   rpc_->Release(entry);
   if (ret != HG_SUCCESS) {
-    throw ENETUNREACH;
+    /* how to recover? */
+    assert(0);
   }
 }
 

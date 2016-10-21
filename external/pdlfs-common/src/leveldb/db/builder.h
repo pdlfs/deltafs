@@ -10,18 +10,17 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/status.h"
 
 /* clang-format off */
 namespace pdlfs {
 
-struct DBOptions;
 struct FileMetaData;
 
-class Env;
-class Iterator;
 class TableCache;
-class VersionEdit;
+class Iterator;
 
 // Build a Table file from the contents of *iter.  The generated file
 // will be named according to meta->number.  On success, the rest of
@@ -34,6 +33,8 @@ extern Status BuildTable(
     const DBOptions& options,
     TableCache* table_cache,
     Iterator* iter,
+    SequenceNumber* min_seq,
+    SequenceNumber* max_seq,
     FileMetaData* meta
 );
 

@@ -38,6 +38,9 @@ class Writer {
 
   Status AddRecord(const Slice& slice);
 
+  // Call Sync() on the destination file.
+  Status Sync();
+
  private:
   WritableFile* dest_;
   int block_offset_;  // Current offset in block

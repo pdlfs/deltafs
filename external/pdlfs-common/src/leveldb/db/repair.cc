@@ -226,12 +226,15 @@ class Repairer {
     }
     delete lfile;
 
+    SequenceNumber ignored_min_seq;
+    SequenceNumber ignored_max_seq;
     // Do not record a version edit for this conversion to a Table
     // since ExtractMetaData() will also generate edits.
     FileMetaData meta;
     meta.number = next_file_number_++;
     Iterator* iter = mem->NewIterator();
-    status = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
+    status = BuildTable(dbname_, env_, options_, table_cache_, iter,
+                        &ignored_min_seq, &ignored_max_seq, &meta);
     delete iter;
     mem->Unref();
     mem = NULL;

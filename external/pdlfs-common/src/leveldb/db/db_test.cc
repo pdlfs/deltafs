@@ -991,15 +991,59 @@ TEST(DBTest, RecoverWithLargeLog) {
   ASSERT_GT(NumTableFilesAtLevel(0), 1);
 }
 
+TEST(DBTest, NoMemTable) {
+  Options options = CurrentOptions();
+  options.no_memtable = true;
+  Reopen(&options);
+
+  ASSERT_OK(Put("foo", "v1"));
+  ASSERT_OK(Put("baz", "v5"));
+
+  Reopen(&options);
+  ASSERT_EQ("v1", Get("foo"));
+
+  ASSERT_EQ("v1", Get("foo"));
+  ASSERT_EQ("v5", Get("baz"));
+  ASSERT_OK(Put("bar", "v2"));
+  ASSERT_OK(Put("foo", "v3"));
+
+  Reopen();
+  ASSERT_EQ("v3", Get("foo"));
+  ASSERT_OK(Put("foo", "v4"));
+  ASSERT_EQ("v4", Get("foo"));
+  ASSERT_EQ("v2", Get("bar"));
+  ASSERT_EQ("v5", Get("baz"));
+}
+
+TEST(DBTest, NoLog) {
+  Options options = CurrentOptions();
+  options.disable_write_ahead_log = true;
+  Reopen(&options);
+
+  ASSERT_OK(Put("foo", "v1"));
+  ASSERT_OK(Put("baz", "v5"));
+
+  Reopen(&options);
+  ASSERT_EQ("NOT_FOUND", Get("foo"));
+  ASSERT_EQ("NOT_FOUND", Get("baz"));
+  ASSERT_OK(Put("bar", "v2"));
+  ASSERT_OK(Put("foo", "v3"));
+
+  Reopen();
+  ASSERT_EQ("NOT_FOUND", Get("foo"));
+  ASSERT_OK(Put("foo", "v4"));
+  ASSERT_EQ("v4", Get("foo"));
+  ASSERT_EQ("NOT_FOUND", Get("bar"));
+  ASSERT_EQ("NOT_FOUND", Get("baz"));
+}
+
 TEST(DBTest, NoCompaction) {
   Options options = CurrentOptions();
   options.disable_compaction = true;
   options.disable_seek_compaction = true;
   Reopen(&options);
 
-  const int N = options.l0_hard_limit + 1;
-
-  for (int i = 0; i < N; i++) {
+  for (int i = 0; i < options.l0_hard_limit + 1; i++) {
     Put("100", "v100");
     Put("900", "v900");
     dbfull()->TEST_CompactMemTable();

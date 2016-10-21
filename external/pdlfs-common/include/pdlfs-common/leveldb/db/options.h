@@ -169,6 +169,11 @@ struct DBOptions {
   // -------------------
   // Dangerous zone - parameters for experts
 
+  // Set to true to skip the creation of memtables.  Without memtables,
+  // all write operations directly result in new Level-0 tables.
+  // Default: false
+  bool no_memtable;
+
   // Set to true to skip garbage collection at the end of each compaction run.
   // Default: false
   bool gc_skip_deletion;
@@ -182,6 +187,11 @@ struct DBOptions {
   // odd/even MANIFEST files.
   // Default: false
   bool rotating_manifest;
+
+  // Set to true to disable the use of a write-ahead log to protect
+  // the data in the current memtable.
+  // Default: false
+  bool disable_write_ahead_log;
 
   // If true, no background compaction will be performed except for
   // those triggered by MemTable dumps.
