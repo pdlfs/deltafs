@@ -49,6 +49,13 @@ std::string DescriptorFileName(const std::string& dbname, uint64_t number) {
   return dbname + buf;
 }
 
+std::string ColumnName(const std::string& dbname, uint64_t number) {
+  char buf[100];
+  snprintf(buf, sizeof(buf), "/COLUMN-%06llu",
+           static_cast<unsigned long long>(number));
+  return dbname + buf;
+}
+
 std::string CurrentFileName(const std::string& dbname) {
   return dbname + "/CURRENT";
 }

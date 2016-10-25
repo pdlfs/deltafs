@@ -68,15 +68,16 @@ class Version {
   // REQUIRES: This version has been saved (see VersionSet::SaveTo)
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
-  // Lookup the value for key.  If found, store it in *val and
-  // return OK.  Else return a non-OK status.  Fills *stats.
+  // Lookup the value for key.  Return true if either the value or a tombstone
+  // is found or false otherwise.  Also fills *s and *stats.
+  // REQUIRES: both s and stats are not NULL
   // REQUIRES: lock is not held
   struct GetStats {
     FileMetaData* seek_file;
     int seek_file_level;
   };
-  Status Get(const ReadOptions& options, const LookupKey& key, Buffer* val,
-             GetStats* stats);
+  bool Get(const ReadOptions& options, const LookupKey& key, Buffer* val,
+           Status* s, GetStats* stats);
 
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.

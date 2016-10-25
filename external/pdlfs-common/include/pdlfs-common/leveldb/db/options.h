@@ -22,6 +22,7 @@ class Env;
 class FilterPolicy;
 class Logger;
 class Snapshot;
+class ThreadPool;
 
 // DB contents are stored in a set of blocks, each of which holds a
 // sequence of key,value pairs.  Each block may be compressed before
@@ -81,6 +82,11 @@ struct DBOptions {
   // in the same directory as the DB contents if info_log is NULL.
   // Default: NULL
   Logger* info_log;
+
+  // Thread pool for running background compaction.
+  // If NULL, env is used instead.
+  // Default: NULL
+  ThreadPool* compaction_pool;
 
   // -------------------
   // Parameters that affect performance

@@ -56,6 +56,10 @@ extern std::string SSTTableFileName(const std::string& dbname, uint64_t number);
 extern std::string DescriptorFileName(const std::string& dbname,
                                       uint64_t number);
 
+// Return the name of a numbered column.  The result will be
+// prefixed with "dbname".
+extern std::string ColumnName(const std::string& dbname, uint64_t number);
+
 // Return the name of the current file.  This file contains the name
 // of the current manifest file.  The result will be prefixed with
 // "dbname".

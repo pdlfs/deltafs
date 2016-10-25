@@ -25,6 +25,7 @@ DBOptions::DBOptions()
       paranoid_checks(false),
       env(Env::Default()),
       info_log(NULL),
+      compaction_pool(NULL),
       write_buffer_size(4 << 20),
       table_cache(NULL),
       block_cache(NULL),

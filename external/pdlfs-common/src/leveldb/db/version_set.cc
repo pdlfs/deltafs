@@ -330,12 +330,11 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
   }
 }
 
-Status Version::Get(const ReadOptions& options, const LookupKey& k, Buffer* buf,
-                    GetStats* stats) {
+bool Version::Get(const ReadOptions& options, const LookupKey& k, Buffer* buf,
+                  Status* s, GetStats* stats) {
   Slice ikey = k.internal_key();
   Slice user_key = k.user_key();
   const Comparator* ucmp = vset_->icmp_.user_comparator();
-  Status s;
 
   stats->seek_file = NULL;
   stats->seek_file_level = -1;
@@ -405,27 +404,28 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k, Buffer* buf,
       saver.ucmp = ucmp;
       saver.user_key = user_key;
       saver.buf = buf;
-      s = vset_->table_cache_->Get(options, f->number, f->file_size, f->seq_off,
-                                   ikey, &saver, SaveValue);
-      if (!s.ok()) {
-        return s;
+      *s = vset_->table_cache_->Get(options, f->number, f->file_size,
+                                    f->seq_off, ikey, &saver, SaveValue);
+      if (!s->ok()) {
+        return true;  // Read error
       }
       switch (saver.state) {
         case kNotFound:
           break;  // Keep searching in other files
         case kFound:
-          return s;
+          return true;  // Found
         case kDeleted:
-          s = Status::NotFound(Slice());  // Use empty error message for speed
-          return s;
+          *s = Status::NotFound(Slice());
+          return true;
         case kCorrupt:
-          s = Status::Corruption("Corrupted key for ", user_key);
-          return s;
+          *s = Status::Corruption("Corrupted key for ", user_key);
+          return true;
       }
     }
   }
 
-  return Status::NotFound(Slice());  // Use an empty error message for speed
+  *s = Status::NotFound(Slice());
+  return false;
 }
 
 bool Version::UpdateStats(const GetStats& stats) {

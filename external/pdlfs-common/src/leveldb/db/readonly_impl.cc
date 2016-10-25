@@ -139,13 +139,13 @@ Status ReadonlyDBImpl::InternalGet(const ReadOptions& options, const Slice& key,
 
   Version* current = versions_->current();
   current->Ref();
-  Version::GetStats ignored_stats;
 
   // Unlock while reading from files
   {
     mutex_.Unlock();
     LookupKey lkey(key, snapshot);
-    s = current->Get(options, lkey, value, &ignored_stats);
+    Version::GetStats ignored;
+    current->Get(options, lkey, value, &s, &ignored);
     mutex_.Lock();
   }
 

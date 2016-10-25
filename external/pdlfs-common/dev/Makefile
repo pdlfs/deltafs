@@ -58,6 +58,7 @@ TESTS = \
 	src/leveldb/db/corruption_test \
 	src/leveldb/db/bulk_test \
 	src/leveldb/db/readonly_test \
+	src/leveldb/db/columnar_test \
 	src/rados/rados_env_test \
 	src/rados/rados_fio_test
 
@@ -215,6 +216,9 @@ $(STATIC_OUTDIR)/bulk_test:src/leveldb/db/bulk_test.cc $(STATIC_LIBOBJECTS) $(TE
 
 $(STATIC_OUTDIR)/readonly_test:src/leveldb/db/readonly_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/leveldb/db/readonly_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
+
+$(STATIC_OUTDIR)/columnar_test:src/leveldb/db/columnar_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
+	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/leveldb/db/columnar_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)
 
 $(STATIC_OUTDIR)/rados_env_test:src/rados/rados_env_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS)
 	$(CXX) $(LDFLAGS) $(CXXFLAGS) src/rados/rados_env_test.cc $(STATIC_LIBOBJECTS) $(TESTHARNESS) -o $@ $(LIBS)

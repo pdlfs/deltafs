@@ -25,6 +25,7 @@
 
 namespace pdlfs {
 
+class ColumnImpl;
 class MemTable;
 class TableCache;
 class Version;
@@ -58,9 +59,6 @@ class DBImpl : public DB {
 
   // Extra methods that are not in the public DB interface
 
-  // Bulk insert a list of pre-ordered and pre-sequenced updates.
-  Status BulkInsert(Iterator* updates);
-
   // Compact any files in the named level that overlap [*begin,*end]
   void TEST_CompactRange(int level, const Slice* begin, const Slice* end);
 
@@ -81,6 +79,13 @@ class DBImpl : public DB {
   // bytes.
   void RecordReadSample(Slice key);
 
+ protected:
+  friend class DB;
+  friend class ColumnImpl;
+  struct CompactionState;
+  struct InsertionState;
+  struct Writer;
+
   Status Get(const ReadOptions&, const Slice& key, Buffer* buf);
   // The snapshots specified in read options are ignored by the following calls
   Status Get(const ReadOptions&, const LookupKey& lkey, Buffer* buf);
@@ -88,18 +93,15 @@ class DBImpl : public DB {
                                 SequenceNumber* latest_snapshot,
                                 uint32_t* seed);
 
- private:
-  friend class DB;
-  struct CompactionState;
-  struct InsertionState;
-  struct Writer;
-
-  Status NewDB();
+  // Bulk insert a list of pre-ordered and pre-sequenced updates.
+  Status BulkInsert(Iterator* updates);
 
   // Recover the descriptor from persistent storage.  May do a significant
   // amount of work to recover recently logged updates.  Any changes to
   // be made to the descriptor are added to *edit.
   Status Recover(VersionEdit* edit);
+
+  Status NewDB();
 
   void MaybeIgnoreError(Status* s) const;
 
@@ -109,10 +111,11 @@ class DBImpl : public DB {
   // Compact the in-memory write buffer to disk.  Switches to a new
   // log-file/memtable and writes a new descriptor iff successful.
   // Errors are recorded in bg_error_.
-  void CompactMemTable();
-
-  Status RecoverLogFile(uint64_t log_number, VersionEdit* edit,
-                        SequenceNumber* max_sequence);
+  //
+  // Subclasses may override the compaction process.
+  virtual void CompactMemTable();
+  virtual Status RecoverLogFile(uint64_t log_number, VersionEdit* edit,
+                                SequenceNumber* max_sequence);
 
   Status WriteMemTable(MemTable* mem, VersionEdit* edit, Version* base);
   Status WriteLevel0Table(Iterator* iter, VersionEdit* edit, Version* base,
@@ -180,6 +183,8 @@ class DBImpl : public DB {
   // part of ongoing compactions.
   std::set<uint64_t> pending_outputs_;
 
+  // Temporarily stop background compaction
+  bool bg_compaction_paused_;
   // Has a background compaction been scheduled or is running?
   bool bg_compaction_scheduled_;
   // Has an outstanding bulk insertion request?
