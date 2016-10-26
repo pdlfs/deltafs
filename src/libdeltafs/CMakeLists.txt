@@ -45,8 +45,8 @@ set (dfs-vers "${DELTAFS_VERSION_MAJOR}.${DELTAFS_VERSION_MINOR}")
 set (dfs-vers "${dfs-vers}.${DELTAFS_VERSION_PATCH}")
 
 # setup and configure deltafs_config.h.in
-configure_file ("../../include/deltafs/deltafs_config_expand.h.in"
-                "../../include/deltafs/deltafs_config_expand.h" @ONLY)
+configure_file ("../../include/deltafs/deltafs_config.h.in"
+                "../../include/deltafs/deltafs_config.h" @ONLY)
 
 #
 # generate complete list of files and tests from the parts
@@ -152,7 +152,7 @@ install (DIRECTORY ../../include/deltafs
          DESTINATION include
          FILES_MATCHING PATTERN "*.h")
 install (FILES
-   "${CMAKE_CURRENT_BINARY_DIR}/../../include/deltafs/deltafs_config_expand.h"
+   "${CMAKE_CURRENT_BINARY_DIR}/../../include/deltafs/deltafs_config.h"
    DESTINATION include/deltafs)
 
 #

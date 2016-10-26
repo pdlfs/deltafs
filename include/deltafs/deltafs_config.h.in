@@ -1,0 +1,15 @@
+/*
+ * deltafs_config.h.in  configuration and options from the build system
+ * 15-Sep-2016  chuck@ece.cmu.edu
+ */
+
+#ifndef DELTAFS_DELTAFS_CONFIG_H
+#define DELTAFS_DELTAFS_CONFIG_H 1
+
+#cmakedefine DELTAFS_MPI
+
+#ifdef DELTAFS_MPI
+#define PDLFS_WITH_MPI 1   /* XXXCDC: backward compat */
+#endif
+
+#endif /* DELTAFS_DELTAFS_CONFIG_H */
