@@ -7,17 +7,19 @@
 # Aug-05-2016 zhengq@cs.cmu.edu
 #
 
-MAKE="make -f ./dev/Makefile"
+mkdir -p build && cd build || exit 1
 
-$MAKE clean
-$MAKE -j4
+cmake -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON \
+      -DPDLFS_MERCURY_RPC=ON \
+      -DPDLFS_RADOS=ON \
+      -DPDLFS_SNAPPY=ON \
+      -DPDLFS_GFLAGS=ON \
+      -DPDLFS_GLOG=ON \
+      ..
 
-echo "== Build tests in 5 seconds ..."
-sleep 5
-$MAKE -j4 tests
+sleep 1
 
-echo "== Run tests in 5 seconds ..."
-sleep 5
-$MAKE check
+make -j4 VERBOSE=1
 
 exit 0
+
