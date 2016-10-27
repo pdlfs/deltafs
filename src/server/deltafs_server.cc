@@ -12,7 +12,7 @@
 
 #include "deltafs/deltafs_config.h"
 #include "pdlfs-common/pdlfs_config.h"
-#if defined(PDLFS_WITH_MPI)
+#if defined(DELTAFS_MPI)
 #include <mpi.h>
 #endif
 
@@ -26,7 +26,7 @@
 #endif
 
 static pdlfs::MetadataServer* srv = NULL;
-#if defined(PDLFS_WITH_MPI)
+#if defined(DELTAFS_MPI)
 static int srv_id = 0;
 static int num_srvs = 1;
 #endif
@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
 #endif
-#if defined(PDLFS_WITH_MPI)
+#if defined(DELTAFS_MPI)
   int ignored_return;
   int r = MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &ignored_return);
   if (r == MPI_SUCCESS) {
