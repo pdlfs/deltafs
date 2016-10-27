@@ -12,7 +12,6 @@
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/rwlock.h"
 
-#if defined(RADOS)
 #include "rados_common.h"
 #include "rados_conn.h"
 
@@ -72,5 +71,3 @@ class RadosFio : public Fio {
 
 }  // namespace rados
 }  // namespace pdlfs
-
-#endif  // RADOS

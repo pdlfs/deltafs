@@ -11,10 +11,10 @@
  */
 
 #include "pdlfs-common/pdlfs_config.h"
-#if defined(GFLAGS)
+#if defined(PDLFS_GFLAGS)
 #include <gflags/gflags.h>
 #endif
-#if defined(GLOG)
+#if defined(PDLFS_GLOG)
 #include <glog/logging.h>
 #endif
 #include <stdlib.h>
@@ -46,11 +46,11 @@ bool RegisterTest(const char* base, const char* name, void (*func)()) {
 }
 
 int RunAllTests(int* argc, char*** argv) {
-#if defined(GFLAGS)
+#if defined(PDLFS_GFLAGS)
   ::google::ParseCommandLineFlags(argc, argv, true);
 #endif
   const char* matcher = getenv("TESTS");
-#if defined(GLOG)
+#if defined(PDLFS_GLOG)
   ::google::InitGoogleLogging((*argv)[0]);
   ::google::InstallFailureSignalHandler();
 #endif

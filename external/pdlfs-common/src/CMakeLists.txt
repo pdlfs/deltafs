@@ -17,13 +17,13 @@ set (pdlfs-common-srcs arena.cc blkdb.cc cache.cc coding.cc crc32c.cc
      dbfiles.cc dcntl.cc ect.cc ectrie/bit_vector.cc
      ectrie/twolevel_bucketing.cc env.cc fio.cc fstypes.cc gigaplus.cc
      hash.cc histogram.cc index_cache.cc lease.cc log_reader.cc log_writer.cc
-     logging.cc lookup_cache.cc margo_rpc.cc mdb.cc mercury_rpc.cc
-     osd.cc osd_internal.cc port_posix.cc posix_env.cc rpc.cc
-     slice.cc spooky.cc status.cc strutil.cc testharness.cc testutil.cc xxhash.cc)
+     logging.cc lookup_cache.cc mdb.cc osd.cc osd_internal.cc
+     port_posix.cc posix_env.cc rpc.cc slice.cc spooky.cc status.cc
+     strutil.cc testharness.cc testutil.cc xxhash.cc)
 set (pdlfs-common-tests arena_test.cc blkdb_test.cc cache_test.cc
      coding_test.cc crc32c_test.cc dbfiles_test.cc ect_test.cc
      env_test.cc fstypes_test.cc gigaplus_test.cc hash_test.cc log_test.cc
-     margo_test.cc mercury_test.cc osd_test.cc strutil_test.cc)
+     osd_test.cc strutil_test.cc)
 
 # leveldb directory sources and tests
 set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
@@ -40,6 +40,20 @@ set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
      db/version_edit_test.cc db/version_set_test.cc
      db/write_batch_test.cc filter_block_test.cc
      index_block_test.cc skiplist_test.cc table_test.cc)
+
+# mercury (note that margo uses the mercury rpc class)
+if (PDLFS_MERCURY_RPC OR PDLFS_MARGO_RPC)
+    set (pdlfs-mercury-srcs mercury_rpc.cc)
+    if (PDLFS_MERCURY_RPC)
+        set (pdlfs-mercury-tests mercury_test.cc)
+    endif ()
+endif ()
+
+# margo
+if (PDLFS_MARGO_RPC)
+    set (pdlfs-margo-srcs margo_rpc.cc)
+    set (pdlfs-margo-tests margo_test.cc)
+endif ()
 
 # rados directory and tests
 if (PDLFS_RADOS)
@@ -151,14 +165,14 @@ elseif (${PDLFS_OS_EDITED} MATCHES "^CYGWIN_")
 endif ()
 
 #
-# setup and configure pdlfs_config_expand.h.in and pdlfs_platform_expand.h.in
+# setup and configure pdlfs_config_expand.h.in and pdlfs_platform.h.in
 #
 set (PDLFS_PLATFORM_${PDLFS_PLATFORM} 1)
 set (PDLFS_OS_${PDLFS_OS_EDITED} 1)
 configure_file ("../include/pdlfs-common/pdlfs_config_expand.h.in"
                 "../include/pdlfs-common/${PDLFS_NAME}_config_expand.h" @ONLY)
-configure_file ("../include/pdlfs-common/pdlfs_platform_expand.h.in"
-                "../include/pdlfs-common/pdlfs_platform_expand.h" @ONLY)
+configure_file ("../include/pdlfs-common/pdlfs_platform.h.in"
+                "../include/pdlfs-common/pdlfs_platform.h" @ONLY)
 
 #
 # prepend the subdir name to files that live in subdirs (e.g. leveldb/)
@@ -177,8 +191,10 @@ string(REGEX REPLACE "([^;]+)" "rados/\\1" pdlfs-rados-tests
 # generate complete list of files and tests from the parts
 #
 set (pdlfs-all-srcs ${pdlfs-common-srcs} ${pdlfs-leveldb-srcs}
+                    ${pdlfs-mercury-srcs} ${pdlfs-margo-srcs}
                     ${pdlfs-rados-srcs})
 set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-leveldb-tests}
+                     ${pdlfs-mercury-tests} ${pdlfs-margo-tests}
                      ${pdlfs-rados-tests})
 
 #
@@ -229,7 +245,7 @@ set_target_properties(pdlfs-common
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
     if (${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 4.4.4)
         target_compile_options (pdlfs-common PRIVATE -fno-builtin-memcmp)
-        message ("**** NOTE: adding -fno-builtin-memcmp for old gcc")
+        message (STATUS "**** NOTE: adding -fno-builtin-memcmp for old gcc")
     endif ()
 endif ()
 
@@ -284,7 +300,7 @@ install (DIRECTORY ../include/pdlfs-common
          FILES_MATCHING PATTERN "*.h")
 install (FILES
   "${CMAKE_CURRENT_BINARY_DIR}/../include/pdlfs-common/${PDLFS_NAME}_config_expand.h"
-  "${CMAKE_CURRENT_BINARY_DIR}/../include/pdlfs-common/pdlfs_platform_expand.h"
+  "${CMAKE_CURRENT_BINARY_DIR}/../include/pdlfs-common/pdlfs_platform.h"
          DESTINATION include/pdlfs-common)
 
 #
@@ -303,9 +319,8 @@ if (NOT TARGET pdl-build-tests)           # can only define it once
 endif ()
 foreach (lcv ${pdlfs-all-tests})
 
-    # need a test name... use regex to extract the file basename into ${id}
-    string (REGEX REPLACE ".*/" "" id ${lcv})
-    string (REGEX REPLACE "([A-Za-z0-9_]+)\\.c+$" "\\1" id ${id})
+    # use basename as test name
+    get_filename_component (id ${lcv} NAME_WE)
 
     add_executable (${id} EXCLUDE_FROM_ALL ${lcv})
     target_link_libraries (${id} pdlfs-common)

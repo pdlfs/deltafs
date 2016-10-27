@@ -1,13 +1,14 @@
-
 /*
- * pdlfs_platform_expand.h.in  platform constants from cmake
+ * pdlfs_platform.h.in  platform-wide constants
  * 29-Jul-2016  chuck@ece.cmu.edu
  */
 
+#ifndef PDLFS_COMMON_PDLFS_PLATFORM_H
+#define PDLFS_COMMON_PDLFS_PLATFORM_H 1
+
 /*
- * this file should only be included by pdlfs_platform.h.  when
- * we stop using old-style makefiles, the content of this file
- * should migrate to a pdlfs_platform.h.in and this file can be removed.
+ * cmake will convert these to real preprocessor defines as part
+ * of the configuration process.
  */
 #cmakedefine PDLFS_PLATFORM_POSIX
 #cmakedefine PDLFS_OS_CYGWIN
@@ -20,3 +21,4 @@
 #cmakedefine PDLFS_OS_OPENBSD
 #cmakedefine PDLFS_OS_HPUX
 
+#endif /* PDLFS_COMMON_PDLFS_PLATFORM_H */

@@ -24,7 +24,7 @@
 // Root permission is required in order to run this script.
 // Otherwise, set the following flag to TRUE to run tests against a simulated
 // rados cluster.
-#if defined(GFLAGS)
+#if defined(PDLFS_GFLAGS)
 #include <gflags/gflags.h>
 DEFINE_bool(useposixosd, true, "Use POSIX to simulate a ceph rados cluster");
 #else

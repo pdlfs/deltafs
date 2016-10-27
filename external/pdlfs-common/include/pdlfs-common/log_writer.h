@@ -32,9 +32,12 @@ class Writer {
   // Create a writer that will append data to "*dest".
   // "*dest" must have initial length "dest_length".
   // "*dest" must remain live while this Writer is in use.
-  Writer(WritableFile* dest, uint64_t dest_length);
+  explicit Writer(WritableFile* dest, uint64_t dest_length);
 
   ~Writer();
+
+  // Return the position of the writing cursor.
+  uint64_t CurrentOffset() const { return offset_; }
 
   Status AddRecord(const Slice& slice);
 
@@ -43,7 +46,8 @@ class Writer {
 
  private:
   WritableFile* dest_;
-  int block_offset_;  // Current offset in block
+  int block_offset_;  // Offset in the block currently being written
+  int offset_;        // Current offset in file
 
   // crc32c values for all supported record types.  These are
   // pre-computed to reduce the overhead of computing the crc of the
@@ -53,8 +57,8 @@ class Writer {
   Status EmitPhysicalRecord(RecordType type, const char* ptr, size_t length);
 
   // No copying allowed
-  Writer(const Writer&);
   void operator=(const Writer&);
+  Writer(const Writer&);
 };
 
 }  // namespace log

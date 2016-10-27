@@ -14,10 +14,10 @@
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/rpc.h"
-#if defined(MARGO) && defined(MERCURY)
+#if defined(PDLFS_MARGO_RPC)
 #include "margo_rpc.h"
 #endif
-#if defined(MERCURY)
+#if defined(PDLFS_MERCURY_RPC)
 #include "mercury_rpc.h"
 #endif
 
@@ -99,7 +99,7 @@ namespace rpc {
 If::~If() {}
 
 namespace {
-#if defined(MARGO) && defined(MERCURY)
+#if defined(PDLFS_MARGO_RPC)
 class MargoRPCImpl : public RPC {
   MargoRPC* rpc_;
 
@@ -122,7 +122,7 @@ class MargoRPCImpl : public RPC {
 }
 
 namespace {
-#if defined(MERCURY)
+#if defined(PDLFS_MERCURY_RPC)
 class MercuryRPCImpl : public RPC {
   MercuryRPC::LocalLooper* looper_;
   MercuryRPC* rpc_;
@@ -152,7 +152,7 @@ class MercuryRPCImpl : public RPC {
 
 }  // namespace rpc
 
-#if defined(MERCURY)
+#if defined(PDLFS_MARGO_RPC) || defined(PDLFS_MERCURY_RPC)
 /* clang-format off */
 
 // plugin | protocol          | initialization format       | lookup format
@@ -182,7 +182,7 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
   if (options.env == NULL) {
     options.env = Env::Default();
   }
-#if defined(MERCURY)
+#if defined(PDLFS_MARGO_RPC) || defined(PDLFS_MERCURY_RPC)
   if (options.impl == kMercuryRPC || options.impl == kMargoRPC) {
     if (options.mode == kServerClient) {
       ConvertUri(&options);
@@ -200,11 +200,11 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
               : "NULL");
 #endif
   RPC* rpc = NULL;
-#if defined(MARGO) && defined(MERCURY)
+#if defined(PDLFS_MARGO_RPC)
   if (options.impl == kMargoRPC) {
     rpc = new rpc::MargoRPCImpl(options);
   }
-#elif defined(MERCURY)
+#elif defined(PDLFS_MERCURY_RPC)
   if (options.impl == kMercuryRPC) {
     rpc = new rpc::MercuryRPCImpl(options);
   }

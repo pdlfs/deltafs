@@ -9,7 +9,6 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#if defined(MARGO) && defined(MERCURY)
 #include <abt.h>
 #include <margo.h>
 #include "mercury_rpc.h"
@@ -78,5 +77,3 @@ class MargoRPC::Client : public If {
 
 }  // namespace rpc
 }  // namespace pdlfs
-
-#endif

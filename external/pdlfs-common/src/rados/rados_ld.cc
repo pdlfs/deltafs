@@ -23,7 +23,6 @@
 extern "C" {
 #endif
 
-#if defined(RADOS)
 typedef pdlfs::rados::RadosOptions options_t;
 typedef pdlfs::rados::RadosConn conn_t;
 typedef pdlfs::port::Mutex mutex_t;
@@ -70,7 +69,6 @@ static conn_t* OpenRadosConn(
     return conn;
   }
 }
-#endif
 
 static void ParseOptions(std::map<std::string, std::string>* options,
                          const char* conf_str) {
@@ -88,7 +86,6 @@ static void ParseOptions(std::map<std::string, std::string>* options,
 
 void* PDLFS_Load_rados_env(const char* conf_str) {
   pdlfs::Env* env = NULL;
-#if defined(RADOS)
   std::map<std::string, std::string> options;
   ParseOptions(&options, conf_str);
   conn_t* conn = OpenRadosConn(options);
@@ -111,15 +108,11 @@ void* PDLFS_Load_rados_env(const char* conf_str) {
       env = NULL;
     }
   }
-#else
-  pdlfs::Error(__LOG_ARGS__, "rados not built");
-#endif
   return env;
 }
 
 void* PDLFS_Load_rados_fio(const char* conf_str) {
   pdlfs::Fio* fio = NULL;
-#if defined(RADOS)
   std::map<std::string, std::string> options;
   ParseOptions(&options, conf_str);
   conn_t* conn = OpenRadosConn(options);
@@ -139,9 +132,6 @@ void* PDLFS_Load_rados_fio(const char* conf_str) {
       fio = NULL;
     }
   }
-#else
-  pdlfs::Error(__LOG_ARGS__, "rados not built");
-#endif
   return fio;
 }
 

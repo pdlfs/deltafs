@@ -61,107 +61,14 @@ cmake_minimum_required (VERSION 2.8) # uses target_include_directories from 2.8
 
 project (PDLFS-COMMON)
 
-# link shared lib with full rpath
-set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-# quiet CMP0042 warning
-set (CMAKE_MACOSX_RPATH 1)
-
-enable_testing ()
-
-if (NOT CMAKE_BUILD_TYPE)
-    set (CMAKE_BUILD_TYPE Release
-         CACHE STRING "Choose the type of build." FORCE)
-    set_property (CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS 
-                  "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
-endif ()
-set (DEBUG_SANITIZER Off CACHE STRING "Sanitizer for debug builds")
-set_property (CACHE DEBUG_SANITIZER PROPERTY STRINGS
-              "Off" "Address" "Thread")
-set (CMAKE_PREFIX_PATH "" CACHE STRING "External dependencies path")
-set (BUILD_SHARED_LIBS "OFF" CACHE BOOL "Build a shared library")
-set (BUILD_TESTS "OFF" CACHE BOOL "Build test programs")
-
-set (PDLFS_PLATFORM "POSIX" CACHE STRING "Select platform (e.g. POSIX)")
-set (PDLFS_OS "${CMAKE_SYSTEM_NAME}" CACHE 
-              STRING "Select operating system (uname -s)")
-set (PDLFS_GFLAGS "OFF" CACHE
-     BOOL "Use GFLAGS (libgflags-dev) for arg parsing")
-set (PDLFS_GLOG "OFF" CACHE
-     BOOL "Use GLOG (libgoogle-glog-dev) for logging")
-set (PDLFS_MARGO_RPC "OFF" CACHE
-     BOOL "Compile in Margo/abt-snoozer/argobots RPC interface")
-set (PDLFS_MERCURY_RPC "OFF" CACHE
-     BOOL "Compile in Mercury RPC interface")
-set (PDLFS_RADOS "OFF" CACHE
-     BOOL "Compile in RADOS object store")
-set (PDLFS_SNAPPY "OFF" CACHE
-     BOOL "Enable SNAPPY (libsnappy-dev) for compression")
-
-#
-# external packages
-#
+# add our cmake module directory to the path
 set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
      "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-include (xpkg-import)
 
-if (PDLFS_GFLAGS)
-    find_package(gflags REQUIRED)
-    if (NOT gflags_FOUND)
-        message (FATAL_ERROR
-        "gflags not found try setting -D GFLAGS_{INCLUDE,LIBRARY}_DIR")
-    endif ()
-    message (STATUS "gflags enabled")
-endif ()
+# pull in pdlfs handling of generic cmake config
+include (cmake-options)
 
-if (PDLFS_GLOG)
-    xdual_import (glog::glog,glog,libglog REQUIRED)
-    message (STATUS "glog enabled")
-endif ()
-
-if (PDLFS_MERCURY_RPC)
-    find_package(mercury CONFIG REQUIRED)
-    message (STATUS "mercury rpc enabled")
-endif ()
-
-if (PDLFS_MARGO_RPC)
-    xpkg_import_module (margo REQUIRED margo)
-    message (STATUS "margo rpc enabled")
-endif ()
-
-if (PDLFS_RADOS)
-    find_package(RADOS MODULE REQUIRED)
-    if (NOT RADOS_FOUND)
-        message (FATAL_ERROR
-        "rados not found try setting -D RADOS_{INCLUDE,LIBRARY}_DIR")
-    endif ()
-    message (STATUS "rados enabled")
-endif ()
-
-if (PDLFS_SNAPPY)
-    find_package(Snappy MODULE REQUIRED)
-    if (NOT Snappy_FOUND)
-        message (FATAL_ERROR
-        "snappy not found try setting -D SNAPPY_{INCLUDE,LIBRARY}_DIR")
-    endif ()
-    message (STATUS "snappy enabled")
-endif ()
-
-#
-# sanitizer config (XXX: does not probe compiler to see if sanitizer flags
-# are supported... )
-#
-set (as_flags "-fsanitize=address -O1 -fno-omit-frame-pointer")
-set (ts_flags "-fsanitize=thread  -O1 -fno-omit-frame-pointer")
-if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-    if (${DEBUG_SANITIZER} STREQUAL "Address")
-        set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
-        set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
-    elseif (${DEBUG_SANITIZER} STREQUAL "Thread")
-        set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
-        set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
-    endif ()
-endif ()
+# handle all the common PDLFS options using cmake/pdlfs-options.cmake
+include (pdlfs-options)
 
 add_subdirectory (src)

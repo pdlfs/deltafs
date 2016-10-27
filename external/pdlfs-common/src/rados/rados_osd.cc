@@ -9,7 +9,6 @@
 
 #include "pdlfs-common/pdlfs_config.h"
 
-#if defined(RADOS)
 #include "rados_osd.h"
 
 namespace pdlfs {
@@ -180,5 +179,3 @@ Status RadosOsd::Get(const Slice& name, std::string* data) {
 
 }  // namespace rados
 }  // namespace pdlfs
-
-#endif  // RADOS

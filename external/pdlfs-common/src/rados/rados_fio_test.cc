@@ -14,7 +14,6 @@
 
 #include "rados_conn.h"
 
-#if defined(RADOS)
 namespace pdlfs {
 namespace rados {
 
@@ -198,7 +197,6 @@ TEST(RadosFioTest, FileWithHoles) {
 
 }  // namespace rados
 }  // namespace pdlfs
-#endif
 
 int main(int argc, char** argv) {
   setenv("TESTS", "X", 0);  // XXX: don't run any tests by default

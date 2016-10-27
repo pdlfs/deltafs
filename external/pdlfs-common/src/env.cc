@@ -14,11 +14,13 @@
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
+#ifdef PDLFS_RADOS
 #include "pdlfs-common/rados/rados_ld.h"
+#endif
 #if defined(PDLFS_PLATFORM_POSIX)
 #include "posix_logger.h"
 #endif
-#if defined(GLOG)
+#if defined(PDLFS_GLOG)
 #include <glog/logging.h>
 #endif
 
@@ -48,7 +50,7 @@ Env* Env::Open(const Slice& env_name, const Slice& env_conf) {
   Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name.c_str());
   Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf.c_str());
 #endif
-#ifdef RADOS
+#ifdef PDLFS_RADOS
   if (env_name == "rados") {
     return reinterpret_cast<Env*>(PDLFS_Load_rados_env(env_conf.c_str()));
   }
@@ -132,7 +134,7 @@ Status ReadFileToString(Env* env, const Slice& fname, std::string* data) {
 
 namespace {
 /* clang-format off */
-#if defined(PDLFS_PLATFORM_POSIX) && defined(GLOG)
+#if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_GLOG)
 class PosixGoogleLogger : public Logger {
  public:
   PosixGoogleLogger() {}
@@ -207,7 +209,7 @@ class NoOpLogger : public Logger {
 }  // namespace
 
 Logger* Logger::Default() {
-#if defined(PDLFS_PLATFORM_POSIX) && defined(GLOG)
+#if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_GLOG)
   static PosixGoogleLogger logger;
   return &logger;
 #elif defined(PDLFS_PLATFORM_POSIX)

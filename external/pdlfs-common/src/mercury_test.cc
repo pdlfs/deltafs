@@ -11,7 +11,6 @@
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 
-#if defined(MERCURY)
 #include "mercury_rpc.h"
 namespace pdlfs {
 namespace rpc {
@@ -128,8 +127,6 @@ TEST(MercuryTest, SendReceive) {
 
 }  // namespace rpc
 }  // namespace pdlfs
-
-#endif
 
 int main(int argc, char** argv) {
   return ::pdlfs::test::RunAllTests(&argc, &argv);

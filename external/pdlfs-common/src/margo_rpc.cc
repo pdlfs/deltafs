@@ -9,7 +9,7 @@
 
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
-#if defined(MARGO) && defined(MERCURY)
+
 #include "margo_rpc.h"
 
 namespace pdlfs {
@@ -143,5 +143,3 @@ void MargoRPC::Client::Call(Message& in, Message& out) {
 
 }  // namespace rpc
 }  // namespace pdlfs
-
-#endif

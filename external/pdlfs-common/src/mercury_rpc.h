@@ -9,7 +9,6 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#if defined(MERCURY)
 #include <mercury.h>
 #include <mercury_proc.h>
 #include <map>
@@ -216,5 +215,3 @@ class MercuryRPC::Client : public If {
 
 }  // namespace rpc
 }  // namespace pdlfs
-
-#endif
