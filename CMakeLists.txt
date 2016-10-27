@@ -55,14 +55,9 @@ cmake_minimum_required (VERSION 2.8.12)
 
 project (DELTAFS)
 
-# link shared lib with full rpath
-set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-# quiet CMP0042 warning
-set (CMAKE_MACOSX_RPATH 1)
-
-enable_testing ()
+# add pdlfs-common cmake module directory to the path
+set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
+     "${CMAKE_CURRENT_SOURCE_DIR}/external/pdlfs-common/cmake")
 
 #
 # we compile everything with -DDELTAFS.  we also set the common library's
@@ -74,97 +69,21 @@ add_definitions (-DDELTAFS)
 set (PDLFS_COMMON_LIBNAME "deltafs-common")
 set (CMAKE_CXX_STANDARD 11)
 
-if (NOT CMAKE_BUILD_TYPE)
-    set (CMAKE_BUILD_TYPE Release
-         CACHE STRING "Choose the type of build." FORCE)
-    set_property (CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS 
-                  "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
-endif ()
-set (DEBUG_SANITIZER Off CACHE STRING "Sanitizer for debug builds")
-set_property (CACHE DEBUG_SANITIZER PROPERTY STRINGS
-              "Off" "Address" "Thread")
-set (CMAKE_PREFIX_PATH "" CACHE STRING "External dependencies path")
-set (BUILD_SHARED_LIBS "OFF" CACHE BOOL "Build a shared library")
-set (BUILD_TESTS "OFF" CACHE BOOL "Build test programs")
+# pull in pdlfs handling of generic cmake config
+include (cmake-options)
 
-# user hooks to configure pdlfs-common
-set (PDLFS_GFLAGS "OFF" CACHE
-     BOOL "Use GFLAGS (libgflags-dev) for arg parsing")
-set (PDLFS_GLOG "OFF" CACHE
-     BOOL "Use GLOG (libgoogle-glog-dev) for logging")
-set (PDLFS_MARGO_RPC "OFF" CACHE
-     BOOL "Compile in Margo/abt-snoozer/argobots RPC interface")
-set (PDLFS_MERCURY_RPC "OFF" CACHE
-     BOOL "Compile in Mercury RPC interface")
-set (PDLFS_RADOS "OFF" CACHE
-     BOOL "Compile in RADOS object store")
-set (PDLFS_SNAPPY "OFF" CACHE
-     BOOL "Enable SNAPPY (libsnappy-dev) for compression")
+# handle all the common PDLFS options using cmake/pdlfs-options.cmake
+include (pdlfs-options)
 
+# user hooks to configure deltafs
 set (DELTAFS_MPI "OFF" CACHE
      BOOL "Enable DELTAFS MPI-based communication")
 
 #
 # external packages
 #
-set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
-     "${CMAKE_CURRENT_SOURCE_DIR}/external/pdlfs-common/cmake")
-include (xpkg-import)
-
-if (PDLFS_GFLAGS)
-    find_package(gflags REQUIRED)
-    if (NOT TARGET gflags)
-        message (FATAL_ERROR
-        "-- gflags not found try setting -D GFLAGS_{INCLUDE,LIBRARY}_DIR")
-    endif ()
-endif ()
-
-if (PDLFS_GLOG)
-    xdual_import (glog::glog,glog,libglog REQUIRED)
-endif ()
-
-if (PDLFS_MERCURY_RPC)
-    find_package(mercury CONFIG REQUIRED)
-endif ()
-
-if (PDLFS_MARGO_RPC)
-    xpkg_import_module (margo REQUIRED margo)
-endif ()
-
-if (PDLFS_RADOS)
-    find_package(RADOS MODULE REQUIRED)
-    if (NOT TARGET rados)
-        message (FATAL_ERROR
-        "-- rados not found try setting -D RADOS_{INCLUDE,LIBRARY}_DIR")
-    endif ()
-endif ()
-
-if (PDLFS_SNAPPY)
-    find_package(Snappy MODULE REQUIRED)
-    if (NOT TARGET snappy)
-        message (FATAL_ERROR
-        "-- snappy not found try setting -D SNAPPY_{INCLUDE,LIBRARY}_DIR")
-    endif ()
-endif ()
-
 if (DELTAFS_MPI)
     find_package(MPI REQUIRED MODULE)
-endif ()
-
-#
-# sanitizer config (XXX: does not probe compiler to see if sanitizer flags
-# are supported... )
-#
-set (as_flags "-fsanitize=address -O1 -fno-omit-frame-pointer")
-set (ts_flags "-fsanitize=thread  -O1 -fno-omit-frame-pointer")
-if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-    if (${DEBUG_SANITIZER} STREQUAL "Address")
-        set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
-        set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
-    elseif (${DEBUG_SANITIZER} STREQUAL "Thread")
-        set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
-        set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
-    endif ()
 endif ()
 
 add_subdirectory (external/pdlfs-common/src)
