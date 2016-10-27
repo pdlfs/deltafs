@@ -70,7 +70,7 @@ git submodule update --init deps/openpa
 # Building
 
 After all software dependencies are installed, we can proceed to build Deltafs.
-Deltafs uses CMake (v3.0+) and requires you to do an out-of-source build. To do that, create a dedicated build directory and run 'ccmake' command from it:
+Deltafs uses cmake and suggests you to do an out-of-source build. To do that, create a dedicated build directory and run 'ccmake' command from it:
 
 ```
 cd deltafs
