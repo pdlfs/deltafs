@@ -88,4 +88,5 @@ endif ()
 
 add_subdirectory (external/pdlfs-common/src)
 add_subdirectory (src)
+add_subdirectory (benchmarks)
 
