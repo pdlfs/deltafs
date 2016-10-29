@@ -7,8 +7,10 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include <getopt.h>
 #include <mpi.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/hash.h"
@@ -209,21 +211,96 @@ static void Print(const char* msg) {
   printf("== %s\n", msg);
 }
 
+static void Help(const char* prog, FILE* out) {
+  fprintf(out,
+          "%s [options]\n\n"
+          "  --relaxed-consistency  :  "
+          "Executes in relaxed consistency mode\n"
+          "  --ignored-erros        :  "
+          "Continue running even on errors\n"
+          "  --skip-inserts         :  "
+          "Skip the insertion phase\n"
+          "  --skip-reads           :  "
+          "Skip the read phase\n"
+          "  --num-files=n          :  "
+          "Total number of files to create\n"
+          "  --num-dirs=n           :  "
+          "Total number of dirs to create\n\n"
+          "Deltafs benchmark\n",
+          prog);
+}
+
+static pdlfs::LDbenchOptions ParseOptions(int argc, char** argv) {
+  pdlfs::LDbenchOptions result;
+  result.rank = 0;
+  result.comm_sz = 1;
+  result.relaxed_consistency = false;
+  result.ignore_errors = false;
+  result.skip_inserts = false;
+  result.skip_reads = false;
+  result.num_files = 16;
+  result.num_dirs = 1;
+  {
+    struct option optinfo[7];
+    optinfo[0] = {"relaxed-consistency", 0, NULL, 1};
+    optinfo[1] = {"ignore-errors", 0, NULL, 2};
+    optinfo[2] = {"skip-inserts", 0, NULL, 3};
+    optinfo[3] = {"skip-reads", 0, NULL, 4};
+    optinfo[4] = {"num-files", 1, NULL, 5};
+    optinfo[5] = {"num-dirs", 1, NULL, 6};
+    optinfo[6] = {"help", 0, NULL, 'H'};
+    optinfo[7] = {NULL, 0, NULL, 0};
+
+    while (true) {
+      int ignored_index;
+      int c = getopt_long_only(argc, argv, "h", optinfo, &ignored_index);
+      if (c != -1) {
+        switch (c) {
+          case 1:
+            result.relaxed_consistency = true;
+            break;
+          case 2:
+            result.ignore_errors = true;
+            break;
+          case 3:
+            result.skip_inserts = true;
+            break;
+          case 4:
+            result.skip_reads = true;
+            break;
+          case 5:
+            result.num_files = atoi(optarg);
+            break;
+          case 6:
+            result.num_dirs = atoi(optarg);
+            break;
+          case 'H':
+          case 'h':
+            Help(argv[0], stdout);
+            exit(EXIT_SUCCESS);
+          default:
+            Help(argv[0], stderr);
+            exit(EXIT_FAILURE);
+        }
+      } else {
+        break;
+      }
+    }
+  }
+
+  return result;
+}
+
 int main(int argc, char** argv) {
+  pdlfs::LDbenchOptions options = ParseOptions(argc, argv);
+
   int rank;
   int size;
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
-  pdlfs::LDbenchOptions options;
   options.rank = rank;
   options.comm_sz = size;
-  options.relaxed_consistency = false;
-  options.ignore_errors = false;
-  options.skip_inserts = false;
-  options.skip_reads = false;
-  options.num_files = 16;
-  options.num_dirs = 1;
   pdlfs::LDbench bench(options);
   pdlfs::LDbenchReport report;
   report.errs = 0;
@@ -269,8 +346,7 @@ int main(int argc, char** argv) {
     if (rank == 0) {
       Print(report);
     }
-  }
-  {
+  } else {
     if (rank == 0) {
       Print("Abort");
       goto end;
