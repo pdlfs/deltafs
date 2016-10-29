@@ -12,10 +12,11 @@
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
-#ifdef PDLFS_RADOS
+#include "pdlfs-common/strutil.h"
+
+#if defined(PDLFS_RADOS)
 #include "pdlfs-common/rados/rados_ld.h"
 #endif
-#include "pdlfs-common/strutil.h"
 
 #if defined(PDLFS_PLATFORM_POSIX)
 #include "posix_fio.h"
@@ -50,7 +51,7 @@ Fio* Fio::Open(const Slice& fio_name, const Slice& fio_conf) {
   Verbose(__LOG_ARGS__, 1, "fio.name -> %s", fio_name.c_str());
   Verbose(__LOG_ARGS__, 1, "fio.conf -> %s", fio_conf.c_str());
 #endif
-#ifdef PDLFS_RADOS
+#if defined(PDLFS_RADOS)
   if (fio_name == "rados") {
     return reinterpret_cast<Fio*>(PDLFS_Load_rados_fio(fio_conf.c_str()));
   }

@@ -22,10 +22,12 @@
 #include <unistd.h>
 #include <string>
 #include <vector>
-#if defined(GFLAGS)
+
+#if defined(PDLFS_GFLAGS)
 #include <gflags/gflags.h>
 #endif
-#if defined(GLOG)
+
+#if defined(PDLFS_GLOG)
 #include <glog/logging.h>
 #endif
 
@@ -151,14 +153,14 @@ static void Exec(const std::vector<std::string>& inputs) {
 }
 
 int main(int argc, char* argv[]) {
-#if defined(GFLAGS)
+#if defined(PDLFS_GFLAGS)
   std::string usage("Sample usage: ");
   usage += argv[0];
   google::SetUsageMessage(usage);
   google::SetVersionString("1.0");
   google::ParseCommandLineFlags(&argc, &argv, true);
 #endif
-#if defined(GLOG)
+#if defined(PDLFS_GLOG)
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
 #endif
