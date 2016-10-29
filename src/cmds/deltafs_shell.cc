@@ -174,7 +174,7 @@ int main(int argc, char* argv[]) {
       break;  // End-of-file
     } else {
       std::vector<std::string> inputs;
-      size_t n = pdlfs::SplitString(pdlfs::Slice(p), ' ', &inputs);
+      size_t n = pdlfs::SplitString(&inputs, pdlfs::Slice(p), ' ');
       if (n != 0) {
         Exec(inputs);
       }

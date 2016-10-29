@@ -63,19 +63,36 @@ TEST(StrUtilTest, ParseNumber) {
 
 TEST(StrUtilTest, Split) {
   std::vector<std::string> v;
-  ASSERT_EQ(SplitString("a; b ;c", ';', &v), 3);
+  ASSERT_EQ(SplitString(&v, "a; b ;c", ';'), 3);
   ASSERT_EQ(v[0], "a");
   ASSERT_EQ(v[1], "b");
   ASSERT_EQ(v[2], "c");
   v.clear();
-  ASSERT_EQ(SplitString("a , b,", ',', &v), 2);
+  ASSERT_EQ(SplitString(&v, " a , b,", ','), 2);
   ASSERT_EQ(v[0], "a");
   ASSERT_EQ(v[1], "b");
   v.clear();
-  ASSERT_EQ(SplitString("&a&&", '&', &v), 1);
+  ASSERT_EQ(SplitString(&v, "&&& a &", '&'), 1);
   ASSERT_EQ(v[0], "a");
   v.clear();
-  ASSERT_EQ(SplitString(" # ", '#', &v), 0);
+  ASSERT_EQ(SplitString(&v, "  # ", '#'), 0);
+  ASSERT_EQ(SplitString(&v, " ## ", '#'), 0);
+  ASSERT_EQ(SplitString(&v, "#  #", '#'), 0);
+}
+
+TEST(StrUtilTest, SplitN) {
+  std::vector<std::string> v;
+  ASSERT_EQ(SplitString(&v, "a; b ;c", ';', 2), 3);
+  ASSERT_EQ(v[0], "a");
+  ASSERT_EQ(v[1], "b");
+  ASSERT_EQ(v[2], "c");
+  v.clear();
+  ASSERT_EQ(SplitString(&v, " a , b,", ',', 1), 2);
+  ASSERT_EQ(v[0], "a");
+  ASSERT_EQ(v[1], "b,");
+  v.clear();
+  ASSERT_EQ(SplitString(&v, "&&& a &", '&', 0), 1);
+  ASSERT_EQ(v[0], "&&& a &");
 }
 
 }  // namespace pdlfs

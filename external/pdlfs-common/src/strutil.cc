@@ -132,11 +132,12 @@ static Slice Trim(const Slice& v) {
   return input;
 }
 
-size_t SplitString(const Slice& value, char delim,
-                   std::vector<std::string>* v) {
-  size_t count = 0;
+size_t SplitString(std::vector<std::string>* v, const Slice& value, char delim,
+                   int max_splits) {
+  size_t count = 0;  // Number of resulting substrings
+  int splits = 0;    // Number of split operations
   Slice input = value;
-  while (!input.empty()) {
+  while (!input.empty() && (max_splits < 0 || splits < max_splits)) {
     const char* start = input.data();
     const char* limit = strchr(start, delim);
     if (limit != NULL) {
@@ -148,6 +149,7 @@ size_t SplitString(const Slice& value, char delim,
           count++;
         }
       }
+      splits++;
     } else {
       break;
     }

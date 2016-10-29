@@ -73,11 +73,11 @@ static conn_t* OpenRadosConn(
 static void ParseOptions(std::map<std::string, std::string>* options,
                          const char* conf_str) {
   std::vector<std::string> confs;
-  pdlfs::SplitString(conf_str, ';', &confs);
+  pdlfs::SplitString(&confs, conf_str);
   for (std::vector<std::string>::iterator it = confs.begin(); it != confs.end();
        ++it) {
     std::vector<std::string> pair;
-    pdlfs::SplitString(*it, '=', &pair);
+    pdlfs::SplitString(&pair, *it, '=');
     if (pair.size() == 2) {
       (*options)[pair[0]] = pair[1];
     }
