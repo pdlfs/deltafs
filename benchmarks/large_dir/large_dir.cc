@@ -8,12 +8,276 @@
  */
 
 #include <mpi.h>
+#include <stdio.h>
+
+#include "pdlfs-common/coding.h"
+#include "pdlfs-common/hash.h"
+
+// Abstract FS interface
+#include "../io_client.h"
+
+namespace pdlfs {
+
+// REQUIRES: callers must explicitly initialize all fields
+struct LDbenchOptions : public ioclient::IOClientOptions {
+  // Total number of dirs to create (among all clients)
+  int num_dirs;
+  // Total number of empty files to create (among all clients)
+  int num_files;
+  // True if clients are running in relaxed consistency mode (deltafs only)
+  bool relaxed_consistency;
+  // Continue running even if we get errors.
+  // Some errors are not ignored.
+  bool ignore_errors;
+  // True to skip the insertion phase.
+  bool skip_inserts;
+  // True to skip the reading phase.
+  bool skip_reads;
+};
+
+// REQUIRES: callers must explicitly initialize all fields
+struct LDbenchReport {
+  double duration;
+  // Total number of operations successfully executed
+  int ops;
+  // Total number of errors
+  int errs;
+};
+
+// A simple benchmark that bulk inserts a large number of empty files
+// into one or more directories.
+class LDbench {  // LD stands for large directory
+ public:
+  LDbench(const LDbenchOptions& options) : options_(options) {
+    io_ = ioclient::IOClient::Default(options_);
+  }
+
+  ~LDbench() {
+    if (io_ != NULL) {
+      io_->Dispose();
+      delete io_;
+    }
+  }
+
+  Status Mkdir(int dir_no) {
+    char tmp[256];
+    snprintf(tmp, sizeof(tmp), "/d_%d", dir_no);
+    Status s = io_->MakeDirectory(tmp);
+    if (options_.ignore_errors) {
+      return Status::OK();
+    } else {
+      return s;
+    }
+  }
+
+  Status Mknod(int dir_no, int f) {
+    char tmp[256];
+    snprintf(tmp, sizeof(tmp), "/d_%d/f_%d", dir_no, f);
+    Status s = io_->NewFile(tmp);
+    if (options_.ignore_errors) {
+      return Status::OK();
+    } else {
+      return s;
+    }
+  }
+
+  Status Fstat(int dir_no, int f) {
+    char tmp[256];
+    snprintf(tmp, sizeof(tmp), "/d_%d/f_%d", dir_no, f);
+    Status s = io_->GetAttr(tmp);
+    if (options_.ignore_errors) {
+      return Status::OK();
+    } else {
+      return s;
+    }
+  }
+
+  static uint32_t Dir(uint32_t file_no) {
+    char tmp[4];
+    EncodeFixed32(tmp, file_no);
+    return Hash(tmp, sizeof(tmp), 0);
+  }
+
+  // Initialize io client.  Collectively create parent directories.
+  // If in relaxed consistency mode, all clients shall create all directories.
+  // Return OK if success, or a non-OK status on errors.
+  LDbenchReport Prepare() {
+    double start = MPI_Wtime();
+    LDbenchReport report;
+    report.errs = 0;
+    report.ops = 0;
+    Status s = io_->Init();
+    if (s.ok() && !options_.skip_inserts) {
+      for (int dir_no = options_.rank; dir_no < options_.num_dirs;) {
+        s = Mkdir(dir_no);
+        if (!s.ok()) {
+          report.errs++;
+          break;
+        } else {
+          report.ops++;
+        }
+        if (!options_.relaxed_consistency) {
+          dir_no += options_.comm_sz;
+        } else {
+          dir_no += 1;
+        }
+      }
+    }
+
+    report.duration = MPI_Wtime() - start;
+    return report;
+  }
+
+  // Collectively create files under parent directories.
+  // Return OK if success, or a non-OK status on errors.
+  LDbenchReport BulkCreates() {
+    double start = MPI_Wtime();
+    LDbenchReport report;
+    report.errs = 0;
+    report.ops = 0;
+    Status s;
+    if (!options_.skip_inserts) {
+      for (int f = options_.rank; f < options_.num_files;) {
+        int dir_no = Dir(f) % options_.num_dirs;
+        s = Mknod(dir_no, f);
+        f += options_.comm_sz;
+        if (!s.ok()) {
+          report.errs++;
+          break;
+        } else {
+          report.ops++;
+        }
+      }
+    }
+
+    report.duration = MPI_Wtime() - start;
+    return report;
+  }
+
+  // Collectively read the metadata of all created files.
+  // Return OK if success, or a non-OK status on errors.
+  LDbenchReport Check() {
+    double start = MPI_Wtime();
+    LDbenchReport report;
+    report.errs = 0;
+    report.ops = 0;
+    Status s;
+    if (!options_.skip_reads) {
+      for (int f = options_.rank; f < options_.num_files;) {
+        int dir_no = Dir(f) % options_.num_dirs;
+        s = Fstat(dir_no, f);
+        f += options_.comm_sz;
+        if (!s.ok()) {
+          report.errs++;
+          break;
+        } else {
+          report.ops++;
+        }
+      }
+    }
+
+    report.duration = MPI_Wtime() - start;
+    return report;
+  }
+
+ private:
+  const LDbenchOptions options_;
+  ioclient::IOClient* io_;
+};
+
+}  // namespace pdlfs
+
+static pdlfs::LDbenchReport Merge(const pdlfs::LDbenchReport& report) {
+  pdlfs::LDbenchReport result;
+
+  MPI_Reduce(&report.duration, &result.duration, 1, MPI_DOUBLE, MPI_MAX, 0,
+             MPI_COMM_WORLD);
+  MPI_Reduce(&report.errs, &result.errs, 1, MPI_INT, MPI_SUM, 0,
+             MPI_COMM_WORLD);
+  MPI_Reduce(&report.ops, &result.ops, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  return result;
+}
+
+static void Print(const pdlfs::LDbenchReport& report) {
+  printf("-- Performed %d ops in %.3f seconds: %d succ, %d fail\n",
+         report.ops + report.errs, report.duration, report.ops, report.errs);
+}
+
+static void Print(const char* msg) {
+  // Usually only called by rank 0
+  printf("== %s\n", msg);
+}
 
 int main(int argc, char** argv) {
   int rank;
+  int size;
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Finalize();
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  pdlfs::LDbenchOptions options;
+  options.rank = rank;
+  options.comm_sz = size;
+  options.relaxed_consistency = false;
+  options.ignore_errors = false;
+  options.skip_inserts = false;
+  options.skip_reads = false;
+  options.num_files = 16;
+  options.num_dirs = 1;
+  pdlfs::LDbench bench(options);
+  pdlfs::LDbenchReport report;
+  report.errs = 0;
 
+  if (report.errs == 0) {
+    if (rank == 0) {
+      Print("Prepare ... ");
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    report = Merge(bench.Prepare());
+    if (rank == 0) {
+      Print(report);
+    }
+  } else {
+    if (rank == 0) {
+      Print("Abort");
+      goto end;
+    }
+  }
+
+  if (report.errs == 0) {
+    if (rank == 0) {
+      Print("Bulk creations ... ");
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    report = Merge(bench.BulkCreates());
+    if (rank == 0) {
+      Print(report);
+    }
+  } else {
+    if (rank == 0) {
+      Print("Abort");
+      goto end;
+    }
+  }
+
+  if (report.errs == 0) {
+    if (rank == 0) {
+      Print("Checks ... ");
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    report = Merge(bench.Check());
+    if (rank == 0) {
+      Print(report);
+    }
+  }
+  {
+    if (rank == 0) {
+      Print("Abort");
+      goto end;
+    }
+  }
+
+end:
+  MPI_Finalize();
   return 0;
 }

@@ -101,7 +101,7 @@ Status PosixClient::MakeDirectory(const std::string& path) {
   printf("mkdir %s ... ", dirname);
 #endif
   Status s;
-  if (mknod(dirname, S_IRWXU | S_IRWXG | S_IRWXO, S_IFDIR) != 0) {
+  if (mkdir(dirname, S_IRWXU | S_IRWXG | S_IRWXO) != 0) {
     s = IOError(path_buf_);
   } else {
     s = Status::OK();
@@ -122,9 +122,9 @@ Status PosixClient::GetAttr(const std::string& path) {
   Status s;
   struct stat statbuf;
   if (stat(nodename, &statbuf) != 0) {
-    return IOError(path_buf_);
+    s = IOError(path_buf_);
   } else {
-    return Status::OK();
+    s = Status::OK();
   }
 #if VERBOSE >= 10
   printf("%s\n", s.ToString().c_str());
