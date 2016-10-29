@@ -11,6 +11,7 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/hash.h"
@@ -241,19 +242,19 @@ static pdlfs::LDbenchOptions ParseOptions(int argc, char** argv) {
   result.num_files = 16;
   result.num_dirs = 1;
   {
-    struct option optinfo[7];
-    optinfo[0] = {"relaxed-consistency", 0, NULL, 1};
-    optinfo[1] = {"ignore-errors", 0, NULL, 2};
-    optinfo[2] = {"skip-inserts", 0, NULL, 3};
-    optinfo[3] = {"skip-reads", 0, NULL, 4};
-    optinfo[4] = {"num-files", 1, NULL, 5};
-    optinfo[5] = {"num-dirs", 1, NULL, 6};
-    optinfo[6] = {"help", 0, NULL, 'H'};
-    optinfo[7] = {NULL, 0, NULL, 0};
+    std::vector<struct option> optinfo;
+    optinfo.push_back({"relaxed-consistency", 0, NULL, 1});
+    optinfo.push_back({"ignore-errors", 0, NULL, 2});
+    optinfo.push_back({"skip-inserts", 0, NULL, 3});
+    optinfo.push_back({"skip-reads", 0, NULL, 4});
+    optinfo.push_back({"num-files", 1, NULL, 5});
+    optinfo.push_back({"num-dirs", 1, NULL, 6});
+    optinfo.push_back({"help", 0, NULL, 'H'});
+    optinfo.push_back({NULL, 0, NULL, 0});
 
     while (true) {
       int ignored_index;
-      int c = getopt_long_only(argc, argv, "h", optinfo, &ignored_index);
+      int c = getopt_long_only(argc, argv, "h", &optinfo[0], &ignored_index);
       if (c != -1) {
         switch (c) {
           case 1:
@@ -292,13 +293,12 @@ static pdlfs::LDbenchOptions ParseOptions(int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
-  pdlfs::LDbenchOptions options = ParseOptions(argc, argv);
-
   int rank;
   int size;
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
+  pdlfs::LDbenchOptions options = ParseOptions(argc, argv);
   options.rank = rank;
   options.comm_sz = size;
   pdlfs::LDbench bench(options);
