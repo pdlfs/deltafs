@@ -39,7 +39,8 @@
 #     - SNAPPY_LIBRARY_DIR: optional hint for finding snappy lib
 #
 # DELTAFS specific compile time options flags:
-#   -DDELTAFS_MPI=ON                       -- enable MPI
+#   -DELTAFS_BENCHMARKS=ON                 -- build our MPI-based benchmarks
+#   -DDELTAFS_MPI=ON                       -- enable MPI in deltafs
 #
 #    If you want to force a particular MPI compiler other than what we
 #    autodetect (e.g. if you want to compile regular stuff with GNU and
@@ -76,17 +77,23 @@ include (cmake-options)
 include (pdlfs-options)
 
 # user hooks to configure deltafs
+set (DELTAFS_BENCHMARKS "OFF" CACHE BOOL "Build benchmarks (requires MPI)")
 set (DELTAFS_MPI "OFF" CACHE
      BOOL "Enable DELTAFS MPI-based communication")
 
 #
 # external packages
 #
-if (DELTAFS_MPI)
-    find_package(MPI REQUIRED MODULE)
+if (DELTAFS_MPI OR DELTAFS_BENCHMARKS)
+    find_package(MPI MODULE)
+    if (NOT MPI_FOUND)
+        message (FATAL_ERROR "MPI not found (required for DELTAFS_MPI or benchmarks)")
+    endif ()
 endif ()
 
 add_subdirectory (external/pdlfs-common/src)
 add_subdirectory (src)
-add_subdirectory (benchmarks)
+if (DELTAFS_BENCHMARKS)
+    add_subdirectory (benchmarks)
+endif ()
 
