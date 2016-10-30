@@ -30,6 +30,7 @@ struct IOClientOptions {
 // Abstract FS client interface
 class IOClient {
  public:
+  static IOClient* Factory(const IOClientOptions&);
   // Open a client backed by the local FS
   static IOClient* Default(const IOClientOptions&);
   // Open a client backed by Deltafs

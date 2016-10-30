@@ -52,7 +52,7 @@ struct LDbenchReport {
 class LDbench {  // LD stands for large directory
  public:
   LDbench(const LDbenchOptions& options) : options_(options) {
-    io_ = ioclient::IOClient::Default(options_);
+    io_ = ioclient::IOClient::Factory(options_);
   }
 
   ~LDbench() {
@@ -243,6 +243,7 @@ static pdlfs::LDbenchOptions ParseOptions(int argc, char** argv) {
   result.num_dirs = 1;
   result.argv = NULL;
   result.argc = 0;
+
   {
     std::vector<struct option> optinfo;
     optinfo.push_back({"relaxed-consistency", 0, NULL, 1});
@@ -291,6 +292,17 @@ static pdlfs::LDbenchOptions ParseOptions(int argc, char** argv) {
     }
   }
 
+  int i = 0;
+  // Rewrite argc and argv
+  result.argc = argc - optind + 1;
+  assert(result.argc > 0);
+  static std::vector<char*> buffer;
+  buffer.resize(result.argc, NULL);
+  result.argv = &buffer[0];
+  result.argv[i] = argv[i];
+  for (int j = optind; j < argc;) {
+    result.argv[++i] = argv[j++];
+  }
   return result;
 }
 
@@ -303,8 +315,6 @@ int main(int argc, char** argv) {
   pdlfs::LDbenchOptions options = ParseOptions(argc, argv);
   options.rank = rank;
   options.comm_sz = size;
-  options.argc = argc;
-  options.argv = argv;
   pdlfs::LDbench bench(options);
   pdlfs::LDbenchReport report;
   report.errs = 0;

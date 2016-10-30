@@ -14,5 +14,21 @@ namespace ioclient {
 
 IOClient::~IOClient() {}
 
+IOClient* IOClient::Factory(const IOClientOptions& raw_options) {
+  IOClientOptions options = raw_options;
+  if (options.argc >= 3) {
+    options.conf_str = options.argv[2];
+  }
+  std::string fs = "default";  // Default io client type
+  if (options.argc >= 2) {
+    fs = options.argv[1];
+  }
+  if (fs == "deltafs") {
+    return IOClient::Deltafs(options);
+  } else {
+    return IOClient::Default(options);
+  }
+}
+
 }  // namespace ioclient
 }  // namespace pdlfs
