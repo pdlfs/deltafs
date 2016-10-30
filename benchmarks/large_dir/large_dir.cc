@@ -102,8 +102,8 @@ class LDbench {  // LD stands for large directory
   }
 
   // Initialize io client.  Collectively create parent directories.
-  // If in relaxed consistency mode, all clients shall create all directories.
-  // Return OK if success, or a non-OK status on errors.
+  // If in relaxed consistency mode, every client will create all directories.
+  // Return a status report with local timing and error counts.
   LDbenchReport Prepare() {
     double start = MPI_Wtime();
     LDbenchReport report;
@@ -111,7 +111,8 @@ class LDbench {  // LD stands for large directory
     report.ops = 0;
     Status s = io_->Init();
     if (s.ok() && !options_.skip_inserts) {
-      for (int dir_no = options_.rank; dir_no < options_.num_dirs;) {
+      int dir_no = options_.relaxed_consistency ? 0 : options_.rank;
+      while (dir_no < options_.num_dirs) {
         s = Mkdir(dir_no);
         if (!s.ok()) {
           report.errs++;
@@ -132,7 +133,7 @@ class LDbench {  // LD stands for large directory
   }
 
   // Collectively create files under parent directories.
-  // Return OK if success, or a non-OK status on errors.
+  // Return a status report with local timing and error counts.
   LDbenchReport BulkCreates() {
     double start = MPI_Wtime();
     LDbenchReport report;
@@ -158,7 +159,7 @@ class LDbench {  // LD stands for large directory
   }
 
   // Collectively read the metadata of all created files.
-  // Return OK if success, or a non-OK status on errors.
+  // Return a status report with local timing and error counts.
   LDbenchReport Check() {
     double start = MPI_Wtime();
     LDbenchReport report;
