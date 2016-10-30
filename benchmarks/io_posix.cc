@@ -51,6 +51,7 @@ class PosixClient : public IOClient {
   virtual Status NewFile(const std::string& path);
   virtual Status MakeDirectory(const std::string& path);
   virtual Status GetAttr(const std::string& path);
+  virtual Status Append(const std::string& path, const char*, size_t);
 
   virtual Status Dispose();
   virtual Status Init();
@@ -125,6 +126,31 @@ Status PosixClient::GetAttr(const std::string& path) {
     s = IOError(path_buf_);
   } else {
     s = Status::OK();
+  }
+#if VERBOSE >= 10
+  printf("%s\n", s.ToString().c_str());
+#endif
+  return s;
+}
+
+Status PosixClient::Append(const std::string& path, const char* data,
+                           size_t size) {
+  path_buf_.resize(mp_size_);
+  path_buf_.append(path);
+  const char* filename = path_buf_.c_str();
+#if VERBOSE >= 10
+  printf("open/append %s ... ", filename);
+#endif
+  Status s;
+  int fd = open(filename, O_WRONLY | O_APPEND | O_CREAT);
+  if (fd == -1) {
+    s = IOError(path_buf_);
+  } else {
+    ssize_t n = write(fd, data, size);
+    if (n != size) {
+      s = IOError(path_buf_);
+    }
+    close(fd);
   }
 #if VERBOSE >= 10
   printf("%s\n", s.ToString().c_str());

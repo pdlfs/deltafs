@@ -15,6 +15,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <vector>
 
@@ -48,6 +49,7 @@ class DeltafsClient : public IOClient {
   virtual Status NewFile(const std::string& path);
   virtual Status MakeDirectory(const std::string& path);
   virtual Status GetAttr(const std::string& path);
+  virtual Status Append(const std::string& path, const char*, size_t);
 
   virtual Status Dispose();
   virtual Status Init();
@@ -110,6 +112,30 @@ Status DeltafsClient::GetAttr(const std::string& path) {
   struct stat statbuf;
   if (deltafs_stat(p, &statbuf) != 0) {
     s = IOError(path);
+  }
+#if VERBOSE >= 10
+  printf("%s\n", s.ToString().c_str());
+#endif
+  return s;
+}
+
+Status DeltafsClient::Append(const std::string& path, const char* data,
+                             size_t size) {
+  const char* p = path.c_str();
+#if VERBOSE >= 10
+  printf("deltafs_open/write %s ... ", p);
+#endif
+  Status s;
+  struct stat statbuf;
+  int fd = deltafs_open(p, O_WRONLY | O_CREAT, kFilePerms, &statbuf);
+  if (fd == -1) {
+    s = IOError(path);
+  } else {
+    ssize_t n = deltafs_pwrite(fd, data, size, statbuf.st_size);
+    if (n != size) {
+      s = IOError(path);
+    }
+    deltafs_close(fd);
   }
 #if VERBOSE >= 10
   printf("%s\n", s.ToString().c_str());

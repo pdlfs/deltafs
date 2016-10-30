@@ -45,6 +45,8 @@ class IOClient {
   virtual Status MakeDirectory(const std::string& path) = 0;
   virtual Status NewFile(const std::string& path) = 0;
   virtual Status GetAttr(const std::string& path) = 0;
+  virtual Status Append(const std::string& path, const char* data,
+                        size_t size) = 0;
 
  private:
   // No copying allowed
