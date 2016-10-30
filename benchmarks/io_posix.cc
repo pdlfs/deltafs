@@ -79,7 +79,7 @@ Status PosixClient::NewFile(const std::string& path) {
   path_buf_.append(path);
   const char* filename = path_buf_.c_str();
 #if VERBOSE >= 10
-  printf("mkfile %s ... ", filename);
+  printf("mknod %s ... ", filename);
 #endif
   Status s;
   if (mknod(filename, S_IRWXU | S_IRWXG | S_IRWXO, S_IFREG) != 0) {
@@ -145,7 +145,7 @@ static std::string MP(const Slice& conf_str) {
   std::string mp =
       "/tmp/ioclient";  // Allow falling back to the default mount point
   std::vector<std::string> confs;
-  SplitString(conf_str, ';', &confs);
+  SplitString(&confs, conf_str);
   for (size_t i = 0; i < confs.size(); i++) {
     Slice input = confs[i];
     if (input.size() != 0) {

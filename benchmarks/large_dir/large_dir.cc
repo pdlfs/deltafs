@@ -241,6 +241,8 @@ static pdlfs::LDbenchOptions ParseOptions(int argc, char** argv) {
   result.skip_reads = false;
   result.num_files = 16;
   result.num_dirs = 1;
+  result.argv = NULL;
+  result.argc = 0;
   {
     std::vector<struct option> optinfo;
     optinfo.push_back({"relaxed-consistency", 0, NULL, 1});
@@ -301,6 +303,8 @@ int main(int argc, char** argv) {
   pdlfs::LDbenchOptions options = ParseOptions(argc, argv);
   options.rank = rank;
   options.comm_sz = size;
+  options.argc = argc;
+  options.argv = argv;
   pdlfs::LDbench bench(options);
   pdlfs::LDbenchReport report;
   report.errs = 0;

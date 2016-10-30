@@ -15,15 +15,14 @@ namespace pdlfs {
 namespace ioclient {
 
 struct IOClientOptions {
+  int argc;
+  char** argv;
   // Configuration string to initialize the client.
   std::string conf_str;
-
   // Optionally set the id of the client
   std::string id;
-
   // The rank of the client within a communication group
   int rank;
-
   // Total number of clients
   int comm_sz;
 };
@@ -33,6 +32,8 @@ class IOClient {
  public:
   // Open a client backed by the local FS
   static IOClient* Default(const IOClientOptions&);
+  // Open a client backed by Deltafs
+  static IOClient* Deltafs(const IOClientOptions&);
 
   IOClient() {}
   virtual ~IOClient();
