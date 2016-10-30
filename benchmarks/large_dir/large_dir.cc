@@ -214,7 +214,7 @@ static void Print(const char* msg) {
 
 static void Help(const char* prog, FILE* out) {
   fprintf(out,
-          "%s [options]\n\n"
+          "%s [options] <io_type> <io_conf>\n\nOptions:\n\n"
           "  --relaxed-consistency  :  "
           "Executes in relaxed consistency mode\n"
           "  --ignored-erros        :  "
@@ -292,17 +292,16 @@ static pdlfs::LDbenchOptions ParseOptions(int argc, char** argv) {
     }
   }
 
-  int i = 0;
   // Rewrite argc and argv
   result.argc = argc - optind + 1;
   assert(result.argc > 0);
+
+  int i = 0;
   static std::vector<char*> buffer;
   buffer.resize(result.argc, NULL);
   result.argv = &buffer[0];
   result.argv[i] = argv[i];
-  for (int j = optind; j < argc;) {
-    result.argv[++i] = argv[j++];
-  }
+  for (int j = optind; j < argc;) result.argv[++i] = argv[j++];
   return result;
 }
 
