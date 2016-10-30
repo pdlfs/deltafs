@@ -9,6 +9,7 @@
 # also get MPI).
 #
 add_library (io_client STATIC io_client.cc io_deltafs.cc io_posix.cc)
+target_link_libraries (io_client deltafs)
 
 # plug in MPI
 foreach (lcvs ${MPI_CXX_COMPILE_FLAGS})
@@ -44,8 +45,8 @@ endif ()
 #
 
 # large_dir
-add_executable (large_dir large_dir/large_dir.c)
-target_link_library (large_dir deltafs io_client)
+add_executable (large_dir large_dir/large_dir.cc)
+target_link_libraries (large_dir io_client)
 install (TARGETS large_dir
          RUNTIME DESTINATION bin)
 
