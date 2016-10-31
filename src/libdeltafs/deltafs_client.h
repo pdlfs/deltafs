@@ -17,6 +17,7 @@
 
 namespace pdlfs {
 
+// Deltafs client API.  Implementation is thread-safe.
 class Client {
   typedef MDS::CLI MDSClient;
 
@@ -47,11 +48,12 @@ class Client {
 
  private:
   class Builder;
+  Client();  // Called only by Client::Builder
   // No copying allowed
   void operator=(const Client&);
   Client(const Client&);
-  Client();
 
+  // State for each opened file
   struct File {
     size_t encoding_length;
     File* next;
@@ -80,10 +82,10 @@ class Client {
   bool IsWriteOk(const File*);
   bool IsReadOk(const File*);
   void Unref(File*);
-  File dummy_;
-  File** fds_;
+  File dummy_;  // File table as a doubly linked list
+  File** fds_;  // File descriptor table
   size_t num_open_fds_;
-  size_t fd_cursor_;
+  size_t fd_slot_;
 
   // Constant after construction
   size_t max_open_fds_;

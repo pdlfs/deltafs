@@ -28,7 +28,7 @@ namespace pdlfs {
 typedef Client::FileInfo FileInfo;
 }
 static inline int NoClient() {
-  errno = ENODEV;
+  errno = EPERM;  // Operation not permitted
   return -1;
 }
 

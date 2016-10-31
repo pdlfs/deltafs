@@ -22,6 +22,7 @@
 
 namespace pdlfs {
 
+// XXX: make this configurable?
 static const int kMaxOpenFileDescriptors = 1000;
 
 static inline Status BadDescriptor() {
@@ -38,7 +39,7 @@ Client::Client() {
   max_open_fds_ = kMaxOpenFileDescriptors;
   fds_ = new File*[max_open_fds_]();
   num_open_fds_ = 0;
-  fd_cursor_ = 0;
+  fd_slot_ = 0;
 }
 
 Client::~Client() {
@@ -52,12 +53,12 @@ Client::~Client() {
 // REQUIRES: mutex_ has been locked.
 size_t Client::Alloc(File* f) {
   assert(num_open_fds_ < max_open_fds_);
-  while (fds_[fd_cursor_] != NULL) {
-    fd_cursor_ = (1 + fd_cursor_) % max_open_fds_;
+  while (fds_[fd_slot_] != NULL) {
+    fd_slot_ = (1 + fd_slot_) % max_open_fds_;
   }
-  fds_[fd_cursor_] = f;
+  fds_[fd_slot_] = f;
   num_open_fds_++;
-  return fd_cursor_;
+  return fd_slot_;
 }
 
 // REQUIRES: mutex_ has been locked.
@@ -536,7 +537,12 @@ Status Client::Chmod(const Slice& p, int mode) {
 class Client::Builder {
  public:
   explicit Builder()
-      : env_(NULL), mdsfty_(NULL), mdscli_(NULL), db_(NULL), blkdb_(NULL) {}
+      : env_(NULL),
+        mdsfty_(NULL),
+        mdscli_(NULL),
+        db_(NULL),
+        blkdb_(NULL),
+        fio_(NULL) {}
   ~Builder() {}
 
   Status status() const { return status_; }
@@ -606,9 +612,9 @@ void Client::Builder::LoadMDSTopology() {
         std::string addrs = config::MetadataSrvAddrs();
         size_t num_addrs = SplitString(&mdstopo_.srv_addrs, addrs);
         if (num_addrs < num_srvs) {
-          status_ = Status::InvalidArgument("not enough addrs");
+          status_ = Status::InvalidArgument("not enough srv addrs");
         } else if (num_addrs > num_srvs) {
-          status_ = Status::InvalidArgument("too many addrs");
+          status_ = Status::InvalidArgument("too many srv addrs");
         }
       }
     }
