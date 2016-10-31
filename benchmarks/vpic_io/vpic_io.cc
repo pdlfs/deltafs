@@ -26,6 +26,8 @@ namespace pdlfs {
 struct VPICbenchOptions : public ioclient::IOClientOptions {
   // Random seed.
   int seed;
+  // Number of dumps
+  int num_dumps;
   // True if clients are running in relaxed consistency mode (deltafs only)
   bool relaxed_consistency;
   // Continue running even on errors.
@@ -50,9 +52,9 @@ struct VPICbenchReport {
 // with a one-file-per-particle input deck.
 class VPICbench {
  public:
-  VPICbench(const VPICbenchOptions& options) : options_(options), rnd_(301) {
+  VPICbench(const VPICbenchOptions& options)
+      : dump_seq_(0), options_(options), rnd_(options.seed) {
     io_ = ioclient::IOClient::Factory(options_);
-    dump_seq_ = 0;
   }
 
   ~VPICbench() {
@@ -211,10 +213,31 @@ static void Print(const char* msg) {
   printf("== %s\n", msg);
 }
 
+static void Help(const char* prog, FILE* out) {
+  fprintf(out,
+          "%s [options] <io_type> <io_conf>\n\nOptions:\n\n"
+          "  --relaxed-consistency  :  "
+          "Executes in relaxed consistency mode\n"
+          "  --ignored-erros        :  "
+          "Continue running even on errors\n"
+          "  --seed=n               :  "
+          "Set the random seed\n"
+          "  --num-dumps=n          :  "
+          "Total number of particle dumps\n"
+          "  --ppc=n                :  "
+          "Number of particles per grid cell\n"
+          "  --x/y/z=n              :  "
+          "3d grid dimensions\n\n"
+          "Deltafs benchmark\n",
+          prog);
+}
+
 static pdlfs::VPICbenchOptions ParseOptions(int argc, char** argv) {
   pdlfs::VPICbenchOptions result;
   result.rank = 0;
   result.comm_sz = 1;
+  result.num_dumps = 1;
+  result.seed = 301;
   result.relaxed_consistency = false;
   result.ignore_errors = false;
   result.x = result.y = result.z = 2;
@@ -222,7 +245,61 @@ static pdlfs::VPICbenchOptions ParseOptions(int argc, char** argv) {
   result.argv = NULL;
   result.argc = 0;
 
-  optind = 1;
+  {
+    std::vector<struct option> optinfo;
+    optinfo.push_back({"relaxed-consistency", 0, NULL, 1});
+    optinfo.push_back({"ignore-errors", 0, NULL, 2});
+    optinfo.push_back({"num-dumps", 1, NULL, 3});
+    optinfo.push_back({"seed", 1, NULL, 4});
+    optinfo.push_back({"ppc", 1, NULL, 'p'});
+    optinfo.push_back({"x", 1, NULL, 'x'});
+    optinfo.push_back({"y", 1, NULL, 'y'});
+    optinfo.push_back({"z", 1, NULL, 'z'});
+    optinfo.push_back({"help", 0, NULL, 'H'});
+    optinfo.push_back({NULL, 0, NULL, 0});
+
+    while (true) {
+      int ignored_index;
+      int c = getopt_long_only(argc, argv, "h", &optinfo[0], &ignored_index);
+      if (c != -1) {
+        switch (c) {
+          case 1:
+            result.relaxed_consistency = true;
+            break;
+          case 2:
+            result.ignore_errors = true;
+            break;
+          case 3:
+            result.num_dumps = atoi(optarg);
+            break;
+          case 4:
+            result.seed = atoi(optarg);
+            break;
+          case 'p':
+            result.ppc = atoi(optarg);
+            break;
+          case 'x':
+            result.x = atoi(optarg);
+            break;
+          case 'y':
+            result.y = atoi(optarg);
+            break;
+          case 'z':
+            result.z = atoi(optarg);
+            break;
+          case 'H':
+          case 'h':
+            Help(argv[0], stdout);
+            exit(EXIT_SUCCESS);
+          default:
+            Help(argv[0], stderr);
+            exit(EXIT_FAILURE);
+        }
+      } else {
+        break;  // No more options
+      }
+    }
+  }
 
   // Rewrite argc and argv
   result.argc = argc - optind + 1;
@@ -248,6 +325,7 @@ int main(int argc, char** argv) {
   options.comm_sz = size;
   pdlfs::VPICbench bench(options);
   pdlfs::VPICbenchReport report;
+  int num_dumps = options.num_dumps;
   report.errors = 0;
 
   if (report.errors == 0) {
@@ -266,19 +344,21 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (report.errors == 0) {
-    if (rank == 0) {
-      Print("Dump ... ");
-    }
-    MPI_Barrier(MPI_COMM_WORLD);
-    report = Merge(bench.Dump());
-    if (rank == 0) {
-      Print(report);
-    }
-  } else {
-    if (rank == 0) {
-      Print("Abort");
-      goto end;
+  while (num_dumps-- != 0) {
+    if (report.errors == 0) {
+      if (rank == 0) {
+        Print("Dump ... ");
+      }
+      MPI_Barrier(MPI_COMM_WORLD);
+      report = Merge(bench.Dump());
+      if (rank == 0) {
+        Print(report);
+      }
+    } else {
+      if (rank == 0) {
+        Print("Abort");
+        goto end;
+      }
     }
   }
 
