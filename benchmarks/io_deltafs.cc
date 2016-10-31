@@ -149,6 +149,17 @@ Status DeltafsClient::Append(const std::string& path, const char* data,
   return s;
 }
 
+static void SetVerboseLevel() {
+#if defined(PDLFS_GLOG)
+  const char* env = getenv("DELTAFS_Verbose");
+  if (env != NULL && strlen(env) != 0) {
+    FLAGS_v = atoi(env);  // Update log verbose level
+  }
+#else
+// Do nothing
+#endif
+}
+
 static void InstallDeltafsOpts(const IOClientOptions& options) {
   std::vector<std::string> confs;
   SplitString(&confs, options.conf_str);
@@ -167,6 +178,8 @@ static void InstallDeltafsOpts(const IOClientOptions& options) {
 #endif
     }
   }
+
+  SetVerboseLevel();
 }
 
 IOClient* IOClient::Deltafs(const IOClientOptions& options) {
@@ -177,6 +190,9 @@ IOClient* IOClient::Deltafs(const IOClientOptions& options) {
   if (options.argc > 0 && options.argv != NULL) {
     argv0 = options.argv[0];
   }
+
+  // XXX: Deltafs relies on glog to print important messages so we
+  // setup it here.
   google::InitGoogleLogging(argv0);
   google::InstallFailureSignalHandler();
 #endif
