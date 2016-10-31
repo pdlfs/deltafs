@@ -57,10 +57,16 @@ class DeltafsClient : public IOClient {
 
 Status DeltafsClient::Init() {
   Status s;
+#if VERBOSE >= 10
+  printf("deltafs_stat %s ... ", "/.deltafs");
+#endif
   struct stat ignored_stat;
-  int r = deltafs_stat("/", &ignored_stat);
+  int r = deltafs_stat("/.deltafs", &ignored_stat);
+#if VERBOSE >= 10
+  printf("%s\n", strerror(errno));
+#endif
   if (r != 0) {
-    return IOError("/");
+    return IOError("/.deltafs");
   } else {
     return s;
   }

@@ -598,6 +598,10 @@ void Client::Builder::LoadIds() {
   if (ok()) {
     cli_id_ = cli_id;
   }
+
+#if VERBOSE >= 10
+  Verbose(__LOG_ARGS__, 10, "LoadIds: %s", status_.ToString().c_str());
+#endif
 }
 
 void Client::Builder::LoadMDSTopology() {
@@ -643,6 +647,10 @@ void Client::Builder::LoadMDSTopology() {
       delete fty;
     }
   }
+
+#if VERBOSE >= 10
+  Verbose(__LOG_ARGS__, 10, "LoadMDSTopology: %s", status_.ToString().c_str());
+#endif
 }
 
 // REQUIRES: both LoadIds() and LoadMDSTopology() have been called.
@@ -664,6 +672,10 @@ void Client::Builder::OpenSession() {
       }
     }
   }
+
+#if VERBOSE >= 10
+  Verbose(__LOG_ARGS__, 10, "OpenSession: %s", status_.ToString().c_str());
+#endif
 }
 
 // REQUIRES: OpenSession() has been called.
@@ -749,6 +761,10 @@ void Client::Builder::OpenMDSCli() {
   if (ok()) {
     mdscli_ = MDSClient::Open(mdscliopts_);
   }
+
+#if VERBOSE >= 10
+  Verbose(__LOG_ARGS__, 10, "OpenMDSCli: %s", status_.ToString().c_str());
+#endif
 }
 
 Client* Client::Builder::BuildClient() {

@@ -23,12 +23,13 @@ extern "C" {
 #endif
 
 static pdlfs::port::OnceType once = PDLFS_ONCE_INIT;
-static pdlfs::Client* client;
+static pdlfs::Client* client = NULL;
 namespace pdlfs {
 typedef Client::FileInfo FileInfo;
 }
 static inline int NoClient() {
-  errno = EPERM;  // Operation not permitted
+  // XXX: Use no-such-device to indicate failure
+  errno = ENODEV;
   return -1;
 }
 
@@ -240,13 +241,17 @@ int deltafs_stat(const char* __path, struct stat* __buf) {
   }
   pdlfs::Stat stat;
   pdlfs::Status s;
-  s = client->Getattr(__path, &stat);
-  if (s.ok()) {
-    CopyStat(stat, __buf);
-    return 0;
+  if (strcmp(__path, "/.deltafs") == 0) {
+    return 0;  // XXX: reserved for admin usage
   } else {
-    SetErrno(s);
-    return -1;
+    s = client->Getattr(__path, &stat);
+    if (s.ok()) {
+      CopyStat(stat, __buf);
+      return 0;
+    } else {
+      SetErrno(s);
+      return -1;
+    }
   }
 }
 
