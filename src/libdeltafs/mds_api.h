@@ -295,7 +295,8 @@ class MDS::RPC::SRV : public rpc::If {
   typedef rpc::If::Message Msg;
 
  public:
-  virtual void Call(Msg& in, Msg& out);
+  // Always return OK.
+  virtual Status Call(Msg& in, Msg& out) RPCNOEXCEPT;
   SRV(MDS* mds) : mds_(mds) {}
   virtual ~SRV();
 

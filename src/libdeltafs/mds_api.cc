@@ -47,12 +47,10 @@ static bool GetDirId(Slice* input, DirId* id) {
 #define DELTAFS_RPC_DEBUG 1
 #else
 #define DELTAFS_RPC_DEBUG 0
-#endif
+#endif  // NDEBUG
 
 static const bool kDebugRPC = DELTAFS_RPC_DEBUG;
-
 #undef DELTAFS_RPC_DEBUG
-
 // RPC op types
 namespace {
 /* clang-format off */
@@ -67,8 +65,14 @@ enum {
 /* clang-format on */
 }  // namespace
 
+// Convenient method that adds op code to a message.
+static inline rpc::If::Message& AddOp(rpc::If::Message& msg, int op) {
+  msg.op = op;
+  return msg;
+}
+
 // RPC dispatcher
-void MDS::RPC::SRV::Call(Msg& in, Msg& out) {
+Status MDS::RPC::SRV::Call(Msg& in, Msg& out) RPCNOEXCEPT {
   switch (in.op) {
     case kLookup:
       LOKUP(in, out);
@@ -112,6 +116,8 @@ void MDS::RPC::SRV::Call(Msg& in, Msg& out) {
     default:
       out.err = Status::kNotSupported;
   }
+
+  return Status::OK();
 }
 
 Status MDS::RPC::CLI::Fstat(const FstatOptions& options, FstatRet* ret) {
@@ -140,12 +146,7 @@ Status MDS::RPC::CLI::Fstat(const FstatOptions& options, FstatRet* ret) {
 
   Msg out;
   if (s.ok()) {
-    try {
-      in.op = kFstat;
-      stub_->Call(in, out);
-    } catch (int rpc_err) {
-      s = Status::Disconnected(Slice());
-    }
+    s = stub_->Call(AddOp(in, kFstat), out);
     if (s.ok()) {
       if (out.err == -1) {
         Redirect re(out.contents.data(), out.contents.size());
@@ -224,12 +225,7 @@ Status MDS::RPC::CLI::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
 
   Msg out;
   if (s.ok()) {
-    try {
-      in.op = kFcreat;
-      stub_->Call(in, out);
-    } catch (int rpc_err) {
-      s = Status::Disconnected(Slice());
-    }
+    s = stub_->Call(AddOp(in, kFcreat), out);
     if (s.ok()) {
       if (out.err == -1) {
         Redirect re(out.contents.data(), out.contents.size());
@@ -310,12 +306,7 @@ Status MDS::RPC::CLI::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
 
   Msg out;
   if (s.ok()) {
-    try {
-      in.op = kMkdir;
-      stub_->Call(in, out);
-    } catch (int rpc_err) {
-      s = Status::Disconnected(Slice());
-    }
+    s = stub_->Call(AddOp(in, kMkdir), out);
     if (s.ok()) {
       if (out.err == -1) {
         Redirect re(out.contents.data(), out.contents.size());
@@ -389,12 +380,7 @@ Status MDS::RPC::CLI::Lookup(const LookupOptions& options, LookupRet* ret) {
 
   Msg out;
   if (s.ok()) {
-    try {
-      in.op = kLookup;
-      stub_->Call(in, out);
-    } catch (int rpc_err) {
-      s = Status::Disconnected(Slice());
-    }
+    s = stub_->Call(AddOp(in, kLookup), out);
     if (s.ok()) {
       if (out.err == -1) {
         Redirect re(out.contents.data(), out.contents.size());
@@ -467,12 +453,7 @@ Status MDS::RPC::CLI::Chmod(const ChmodOptions& options, ChmodRet* ret) {
 
   Msg out;
   if (s.ok()) {
-    try {
-      in.op = kChmod;
-      stub_->Call(in, out);
-    } catch (int rpc_err) {
-      s = Status::Disconnected(Slice());
-    }
+    s = stub_->Call(AddOp(in, kChmod), out);
     if (s.ok()) {
       if (out.err == -1) {
         Redirect re(out.contents.data(), out.contents.size());
@@ -548,12 +529,7 @@ Status MDS::RPC::CLI::Utime(const UtimeOptions& options, UtimeRet* ret) {
 
   Msg out;
   if (s.ok()) {
-    try {
-      in.op = kUtime;
-      stub_->Call(in, out);
-    } catch (int rpc_err) {
-      s = Status::Disconnected(Slice());
-    }
+    s = stub_->Call(AddOp(in, kUtime), out);
     if (s.ok()) {
       if (out.err == -1) {
         Redirect re(out.contents.data(), out.contents.size());
@@ -630,12 +606,7 @@ Status MDS::RPC::CLI::Trunc(const TruncOptions& options, TruncRet* ret) {
 
   Msg out;
   if (s.ok()) {
-    try {
-      in.op = kTrunc;
-      stub_->Call(in, out);
-    } catch (int rpc_err) {
-      s = Status::Disconnected(Slice());
-    }
+    s = stub_->Call(AddOp(in, kTrunc), out);
     if (s.ok()) {
       if (out.err == -1) {
         Redirect re(out.contents.data(), out.contents.size());
@@ -692,12 +663,7 @@ Status MDS::RPC::CLI::Listdir(const ListdirOptions& options, ListdirRet* ret) {
   p = EncodeVarint64(p, options.op_due);
   in.contents = Slice(scratch, p - scratch);
   Msg out;
-  try {
-    in.op = kListdir;
-    stub_->Call(in, out);
-  } catch (int rpc_err) {
-    s = Status::Disconnected(Slice());
-  }
+  s = stub_->Call(AddOp(in, kListdir), out);
   if (s.ok()) {
     std::vector<std::string>* names = ret->names;
     if (out.err != 0) {
@@ -758,12 +724,7 @@ Status MDS::RPC::CLI::Readidx(const ReadidxOptions& options, ReadidxRet* ret) {
   p = EncodeVarint64(p, options.op_due);
   in.contents = Slice(scratch, p - scratch);
   Msg out;
-  try {
-    in.op = kReadidx;
-    stub_->Call(in, out);
-  } catch (int rpc_err) {
-    s = Status::Disconnected(Slice());
-  }
+  s = stub_->Call(AddOp(in, kReadidx), out);
   if (s.ok()) {
     if (out.err != 0) {
       s = Status::FromCode(out.err);
@@ -801,12 +762,7 @@ Status MDS::RPC::CLI::Opensession(const OpensessionOptions& options,
   Status s;
   Msg in;
   Msg out;
-  try {
-    in.op = kOpensession;
-    stub_->Call(in, out);
-  } catch (int rpc_err) {
-    s = Status::Disconnected(Slice());
-  }
+  s = stub_->Call(AddOp(in, kOpensession), out);
   if (s.ok()) {
     if (out.err != 0) {
       s = Status::FromCode(out.err);
@@ -858,12 +814,7 @@ Status MDS::RPC::CLI::Getinput(const GetinputOptions& options,
   Status s;
   Msg in;
   Msg out;
-  try {
-    in.op = kGetinput;
-    stub_->Call(in, out);
-  } catch (int rpc_err) {
-    s = Status::Disconnected(Slice());
-  }
+  s = stub_->Call(AddOp(in, kGetinput), out);
   if (s.ok()) {
     if (out.err != 0) {
       s = Status::FromCode(out.err);
@@ -900,12 +851,7 @@ Status MDS::RPC::CLI::Getoutput(const GetoutputOptions& options,
   Status s;
   Msg in;
   Msg out;
-  try {
-    in.op = kGetoutput;
-    stub_->Call(in, out);
-  } catch (int rpc_err) {
-    s = Status::Disconnected(Slice());
-  }
+  s = stub_->Call(AddOp(in, kGetoutput), out);
   if (s.ok()) {
     if (out.err != 0) {
       s = Status::FromCode(out.err);

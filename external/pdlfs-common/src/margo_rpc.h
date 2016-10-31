@@ -59,7 +59,8 @@ class MargoRPC::Client : public If {
     rpc_->Ref();
   }
 
-  virtual void Call(Message& in, Message& out);
+  // Return OK on success, a non-OK status on RPC errors.
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
 
   virtual ~Client() {
     if (rpc_ != NULL) {

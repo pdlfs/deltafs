@@ -99,15 +99,14 @@ hg_return_t MargoRPC::Lookup(const std::string& target, AddrEntry** result) {
   }
 }
 
-void MargoRPC::Client::Call(Message& in, Message& out) {
+Status MargoRPC::Client::Call(Message& in, Message& out) RPCNOEXCEPT {
   AddrEntry* entry = NULL;
-  hg_return_t r = rpc_->Lookup(addr_, &entry);
-  if (r != HG_SUCCESS) throw EHOSTUNREACH;
+  hg_return_t ret = rpc_->Lookup(addr_, &entry);
+  if (ret != HG_SUCCESS) return Status::Disconnected(Slice());
   assert(entry != NULL);
   hg_addr_t addr = entry->value->rep;
   hg_handle_t handle;
-  hg_return_t ret =
-      HG_Create(rpc_->hg_->hg_context_, addr, rpc_->hg_rpc_id_, &handle);
+  ret = HG_Create(rpc_->hg_->hg_context_, addr, rpc_->hg_rpc_id_, &handle);
   if (ret == HG_SUCCESS) {
     ret = margo_forward_timed(rpc_->margo_id_, handle, &in,
                               rpc_->rpc_timeout_ / 1000);
@@ -137,7 +136,9 @@ void MargoRPC::Client::Call(Message& in, Message& out) {
   }
   rpc_->Release(entry);
   if (ret != HG_SUCCESS) {
-    throw ENETUNREACH;
+    return Status::Disconnected(Slice());
+  } else {
+    return Status::OK();
   }
 }
 

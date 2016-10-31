@@ -17,8 +17,20 @@
 #include "pdlfs-common/status.h"
 
 namespace pdlfs {
+#define RPCNOEXCEPT \
+  throw()  // XXX: noexcept operator not available until CXX 11+
 // Internal RPC interface
 namespace rpc {
+/*
+ * XXX: We DON'T use exceptions throughout our codebase.
+ *
+ * RPC implementation should never use exceptions to indicate errors.
+ * Instead, they should simply return a non-OK status.
+ * Some RPC framework (such as Apache Thrift) uses
+ * CXX exceptions. We expect our wrappers to try-catch
+ * these exceptions and must not continue propagating them
+ * further up the call stack.
+ */
 class If;
 }
 
@@ -122,7 +134,8 @@ class If {
     std::string extra_buf;
   };
 
-  virtual void Call(Message& in, Message& out) = 0;
+  // Return OK on success, or a non-OK status on errors.
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT = 0;
   virtual ~If();
   If() {}
 
