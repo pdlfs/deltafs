@@ -47,6 +47,11 @@ endif ()
 # large_dir
 add_executable (large_dir large_dir/large_dir.cc)
 target_link_libraries (large_dir io_client)
+
+#vpic_io
+add_executable (vpic_io vpic_io/vpic_io.cc)
+target_link_libraries (vpic_io io_client)
+
 install (TARGETS large_dir
          RUNTIME DESTINATION bin)
 
