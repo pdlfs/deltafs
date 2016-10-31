@@ -142,7 +142,8 @@ Status PosixClient::Append(const std::string& path, const char* data,
   printf("open/append %s ... ", filename);
 #endif
   Status s;
-  int fd = open(filename, O_WRONLY | O_APPEND | O_CREAT, 0777);
+  const mode_t mode = S_IRWXU | S_IRWXG | S_IRWXO;
+  int fd = open(filename, O_WRONLY | O_APPEND | O_CREAT, mode);
   if (fd == -1) {
     s = IOError(path_buf_);
   } else {
