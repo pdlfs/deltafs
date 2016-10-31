@@ -143,9 +143,9 @@ Status DeltafsClient::Append(const std::string& path, const char* data,
   return s;
 }
 
-static void InstallDeltafsOpts(const Slice& conf_str) {
+static void InstallDeltafsOpts(const IOClientOptions& options) {
   std::vector<std::string> confs;
-  SplitString(&confs, conf_str);
+  SplitString(&confs, options.conf_str);
   for (size_t i = 0; i < confs.size(); i++) {
     std::vector<std::string> kv;
     SplitString(&kv, confs[i], ':', 1);
@@ -153,8 +153,11 @@ static void InstallDeltafsOpts(const Slice& conf_str) {
       const char* k = kv[0].c_str();
       const char* v = kv[1].c_str();
       setenv(k, v, 1);  // Override the existing one
+
 #if VERBOSE >= 10
-      printf("%s -> %s\n", k, v);
+      if (options.rank == 0) {
+        printf("%s -> %s\n", k, v);
+      }
 #endif
     }
   }
@@ -162,7 +165,7 @@ static void InstallDeltafsOpts(const Slice& conf_str) {
 
 IOClient* IOClient::Deltafs(const IOClientOptions& options) {
   DeltafsClient* cli = new DeltafsClient;
-  InstallDeltafsOpts(options.conf_str);
+  InstallDeltafsOpts(options);
 #if defined(PDLFS_GLOG)
   const char* argv0 = "io_deltafs";
   if (options.argc > 0 && options.argv != NULL) {

@@ -168,11 +168,11 @@ void PosixClient::SetMountPoint(const std::string& mp) {
 }
 
 // Fetch the mount point from the given configuration string
-static std::string MP(const Slice& conf_str) {
+static std::string MP(const IOClientOptions& options) {
   std::string mp =
       "/tmp/ioclient";  // Allow falling back to the default mount point
   std::vector<std::string> confs;
-  SplitString(&confs, conf_str);
+  SplitString(&confs, options.conf_str);
   for (size_t i = 0; i < confs.size(); i++) {
     Slice input = confs[i];
     if (input.size() != 0) {
@@ -183,14 +183,16 @@ static std::string MP(const Slice& conf_str) {
     }
   }
 #if VERBOSE >= 2
-  printf("mount_point -> %s\n", mp.c_str());
+  if (options.rank == 0) {
+    printf("mount_point -> %s\n", mp.c_str());
+  }
 #endif
   return mp;
 }
 
 IOClient* IOClient::Default(const IOClientOptions& options) {
   PosixClient* cli = new PosixClient;
-  cli->SetMountPoint(MP(options.conf_str));
+  cli->SetMountPoint(MP(options));
   cli->path_buf_.reserve(256);
   return cli;
 }
