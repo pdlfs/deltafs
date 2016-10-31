@@ -39,7 +39,7 @@
 #     - SNAPPY_LIBRARY_DIR: optional hint for finding snappy lib
 #
 # DELTAFS specific compile time options flags:
-#   -DELTAFS_BENCHMARKS=ON                 -- build our MPI-based benchmarks
+#   -DDELTAFS_BENCHMARKS=ON                -- build our MPI-based benchmarks
 #   -DDELTAFS_MPI=ON                       -- enable MPI in deltafs
 #
 #    If you want to force a particular MPI compiler other than what we

@@ -154,7 +154,7 @@ static void InstallDeltafsOpts(const IOClientOptions& options) {
       const char* v = kv[1].c_str();
       setenv(k, v, 1);  // Override the existing one
 
-#if VERBOSE >= 10
+#if VERBOSE >= 2
       if (options.rank == 0) {
         printf("%s -> %s\n", k, v);
       }

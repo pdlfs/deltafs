@@ -52,6 +52,6 @@ target_link_libraries (large_dir io_client)
 add_executable (vpic_io vpic_io/vpic_io.cc)
 target_link_libraries (vpic_io io_client)
 
-install (TARGETS large_dir
+install (TARGETS large_dir vpic_io
          RUNTIME DESTINATION bin)
 
