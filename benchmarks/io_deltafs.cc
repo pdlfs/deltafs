@@ -149,11 +149,22 @@ Status DeltafsClient::Append(const std::string& path, const char* data,
   return s;
 }
 
-static void SetVerboseLevel() {
+static void MaybeSetVerboseLevel() {
 #if defined(PDLFS_GLOG)
   const char* env = getenv("DELTAFS_Verbose");
   if (env != NULL && strlen(env) != 0) {
     FLAGS_v = atoi(env);  // Update log verbose level
+  }
+#else
+// Do nothing
+#endif
+}
+
+static void MaybeLogToStderr() {
+#if defined(PDLFS_GLOG)
+  const char* env = getenv("DELTAFS_LogToStderr");
+  if (env != NULL && strlen(env) != 0) {
+    FLAGS_logtostderr = true;
   }
 #else
 // Do nothing
@@ -179,7 +190,9 @@ static void InstallDeltafsOpts(const IOClientOptions& options) {
     }
   }
 
-  SetVerboseLevel();
+  // XXX: Must get called before glog is initialized
+  MaybeSetVerboseLevel();
+  MaybeLogToStderr();
 }
 
 IOClient* IOClient::Deltafs(const IOClientOptions& options) {
