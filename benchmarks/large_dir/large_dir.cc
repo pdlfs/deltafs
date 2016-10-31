@@ -44,7 +44,7 @@ struct LDbenchReport {
   // Total number of operations successfully executed
   int ops;
   // Total number of errors
-  int errs;
+  int errors;
 };
 
 // A simple benchmark that bulk inserts a large number of empty files
@@ -107,7 +107,7 @@ class LDbench {  // LD stands for large directory
   LDbenchReport Prepare() {
     double start = MPI_Wtime();
     LDbenchReport report;
-    report.errs = 0;
+    report.errors = 0;
     report.ops = 0;
     Status s = io_->Init();
     if (s.ok() && !options_.skip_inserts) {
@@ -115,7 +115,7 @@ class LDbench {  // LD stands for large directory
       while (dir_no < options_.num_dirs) {
         s = Mkdir(dir_no);
         if (!s.ok()) {
-          report.errs++;
+          report.errors++;
           break;
         } else {
           report.ops++;
@@ -137,7 +137,7 @@ class LDbench {  // LD stands for large directory
   LDbenchReport BulkCreates() {
     double start = MPI_Wtime();
     LDbenchReport report;
-    report.errs = 0;
+    report.errors = 0;
     report.ops = 0;
     Status s;
     if (!options_.skip_inserts) {
@@ -146,7 +146,7 @@ class LDbench {  // LD stands for large directory
         s = Mknod(dir_no, f);
         f += options_.comm_sz;
         if (!s.ok()) {
-          report.errs++;
+          report.errors++;
           break;
         } else {
           report.ops++;
@@ -163,7 +163,7 @@ class LDbench {  // LD stands for large directory
   LDbenchReport Check() {
     double start = MPI_Wtime();
     LDbenchReport report;
-    report.errs = 0;
+    report.errors = 0;
     report.ops = 0;
     Status s;
     if (!options_.skip_reads) {
@@ -172,7 +172,7 @@ class LDbench {  // LD stands for large directory
         s = Fstat(dir_no, f);
         f += options_.comm_sz;
         if (!s.ok()) {
-          report.errs++;
+          report.errors++;
           break;
         } else {
           report.ops++;
@@ -196,7 +196,7 @@ static pdlfs::LDbenchReport Merge(const pdlfs::LDbenchReport& report) {
 
   MPI_Reduce(&report.duration, &result.duration, 1, MPI_DOUBLE, MPI_MAX, 0,
              MPI_COMM_WORLD);
-  MPI_Reduce(&report.errs, &result.errs, 1, MPI_INT, MPI_SUM, 0,
+  MPI_Reduce(&report.errors, &result.errors, 1, MPI_INT, MPI_SUM, 0,
              MPI_COMM_WORLD);
   MPI_Reduce(&report.ops, &result.ops, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
@@ -205,7 +205,8 @@ static pdlfs::LDbenchReport Merge(const pdlfs::LDbenchReport& report) {
 
 static void Print(const pdlfs::LDbenchReport& report) {
   printf("-- Performed %d ops in %.3f seconds: %d succ, %d fail\n",
-         report.ops + report.errs, report.duration, report.ops, report.errs);
+         report.ops + report.errors, report.duration, report.ops,
+         report.errors);
 }
 
 static void Print(const char* msg) {
@@ -317,9 +318,9 @@ int main(int argc, char** argv) {
   options.comm_sz = size;
   pdlfs::LDbench bench(options);
   pdlfs::LDbenchReport report;
-  report.errs = 0;
+  report.errors = 0;
 
-  if (report.errs == 0) {
+  if (report.errors == 0) {
     if (rank == 0) {
       Print("Prepare ... ");
     }
@@ -335,7 +336,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (report.errs == 0) {
+  if (report.errors == 0) {
     if (rank == 0) {
       Print("Bulk creations ... ");
     }
@@ -351,7 +352,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (report.errs == 0) {
+  if (report.errors == 0) {
     if (rank == 0) {
       Print("Checks ... ");
     }
