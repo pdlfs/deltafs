@@ -110,22 +110,27 @@ class LDbench {  // LD stands for large directory
     report.errors = 0;
     report.ops = 0;
     Status s = io_->Init();
-    if (s.ok() && !options_.skip_inserts) {
-      int dir_no = options_.relaxed_consistency ? 0 : options_.rank;
-      while (dir_no < options_.num_dirs) {
-        s = Mkdir(dir_no);
-        if (!s.ok()) {
-          report.errors++;
-          break;
-        } else {
-          report.ops++;
-        }
-        if (!options_.relaxed_consistency) {
-          dir_no += options_.comm_sz;
-        } else {
-          dir_no += 1;
+    if (s.ok()) {
+      report.ops++;
+      if (!options_.skip_inserts) {
+        int dir_no = options_.relaxed_consistency ? 0 : options_.rank;
+        while (dir_no < options_.num_dirs) {
+          s = Mkdir(dir_no);
+          if (!s.ok()) {
+            report.errors++;
+            break;
+          } else {
+            report.ops++;
+          }
+          if (!options_.relaxed_consistency) {
+            dir_no += options_.comm_sz;
+          } else {
+            dir_no += 1;
+          }
         }
       }
+    } else {
+      report.errors++;
     }
 
     report.duration = MPI_Wtime() - start;

@@ -129,13 +129,18 @@ class VPICbench {
     report.errors = 0;
     report.ops = 0;
     Status s = io_->Init();
-    if (s.ok() && (options_.rank == 0 || options_.relaxed_consistency)) {
-      s = Mkroot();
-      if (!s.ok()) {
-        report.errors++;
-      } else {
-        report.ops++;
+    if (s.ok()) {
+      report.ops++;
+      if (options_.rank == 0 || options_.relaxed_consistency) {
+        s = Mkroot();
+        if (!s.ok()) {
+          report.errors++;
+        } else {
+          report.ops++;
+        }
       }
+    } else {
+      report.errors++;
     }
 
     report.duration = MPI_Wtime() - start;
