@@ -46,10 +46,11 @@ class MercuryServer : public If {
     delete pool_;
   }
 
-  virtual void Call(Message& in, Message& out) {
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
     out.op = in.op;
     out.err = in.err;
     out.contents = in.contents;
+    return Status::OK();
   }
 
   ThreadPool* pool_;

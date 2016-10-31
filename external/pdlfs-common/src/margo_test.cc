@@ -36,10 +36,11 @@ class MargoServer : public If {
     delete self_;
   }
 
-  virtual void Call(Message& in, Message& out) {
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT {
     out.op = in.op;
     out.err = in.err;
     out.contents = in.contents;
+    return Status::OK();
   }
 
   MargoRPC::Client* self_;
