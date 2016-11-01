@@ -324,7 +324,7 @@ hg_return_t MercuryRPC::Lookup(const std::string& target, AddrEntry** result) {
     mutex_.Lock();
     if (ret == HG_SUCCESS) {
       while (!state.lookup_done && !has_error_.NoBarrier_Load()) {
-        lookup_cv_.TimedWait(500 * 1000);  // 5000 milliseconds
+        lookup_cv_.TimedWait(500 * 1000);  // 500 milliseconds
       }
       if (!has_error_.NoBarrier_Load()) {
         ret = state.ret;
