@@ -118,6 +118,10 @@ class MDS {
   MDS_OP_RET(Trunc) { Stat stat; };
   MDS_OP(Trunc)
 
+  MDS_OP_OPTIONS(Unlink) { uint32_t flags; };
+  MDS_OP_RET(Unlink) { Stat stat; };
+  MDS_OP(Unlink)
+
   MDS_OP_OPTIONS(Lookup){};
   MDS_OP_RET(Lookup) { LookupStat stat; };
   MDS_OP(Lookup)
@@ -190,6 +194,7 @@ class MDSWrapper : public MDS {
   DEF_OP(Chmod)
   DEF_OP(Utime)
   DEF_OP(Trunc)
+  DEF_OP(Unlink)
   DEF_OP(Lookup)
   DEF_OP(Listdir)
   DEF_OP(Readidx)
@@ -247,6 +252,7 @@ class MDSTracer : public MDSWrapper {
   DEF_OP(Chmod)
   DEF_OP(Utime)
   DEF_OP(Trunc)
+  DEF_OP(Unlink)
   DEF_OP(Lookup)
   DEF_OP(Listdir)
   DEF_OP(Readidx)
@@ -278,6 +284,7 @@ class MDS::RPC::CLI : public MDS {
   DEC_OP(Chmod)
   DEC_OP(Utime)
   DEC_OP(Trunc)
+  DEC_OP(Unlink)
   DEC_OP(Lookup)
   DEC_OP(Listdir)
   DEC_OP(Readidx)
@@ -308,6 +315,7 @@ class MDS::RPC::SRV : public rpc::If {
   DEC_RPC(CHMOD)
   DEC_RPC(UTIME)
   DEC_RPC(TRUNC)
+  DEC_RPC(UNLNK)
   DEC_RPC(LOKUP)
   DEC_RPC(LSDIR)
   DEC_RPC(RDIDX)

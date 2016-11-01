@@ -31,6 +31,7 @@ class MDS::SRV : public MDS {
   DEC_OP(Chmod)
   DEC_OP(Utime)
   DEC_OP(Trunc)
+  DEC_OP(Unlink)
   DEC_OP(Lookup)
   DEC_OP(Listdir)
   DEC_OP(Readidx)

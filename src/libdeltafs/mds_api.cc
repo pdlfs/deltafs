@@ -57,7 +57,7 @@ namespace {
 enum {
   kNonop, kFstat, kFcreat, kMkdir,
   kChmod, kUtime, kTrunc,
-  kLookup, kListdir, kReadidx,
+  kUnlink, kLookup, kListdir, kReadidx,
   kOpensession,
   kGetinput,
   kGetoutput
@@ -85,6 +85,9 @@ Status MDS::RPC::SRV::Call(Msg& in, Msg& out) RPCNOEXCEPT {
       break;
     case kTrunc:
       TRUNC(in, out);
+      break;
+    case kUnlink:
+      UNLNK(in, out);
       break;
     case kMkdir:
       MKDIR(in, out);
@@ -638,6 +641,80 @@ void MDS::RPC::SRV::TRUNC(Msg& in, Msg& out) {
   } else {
     try {
       s = mds_->Trunc(options, &ret);
+    } catch (Redirect& re) {
+      out.extra_buf.swap(re);
+      out.contents = Slice(out.extra_buf);
+      out.err = -1;
+      return;
+    }
+  }
+  if (s.ok()) {
+    out.contents = ret.stat.EncodeTo(out.buf);
+    out.err = 0;
+  } else {
+    out.err = s.err_code();
+  }
+}
+
+Status MDS::RPC::CLI::Unlink(const UnlinkOptions& options, UnlinkRet* ret) {
+  Status s;
+  Msg in;
+  if (!kDebugRPC) {
+    char* scratch = &in.buf[0];
+    char* p = scratch;
+    p = EncodeDirId(p, options.dir_id);
+    p = EncodeLengthPrefixedSlice(p, options.name_hash);
+    p = EncodeLengthPrefixedSlice(p, options.name);
+    p = EncodeVarint32(p, options.flags);
+    p = EncodeVarint32(p, options.session_id);
+    p = EncodeVarint64(p, options.op_due);
+    in.contents = Slice(scratch, p - scratch);
+  } else {
+    PutDirId(&in.extra_buf, options.dir_id);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name_hash);
+    PutLengthPrefixedSlice(&in.extra_buf, options.name);
+    PutVarint32(&in.extra_buf, options.flags);
+    PutVarint32(&in.extra_buf, options.session_id);
+    PutVarint64(&in.extra_buf, options.op_due);
+    in.contents = Slice(in.extra_buf);
+    if (in.contents.size() > sizeof(in.buf)) {
+      s = Status::BufferFull(Slice());
+    }
+  }
+
+  Msg out;
+  if (s.ok()) {
+    s = stub_->Call(AddOp(in, kUnlink), out);
+    if (s.ok()) {
+      if (out.err == -1) {
+        Redirect re(out.contents.data(), out.contents.size());
+        throw re;
+      } else if (out.err != 0) {
+        s = Status::FromCode(out.err);
+      } else if (!ret->stat.DecodeFrom(out.contents)) {
+        s = Status::Corruption(Slice());
+      }
+    }
+  }
+  return s;
+}
+
+void MDS::RPC::SRV::UNLNK(Msg& in, Msg& out) {
+  Status s;
+  UnlinkOptions options;
+  UnlinkRet ret;
+  assert(in.op == kUnlink);
+  Slice input = in.contents;
+  if (!GetDirId(&input, &options.dir_id) ||
+      !GetLengthPrefixedSlice(&input, &options.name_hash) ||
+      !GetLengthPrefixedSlice(&input, &options.name) ||
+      !GetVarint32(&input, &options.flags) ||
+      !GetVarint32(&input, &options.session_id) ||
+      !GetVarint64(&input, &options.op_due)) {
+    s = Status::InvalidArgument(Slice());
+  } else {
+    try {
+      s = mds_->Unlink(options, &ret);
     } catch (Redirect& re) {
       out.extra_buf.swap(re);
       out.contents = Slice(out.extra_buf);
