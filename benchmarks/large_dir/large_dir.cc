@@ -36,6 +36,8 @@ struct LDbenchOptions : public ioclient::IOClientOptions {
   bool skip_inserts;
   // True to skip the reading phase.
   bool skip_reads;
+  // True to skip the deletion phase.
+  bool skip_deletes;
 };
 
 // REQUIRES: callers must explicitly initialize all fields
@@ -88,6 +90,17 @@ class LDbench {  // LD stands for large directory
     char tmp[256];
     snprintf(tmp, sizeof(tmp), "/d_%d/f_%d", dir_no, f);
     Status s = io_->GetAttr(tmp);
+    if (options_.ignore_errors) {
+      return Status::OK();
+    } else {
+      return s;
+    }
+  }
+
+  Status Delete(int dir_no, int f) {
+    char tmp[256];
+    snprintf(tmp, sizeof(tmp), "/d_%d/f_%d", dir_no, f);
+    Status s = io_->DelFile(tmp);
     if (options_.ignore_errors) {
       return Status::OK();
     } else {
@@ -163,9 +176,9 @@ class LDbench {  // LD stands for large directory
     return report;
   }
 
-  // Collectively read the metadata of all created files.
+  // Collectively touch all created files.
   // Return a status report with local timing and error counts.
-  LDbenchReport Check() {
+  LDbenchReport Touch() {
     double start = MPI_Wtime();
     LDbenchReport report;
     report.errors = 0;
@@ -175,6 +188,32 @@ class LDbench {  // LD stands for large directory
       for (int f = options_.rank; f < options_.num_files;) {
         int dir_no = Dir(f) % options_.num_dirs;
         s = Fstat(dir_no, f);
+        f += options_.comm_sz;
+        if (!s.ok()) {
+          report.errors++;
+          break;
+        } else {
+          report.ops++;
+        }
+      }
+    }
+
+    report.duration = MPI_Wtime() - start;
+    return report;
+  }
+
+  // Collectively remove all created files.
+  // Return a status report with local timing and error counts.
+  LDbenchReport BulkRemoves() {
+    double start = MPI_Wtime();
+    LDbenchReport report;
+    report.errors = 0;
+    report.ops = 0;
+    Status s;
+    if (!options_.skip_deletes) {
+      for (int f = options_.rank; f < options_.num_files;) {
+        int dir_no = Dir(f) % options_.num_dirs;
+        s = Delete(dir_no, f);
         f += options_.comm_sz;
         if (!s.ok()) {
           report.errors++;
@@ -230,6 +269,8 @@ static void Help(const char* prog, FILE* out) {
           "Skip the insertion phase\n"
           "  --skip-reads           :  "
           "Skip the read phase\n"
+          "  --skip-deletes         :  "
+          "Skip the deletion phase\n"
           "  --num-files=n          :  "
           "Total number of files to create\n"
           "  --num-dirs=n           :  "
@@ -246,6 +287,7 @@ static pdlfs::LDbenchOptions ParseOptions(int argc, char** argv) {
   result.ignore_errors = false;
   result.skip_inserts = false;
   result.skip_reads = false;
+  result.skip_deletes = false;
   result.num_files = 16;
   result.num_dirs = 1;
   result.argv = NULL;
@@ -255,10 +297,11 @@ static pdlfs::LDbenchOptions ParseOptions(int argc, char** argv) {
     std::vector<struct option> optinfo;
     optinfo.push_back({"relaxed-consistency", 0, NULL, 1});
     optinfo.push_back({"ignore-errors", 0, NULL, 2});
-    optinfo.push_back({"skip-inserts", 0, NULL, 3});
-    optinfo.push_back({"skip-reads", 0, NULL, 4});
-    optinfo.push_back({"num-files", 1, NULL, 5});
-    optinfo.push_back({"num-dirs", 1, NULL, 6});
+    optinfo.push_back({"skip-inserts", 0, NULL, 'i'});
+    optinfo.push_back({"skip-reads", 0, NULL, 'r'});
+    optinfo.push_back({"skip-deletes", 0, NULL, 'd'});
+    optinfo.push_back({"num-files", 1, NULL, 'n'});
+    optinfo.push_back({"num-dirs", 1, NULL, 'm'});
     optinfo.push_back({"help", 0, NULL, 'H'});
     optinfo.push_back({NULL, 0, NULL, 0});
 
@@ -273,16 +316,19 @@ static pdlfs::LDbenchOptions ParseOptions(int argc, char** argv) {
           case 2:
             result.ignore_errors = true;
             break;
-          case 3:
+          case 'i':
             result.skip_inserts = true;
             break;
-          case 4:
+          case 'r':
             result.skip_reads = true;
             break;
-          case 5:
+          case 'd':
+            result.skip_deletes = true;
+            break;
+          case 'n':
             result.num_files = atoi(optarg);
             break;
-          case 6:
+          case 'm':
             result.num_dirs = atoi(optarg);
             break;
           case 'H':
@@ -362,7 +408,23 @@ int main(int argc, char** argv) {
       Print("Checks ... ");
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    report = Merge(bench.Check());
+    report = Merge(bench.Touch());
+    if (rank == 0) {
+      Print(report);
+    }
+  } else {
+    if (rank == 0) {
+      Print("Abort");
+      goto end;
+    }
+  }
+
+  if (report.errors == 0) {
+    if (rank == 0) {
+      Print("Checks ... ");
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    report = Merge(bench.BulkRemoves());
     if (rank == 0) {
       Print(report);
     }
