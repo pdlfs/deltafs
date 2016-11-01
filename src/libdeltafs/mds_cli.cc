@@ -526,7 +526,7 @@ Status MDS::CLI::_Mkdir(const DirIndex* idx, const MkdirOptions& options,
       } else {
         s = Status::TryAgain(Slice());
       }
-      assert(tmp_dir != NULL);
+      assert(tmp_idx != NULL);
       latest_idx = tmp_idx;
     }
   } while (s.IsTryAgain());
@@ -561,7 +561,7 @@ Status MDS::CLI::Chmod(const Slice& p, int mode, Fentry* ent) {
   s = ResolvePath(p, &path);
   if (s.ok()) {
     if (path.depth == 0) {
-      s = Status::NotSupported(Slice("updating root directory"));
+      s = Status::NotSupported("updating root directory");
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
