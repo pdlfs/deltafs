@@ -78,7 +78,7 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
       options.name_hash = nhash;
       if (paranoid_checks_) options.name = name;
       LookupRet ret;
-      s = DoLookup(index_cache_->Value(idxh), options, &ret);
+      s = _Lookup(index_cache_->Value(idxh), options, &ret);
       if (s.ok()) {
         LookupStat* stat = new LookupStat(ret.stat);
         h = lookup_cache_->Insert(pid, nhash, stat);
@@ -93,18 +93,19 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
   return s;
 }
 
-Status MDS::CLI::DoLookup(const DirIndex* idx, const LookupOptions& options,
-                          LookupRet* ret) {
+Status MDS::CLI::_Lookup(const DirIndex* idx, const LookupOptions& options,
+                         LookupRet* ret) {
   Status s;
   mutex_.AssertHeld();
   DirIndex* tmp_idx = NULL;
   assert(idx != NULL);
   const DirIndex* latest_idx = idx;
-  int redirects_allowed = max_redirects_allowed_;
+  int remaining_redirects = max_redirects_allowed_;
   mutex_.Unlock();
 
   do {
     try {
+      assert(latest_idx != NULL);
       size_t server = latest_idx->HashToServer(options.name_hash);
       assert(server < giga_.num_servers);
       s = factory_->Get(server)->Lookup(options, ret);
@@ -113,11 +114,12 @@ Status MDS::CLI::DoLookup(const DirIndex* idx, const LookupOptions& options,
         tmp_idx = new DirIndex(&giga_);
         tmp_idx->Update(*idx);
       }
-      if (--redirects_allowed == 0 || !tmp_idx->Update(re)) {
-        s = Status::Corruption(Slice());
+      if (--remaining_redirects == 0 || !tmp_idx->Update(re)) {
+        s = Status::Corruption("bad giga+ index");
       } else {
         s = Status::TryAgain(Slice());
       }
+      assert(tmp_idx);
       latest_idx = tmp_idx;
     }
   } while (s.IsTryAgain());
@@ -196,13 +198,13 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
 
 Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
   Status s;
-  char tmp[20];
+  char tmp[20];  // name hash buffer
   PathInfo path;
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path);
   if (s.ok()) {
     if (path.depth == 0) {
-      s = Status::NotSupported(Slice());  // XXX: FIXME
+      s = Status::NotSupported("stating root directory");
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
@@ -216,7 +218,7 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
         options.name_hash = DirIndex::Hash(path.name, tmp);
         if (paranoid_checks_) options.name = path.name;
         FstatRet ret;
-        s = DoFstat(index_cache_->Value(idxh), options, &ret);
+        s = _Fstat(index_cache_->Value(idxh), options, &ret);
         if (s.ok()) {
           if (ent != NULL) {
             ent->pid = path.pid;
@@ -232,18 +234,19 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
   return s;
 }
 
-Status MDS::CLI::DoFstat(const DirIndex* idx, const FstatOptions& options,
-                         FstatRet* ret) {
+Status MDS::CLI::_Fstat(const DirIndex* idx, const FstatOptions& options,
+                        FstatRet* ret) {
   Status s;
   mutex_.AssertHeld();
   DirIndex* tmp_idx = NULL;
   assert(idx != NULL);
   const DirIndex* latest_idx = idx;
-  int redirects_allowed = max_redirects_allowed_;
+  int remaining_redirects = max_redirects_allowed_;
   mutex_.Unlock();
 
   do {
     try {
+      assert(latest_idx != NULL);
       size_t server = latest_idx->HashToServer(options.name_hash);
       assert(server < giga_.num_servers);
       s = factory_->Get(server)->Fstat(options, ret);
@@ -252,11 +255,12 @@ Status MDS::CLI::DoFstat(const DirIndex* idx, const FstatOptions& options,
         tmp_idx = new DirIndex(&giga_);
         tmp_idx->Update(*idx);
       }
-      if (--redirects_allowed == 0 || !tmp_idx->Update(re)) {
-        s = Status::Corruption(Slice());
+      if (--remaining_redirects == 0 || !tmp_idx->Update(re)) {
+        s = Status::Corruption("bad giga+ index");
       } else {
         s = Status::TryAgain(Slice());
       }
+      assert(tmp_idx != NULL);
       latest_idx = tmp_idx;
     }
   } while (s.IsTryAgain());
@@ -278,7 +282,7 @@ Status MDS::CLI::DoFstat(const DirIndex* idx, const FstatOptions& options,
 Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, int mode,
                         Fentry* ent) {
   Status s;
-  char tmp[20];
+  char tmp[20];  // name hash buffer
   PathInfo path;
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path);
@@ -302,7 +306,7 @@ Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, int mode,
         options.name_hash = DirIndex::Hash(path.name, tmp);
         options.name = path.name;
         FcreatRet ret;
-        s = DoFcreat(index_cache_->Value(idxh), options, &ret);
+        s = _Fcreat(index_cache_->Value(idxh), options, &ret);
         if (s.ok()) {
           if (ent != NULL) {
             ent->pid = path.pid;
@@ -318,18 +322,19 @@ Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, int mode,
   return s;
 }
 
-Status MDS::CLI::DoFcreat(const DirIndex* idx, const FcreatOptions& options,
-                          FcreatRet* ret) {
+Status MDS::CLI::_Fcreat(const DirIndex* idx, const FcreatOptions& options,
+                         FcreatRet* ret) {
   Status s;
   mutex_.AssertHeld();
   DirIndex* tmp_idx = NULL;
   assert(idx != NULL);
   const DirIndex* latest_idx = idx;
-  int redirects_allowed = max_redirects_allowed_;
+  int remaining_redirects = max_redirects_allowed_;
   mutex_.Unlock();
 
   do {
     try {
+      assert(latest_idx != NULL);
       size_t server = latest_idx->HashToServer(options.name_hash);
       assert(server < giga_.num_servers);
       s = factory_->Get(server)->Fcreat(options, ret);
@@ -338,11 +343,12 @@ Status MDS::CLI::DoFcreat(const DirIndex* idx, const FcreatOptions& options,
         tmp_idx = new DirIndex(&giga_);
         tmp_idx->Update(*idx);
       }
-      if (--redirects_allowed == 0 || !tmp_idx->Update(re)) {
-        s = Status::Corruption(Slice());
+      if (--remaining_redirects == 0 || !tmp_idx->Update(re)) {
+        s = Status::Corruption("bad giga+ index");
       } else {
         s = Status::TryAgain(Slice());
       }
+      assert(tmp_idx != NULL);
       latest_idx = tmp_idx;
     }
   } while (s.IsTryAgain());
@@ -392,7 +398,7 @@ Status MDS::CLI::Unlink(const Slice& p, bool error_not_found, Fentry* ent) {
         options.name_hash = DirIndex::Hash(path.name, tmp);
         if (paranoid_checks_) options.name = path.name;
         UnlinkRet ret;
-        s = DoUnlink(index_cache_->Value(idxh), options, &ret);
+        s = _Unlink(index_cache_->Value(idxh), options, &ret);
         if (s.ok()) {
           if (ent != NULL) {
             ent->pid = path.pid;
@@ -408,14 +414,14 @@ Status MDS::CLI::Unlink(const Slice& p, bool error_not_found, Fentry* ent) {
   return s;
 }
 
-Status MDS::CLI::DoUnlink(const DirIndex* idx, const UnlinkOptions& options,
-                          UnlinkRet* ret) {
+Status MDS::CLI::_Unlink(const DirIndex* idx, const UnlinkOptions& options,
+                         UnlinkRet* ret) {
   Status s;
   mutex_.AssertHeld();
   DirIndex* tmp_idx = NULL;
   assert(idx != NULL);
   const DirIndex* latest_idx = idx;
-  int redirects_allowed = max_redirects_allowed_;
+  int remaining_redirects = max_redirects_allowed_;
   mutex_.Unlock();
 
   do {
@@ -429,8 +435,8 @@ Status MDS::CLI::DoUnlink(const DirIndex* idx, const UnlinkOptions& options,
         tmp_idx = new DirIndex(&giga_);
         tmp_idx->Update(*idx);
       }
-      if (--redirects_allowed == 0 || !tmp_idx->Update(re)) {
-        s = Status::Corruption(Slice());
+      if (--remaining_redirects == 0 || !tmp_idx->Update(re)) {
+        s = Status::Corruption("bad giga+ index");
       } else {
         s = Status::TryAgain(Slice());
       }
@@ -455,7 +461,7 @@ Status MDS::CLI::DoUnlink(const DirIndex* idx, const UnlinkOptions& options,
 
 Status MDS::CLI::Mkdir(const Slice& p, int mode, Fentry* ent) {
   Status s;
-  char tmp[20];
+  char tmp[20];  // name hash buffer
   PathInfo path;
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path);
@@ -478,7 +484,7 @@ Status MDS::CLI::Mkdir(const Slice& p, int mode, Fentry* ent) {
         options.name_hash = DirIndex::Hash(path.name, tmp);
         options.name = path.name;
         MkdirRet ret;
-        s = DoMkdir(index_cache_->Value(idxh), options, &ret);
+        s = _Mkdir(index_cache_->Value(idxh), options, &ret);
         if (s.ok()) {
           if (ent != NULL) {
             ent->pid = path.pid;
@@ -494,18 +500,19 @@ Status MDS::CLI::Mkdir(const Slice& p, int mode, Fentry* ent) {
   return s;
 }
 
-Status MDS::CLI::DoMkdir(const DirIndex* idx, const MkdirOptions& options,
-                         MkdirRet* ret) {
+Status MDS::CLI::_Mkdir(const DirIndex* idx, const MkdirOptions& options,
+                        MkdirRet* ret) {
   Status s;
   mutex_.AssertHeld();
   DirIndex* tmp_idx = NULL;
   assert(idx != NULL);
   const DirIndex* latest_idx = idx;
-  int redirects_allowed = max_redirects_allowed_;
+  int remaining_redirects = max_redirects_allowed_;
   mutex_.Unlock();
 
   do {
     try {
+      assert(latest_idx != NULL);
       size_t server = latest_idx->HashToServer(options.name_hash);
       assert(server < giga_.num_servers);
       s = factory_->Get(server)->Mkdir(options, ret);
@@ -514,11 +521,12 @@ Status MDS::CLI::DoMkdir(const DirIndex* idx, const MkdirOptions& options,
         tmp_idx = new DirIndex(&giga_);
         tmp_idx->Update(*idx);
       }
-      if (--redirects_allowed == 0 || !tmp_idx->Update(re)) {
-        s = Status::Corruption(Slice());
+      if (--remaining_redirects == 0 || !tmp_idx->Update(re)) {
+        s = Status::Corruption("bad giga+ index");
       } else {
         s = Status::TryAgain(Slice());
       }
+      assert(tmp_dir != NULL);
       latest_idx = tmp_idx;
     }
   } while (s.IsTryAgain());
@@ -547,13 +555,13 @@ Status MDS::CLI::DoMkdir(const DirIndex* idx, const MkdirOptions& options,
 
 Status MDS::CLI::Chmod(const Slice& p, int mode, Fentry* ent) {
   Status s;
-  char tmp[20];
+  char tmp[20];  // name hash buffer
   PathInfo path;
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path);
   if (s.ok()) {
     if (path.depth == 0) {
-      s = Status::NotSupported(Slice());  // XXX: FIXME
+      s = Status::NotSupported(Slice("updating root directory"));
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
@@ -568,7 +576,7 @@ Status MDS::CLI::Chmod(const Slice& p, int mode, Fentry* ent) {
         options.name_hash = DirIndex::Hash(path.name, tmp);
         if (paranoid_checks_) options.name = path.name;
         ChmodRet ret;
-        s = DoChmod(index_cache_->Value(idxh), options, &ret);
+        s = _Chmod(index_cache_->Value(idxh), options, &ret);
         if (s.ok()) {
           if (ent != NULL) {
             ent->pid = path.pid;
@@ -584,18 +592,19 @@ Status MDS::CLI::Chmod(const Slice& p, int mode, Fentry* ent) {
   return s;
 }
 
-Status MDS::CLI::DoChmod(const DirIndex* idx, const ChmodOptions& options,
-                         ChmodRet* ret) {
+Status MDS::CLI::_Chmod(const DirIndex* idx, const ChmodOptions& options,
+                        ChmodRet* ret) {
   Status s;
   mutex_.AssertHeld();
   DirIndex* tmp_idx = NULL;
   assert(idx != NULL);
   const DirIndex* latest_idx = idx;
-  int redirects_allowed = max_redirects_allowed_;
+  int remaining_redirects = max_redirects_allowed_;
   mutex_.Unlock();
 
   do {
     try {
+      assert(latest_idx != NULL);
       size_t server = latest_idx->HashToServer(options.name_hash);
       assert(server < giga_.num_servers);
       s = factory_->Get(server)->Chmod(options, ret);
@@ -604,11 +613,12 @@ Status MDS::CLI::DoChmod(const DirIndex* idx, const ChmodOptions& options,
         tmp_idx = new DirIndex(&giga_);
         tmp_idx->Update(*idx);
       }
-      if (--redirects_allowed == 0 || !tmp_idx->Update(re)) {
-        s = Status::Corruption(Slice());
+      if (--remaining_redirects == 0 || !tmp_idx->Update(re)) {
+        s = Status::Corruption("bad giga+ index");
       } else {
         s = Status::TryAgain(Slice());
       }
+      assert(tmp_idx != NULL);
       latest_idx = tmp_idx;
     }
   } while (s.IsTryAgain());
@@ -661,9 +671,10 @@ Status MDS::CLI::Ftruncate(const Fentry& ent, uint64_t mtime, uint64_t size) {
 
     const DirIndex* latest_idx = idx;
     DirIndex* tmp_idx = NULL;
-    int redirects_allowed = max_redirects_allowed_;
+    int remaining_redirects = max_redirects_allowed_;
     do {
       try {
+        assert(latest_idx != NULL);
         size_t server = latest_idx->HashToServer(ent.nhash);
         assert(server < giga_.num_servers);
         s = factory_->Get(server)->Trunc(options, &ret);
@@ -672,11 +683,12 @@ Status MDS::CLI::Ftruncate(const Fentry& ent, uint64_t mtime, uint64_t size) {
           tmp_idx = new DirIndex(&giga_);
           tmp_idx->Update(*idx);
         }
-        if (--redirects_allowed == 0 || !tmp_idx->Update(re)) {
-          s = Status::Corruption(Slice());
+        if (--remaining_redirects == 0 || !tmp_idx->Update(re)) {
+          s = Status::Corruption("bad giga+ index");
         } else {
           s = Status::TryAgain(Slice());
         }
+        assert(tmp_idx != NULL);
         latest_idx = tmp_idx;
       }
     } while (s.IsTryAgain());

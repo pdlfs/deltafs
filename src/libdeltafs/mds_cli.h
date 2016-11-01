@@ -64,7 +64,7 @@ class MDS::CLI {
 
 // REQUIRES: mutex_ has been locked.
 #define HELPER(OP) \
-  Status Do##OP(const DirIndex*, const OP##Options& opts, OP##Ret* ret)
+  Status _##OP(const DirIndex*, const OP##Options& opts, OP##Ret* ret)
 
   HELPER(Lookup);
   HELPER(Fstat);
