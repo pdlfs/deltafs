@@ -20,7 +20,7 @@ static std::string LoadFromEnv(const char* key) {
     return v;
   }
 }
-#if defined(GFLAGS)
+#if defined(PDLFS_GFLAGS)
 #include <gflags/gflags.h>
 #define DEFINE_FLAG_PORT(n, v)                                               \
   static std::string FLAGS_load_##n() { return LoadFromEnv("DELTAFS_" #n); } \
