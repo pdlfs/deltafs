@@ -49,6 +49,7 @@ class PosixClient : public IOClient {
 
   // Common FS operations
   virtual Status NewFile(const std::string& path);
+  virtual Status DelFile(const std::string& path);
   virtual Status MakeDirectory(const std::string& path);
   virtual Status GetAttr(const std::string& path);
   virtual Status Append(const std::string& path, const char*, size_t);
@@ -80,10 +81,29 @@ Status PosixClient::NewFile(const std::string& path) {
   path_buf_.append(path);
   const char* filename = path_buf_.c_str();
 #if VERBOSE >= 10
-  printf("mknod %s ... ", filename);
+  printf("mknod %s...\n", filename);
 #endif
   Status s;
   if (mknod(filename, S_IRWXU | S_IRWXG | S_IRWXO, S_IFREG) != 0) {
+    s = IOError(path_buf_);
+  } else {
+    s = Status::OK();
+  }
+#if VERBOSE >= 10
+  printf("%s\n", s.ToString().c_str());
+#endif
+  return s;
+}
+
+Status PosixClient::DelFile(const std::string& path) {
+  path_buf_.resize(mp_size_);
+  path_buf_.append(path);
+  const char* filename = path_buf_.c_str();
+#if VERBOSE >= 10
+  printf("unlink %s...\n", filename);
+#endif
+  Status s;
+  if (unlink(filename) != 0) {
     s = IOError(path_buf_);
   } else {
     s = Status::OK();
@@ -99,7 +119,7 @@ Status PosixClient::MakeDirectory(const std::string& path) {
   path_buf_.append(path);
   const char* dirname = path_buf_.c_str();
 #if VERBOSE >= 10
-  printf("mkdir %s ... ", dirname);
+  printf("mkdir %s...\n", dirname);
 #endif
   Status s;
   if (mkdir(dirname, S_IRWXU | S_IRWXG | S_IRWXO) != 0) {
@@ -118,7 +138,7 @@ Status PosixClient::GetAttr(const std::string& path) {
   path_buf_.append(path);
   const char* nodename = path_buf_.c_str();
 #if VERBOSE >= 10
-  printf("stat %s ... ", nodename);
+  printf("stat %s...\n", nodename);
 #endif
   Status s;
   struct stat statbuf;
@@ -139,7 +159,7 @@ Status PosixClient::Append(const std::string& path, const char* data,
   path_buf_.append(path);
   const char* filename = path_buf_.c_str();
 #if VERBOSE >= 10
-  printf("open/append %s ... ", filename);
+  printf("open+w %s...\n", filename);
 #endif
   Status s;
   const mode_t mode = S_IRWXU | S_IRWXG | S_IRWXO;

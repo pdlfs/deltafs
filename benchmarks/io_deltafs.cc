@@ -47,6 +47,7 @@ class DeltafsClient : public IOClient {
 
   // Common FS operations
   virtual Status NewFile(const std::string& path);
+  virtual Status DelFile(const std::string& path);
   virtual Status MakeDirectory(const std::string& path);
   virtual Status GetAttr(const std::string& path);
   virtual Status Append(const std::string& path, const char*, size_t);
@@ -58,7 +59,7 @@ class DeltafsClient : public IOClient {
 Status DeltafsClient::Init() {
   Status s;
 #if VERBOSE >= 10
-  printf("deltafs_stat %s ... ", "/.deltafs");
+  printf("deltafs_stat /.deltafs...\n");
 #endif
   struct stat ignored_stat;
   int r = deltafs_stat("/.deltafs", &ignored_stat);
@@ -82,7 +83,7 @@ Status DeltafsClient::Dispose() {
 Status DeltafsClient::NewFile(const std::string& path) {
   const char* p = path.c_str();
 #if VERBOSE >= 10
-  printf("deltafs_mkfile %s ... ", p);
+  printf("deltafs_mkfile %s...\n", p);
 #endif
   Status s;
   if (deltafs_mkfile(p, kFilePerms) != 0) {
@@ -94,10 +95,25 @@ Status DeltafsClient::NewFile(const std::string& path) {
   return s;
 }
 
+Status DeltafsClient::DelFile(const std::string& path) {
+  const char* p = path.c_str();
+#if VERBOSE >= 10
+  printf("deltafs_unlink %s...\n", p);
+#endif
+  Status s;
+  if (deltafs_unlink(p) != 0) {
+    s = IOError(path);
+  }
+#if VERBOSE >= 10
+  printf("%s\n", s.ToString().c_str());
+#endif
+  return s;
+}
+
 Status DeltafsClient::MakeDirectory(const std::string& path) {
   const char* p = path.c_str();
 #if VERBOSE >= 10
-  printf("deltafs_mkdir %s ... ", p);
+  printf("deltafs_mkdir %s...\n", p);
 #endif
   Status s;
   if (deltafs_mkdir(p, kDirPerms) != 0) {
@@ -112,7 +128,7 @@ Status DeltafsClient::MakeDirectory(const std::string& path) {
 Status DeltafsClient::GetAttr(const std::string& path) {
   const char* p = path.c_str();
 #if VERBOSE >= 10
-  printf("deltafs_stat %s ... ", p);
+  printf("deltafs_stat %s...\n", p);
 #endif
   Status s;
   struct stat statbuf;
@@ -129,7 +145,7 @@ Status DeltafsClient::Append(const std::string& path, const char* data,
                              size_t size) {
   const char* p = path.c_str();
 #if VERBOSE >= 10
-  printf("deltafs_open/write %s ... ", p);
+  printf("deltafs_open+w %s...\n", p);
 #endif
   Status s;
   struct stat statbuf;
