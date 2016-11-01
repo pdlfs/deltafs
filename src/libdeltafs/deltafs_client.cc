@@ -107,16 +107,19 @@ void Client::Unref(File* f) {
   }
 }
 
-static Status SanitizePath(Slice* input, std::string* scratch) {
-  if (input->size() > 1 && (*input)[input->size() - 1] == '/') {
-    scratch->assign(input->c_str(), input->size() - 1);
+// If path is valid, remove tailing slashes and return OK.
+// Otherwise, return a non-OK status.
+// NOTE: *path is used both as an input and output parameter.
+static Status SanitizePath(Slice* path, std::string* scratch) {
+  if (path->size() > 1 && (*path)[path->size() - 1] == '/') {
+    scratch->assign(path->c_str(), path->size() - 1);
     while (scratch->size() > 1 && (*scratch)[scratch->size() - 1] == '/') {
       scratch->resize(scratch->size() - 1);
     }
-    *input = *scratch;
+    *path = *scratch;
   }
-  if (input->empty() || (*input)[0] != '/') {
-    return Status::InvalidArgument(Slice());
+  if (path->empty() || (*path)[0] != '/') {
+    return Status::InvalidArgument("relative or empty path");
   } else {
     return Status::OK();
   }
@@ -504,9 +507,9 @@ Status Client::Mkfile(const Slice& p, int mode) {
   Status s;
   Slice path = p;
   std::string tmp;
+  static const bool error_if_exists = true;
   s = SanitizePath(&path, &tmp);
   if (s.ok()) {
-    const bool error_if_exists = true;
     s = mdscli_->Fcreat(path, error_if_exists, mode, NULL);
   }
   return s;
@@ -530,6 +533,18 @@ Status Client::Chmod(const Slice& p, int mode) {
   s = SanitizePath(&path, &tmp);
   if (s.ok()) {
     s = mdscli_->Chmod(path, mode, NULL);
+  }
+  return s;
+}
+
+Status Client::Unlink(const Slice& p) {
+  Status s;
+  Slice path = p;
+  std::string tmp;
+  static const bool error_not_found = true;
+  s = SanitizePath(&path, &tmp);
+  if (s.ok()) {
+    s = mdscli_->Unlink(path, error_not_found, NULL);
   }
   return s;
 }

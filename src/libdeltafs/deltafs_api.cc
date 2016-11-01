@@ -306,6 +306,24 @@ int deltafs_chmod(const char* __path, mode_t __mode) {
   }
 }
 
+int deltafs_unlink(const char* __path) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+
+  pdlfs::Status s;
+  s = client->Unlink(__path);
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
 #ifdef __cplusplus
 }
 #endif

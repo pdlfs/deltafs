@@ -21,6 +21,7 @@ int deltafs_mkfile(const char* __path, mode_t __mode);
 int deltafs_mkdir(const char* __path, mode_t __mode);
 int deltafs_chmod(const char* __path, mode_t __mode);
 int deltafs_stat(const char* __path, struct stat*);
+int deltafs_unlink(const char* __path);
 ssize_t deltafs_pread(int __fd, void* __buf, size_t __sz, off_t __off);
 ssize_t deltafs_read(int __fd, void* __buf, size_t __sz);
 ssize_t deltafs_pwrite(int __fd, const void* __buf, size_t __sz, off_t __off);

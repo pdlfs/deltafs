@@ -45,6 +45,7 @@ class Client {
   Status Mkfile(const Slice& path, int mode);
   Status Mkdir(const Slice& path, int mode);
   Status Chmod(const Slice& path, int mode);
+  Status Unlink(const Slice& path);
 
  private:
   class Builder;
