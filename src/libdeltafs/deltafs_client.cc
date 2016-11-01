@@ -614,7 +614,7 @@ void Client::Builder::LoadMDSTopology() {
       status_ = config::LoadNumOfMetadataSrvs(&num_srvs);
       if (ok()) {
         std::string addrs = config::MetadataSrvAddrs();
-        size_t num_addrs = SplitString(&mdstopo_.srv_addrs, addrs);
+        size_t num_addrs = SplitString(&mdstopo_.srv_addrs, addrs, '&');
         if (num_addrs < num_srvs) {
           status_ = Status::InvalidArgument("not enough srv addrs");
         } else if (num_addrs > num_srvs) {
