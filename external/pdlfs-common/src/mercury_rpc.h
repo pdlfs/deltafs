@@ -31,6 +31,15 @@ class MercuryRPC {
   AddrEntry* Bind(const std::string& addr, Addr*);
   hg_return_t Lookup(const std::string& addr, AddrEntry** result);
   MercuryRPC(bool listen, const RPCOptions& options);
+  bool ok() const { return !has_error_.Acquire_Load(); }
+  Status status() const {
+    if (has_error_.Acquire_Load()) {
+      return Status::IOError(Slice());
+    } else {
+      return Status::OK();
+    }
+  }
+  void SetError();
   void Unref();
   void Ref();
 
@@ -88,6 +97,7 @@ class MercuryRPC {
 
   // State below is protected by mutex_
   port::Mutex mutex_;
+  port::AtomicPointer has_error_;
   port::CondVar lookup_cv_;
   LRUCache<AddrEntry> addr_cache_;
   void Remove(Timer*);
@@ -129,9 +139,8 @@ class MercuryRPC::LocalLooper {
   int bg_loops_;
   int bg_id_;
 
-  Status status_;
   // Constant after construction
-  bool ignore_rpc_error_;  // Keep looping even if we receive rpc errors
+  bool ignore_rpc_error_;  // Keep looping even if we receive errors
   int max_bg_loops_;
   MercuryRPC* rpc_;
 
@@ -142,8 +151,6 @@ class MercuryRPC::LocalLooper {
   }
 
  public:
-  Status status() const { return status_; }
-
   LocalLooper(MercuryRPC* rpc, const RPCOptions& options)
       : shutting_down_(NULL),
         bg_cv_(&mutex_),

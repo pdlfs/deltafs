@@ -14,9 +14,11 @@
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/rpc.h"
+
 #if defined(PDLFS_MARGO_RPC)
 #include "margo_rpc.h"
 #endif
+
 #if defined(PDLFS_MERCURY_RPC)
 #include "mercury_rpc.h"
 #endif
@@ -128,7 +130,7 @@ class MercuryRPCImpl : public RPC {
   MercuryRPC* rpc_;
 
  public:
-  virtual Status status() const { return looper_->status(); }
+  virtual Status status() const { return rpc_->status(); }
   virtual Status Start() { return looper_->Start(); }
   virtual Status Stop() { return looper_->Stop(); }
 
