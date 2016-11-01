@@ -53,7 +53,7 @@ class MDS::CLI {
   Status Ftruncate(const Fentry&, uint64_t mtime, uint64_t size);
   Status Mkdir(const Slice& path, int mode, Fentry*);
   Status Chmod(const Slice& path, int mode, Fentry*);
-
+  Status Unlink(const Slice& path, bool error_not_found, Fentry*);
   Status Listdir(const Slice& path, std::vector<std::string>* names);
 
   int uid() const { return uid_; }
@@ -62,6 +62,7 @@ class MDS::CLI {
  private:
   CLI(const MDSCliOptions&);
 
+// REQUIRES: mutex_ has been locked.
 #define HELPER(OP) \
   Status Do##OP(const DirIndex*, const OP##Options& opts, OP##Ret* ret)
 
@@ -70,6 +71,7 @@ class MDS::CLI {
   HELPER(Fcreat);
   HELPER(Mkdir);
   HELPER(Chmod);
+  HELPER(Unlink);
 
 #undef HELPER
 

@@ -369,6 +369,90 @@ Status MDS::CLI::DoFcreat(const DirIndex* idx, const FcreatOptions& options,
   return s;
 }
 
+Status MDS::CLI::Unlink(const Slice& p, bool error_not_found, Fentry* ent) {
+  Status s;
+  char tmp[20];  // name hash buffer
+  PathInfo path;
+  MutexLock ml(&mutex_);
+  s = ResolvePath(p, &path);
+  if (s.ok()) {
+    if (path.depth == 0) {
+      s = Status::NotSupported("deleting root directory");
+    } else {
+      IndexHandle* idxh = NULL;
+      s = FetchIndex(path.pid, path.zserver, &idxh);
+      if (s.ok()) {
+        assert(idxh != NULL);
+        IndexGuard idxg(index_cache_, idxh);
+        UnlinkOptions options;
+        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.session_id = session_id_;
+        options.dir_id = path.pid;
+        options.flags = error_not_found ? O_EXCL : 0;
+        options.name_hash = DirIndex::Hash(path.name, tmp);
+        if (paranoid_checks_) options.name = path.name;
+        UnlinkRet ret;
+        s = DoUnlink(index_cache_->Value(idxh), options, &ret);
+        if (s.ok()) {
+          if (ent != NULL) {
+            ent->pid = path.pid;
+            ent->nhash = options.name_hash.ToString();
+            ent->zserver = path.zserver;
+            ent->stat = ret.stat;
+          }
+        }
+      }
+    }
+  }
+
+  return s;
+}
+
+Status MDS::CLI::DoUnlink(const DirIndex* idx, const UnlinkOptions& options,
+                          UnlinkRet* ret) {
+  Status s;
+  mutex_.AssertHeld();
+  DirIndex* tmp_idx = NULL;
+  assert(idx != NULL);
+  const DirIndex* latest_idx = idx;
+  int redirects_allowed = max_redirects_allowed_;
+  mutex_.Unlock();
+
+  do {
+    try {
+      assert(latest_idx != NULL);
+      size_t server = latest_idx->HashToServer(options.name_hash);
+      assert(server < giga_.num_servers);
+      s = factory_->Get(server)->Unlink(options, ret);
+    } catch (Redirect& re) {
+      if (tmp_idx == NULL) {
+        tmp_idx = new DirIndex(&giga_);
+        tmp_idx->Update(*idx);
+      }
+      if (--redirects_allowed == 0 || !tmp_idx->Update(re)) {
+        s = Status::Corruption(Slice());
+      } else {
+        s = Status::TryAgain(Slice());
+      }
+      assert(tmp_idx != NULL);
+      latest_idx = tmp_idx;
+    }
+  } while (s.IsTryAgain());
+
+  mutex_.Lock();
+  if (tmp_idx != NULL) {
+    if (s.ok()) {
+      const DirId& pid = options.dir_id;
+      IndexHandle* h = index_cache_->Insert(pid, tmp_idx);
+      index_cache_->Release(h);
+    } else {
+      delete tmp_idx;
+    }
+  }
+
+  return s;
+}
+
 Status MDS::CLI::Mkdir(const Slice& p, int mode, Fentry* ent) {
   Status s;
   char tmp[20];
