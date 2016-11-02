@@ -18,10 +18,10 @@
 
 #include "../libdeltafs/deltafs_mds.h"
 
-#if defined(GFLAGS)
+#if defined(PDLFS_GFLAGS)
 #include <gflags/gflags.h>
 #endif
-#if defined(GLOG)
+#if defined(PDLFS_GLOG)
 #include <glog/logging.h>
 #endif
 
@@ -44,10 +44,10 @@ static void HandleSignal(int signal) {
 }
 
 int main(int argc, char* argv[]) {
-#if defined(GFLAGS)
+#if defined(PDLFS_GFLAGS)
   google::ParseCommandLineFlags(&argc, &argv, true);
 #endif
-#if defined(GLOG)
+#if defined(PDLFS_GLOG)
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
 #endif
