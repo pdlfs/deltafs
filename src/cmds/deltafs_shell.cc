@@ -62,12 +62,16 @@ static void PrintHelpMsg() {
 static void Mkdir(const std::string& path) {
   if (deltafs_mkdir(path.c_str(), ACCESSPERMS) != 0) {
     perror("Fail to make directory");
+  } else {
+    printf("OK\n");
   }
 }
 
 static void Mkfile(const std::string& path) {
   if (deltafs_mkfile(path.c_str(), ACCESSPERMS) != 0) {
     perror("Fail to create regular file");
+  } else {
+    printf("OK\n");
   }
 }
 
@@ -121,6 +125,7 @@ static void CopyFromLocal(const std::string& src, const std::string& dst) {
       deltafs_close(dfd);
     }
     close(fd);
+    printf("OK\n");
   }
 }
 
