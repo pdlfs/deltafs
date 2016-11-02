@@ -543,8 +543,15 @@ Status Client::Unlink(const Slice& p) {
   std::string tmp;
   static const bool error_not_found = true;
   s = SanitizePath(&path, &tmp);
+  Fentry fentry;
   if (s.ok()) {
-    s = mdscli_->Unlink(path, error_not_found, NULL);
+    s = mdscli_->Unlink(path, error_not_found, &fentry);
+    if (s.ok()) {
+      char tmp[100];
+      Slice fentry_encoding = fentry.EncodeTo(tmp);
+      // XXX: garbage collection
+      fio_->Drop(fentry_encoding);
+    }
   }
   return s;
 }
