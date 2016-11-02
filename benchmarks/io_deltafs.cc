@@ -39,6 +39,11 @@ static Status IOError(const std::string& target) {
   }
 }
 
+// Be very verbose
+static const bool kVVerbose = false;
+// Be verbose
+static const bool kVerbose = true;
+
 // IOClient implementation layered on top of deltafs API.
 class DeltafsClient : public IOClient {
  public:
@@ -56,21 +61,25 @@ class DeltafsClient : public IOClient {
   virtual Status Init();
 };
 
+// Convenient method for printing status lines
+static inline void print(const Status& s) {
+  printf("> %s\n", s.ToString().c_str());
+}
+
 Status DeltafsClient::Init() {
   Status s;
 #if VERBOSE >= 10
-  printf("deltafs_stat /.deltafs...\n");
+  if (kVVerbose) printf("deltafs_stat /.deltafs...\n");
 #endif
   struct stat ignored_stat;
   int r = deltafs_stat("/.deltafs", &ignored_stat);
-#if VERBOSE >= 10
-  printf("%s\n", strerror(errno));
-#endif
   if (r != 0) {
-    return IOError("/.deltafs");
-  } else {
-    return s;
+    s = IOError("/.deltafs");
   }
+#if VERBOSE >= 10
+  if (kVVerbose) print(s);
+#endif
+  return s;
 }
 
 Status DeltafsClient::Dispose() {
@@ -83,14 +92,15 @@ Status DeltafsClient::Dispose() {
 Status DeltafsClient::NewFile(const std::string& path) {
   const char* p = path.c_str();
 #if VERBOSE >= 10
-  printf("deltafs_mkfile %s...\n", p);
+  if (kVVerbose) printf("deltafs_mkfile %s...\n", p);
 #endif
   Status s;
-  if (deltafs_mkfile(p, kFilePerms) != 0) {
+  int r = deltafs_mkfile(p, kFilePerms);
+  if (r != 0) {
     s = IOError(path);
   }
 #if VERBOSE >= 10
-  printf("%s\n", s.ToString().c_str());
+  if (kVVerbose) print(s);
 #endif
   return s;
 }
@@ -98,14 +108,15 @@ Status DeltafsClient::NewFile(const std::string& path) {
 Status DeltafsClient::DelFile(const std::string& path) {
   const char* p = path.c_str();
 #if VERBOSE >= 10
-  printf("deltafs_unlink %s...\n", p);
+  if (kVVerbose) printf("deltafs_unlink %s...\n", p);
 #endif
   Status s;
-  if (deltafs_unlink(p) != 0) {
+  int r = deltafs_unlink(p);
+  if (r != 0) {
     s = IOError(path);
   }
 #if VERBOSE >= 10
-  printf("%s\n", s.ToString().c_str());
+  if (kVVerbose) print(s);
 #endif
   return s;
 }
@@ -113,14 +124,15 @@ Status DeltafsClient::DelFile(const std::string& path) {
 Status DeltafsClient::MakeDirectory(const std::string& path) {
   const char* p = path.c_str();
 #if VERBOSE >= 10
-  printf("deltafs_mkdir %s...\n", p);
+  if (kVVerbose) printf("deltafs_mkdir %s...\n", p);
 #endif
   Status s;
-  if (deltafs_mkdir(p, kDirPerms) != 0) {
+  int r = deltafs_mkdir(p, kDirPerms);
+  if (r != 0) {
     s = IOError(path);
   }
 #if VERBOSE >= 10
-  printf("%s\n", s.ToString().c_str());
+  if (kVVerbose) print(s);
 #endif
   return s;
 }
@@ -128,15 +140,16 @@ Status DeltafsClient::MakeDirectory(const std::string& path) {
 Status DeltafsClient::GetAttr(const std::string& path) {
   const char* p = path.c_str();
 #if VERBOSE >= 10
-  printf("deltafs_stat %s...\n", p);
+  if (kVVerbose) printf("deltafs_stat %s...\n", p);
 #endif
   Status s;
   struct stat statbuf;
-  if (deltafs_stat(p, &statbuf) != 0) {
+  int r = deltafs_stat(p, &statbuf);
+  if (r != 0) {
     s = IOError(path);
   }
 #if VERBOSE >= 10
-  printf("%s\n", s.ToString().c_str());
+  if (kVVerbose) print(s);
 #endif
   return s;
 }
@@ -145,7 +158,7 @@ Status DeltafsClient::Append(const std::string& path, const char* data,
                              size_t size) {
   const char* p = path.c_str();
 #if VERBOSE >= 10
-  printf("deltafs_open+w %s...\n", p);
+  if (kVVerbose) printf("deltafs_open+w %s...\n", p);
 #endif
   Status s;
   struct stat statbuf;
@@ -160,7 +173,7 @@ Status DeltafsClient::Append(const std::string& path, const char* data,
     deltafs_close(fd);
   }
 #if VERBOSE >= 10
-  printf("%s\n", s.ToString().c_str());
+  if (kVVerbose) print(s);
 #endif
   return s;
 }
@@ -200,7 +213,9 @@ static void InstallDeltafsOpts(const IOClientOptions& options) {
 
 #if VERBOSE >= 2
       if (options.rank == 0) {
-        printf("%s -> %s\n", k, v);
+        if (kVerbose) {
+          printf("%s -> %s\n", k, v);
+        }
       }
 #endif
     }

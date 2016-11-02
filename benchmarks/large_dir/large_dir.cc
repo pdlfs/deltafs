@@ -373,7 +373,7 @@ int main(int argc, char** argv) {
 
   if (report.errors == 0) {
     if (rank == 0) {
-      Print("Prepare ... ");
+      Print("Prepare...");
     }
     MPI_Barrier(MPI_COMM_WORLD);
     report = Merge(bench.Prepare());
@@ -389,7 +389,7 @@ int main(int argc, char** argv) {
 
   if (report.errors == 0) {
     if (rank == 0) {
-      Print("Bulk creations ... ");
+      Print("Bulk creations...");
     }
     MPI_Barrier(MPI_COMM_WORLD);
     report = Merge(bench.BulkCreates());
@@ -405,7 +405,7 @@ int main(int argc, char** argv) {
 
   if (report.errors == 0) {
     if (rank == 0) {
-      Print("Checks ... ");
+      Print("Checks...");
     }
     MPI_Barrier(MPI_COMM_WORLD);
     report = Merge(bench.Touch());
@@ -421,7 +421,7 @@ int main(int argc, char** argv) {
 
   if (report.errors == 0) {
     if (rank == 0) {
-      Print("Checks ... ");
+      Print("Bulk removes...");
     }
     MPI_Barrier(MPI_COMM_WORLD);
     report = Merge(bench.BulkRemoves());

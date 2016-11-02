@@ -41,6 +41,11 @@ static Status Mkdir(const std::string& path) {
   return Status::OK();
 }
 
+// Be very verbose
+static const bool kVVerbose = false;
+// Be verbose
+static const bool kVerbose = true;
+
 // IOClient implementation that uses local FS as its backend file system.
 class PosixClient : public IOClient {
  public:
@@ -64,6 +69,11 @@ class PosixClient : public IOClient {
   size_t mp_size_;        // Length of the mount point
 };
 
+// Convenient method for printing status lines
+static inline void print(const Status& s) {
+  printf("> %s\n", s.ToString().c_str());
+}
+
 Status PosixClient::Init() {
   assert(mp_size_ != 0);                 // Mount point is non-empty
   assert(path_buf_.size() >= mp_size_);  // Mount point is valid
@@ -81,7 +91,7 @@ Status PosixClient::NewFile(const std::string& path) {
   path_buf_.append(path);
   const char* filename = path_buf_.c_str();
 #if VERBOSE >= 10
-  printf("mknod %s...\n", filename);
+  if (kVVerbose) printf("mknod %s...\n", filename);
 #endif
   Status s;
   if (mknod(filename, S_IRWXU | S_IRWXG | S_IRWXO, S_IFREG) != 0) {
@@ -90,7 +100,7 @@ Status PosixClient::NewFile(const std::string& path) {
     s = Status::OK();
   }
 #if VERBOSE >= 10
-  printf("%s\n", s.ToString().c_str());
+  if (kVVerbose) print(s);
 #endif
   return s;
 }
@@ -100,7 +110,7 @@ Status PosixClient::DelFile(const std::string& path) {
   path_buf_.append(path);
   const char* filename = path_buf_.c_str();
 #if VERBOSE >= 10
-  printf("unlink %s...\n", filename);
+  if (kVVerbose) printf("unlink %s...\n", filename);
 #endif
   Status s;
   if (unlink(filename) != 0) {
@@ -109,7 +119,7 @@ Status PosixClient::DelFile(const std::string& path) {
     s = Status::OK();
   }
 #if VERBOSE >= 10
-  printf("%s\n", s.ToString().c_str());
+  if (kVVerbose) print(s);
 #endif
   return s;
 }
@@ -119,7 +129,7 @@ Status PosixClient::MakeDirectory(const std::string& path) {
   path_buf_.append(path);
   const char* dirname = path_buf_.c_str();
 #if VERBOSE >= 10
-  printf("mkdir %s...\n", dirname);
+  if (kVVerbose) printf("mkdir %s...\n", dirname);
 #endif
   Status s;
   if (mkdir(dirname, S_IRWXU | S_IRWXG | S_IRWXO) != 0) {
@@ -128,7 +138,7 @@ Status PosixClient::MakeDirectory(const std::string& path) {
     s = Status::OK();
   }
 #if VERBOSE >= 10
-  printf("%s\n", s.ToString().c_str());
+  if (kVVerbose) print(s);
 #endif
   return s;
 }
@@ -138,7 +148,7 @@ Status PosixClient::GetAttr(const std::string& path) {
   path_buf_.append(path);
   const char* nodename = path_buf_.c_str();
 #if VERBOSE >= 10
-  printf("stat %s...\n", nodename);
+  if (kVVerbose) printf("stat %s...\n", nodename);
 #endif
   Status s;
   struct stat statbuf;
@@ -148,7 +158,7 @@ Status PosixClient::GetAttr(const std::string& path) {
     s = Status::OK();
   }
 #if VERBOSE >= 10
-  printf("%s\n", s.ToString().c_str());
+  if (kVVerbose) print(s);
 #endif
   return s;
 }
@@ -159,7 +169,7 @@ Status PosixClient::Append(const std::string& path, const char* data,
   path_buf_.append(path);
   const char* filename = path_buf_.c_str();
 #if VERBOSE >= 10
-  printf("open+w %s...\n", filename);
+  if (kVVerbose) printf("open+w %s...\n", filename);
 #endif
   Status s;
   const mode_t mode = S_IRWXU | S_IRWXG | S_IRWXO;
@@ -174,7 +184,7 @@ Status PosixClient::Append(const std::string& path, const char* data,
     close(fd);
   }
 #if VERBOSE >= 10
-  printf("%s\n", s.ToString().c_str());
+  if (kVVerbose) print(s);
 #endif
   return s;
 }
@@ -204,7 +214,9 @@ static std::string MP(const IOClientOptions& options) {
   }
 #if VERBOSE >= 2
   if (options.rank == 0) {
-    printf("mount_point -> %s\n", mp.c_str());
+    if (kVerbose) {
+      printf("mount_point -> %s\n", mp.c_str());
+    }
   }
 #endif
   return mp;
