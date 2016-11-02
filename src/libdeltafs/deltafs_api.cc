@@ -72,6 +72,8 @@ static void SetErrno(const pdlfs::Status& s) {
     errno = EROFS;
   } else if (s.IsNotSupported()) {
     errno = EPERM;
+  } else if (s.IsInvalidArgument()) {
+    errno = EINVAL;
   } else if (!s.ok()) {
     errno = EIO;  // TODO: map more error types
   }
