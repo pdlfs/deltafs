@@ -573,9 +573,15 @@ class Client::Builder {
   }
 
   static int FetchGid() {
+#if 0
 #if defined(PDLFS_PLATFORM_POSIX)
     return getgid();
 #else
+    return 0;
+#endif
+#else
+    // XXX: mark everyone part of the root group so they can start
+    // creating  stuff under the root directory.
     return 0;
 #endif
   }

@@ -86,6 +86,7 @@ class MDS::CLI {
     gid_t gid;
   };
   Status ResolvePath(const Slice& path, PathInfo*);
+  bool IsWriteDirOk(const PathInfo*);
   bool IsLookupOk(const PathInfo*);
 
   typedef LookupCache::Handle LookupHandle;

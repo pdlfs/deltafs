@@ -13,8 +13,9 @@
 #include <sys/types.h>
 #include <set>
 
-#include "mds_cli.h"
 #include "pdlfs-common/mutexlock.h"
+
+#include "mds_cli.h"
 
 namespace pdlfs {
 
@@ -148,6 +149,22 @@ Status MDS::CLI::_Lookup(const DirIndex* idx, const LookupOptions& options,
   return s;
 }
 
+bool MDS::CLI::IsWriteDirOk(const PathInfo* info) {
+  if (info == NULL) {
+    return false;
+  } else if (uid_ == 0) {
+    return true;
+  } else if (uid_ == info->uid && (info->mode & S_IWUSR) == S_IWUSR) {
+    return true;
+  } else if (gid_ == info->gid && (info->mode & S_IWGRP) == S_IWGRP) {
+    return true;
+  } else if ((info->mode & S_IWOTH) == S_IWOTH) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 bool MDS::CLI::IsLookupOk(const PathInfo* info) {
   if (info == NULL) {
     return false;
@@ -171,16 +188,18 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
   Slice input(path);
   assert(input.size() != 0);
   assert(input[0] == '/');
+  const static mode_t perm = ACCESSPERMS & ~S_IWOTH;
+  const static mode_t mode = S_IFDIR | perm;
   result->lease_due = kMaxMicros;
   result->pid = DirId(0, 0, 0);
   result->zserver = 0;
   result->name = "/";
   result->depth = 0;
-  result->mode = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
+  result->mode = mode;
   result->uid = 0;
   result->gid = 0;
   if (input.size() == 1) {
-    return s; // Path is root directory
+    return s;  // Done; path is root
   }
 
   input.remove_prefix(1);
@@ -324,6 +343,8 @@ Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, int mode,
   if (s.ok()) {
     if (path.depth == 0) {
       s = Status::AlreadyExists(Slice());
+    } else if (!IsWriteDirOk(&path)) {
+      s = Status::AccessDenied(Slice());
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
@@ -419,6 +440,8 @@ Status MDS::CLI::Unlink(const Slice& p, bool error_not_found, Fentry* ent) {
   if (s.ok()) {
     if (path.depth == 0) {
       s = Status::NotSupported("deleting root directory");
+    } else if (!IsWriteDirOk(&path)) {
+      s = Status::AccessDenied(Slice());
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
@@ -503,6 +526,8 @@ Status MDS::CLI::Mkdir(const Slice& p, int mode, Fentry* ent) {
   if (s.ok()) {
     if (path.depth == 0) {
       s = Status::AlreadyExists(Slice());
+    } else if (!IsWriteDirOk(&path)) {
+      s = Status::AccessDenied(Slice());
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
