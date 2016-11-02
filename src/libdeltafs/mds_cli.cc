@@ -76,7 +76,9 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
       options.session_id = session_id_;
       options.dir_id = pid;
       options.name_hash = nhash;
-      if (paranoid_checks_) options.name = name;
+      if (paranoid_checks_) {
+        options.name = name;
+      }
       LookupRet ret;
       s = _Lookup(index_cache_->Value(idxh), options, &ret);
       if (s.ok()) {
@@ -146,6 +148,22 @@ Status MDS::CLI::_Lookup(const DirIndex* idx, const LookupOptions& options,
   return s;
 }
 
+bool MDS::CLI::IsLookupOk(const PathInfo* info) {
+  if (info == NULL) {
+    return false;
+  } else if (uid_ == 0) {
+    return true;
+  } else if (uid_ == info->uid && (info->mode & S_IXUSR) == S_IXUSR) {
+    return true;
+  } else if (gid_ == info->gid && (info->mode & S_IXGRP) == S_IXGRP) {
+    return true;
+  } else if ((info->mode & S_IXOTH) == S_IXOTH) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
   mutex_.AssertHeld();
 
@@ -158,8 +176,11 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
   result->zserver = 0;
   result->name = "/";
   result->depth = 0;
+  result->mode = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
+  result->uid = 0;
+  result->gid = 0;
   if (input.size() == 1) {
-    return s;
+    return s; // Path is root directory
   }
 
   input.remove_prefix(1);
@@ -171,27 +192,41 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
     input.remove_prefix(p - q + 1);
     Slice name = Slice(q, p - q);
     if (!name.empty()) {
-      result->depth++;
-      LookupHandle* lh = NULL;
-      s = Lookup(result->pid, name, result->zserver, result->lease_due, &lh);
-      if (s.ok()) {
-        assert(lh != NULL);
-        LookupStat* stat = lookup_cache_->Value(lh);
-        assert(stat != NULL);
-        result->pid = DirId(stat->RegId(), stat->SnapId(), stat->InodeNo());
-        result->zserver = stat->ZerothServer();
-        if (stat->LeaseDue() < result->lease_due) {
-          result->lease_due = stat->LeaseDue();
-        }
-        lookup_cache_->Release(lh);
+      if (!IsLookupOk(result)) {
+        s = Status::AccessDenied(Slice());
       } else {
+        result->depth++;
+        LookupHandle* lh = NULL;
+        s = Lookup(result->pid, name, result->zserver, result->lease_due, &lh);
+        if (s.ok()) {
+          assert(lh != NULL);
+          const LookupStat* stat = lookup_cache_->Value(lh);
+          assert(stat != NULL);
+          result->pid = DirId(stat->RegId(), stat->SnapId(), stat->InodeNo());
+          result->zserver = stat->ZerothServer();
+          if (result->lease_due > stat->LeaseDue()) {
+            result->lease_due = stat->LeaseDue();
+          }
+          result->mode = stat->DirMode();
+          result->uid = stat->UserId();
+          result->gid = stat->GroupId();
+
+          lookup_cache_->Release(lh);
+        }
+      }
+
+      if (!s.ok()) {
         break;
       }
     }
   }
 
   if (s.ok()) {
-    result->name = input;
+    if (!IsLookupOk(result)) {
+      s = Status::AccessDenied(Slice());
+    } else {
+      result->name = input;
+    }
   }
   return s;
 }

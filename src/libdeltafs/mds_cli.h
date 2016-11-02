@@ -76,13 +76,17 @@ class MDS::CLI {
 #undef HELPER
 
   struct PathInfo {
-    uint64_t lease_due;
     DirId pid;
     Slice name;
+    uint64_t lease_due;
     int zserver;
     int depth;
+    mode_t mode;
+    uid_t uid;
+    gid_t gid;
   };
   Status ResolvePath(const Slice& path, PathInfo*);
+  bool IsLookupOk(const PathInfo*);
 
   typedef LookupCache::Handle LookupHandle;
   Status Lookup(const DirId&, const Slice& name, int zserver, uint64_t op_due,
@@ -91,6 +95,7 @@ class MDS::CLI {
   Status FetchIndex(const DirId&, int zserver, IndexHandle**);
   typedef RefGuard<IndexCache, IndexHandle> IndexGuard;
 
+  // Constant after construction
   Env* env_;
   MDSFactory* factory_;
   typedef DirIndexOptions GIGA;
