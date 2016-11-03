@@ -1134,7 +1134,8 @@ Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
 // with other concurrent read or write operations.
 // Errors are mostly masked so an empty list is returned in worst case.
 Status MDS::SRV::Listdir(const ListdirOptions& options, ListdirRet* ret) {
-  mdb_->List(options.dir_id, NULL, ret->names, NULL);
+  static const size_t kSizeLimit = 1000;
+  mdb_->List(options.dir_id, NULL, ret->names, NULL, kSizeLimit);
   return Status::OK();
 }
 

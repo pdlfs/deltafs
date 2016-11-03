@@ -192,7 +192,8 @@ Status MDB::DelNode(const DirId& id, const Slice& hash, Tx* tx) {
   return s;
 }
 
-int MDB::List(const DirId& id, StatList* stats, NameList* names, Tx* tx) {
+size_t MDB::List(const DirId& id, StatList* stats, NameList* names, Tx* tx,
+                 size_t limit) {
   Key key(KEY_INITIALIZER(id, kDirEntType));
   ReadOptions options;
   options.verify_checksums = options_.verify_checksums;
@@ -205,8 +206,8 @@ int MDB::List(const DirId& id, StatList* stats, NameList* names, Tx* tx) {
   iter->Seek(prefix);
   Slice name;
   Stat stat;
-  int num_entries = 0;
-  for (; iter->Valid(); iter->Next()) {
+  size_t num_entries = 0;
+  for (; iter->Valid() && num_entries < limit; iter->Next()) {
     Slice key = iter->key();
     if (key.starts_with(prefix)) {
       Slice input = iter->value();
@@ -224,6 +225,7 @@ int MDB::List(const DirId& id, StatList* stats, NameList* names, Tx* tx) {
     }
   }
   delete iter;
+
   return num_entries;
 }
 

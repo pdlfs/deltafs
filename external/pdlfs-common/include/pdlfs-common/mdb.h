@@ -121,7 +121,8 @@ class MDB {
 
   typedef std::vector<std::string> NameList;
   typedef std::vector<Stat> StatList;
-  int List(const DirId& id, StatList* stats, NameList* names, Tx* tx);
+  size_t List(const DirId& id, StatList* stats, NameList* names, Tx* tx,
+              size_t limit);
   bool Exists(const DirId& id, const Slice& hash, Tx* tx);
 
   Status Commit(Tx* tx) {
