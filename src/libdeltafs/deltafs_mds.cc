@@ -121,6 +121,8 @@ class MetadataServer::Builder {
   void OpenMDS();
   void OpenRPC();
 
+  void WriteRunInfo();
+
  private:
   Status status_;
   bool ok() const { return status_.ok(); }
@@ -352,6 +354,29 @@ void MetadataServer::Builder::OpenRPC() {
   }
 }
 
+// REQUIRES: server has been successfully built
+void MetadataServer::Builder::WriteRunInfo() {
+  std::string run_dir = config::RunDir();
+  if (!run_dir.empty()) {
+    Env* const env = myenv_->env;
+    // Ignore error because it may already exist
+    env->CreateDir(run_dir);
+
+    std::string fname = run_dir;
+    char tmp[30];
+    snprintf(tmp, sizeof(tmp), "/srv-%08d.uri", srv_id_);
+    fname += tmp;
+    WritableFile* f;
+    Status s = env->NewWritableFile(fname, &f);
+    if (s.ok()) {
+      s = f->Append(mdstopo_.srv_addrs[srv_id_]);
+      if (s.ok()) f->Flush();
+      f->Close();
+      delete f;
+    }
+  }
+}
+
 MetadataServer* MetadataServer::Builder::BuildServer() {
   LoadIds();
   LoadMDSTopology();
@@ -361,6 +386,7 @@ MetadataServer* MetadataServer::Builder::BuildServer() {
   OpenRPC();
 
   if (ok()) {
+    WriteRunInfo();
     MetadataServer* srv = new MetadataServer;
     srv->rpc_ = rpc_;
     srv->wrapper_ = wrapper_;
