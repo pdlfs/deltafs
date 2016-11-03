@@ -159,13 +159,18 @@ static std::string GetLocalUri(int srv_id) {
   std::vector<std::string> ips;
   Status s = Env::Default()->FetchHostIPAddrs(&ips);
   if (s.ok() && !ips.empty()) {
-    int port = 10101 + srv_id;
-    char tmp[30];
-    snprintf(tmp, sizeof(tmp), "%s:%d", ips[0].c_str(), port);
-    return tmp;
-  } else {
-    return "";
+    assert(srv_id >= 0);
+    // Auto generate port number
+    const int port = 10101 + srv_id;
+    // Giving up if we run out of port numbers
+    if (port < 60000) {
+      char tmp[30];
+      snprintf(tmp, sizeof(tmp), "%s:%d", ips[0].c_str(), port);
+      return tmp;
+    }
   }
+
+  return "";
 }
 
 void MetadataServer::Builder::LoadMDSTopology() {
@@ -176,29 +181,34 @@ void MetadataServer::Builder::LoadMDSTopology() {
     status_ = config::LoadNumOfVirMetadataSrvs(&num_vir_srvs);
     if (ok()) {
       status_ = config::LoadNumOfMetadataSrvs(&num_srvs);
-      if (ok()) {
-        if (srv_id_ >= num_srvs) {
-          status_ = Status::InvalidArgument("bad instance id");
-        }
+    }
+  }
+
+  if (ok()) {
+    if (srv_id_ >= num_srvs) {
+      status_ = Status::InvalidArgument("bad instance id");
+    }
+  }
+
+  if (ok()) {
+    std::string addrs = config::MetadataSrvAddrs();
+    size_t num_addrs = SplitString(&mdstopo_.srv_addrs, addrs, '&');
+    if (num_addrs == 0) {
+      std::string uri = GetLocalUri(srv_id_);
+      if (uri.empty()) {
+        status_ = Status::IOError("cannot obtain local uri");
+      } else {
+        mdstopo_.srv_addrs = std::vector<std::string>(num_srvs);
+        mdstopo_.srv_addrs[srv_id_] = uri;
       }
     }
   }
 
   if (ok()) {
-    size_t num_addrs =
-        SplitString(&mdstopo_.srv_addrs, config::MetadataSrvAddrs());
-    if (num_addrs == 0) {
-      std::string uri = GetLocalUri(srv_id_);
-      if (uri.empty()) {
-        status_ = Status::IOError("cannot obtain local IP address");
-      } else {
-        mdstopo_.srv_addrs = std::vector<std::string>(num_srvs);
-        mdstopo_.srv_addrs[srv_id_] = uri;
-      }
-    } else if (num_addrs < num_srvs) {
-      status_ = Status::InvalidArgument("not enough addrs");
-    } else if (num_addrs > num_srvs) {
-      status_ = Status::InvalidArgument("too many addrs");
+    if (mdstopo_.srv_addrs.size() < num_srvs) {
+      status_ = Status::InvalidArgument("not enough srv addrs");
+    } else if (mdstopo_.srv_addrs.size() > num_srvs) {
+      status_ = Status::InvalidArgument("too many srv addrs");
     }
   }
 
