@@ -238,6 +238,9 @@ void MetadataServer::Builder::LoadMDSEnv() {
 // REQUIRES: both LoadIds() and LoadMDSEnv() have been called.
 void MetadataServer::Builder::OpenDB() {
   std::string output_root;
+  bool disable_table_compaction;
+  uint64_t write_buffer_size;
+  uint64_t table_size;
 
   if (ok()) {
     output_root = myenv_->output_conf;
@@ -246,13 +249,27 @@ void MetadataServer::Builder::OpenDB() {
   }
 
   if (ok()) {
-    status_ = config::LoadVerifyChecksums(&mdbopts_.verify_checksums);
+    status_ = config::LoadDisableMetadataCompaction(&disable_table_compaction);
+    if (ok()) {
+      status_ = config::LoadVerifyChecksums(&mdbopts_.verify_checksums);
+    }
+  }
+
+  if (ok()) {
+    status_ = config::LoadSizeOfMetadataWriteBuffer(&write_buffer_size);
+    if (ok()) {
+      status_ = config::LoadSizeOfMetadataTables(&table_size);
+    }
   }
 
   if (ok()) {
     dbopts_.error_if_exists = true;
     dbopts_.create_if_missing = true;
     dbopts_.compression = kSnappyCompression;
+    dbopts_.disable_compaction = disable_table_compaction;
+    dbopts_.disable_seek_compaction = disable_table_compaction;
+    dbopts_.write_buffer_size = write_buffer_size;
+    dbopts_.table_file_size = table_size;
     dbopts_.skip_lock_file = true;
     dbopts_.info_log = Logger::Default();
     dbopts_.env = myenv_->env;
@@ -261,7 +278,7 @@ void MetadataServer::Builder::OpenDB() {
   if (ok()) {
     std::string dbhome = output_root;
     char tmp[30];
-    snprintf(tmp, sizeof(tmp), "/meta_%d", srv_id_);
+    snprintf(tmp, sizeof(tmp), "/shard-%08d", srv_id_);
     dbhome += tmp;
     status_ = DB::Open(dbopts_, dbhome, &db_);
     if (ok()) {
