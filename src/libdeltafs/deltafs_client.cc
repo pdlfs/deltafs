@@ -626,10 +626,32 @@ void Client::Builder::LoadIds() {
   if (ok()) {
     cli_id_ = cli_id;
   }
+}
 
+// Try to obtain the uri for a specified server.
+// Return the uri if success, or an empty string if not.
+static std::string TryObtainSrvUri(int srv_id) {
+  std::string run_dir = config::RunDir();
+  if (!run_dir.empty()) {
+    Env* const env = Env::Default();
+
+    std::string result;
+    std::string fname = run_dir;
+    char tmp[30];
+    snprintf(tmp, sizeof(tmp), "/srv-%08d.uri", srv_id);
+    fname += tmp;
+    Status s = ReadFileToString(env, fname, &result);
+    if (s.ok()) {
 #if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "LoadIds: %s", status_.ToString().c_str());
+      Verbose(__LOG_ARGS__, 10, "TryObtainSrvUri #%d: %s", srv_id,
+              result.c_str());
 #endif
+
+      return result;
+    }
+  }
+
+  return "";
 }
 
 void Client::Builder::LoadMDSTopology() {
@@ -640,15 +662,30 @@ void Client::Builder::LoadMDSTopology() {
     status_ = config::LoadNumOfVirMetadataSrvs(&num_vir_srvs);
     if (ok()) {
       status_ = config::LoadNumOfMetadataSrvs(&num_srvs);
-      if (ok()) {
-        std::string addrs = config::MetadataSrvAddrs();
-        size_t num_addrs = SplitString(&mdstopo_.srv_addrs, addrs, '&');
-        if (num_addrs < num_srvs) {
-          status_ = Status::InvalidArgument("not enough srv addrs");
-        } else if (num_addrs > num_srvs) {
-          status_ = Status::InvalidArgument("too many srv addrs");
+    }
+  }
+
+  if (ok()) {
+    std::string addrs = config::MetadataSrvAddrs();
+    size_t num_addrs = SplitString(&mdstopo_.srv_addrs, addrs, '&');
+    if (num_addrs == 0) {
+      for (size_t i = 0; i < num_srvs; i++) {
+        std::string uri = TryObtainSrvUri(i);
+        if (!uri.empty()) {
+          mdstopo_.srv_addrs.push_back(uri);
+        } else {
+          mdstopo_.srv_addrs.clear();
+          break;
         }
       }
+    }
+  }
+
+  if (ok()) {
+    if (mdstopo_.srv_addrs.size() < num_srvs) {
+      status_ = Status::InvalidArgument("not enough srv addrs");
+    } else if (mdstopo_.srv_addrs.size() > num_srvs) {
+      status_ = Status::InvalidArgument("too many srv addrs");
     }
   }
 
@@ -675,10 +712,6 @@ void Client::Builder::LoadMDSTopology() {
       delete fty;
     }
   }
-
-#if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "LoadMDSTopology: %s", status_.ToString().c_str());
-#endif
 }
 
 // REQUIRES: both LoadIds() and LoadMDSTopology() have been called.
@@ -700,10 +733,6 @@ void Client::Builder::OpenSession() {
       }
     }
   }
-
-#if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "OpenSession: %s", status_.ToString().c_str());
-#endif
 }
 
 // REQUIRES: OpenSession() has been called.
@@ -789,18 +818,29 @@ void Client::Builder::OpenMDSCli() {
   if (ok()) {
     mdscli_ = MDSClient::Open(mdscliopts_);
   }
-
-#if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "OpenMDSCli: %s", status_.ToString().c_str());
-#endif
 }
 
 Client* Client::Builder::BuildClient() {
   LoadIds();
+#if VERBOSE >= 10
+  Verbose(__LOG_ARGS__, 10, "LoadIds: %s", status_.ToString().c_str());
+#endif
+
   LoadMDSTopology();
+#if VERBOSE >= 10
+  Verbose(__LOG_ARGS__, 10, "LoadMDSTopology: %s", status_.ToString().c_str());
+#endif
+
   OpenSession();
+#if VERBOSE >= 10
+  Verbose(__LOG_ARGS__, 10, "OpenSession: %s", status_.ToString().c_str());
+#endif
+
   OpenDB();
   OpenMDSCli();
+#if VERBOSE >= 10
+  Verbose(__LOG_ARGS__, 10, "OpenMDSCli: %s", status_.ToString().c_str());
+#endif
 
   if (ok()) {
     Client* cli = new Client;
