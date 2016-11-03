@@ -96,7 +96,7 @@ Status MetadataServer::RunTillInterruptionOrError() {
 }
 
 void MetadataServer::Interrupt() {
-  interrupted_.Release_Store(this);
+  interrupted_.Release_Store(this);  // Any non-NULL value is ok
   cv_.SignalAll();
 }
 
@@ -241,9 +241,7 @@ void MetadataServer::Builder::OpenDB() {
 
   if (ok()) {
     output_root = myenv_->output_conf;
-    // The output root must exist in the local file system but not
-    // necessarily in the underlying object storage.
-    // Error is ignored since the directory may exist.
+    // Ignore error because it may already exist
     Env::Default()->CreateDir(output_root);
   }
 
@@ -252,10 +250,11 @@ void MetadataServer::Builder::OpenDB() {
   }
 
   if (ok()) {
-    dbopts_.create_if_missing = true;
     dbopts_.error_if_exists = true;
+    dbopts_.create_if_missing = true;
     dbopts_.compression = kSnappyCompression;
-    dbopts_.disable_compaction = true;
+    dbopts_.skip_lock_file = true;
+    dbopts_.info_log = Logger::Default();
     dbopts_.env = myenv_->env;
   }
 
