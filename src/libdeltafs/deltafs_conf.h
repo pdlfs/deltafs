@@ -30,10 +30,10 @@ extern std::string RPCProto();
 // e.g. true, yes
 extern std::string MDSTracing();
 // Return an ordered array of server addrs. Addrs associated with
-// different servers are separated by semicolons; addrs associated with
-// a same server are separated by commas. We are assuming each metadata
+// different servers are separated by '&'; addrs associated with
+// a same server are separated by ','. We are assuming each metadata
 // server may potentially have multiple addrs.
-// e.g. 10.0.0.1:10000;10.0.0.1:20000
+// e.g. 10.0.0.1:10000&10.0.0.1:20000
 extern std::string MetadataSrvAddrs();
 // Return the size of lease table at each metadata server.
 // e.g. 4096, 16k
@@ -56,24 +56,36 @@ extern std::string ParanoidChecks();
 // Indicate if deltafs should always verify checksums.
 // e.g. true, yes
 extern std::string VerifyChecksums();
+// Set the size of leveldb write buffer that holds metadata updates.
+// e.g. 8M, 32M
+extern std::string SizeOfMetadataWriteBuffer();
+// Set the size of leveldb tables that store metadata.
+// e.g. 8M, 32M
+extern std::string SizeOfMetadataTables();
+// True if all background compaction of metadata tables should be disabled.
+// e.g. true, yes
+extern std::string DisableMetadataCompaction();
 // Return the name of the Env implementation to use.
 // XXX: support running deltafs on multiple Env instances.
 // e.g. rados, hdfs
 extern std::string EnvName();
 // Return the conf string that should be passed to Env loaders.
-// e.g. "rados_conf=/etc/ceph.conf;pool_name=metadata"
+// e.g. "rados_conf=/etc/ceph.conf&pool_name=metadata"
 extern std::string EnvConf();
 // Return the name of the Fio implementation to use.
 // XXX: support running deltafs on multiple Fio instances.
 // e.g. rados, hdfs
 extern std::string FioName();
 // Return the conf string that should be passed to Fio loaders.
-// e.g. "rados_conf=/etc/ceph.conf;pool_name=data"
+// e.g. "rados_conf=/etc/ceph.conf&pool_name=data"
 extern std::string FioConf();
 // Return the conf string for input snapshots
 extern std::string Inputs();
 // Return the conf string for output snapshots
 extern std::string Outputs();
+// Return the name of the run directory.
+// e.g. "/tmp/deltafs_run", "/var/run/deltafs"
+extern std::string RunDir();
 
 }  // namespace config
 }  // namespace pdlfs
