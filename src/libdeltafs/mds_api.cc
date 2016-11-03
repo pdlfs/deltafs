@@ -746,14 +746,18 @@ Status MDS::RPC::CLI::Listdir(const ListdirOptions& options, ListdirRet* ret) {
     if (out.err != 0) {
       s = Status::FromCode(out.err);
     } else {
-      uint32_t num;
       Slice name;
       Slice encoding = out.contents;
-      if (GetVarint32(&encoding, &num)) {
+      if (encoding.size() < 4) {
+        s = Status::Corruption(Slice());
+      } else {
+        uint32_t num = DecodeFixed32(encoding.data() + encoding.size() - 4);
+        encoding.remove_suffix(4);
         while (num-- != 0) {
           if (GetLengthPrefixedSlice(&encoding, &name)) {
             names->push_back(name.ToString());
           } else {
+            s = Status::Corruption(Slice());
             break;
           }
         }
@@ -779,11 +783,16 @@ void MDS::RPC::SRV::LSDIR(Msg& in, Msg& out) {
     s = mds_->Listdir(options, &ret);
   }
   if (s.ok()) {
-    PutVarint32(&out.extra_buf, names.size());
+    size_t num_entries = 0;
     for (std::vector<std::string>::iterator it = names.begin();
          it != names.end(); ++it) {
       PutLengthPrefixedSlice(&out.extra_buf, *it);
+      num_entries++;
+      if (out.extra_buf.size() >= 1000) {
+        break;  // Silently discard rest entries
+      }
     }
+    PutFixed32(&out.extra_buf, num_entries);
     out.contents = Slice(out.extra_buf);
     out.err = 0;
   } else {
