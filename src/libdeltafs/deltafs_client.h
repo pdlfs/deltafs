@@ -41,6 +41,7 @@ class Client {
   Status Flush(int fd);
   Status Close(int fd);
 
+  Status Accessdir(const Slice& path, int mode);
   Status Listdir(const Slice& path, std::vector<std::string>*);
   Status Getattr(const Slice& path, Stat*);
   Status Mkfile(const Slice& path, int mode);

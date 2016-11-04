@@ -55,7 +55,7 @@ class MDS::CLI {
   Status Chmod(const Slice& path, int mode, Fentry*);
   Status Unlink(const Slice& path, bool error_not_found, Fentry*);
   Status Listdir(const Slice& path, std::vector<std::string>* names);
-  Status Accessdir(const Slice& path);
+  Status Accessdir(const Slice& path, int mode);
 
   int uid() const { return uid_; }
   int gid() const { return gid_; }

@@ -839,7 +839,7 @@ Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
   return s;
 }
 
-Status MDS::CLI::Accessdir(const Slice& p) {
+Status MDS::CLI::Accessdir(const Slice& p, int mode) {
   Status s;
   assert(!p.empty());
   if (p.size() != 1) assert(!p.ends_with("/"));
@@ -849,7 +849,11 @@ Status MDS::CLI::Accessdir(const Slice& p) {
   static const bool kPrefetchDirIndex = true;
   s = ResolvePath(fake_path, &path);
   if (s.ok()) {
-    if (!IsReadDirOk(&path)) {
+    if ((mode & R_OK) == R_OK && !IsReadDirOk(&path)) {
+      s = Status::AccessDenied(Slice());
+    } else if ((mode & W_OK) == W_OK && !IsWriteDirOk(&path)) {
+      s = Status::AccessDenied(Slice());
+    } else if ((mode & X_OK) == X_OK && !IsLookupOk(&path)) {
       s = Status::AccessDenied(Slice());
     } else if (kPrefetchDirIndex) {
       IndexHandle* idxh = NULL;

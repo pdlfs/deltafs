@@ -491,6 +491,17 @@ Status Client::Close(int fd) {
   }
 }
 
+Status Client::Accessdir(const Slice& p, int mode) {
+  Status s;
+  Slice path = p;
+  std::string tmp;
+  s = SanitizePath(&path, &tmp);
+  if (s.ok()) {
+    s = mdscli_->Accessdir(path, mode);
+  }
+  return s;
+}
+
 Status Client::Listdir(const Slice& p, std::vector<std::string>* names) {
   Status s;
   Slice path = p;
