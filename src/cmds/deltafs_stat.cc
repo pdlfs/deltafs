@@ -49,21 +49,21 @@ int main(int argc, char* argv[]) {
         return "Unknown file type";
       }
     }
-    static std::string PrintUser(const struct stat* statbuf) {
+    static std::string PrintUsr(const struct stat* statbuf) {
       char tmp[30];
       struct passwd* pw = getpwuid(statbuf->st_uid);
       if (pw != NULL) {
-        snprintf(tmp, sizeof(tmp), "%d / %s", statbuf->st_uid, pw->pw_name);
+        snprintf(tmp, sizeof(tmp), "%d/%s", statbuf->st_uid, pw->pw_name);
       } else {
         snprintf(tmp, sizeof(tmp), "%d", statbuf->st_uid);
       }
       return tmp;
     }
-    static std::string PrintGroup(const struct stat* statbuf) {
+    static std::string PrintGrp(const struct stat* statbuf) {
       char tmp[30];
       struct group* gr = getgrgid(statbuf->st_gid);
       if (gr != NULL) {
-        snprintf(tmp, sizeof(tmp), "%d / %s", statbuf->st_gid, gr->gr_name);
+        snprintf(tmp, sizeof(tmp), "%d/%s", statbuf->st_gid, gr->gr_name);
       } else {
         snprintf(tmp, sizeof(tmp), "%d", statbuf->st_gid);
       }
@@ -76,13 +76,16 @@ int main(int argc, char* argv[]) {
     if (r == 0) {
       fprintf(stdout,
               "  File: '%s'\n"
-              "  Size: %llu\n"
               "  Mode: %s\n"
-              "Access: %o\tUser: %s\tGroup: %s\n",
-              argv[i], static_cast<unsigned long long>(statbuf.st_size),
-              StatPrinter::PrintMode(&statbuf).c_str(), statbuf.st_mode,
-              StatPrinter::PrintUser(&statbuf).c_str(),
-              StatPrinter::PrintGroup(&statbuf).c_str());
+              "Access: %o\tUser: %s\tGroup: %s\n"
+              " Mtime: %s"
+              "  Size: %llu Bytes\n"
+              " Inode: %llu\n",
+              argv[i], StatPrinter::PrintMode(&statbuf).c_str(),
+              statbuf.st_mode, StatPrinter::PrintUsr(&statbuf).c_str(),
+              StatPrinter::PrintGrp(&statbuf).c_str(), ctime(&statbuf.st_mtime),
+              static_cast<unsigned long long>(statbuf.st_size),
+              static_cast<unsigned long long>(statbuf.st_ino));
     } else {
       fprintf(stderr, "stat: cannot stat file '%s': %s\n", argv[i],
               strerror(errno));
