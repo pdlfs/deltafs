@@ -149,6 +149,22 @@ Status MDS::CLI::_Lookup(const DirIndex* idx, const LookupOptions& options,
   return s;
 }
 
+bool MDS::CLI::IsReadDirOk(const PathInfo* info) {
+  if (info == NULL) {
+    return false;
+  } else if (uid_ == 0) {
+    return true;
+  } else if (uid_ == info->uid && (info->mode & S_IRUSR) == S_IRUSR) {
+    return true;
+  } else if (gid_ == info->gid && (info->mode & S_IRGRP) == S_IRGRP) {
+    return true;
+  } else if ((info->mode & S_IROTH) == S_IROTH) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 bool MDS::CLI::IsWriteDirOk(const PathInfo* info) {
   if (info == NULL) {
     return false;
@@ -780,39 +796,43 @@ Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
   PathInfo path;
   s = ResolvePath(fake_path, &path);
   if (s.ok()) {
-    IndexHandle* idxh = NULL;
-    s = FetchIndex(path.pid, path.zserver, &idxh);
-    if (s.ok()) {
-      mutex_.Unlock();
+    if (!IsReadDirOk(&path)) {
+      s = Status::AccessDenied(Slice());
+    } else {
+      IndexHandle* idxh = NULL;
+      s = FetchIndex(path.pid, path.zserver, &idxh);
+      if (s.ok()) {
+        mutex_.Unlock();
 
-      assert(idxh != NULL);
-      const DirIndex* idx = index_cache_->Value(idxh);
-      assert(idx != NULL);
-      ListdirOptions options;
-      options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
-      options.session_id = session_id_;
-      options.dir_id = path.pid;
-      ListdirRet ret;
-      ret.names = names;
+        assert(idxh != NULL);
+        const DirIndex* idx = index_cache_->Value(idxh);
+        assert(idx != NULL);
+        ListdirOptions options;
+        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.session_id = session_id_;
+        options.dir_id = path.pid;
+        ListdirRet ret;
+        ret.names = names;
 
-      std::set<size_t> visited;
-      int num_parts = 1 << idx->Radix();
-      for (int i = 0; i < num_parts; i++) {
-        if (idx->IsSet(i)) {
-          size_t server = idx->GetServerForIndex(i);
-          assert(server < giga_.num_servers);
-          if (visited.count(server) == 0) {
-            factory_->Get(server)->Listdir(options, &ret);
-            visited.insert(server);
-            if (visited.size() >= giga_.num_servers) {
-              break;
+        std::set<size_t> visited;
+        int num_parts = 1 << idx->Radix();
+        for (int i = 0; i < num_parts; i++) {
+          if (idx->IsSet(i)) {
+            size_t server = idx->GetServerForIndex(i);
+            assert(server < giga_.num_servers);
+            if (visited.count(server) == 0) {
+              factory_->Get(server)->Listdir(options, &ret);
+              visited.insert(server);
+              if (visited.size() >= giga_.num_servers) {
+                break;
+              }
             }
           }
         }
-      }
 
-      mutex_.Lock();
-      index_cache_->Release(idxh);
+        mutex_.Lock();
+        index_cache_->Release(idxh);
+      }
     }
   }
   return s;

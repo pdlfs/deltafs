@@ -86,6 +86,9 @@ class MDS::CLI {
     gid_t gid;
   };
   Status ResolvePath(const Slice& path, PathInfo*);
+
+  // Convenient methods for permission checking
+  bool IsReadDirOk(const PathInfo*);
   bool IsWriteDirOk(const PathInfo*);
   bool IsLookupOk(const PathInfo*);
 
