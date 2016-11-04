@@ -793,7 +793,7 @@ Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
   assert(!p.empty());
   if (p.size() != 1) assert(!p.ends_with("/"));
   std::string fake_path = p.ToString();
-  fake_path.append("/.");
+  fake_path += "/_";
   PathInfo path;
   s = ResolvePath(fake_path, &path);
   if (s.ok()) {
@@ -832,6 +832,30 @@ Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
         }
 
         mutex_.Lock();
+        index_cache_->Release(idxh);
+      }
+    }
+  }
+  return s;
+}
+
+Status MDS::CLI::Accessdir(const Slice& p) {
+  Status s;
+  assert(!p.empty());
+  if (p.size() != 1) assert(!p.ends_with("/"));
+  std::string fake_path = p.ToString();
+  fake_path += "/_";
+  PathInfo path;
+  static const bool kPrefetchDirIndex = true;
+  s = ResolvePath(fake_path, &path);
+  if (s.ok()) {
+    if (!IsReadDirOk(&path)) {
+      s = Status::AccessDenied(Slice());
+    } else if (kPrefetchDirIndex) {
+      IndexHandle* idxh = NULL;
+      s = FetchIndex(path.pid, path.zserver, &idxh);
+      if (s.ok()) {
+        assert(idxh != NULL);
         index_cache_->Release(idxh);
       }
     }
