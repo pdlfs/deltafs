@@ -22,6 +22,9 @@
 
 namespace pdlfs {
 
+// Convenient method for getting status strings.
+#define C_STR(s) s.ToString().c_str()
+
 // XXX: make this configurable?
 static const int kMaxOpenFileDescriptors = 1000;
 
@@ -488,6 +491,17 @@ Status Client::Close(int fd) {
   }
 }
 
+Status Client::Listdir(const Slice& p, std::vector<std::string>* names) {
+  Status s;
+  Slice path = p;
+  std::string tmp;
+  s = SanitizePath(&path, &tmp);
+  if (s.ok()) {
+    s = mdscli_->Listdir(path, names);
+  }
+  return s;
+}
+
 Status Client::Getattr(const Slice& p, Stat* statbuf) {
   Status s;
   Slice path = p;
@@ -823,23 +837,23 @@ void Client::Builder::OpenMDSCli() {
 Client* Client::Builder::BuildClient() {
   LoadIds();
 #if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "LoadIds: %s", status_.ToString().c_str());
+  Verbose(__LOG_ARGS__, 10, "LoadIds: %s", C_STR(status_));
 #endif
 
   LoadMDSTopology();
 #if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "LoadMDSTopology: %s", status_.ToString().c_str());
+  Verbose(__LOG_ARGS__, 10, "LoadMDSTopology: %s", C_STR(status_));
 #endif
 
   OpenSession();
 #if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "OpenSession: %s", status_.ToString().c_str());
+  Verbose(__LOG_ARGS__, 10, "OpenSession: %s", C_STR(status_));
 #endif
 
   OpenDB();
   OpenMDSCli();
 #if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "OpenMDSCli: %s", status_.ToString().c_str());
+  Verbose(__LOG_ARGS__, 10, "OpenMDSCli: %s", C_STR(status_));
 #endif
 
   if (ok()) {

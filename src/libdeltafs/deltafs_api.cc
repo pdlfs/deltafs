@@ -234,6 +234,31 @@ int deltafs_close(int __fd) {
   }
 }
 
+int deltafs_listdir(const char* __path, deltafs_filler_t __filler,
+                    void* __arg) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+  std::vector<std::string> names;
+  pdlfs::Status s;
+  s = client->Listdir(__path, &names);
+  if (s.ok()) {
+    for (std::vector<std::string>::iterator iter = names.begin();
+         iter != names.end(); ++iter) {
+      if (__filler(iter->c_str(), __arg) != 0) {
+        break;
+      }
+    }
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
 int deltafs_stat(const char* __path, struct stat* __buf) {
   if (client == NULL) {
     pdlfs::port::InitOnce(&once, InitClient);
