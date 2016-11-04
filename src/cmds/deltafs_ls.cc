@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
     if (argc > 2) fprintf(stdout, "%s:\n", argv[i]);
     int r = deltafs_listdir(argv[i], NamePrinter::Print, &count);
     if (r != 0) {
-      fprintf(stderr, "%s: cannot list directory '%s': %s\n", argv[0], argv[i],
+      fprintf(stderr, "ls: cannot list directory '%s': %s\n", argv[i],
               strerror(errno));
       return -1;
     } else if (argc > 2) {
