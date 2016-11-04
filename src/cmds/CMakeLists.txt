@@ -15,9 +15,12 @@ target_link_libraries (deltafs_ls deltafs)
 add_executable (deltafs_touch deltafs_touch.cc)
 target_link_libraries (deltafs_touch deltafs)
 
+add_executable (deltafs_unlink deltafs_unlink.cc)
+target_link_libraries (deltafs_unlink deltafs)
+
 #
 # "make install" rules
 #
 install (TARGETS deltafs_shell deltafs_mkdir deltafs_ls
-                 deltafs_touch
+                 deltafs_touch deltafs_unlink
          RUNTIME DESTINATION bin)
