@@ -91,7 +91,9 @@ int deltafs_open(const char* __path, int __oflags, mode_t __mode,
   pdlfs::Status s;
   s = client->Fopen(__path, __oflags, __mode, &info);
   if (s.ok()) {
-    CopyStat(info.stat, __buf);
+    if (__buf != NULL) {
+      CopyStat(info.stat, __buf);
+    }
     return info.fd;
   } else {
     SetErrno(s);
