@@ -790,7 +790,8 @@ Status MDS::CLI::Ftruncate(const Fentry& ent, uint64_t mtime, uint64_t size) {
 
 Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
   Status s;
-  assert(!p.ends_with("/"));
+  assert(!p.empty());
+  if (p.size() != 1) assert(!p.ends_with("/"));
   std::string fake_path = p.ToString();
   fake_path.append("/.");
   PathInfo path;
