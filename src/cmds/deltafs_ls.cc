@@ -36,13 +36,23 @@ int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
 #endif
-  static const mode_t mode = ACCESSPERMS & ~S_IWOTH;
+  struct NamePrinter {
+    static int Print(const char* name, void* count) {
+      (*reinterpret_cast<int*>(count))++;
+      fprintf(stdout, "%s\n", name);
+      return 0;
+    }
+  };
   for (int i = 1; i < argc; i++) {
-    int r = deltafs_mkdir(argv[i], mode);
+    int count = 0;
+    if (argc > 2) fprintf(stdout, "%s:\n", argv[i]);
+    int r = deltafs_listdir(argv[i], NamePrinter::Print, &count);
     if (r != 0) {
-      fprintf(stderr, "mkdir: cannot make directory '%s': %s\n", argv[i],
+      fprintf(stderr, "%s: cannot list directory '%s': %s\n", argv[0], argv[i],
               strerror(errno));
       return -1;
+    } else if (argc > 2) {
+      fprintf(stdout, "\n");
     }
   }
 
