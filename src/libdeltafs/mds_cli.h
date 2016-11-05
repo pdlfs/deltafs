@@ -56,6 +56,7 @@ class MDS::CLI {
   Status Unlink(const Slice& path, bool error_if_absent, Fentry*);
   Status Listdir(const Slice& path, std::vector<std::string>* names);
   Status Accessdir(const Slice& path, int mode);
+  Status Access(const Slice& path, int mode);
 
   uid_t uid() const { return uid_; }
   gid_t gid() const { return gid_; }
@@ -92,6 +93,9 @@ class MDS::CLI {
   bool IsReadDirOk(const PathInfo*);
   bool IsWriteDirOk(const PathInfo*);
   bool IsLookupOk(const PathInfo*);
+  bool IsReadOk(const Stat*);
+  bool IsWriteOk(const Stat*);
+  bool IsExecOk(const Stat*);
 
   typedef LookupCache::Handle LookupHandle;
   Status Lookup(const DirId&, const Slice& name, int zserver, uint64_t op_due,

@@ -470,7 +470,7 @@ Status MDS::CLI::Unlink(const Slice& p, bool error_if_absent, Fentry* ent) {
         options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
         options.session_id = session_id_;
         options.dir_id = path.pid;
-        options.flags = error_not_found ? O_EXCL : 0;
+        options.flags = error_if_absent ? O_EXCL : 0;
         options.name_hash = DirIndex::Hash(path.name, tmp);
         if (paranoid_checks_) {
           options.name = path.name;
@@ -852,7 +852,7 @@ Status MDS::CLI::Accessdir(const Slice& p, int mode) {
   std::string fake_path = p.ToString();
   fake_path += "/_";
   PathInfo path;
-  static const bool kPrefetchDirIndex = true;
+  static const bool kPrefetchDirIndex = false;
   s = ResolvePath(fake_path, &path);
   if (s.ok()) {
     if ((mode & R_OK) == R_OK && !IsReadDirOk(&path)) {
@@ -870,6 +870,71 @@ Status MDS::CLI::Accessdir(const Slice& p, int mode) {
       }
     }
   }
+  return s;
+}
+
+bool MDS::CLI::IsReadOk(const Stat* s) {
+  if (s == NULL) {
+    return false;
+  } else if (uid_ == 0) {
+    return true;
+  } else if (uid_ == s->UserId() && (s->FileMode() & S_IRUSR) == S_IRUSR) {
+    return true;
+  } else if (gid_ == s->GroupId() && (s->FileMode() & S_IRGRP) == S_IRGRP) {
+    return true;
+  } else if ((s->FileMode() & S_IROTH) == S_IROTH) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool MDS::CLI::IsWriteOk(const Stat* s) {
+  if (s == NULL) {
+    return false;
+  } else if (uid_ == 0) {
+    return true;
+  } else if (uid_ == s->UserId() && (s->FileMode() & S_IWUSR) == S_IWUSR) {
+    return true;
+  } else if (gid_ == s->GroupId() && (s->FileMode() & S_IWGRP) == S_IWGRP) {
+    return true;
+  } else if ((s->FileMode() & S_IWOTH) == S_IWOTH) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool MDS::CLI::IsExecOk(const Stat* s) {
+  if (s == NULL) {
+    return false;
+  } else if (uid_ == 0) {
+    return true;
+  } else if (uid_ == s->UserId() && (s->FileMode() & S_IXUSR) == S_IXUSR) {
+    return true;
+  } else if (gid_ == s->GroupId() && (s->FileMode() & S_IXGRP) == S_IXGRP) {
+    return true;
+  } else if ((s->FileMode() & S_IXOTH) == S_IXOTH) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+Status MDS::CLI::Access(const Slice& p, int mode) {
+  Status s;
+  Fentry entry;
+  s = Fstat(p, &entry);
+  if (s.ok()) {
+    if ((mode & R_OK) == R_OK && !IsReadOk(&entry.stat)) {
+      s = Status::AccessDenied(Slice());
+    } else if ((mode & W_OK) == W_OK && !IsWriteOk(&entry.stat)) {
+      s = Status::AccessDenied(Slice());
+    } else if ((mode & X_OK) == X_OK && !IsExecOk(&entry.stat)) {
+      s = Status::AccessDenied(Slice());
+    }
+  }
+
   return s;
 }
 
