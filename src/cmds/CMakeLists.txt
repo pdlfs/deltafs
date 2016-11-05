@@ -24,10 +24,13 @@ target_link_libraries (deltafs_stat deltafs)
 add_executable (deltafs_accessdir deltafs_accessdir.cc)
 target_link_libraries (deltafs_accessdir deltafs)
 
+add_executable (deltafs_access deltafs_access.cc)
+target_link_libraries (deltafs_access deltafs)
+
 #
 # "make install" rules
 #
 install (TARGETS deltafs_shell deltafs_mkdir deltafs_ls
                  deltafs_touch deltafs_unlink deltafs_stat
-                 deltafs_accessdir
+                 deltafs_accessdir deltafs_access
          RUNTIME DESTINATION bin)
