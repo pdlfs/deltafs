@@ -21,6 +21,7 @@ int deltafs_mkfile(const char* __path, mode_t __mode);
 int deltafs_mkdir(const char* __path, mode_t __mode);
 int deltafs_chmod(const char* __path, mode_t __mode);
 int deltafs_stat(const char* __path, struct stat*);
+int deltafs_access(const char* __path, int __mode);
 int deltafs_accessdir(const char* __path, int __mode);
 int deltafs_unlink(const char* __path);
 typedef int (*deltafs_filler_t)(const char* __name, void* __arg);

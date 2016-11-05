@@ -236,6 +236,23 @@ int deltafs_close(int __fd) {
   }
 }
 
+int deltafs_access(const char* __path, int __mode) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+  pdlfs::Status s;
+  s = client->Access(__path, __mode);
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
 int deltafs_accessdir(const char* __path, int __mode) {
   if (client == NULL) {
     pdlfs::port::InitOnce(&once, InitClient);

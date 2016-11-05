@@ -382,14 +382,14 @@ Status Client::Fdatasync(int fd) {
     uint32_t seq_flush = file->seq_flush;
     file->refs++;
     mutex_.Unlock();
-    const bool force_sync = true;
-    s = fio_->Flush(file->fentry_encoding(), file->fh, force_sync);
+    static const bool kForceSync = true;
+    s = fio_->Flush(file->fentry_encoding(), file->fh, kForceSync);
     if (s.ok() && seq_flush < seq_write) {
       uint64_t mtime;
       uint64_t size;
-      const bool skip_cache = true;
+      static const bool kSkipCache = true;
       s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size,
-                     skip_cache);
+                     kSkipCache);
       if (s.ok()) {
         Fentry fentry;
         Slice encoding = file->fentry_encoding();
@@ -491,6 +491,7 @@ Status Client::Flush(int fd) {
 }
 
 Status Client::Close(int fd) {
+  Status s;
   MutexLock ml(&mutex_);
   File* file = FetchFile(fd);
   if (file == NULL) {
@@ -500,16 +501,30 @@ Status Client::Close(int fd) {
     assert(file->refs > 0);
     while (file->seq_flush < file->seq_write) {
       mutex_.Unlock();
-      Status s = Flush(fd);
+      Status s_ = Flush(fd);
       mutex_.Lock();
-      if (!s.ok()) {
+      if (!s_.ok()) {
+        Error(__LOG_ARGS__, "fail to close file: %s", C_STR(s_));
         break;
       }
     }
+
     Free(fd);
     Unref(file);
-    return Status::OK();
   }
+
+  return s;
+}
+
+Status Client::Access(const Slice& p, int mode) {
+  Status s;
+  Slice path = p;
+  std::string tmp;
+  s = SanitizePath(&path, &tmp);
+  if (s.ok()) {
+    s = mdscli_->Access(path, mode);
+  }
+  return s;
 }
 
 Status Client::Accessdir(const Slice& p, int mode) {

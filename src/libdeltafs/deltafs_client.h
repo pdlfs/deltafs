@@ -41,6 +41,7 @@ class Client {
   Status Flush(int fd);
   Status Close(int fd);
 
+  Status Access(const Slice& path, int mode);
   Status Accessdir(const Slice& path, int mode);
   Status Listdir(const Slice& path, std::vector<std::string>*);
   Status Getattr(const Slice& path, Stat*);
@@ -66,8 +67,8 @@ class Client {
     uid_t uid;
     gid_t gid;
     int flags;
-    uint32_t seq_write;
-    uint32_t seq_flush;
+    uint32_t seq_write;  // Latest write
+    uint32_t seq_flush;  // Latest metadata update
     int refs;
 
     char encoding_data[1];  // Beginning of fentry encoding
