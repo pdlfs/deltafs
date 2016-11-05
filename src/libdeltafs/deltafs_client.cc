@@ -22,17 +22,17 @@
 
 namespace pdlfs {
 
-// Convenient method for getting status strings.
+// Helper for getting status strings.
 #define C_STR(s) s.ToString().c_str()
 
 // XXX: make this configurable?
 static const int kMaxOpenFileDescriptors = 1000;
 
-static inline Status BadDescriptor() {
+static inline Status FileAccessModeNotMatched() {
   return Status::InvalidFileDescriptor(Slice());
 }
 
-static inline Status FileReadWritePermissionDenied() {
+static inline Status BadDescriptor() {
   return Status::InvalidFileDescriptor(Slice());
 }
 
@@ -52,6 +52,7 @@ Client::~Client() {
   delete fio_;
 }
 
+// Consume a descriptor slot to point to the specified file entry.
 // REQUIRES: less than "max_open_files_" files have been opened.
 // REQUIRES: mutex_ has been locked.
 size_t Client::Alloc(File* f) {
@@ -64,6 +65,8 @@ size_t Client::Alloc(File* f) {
   return fd_slot_;
 }
 
+// Deallocate a given file descriptor slot.
+// The associated file entry is not un-referenced.
 // REQUIRES: mutex_ has been locked.
 Client::File* Client::Free(size_t index) {
   File* f = fds_[index];
@@ -168,7 +171,7 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
     } else {
       s = mdscli_->Fstat(path, &fentry);
       if (s.ok()) {
-        if (S_ISDIR(fentry.stat.FileMode())) {
+        if (!S_ISREG(fentry.stat.FileMode())) {
           s = Status::FileExpected(Slice());
         }
       }
@@ -307,7 +310,7 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   if (file == NULL) {
     return BadDescriptor();
   } else if (!IsWriteOk(file)) {
-    return FileReadWritePermissionDenied();
+    return FileAccessModeNotMatched();
   } else {
     Status s;
     assert(file->fh != NULL);
@@ -329,7 +332,7 @@ Status Client::Write(int fd, const Slice& data) {
   if (file == NULL) {
     return BadDescriptor();
   } else if (!IsWriteOk(file)) {
-    return FileReadWritePermissionDenied();
+    return FileAccessModeNotMatched();
   } else {
     Status s;
     assert(file->fh != NULL);
@@ -351,7 +354,7 @@ Status Client::Ftruncate(int fd, uint64_t len) {
   if (file == NULL) {
     return BadDescriptor();
   } else if (!IsWriteOk(file)) {
-    return FileReadWritePermissionDenied();
+    return FileAccessModeNotMatched();
   } else {
     Status s;
     assert(file->fh != NULL);
@@ -415,7 +418,7 @@ Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
   if (file == NULL) {
     return BadDescriptor();
   } else if (!IsReadOk(file)) {
-    return FileReadWritePermissionDenied();
+    return FileAccessModeNotMatched();
   } else {
     Status s;
     assert(file->fh != NULL);
@@ -435,7 +438,7 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
   if (file == NULL) {
     return BadDescriptor();
   } else if (!IsReadOk(file)) {
-    return FileReadWritePermissionDenied();
+    return FileAccessModeNotMatched();
   } else {
     Status s;
     assert(file->fh != NULL);
