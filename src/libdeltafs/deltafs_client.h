@@ -30,7 +30,7 @@ class Client {
     int fd;
   };
 
-  Status Fopen(const Slice& path, int flags, int mode, FileInfo*);
+  Status Fopen(const Slice& path, int flags, mode_t mode, FileInfo*);
   Status Write(int fd, const Slice& data);
   Status Pwrite(int fd, const Slice& data, uint64_t off);
   Status Read(int fd, Slice* result, uint64_t size, char* buf);
@@ -44,9 +44,9 @@ class Client {
   Status Accessdir(const Slice& path, int mode);
   Status Listdir(const Slice& path, std::vector<std::string>*);
   Status Getattr(const Slice& path, Stat*);
-  Status Mkfile(const Slice& path, int mode);
-  Status Mkdir(const Slice& path, int mode);
-  Status Chmod(const Slice& path, int mode);
+  Status Mkfile(const Slice& path, mode_t mode);
+  Status Mkdir(const Slice& path, mode_t mode);
+  Status Chmod(const Slice& path, mode_t mode);
   Status Unlink(const Slice& path);
 
  private:

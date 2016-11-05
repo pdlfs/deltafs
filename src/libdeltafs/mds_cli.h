@@ -61,6 +61,11 @@ class MDS::CLI {
   uid_t uid() const { return uid_; }
   gid_t gid() const { return gid_; }
 
+  // Convenient methods for general access control
+  bool IsReadOk(const Stat*);
+  bool IsWriteOk(const Stat*);
+  bool IsExecOk(const Stat*);
+
  private:
   CLI(const MDSCliOptions&);
 
@@ -88,14 +93,10 @@ class MDS::CLI {
     gid_t gid;
   };
   Status ResolvePath(const Slice& path, PathInfo*);
-
   // Convenient methods for permission checking
   bool IsReadDirOk(const PathInfo*);
   bool IsWriteDirOk(const PathInfo*);
   bool IsLookupOk(const PathInfo*);
-  bool IsReadOk(const Stat*);
-  bool IsWriteOk(const Stat*);
-  bool IsExecOk(const Stat*);
 
   typedef LookupCache::Handle LookupHandle;
   Status Lookup(const DirId&, const Slice& name, int zserver, uint64_t op_due,

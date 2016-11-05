@@ -32,8 +32,8 @@ static inline Status BadDescriptor() {
   return Status::InvalidFileDescriptor(Slice());
 }
 
-static inline Status PermissionDenied() {
-  return Status::AccessDenied(Slice());
+static inline Status FileReadWritePermissionDenied() {
+  return Status::InvalidFileDescriptor(Slice());
 }
 
 Client::Client() {
@@ -138,15 +138,21 @@ static Status SanitizePath(Slice* path, std::string* scratch) {
 // to represent the file. The current length of the file is also returned along
 // with the file descriptor.
 // Only a fixed amount of file can be opened simultaneously.
-// It is also possible that a process may open a same file multiple times
-// and obtain multiple file descriptors.
-Status Client::Fopen(const Slice& p, int flags, int mode, FileInfo* info) {
+// A process may open a same file multiple times and obtain multiple file
+// descriptors that point to distinct open file entries.
+// TODO: allow processed to open directories.
+Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
   Status s;
   Slice path = p;
   std::string tmp;
   s = SanitizePath(&path, &tmp);
   if (!s.ok()) {
     return s;
+  }
+
+  // XXX: enable open directories
+  if ((flags & O_DIRECTORY) == O_DIRECTORY) {
+    return Status::NotSupported("cannot open directories");
   }
 
   MutexLock ml(&mutex_);
@@ -161,35 +167,62 @@ Status Client::Fopen(const Slice& p, int flags, int mode, FileInfo* info) {
       s = mdscli_->Fcreat(path, error_if_exists, mode, &fentry);
     } else {
       s = mdscli_->Fstat(path, &fentry);
+      if (s.ok()) {
+        if (S_ISDIR(fentry.stat.FileMode())) {
+          s = Status::FileExpected(Slice());
+        }
+      }
     }
 
 #if VERBOSE >= 10
     if (s.ok()) {
-      Verbose(__LOG_ARGS__, 10, "deltafs_open: %s -> [%llu:%llu:%llu]",
+      Verbose(__LOG_ARGS__, 10, "Fopen: %s -> inode=[%llu:%llu:%llu]",
               path.c_str(), (unsigned long long)fentry.stat.RegId(),
               (unsigned long long)fentry.stat.SnapId(),
               (unsigned long long)fentry.stat.InodeNo());
     }
 #endif
 
+    // Verify I/O permissions
+    if (s.ok()) {
+      assert(S_ISREG(fentry.stat.FileMode()));
+
+      if ((flags & O_ACCMODE) != O_RDONLY) {
+        if (!mdscli_->IsWriteOk(&fentry.stat)) {
+          s = Status::AccessDenied(Slice());
+        }
+      }
+
+      if (s.ok() && (flags & O_ACCMODE) != O_WRONLY) {
+        if (!mdscli_->IsReadOk(&fentry.stat)) {
+          s = Status::AccessDenied(Slice());
+        }
+      }
+    }
+
+    // Link file objects
     Fio::Handle* fh = NULL;
-    uint64_t mtime = fentry.stat.ModifyTime();
-    uint64_t size = fentry.stat.FileSize();
+    uint64_t mtime = 0;
+    uint64_t size = 0;
     Slice fentry_encoding;
     char tmp[100];
     if (s.ok()) {
       fentry_encoding = fentry.EncodeTo(tmp);
-      if (fentry.stat.ChangeTime() >= my_time) {
-        // File doesn't exist before so we explicit create it
-        s = fio_->Creat(fentry_encoding, &fh);
-      } else {
+      mtime = fentry.stat.ModifyTime();
+      size = fentry.stat.FileSize();
+
+      if (fentry.stat.ChangeTime() < my_time) {
         const bool create_if_missing = true;  // Allow lazy object creation
         const bool truncate_if_exists =
             (flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC) == O_TRUNC;
         s = fio_->Open(fentry_encoding, create_if_missing, truncate_if_exists,
                        &mtime, &size, &fh);
+      } else {
+        // File doesn't exist before so we explicit create it
+        s = fio_->Creat(fentry_encoding, &fh);
       }
     }
+
     mutex_.Lock();
     if (s.ok()) {
       if (num_open_fds_ >= max_open_fds_) {
@@ -200,6 +233,7 @@ Status Client::Fopen(const Slice& p, int flags, int mode, FileInfo* info) {
       } else {
         fentry.stat.SetFileSize(size);
         fentry.stat.SetModifyTime(mtime);
+
         info->fd = Open(fentry_encoding, flags, fentry.stat, fh);
         info->stat = fentry.stat;
       }
@@ -211,32 +245,16 @@ Status Client::Fopen(const Slice& p, int flags, int mode, FileInfo* info) {
 bool Client::IsReadOk(const File* f) {
   if ((f->flags & O_ACCMODE) == O_WRONLY) {
     return false;
-  } else if (mdscli_->uid() == 0) {
-    return true;
-  } else if (mdscli_->uid() == f->uid && (f->mode & S_IRUSR) == S_IRUSR) {
-    return true;
-  } else if (mdscli_->gid() == f->gid && (f->mode & S_IRGRP) == S_IRGRP) {
-    return true;
-  } else if ((f->mode & S_IROTH) == S_IROTH) {
-    return true;
   } else {
-    return false;
+    return true;
   }
 }
 
 bool Client::IsWriteOk(const File* f) {
   if ((f->flags & O_ACCMODE) == O_RDONLY) {
     return false;
-  } else if (mdscli_->uid() == 0) {
-    return true;
-  } else if (mdscli_->uid() == f->uid && (f->mode & S_IWUSR) == S_IWUSR) {
-    return true;
-  } else if (mdscli_->gid() == f->gid && (f->mode & S_IWGRP) == S_IWGRP) {
-    return true;
-  } else if ((f->mode & S_IWOTH) == S_IWOTH) {
-    return true;
   } else {
-    return false;
+    return true;
   }
 }
 
@@ -289,7 +307,7 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   if (file == NULL) {
     return BadDescriptor();
   } else if (!IsWriteOk(file)) {
-    return PermissionDenied();
+    return FileReadWritePermissionDenied();
   } else {
     Status s;
     assert(file->fh != NULL);
@@ -311,7 +329,7 @@ Status Client::Write(int fd, const Slice& data) {
   if (file == NULL) {
     return BadDescriptor();
   } else if (!IsWriteOk(file)) {
-    return PermissionDenied();
+    return FileReadWritePermissionDenied();
   } else {
     Status s;
     assert(file->fh != NULL);
@@ -333,7 +351,7 @@ Status Client::Ftruncate(int fd, uint64_t len) {
   if (file == NULL) {
     return BadDescriptor();
   } else if (!IsWriteOk(file)) {
-    return PermissionDenied();
+    return FileReadWritePermissionDenied();
   } else {
     Status s;
     assert(file->fh != NULL);
@@ -397,7 +415,7 @@ Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
   if (file == NULL) {
     return BadDescriptor();
   } else if (!IsReadOk(file)) {
-    return PermissionDenied();
+    return FileReadWritePermissionDenied();
   } else {
     Status s;
     assert(file->fh != NULL);
@@ -417,7 +435,7 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
   if (file == NULL) {
     return BadDescriptor();
   } else if (!IsReadOk(file)) {
-    return PermissionDenied();
+    return FileReadWritePermissionDenied();
   } else {
     Status s;
     assert(file->fh != NULL);
@@ -528,7 +546,7 @@ Status Client::Getattr(const Slice& p, Stat* statbuf) {
   return s;
 }
 
-Status Client::Mkfile(const Slice& p, int mode) {
+Status Client::Mkfile(const Slice& p, mode_t mode) {
   Status s;
   Slice path = p;
   std::string tmp;
@@ -540,7 +558,7 @@ Status Client::Mkfile(const Slice& p, int mode) {
   return s;
 }
 
-Status Client::Mkdir(const Slice& p, int mode) {
+Status Client::Mkdir(const Slice& p, mode_t mode) {
   Status s;
   Slice path = p;
   std::string tmp;
@@ -551,7 +569,7 @@ Status Client::Mkdir(const Slice& p, int mode) {
   return s;
 }
 
-Status Client::Chmod(const Slice& p, int mode) {
+Status Client::Chmod(const Slice& p, mode_t mode) {
   Status s;
   Slice path = p;
   std::string tmp;
