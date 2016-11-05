@@ -286,7 +286,9 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
         options.session_id = session_id_;
         options.dir_id = path.pid;
         options.name_hash = DirIndex::Hash(path.name, tmp);
-        if (paranoid_checks_) options.name = path.name;
+        if (paranoid_checks_) {
+          options.name = path.name;
+        }
         FstatRet ret;
         s = _Fstat(index_cache_->Value(idxh), options, &ret);
         if (s.ok()) {
@@ -349,7 +351,7 @@ Status MDS::CLI::_Fstat(const DirIndex* idx, const FstatOptions& options,
   return s;
 }
 
-Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, int mode,
+Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, mode_t mode,
                         Fentry* ent) {
   Status s;
   char tmp[20];  // name hash buffer
@@ -447,7 +449,7 @@ Status MDS::CLI::_Fcreat(const DirIndex* idx, const FcreatOptions& options,
   return s;
 }
 
-Status MDS::CLI::Unlink(const Slice& p, bool error_not_found, Fentry* ent) {
+Status MDS::CLI::Unlink(const Slice& p, bool error_if_absent, Fentry* ent) {
   Status s;
   char tmp[20];  // name hash buffer
   PathInfo path;
@@ -470,7 +472,9 @@ Status MDS::CLI::Unlink(const Slice& p, bool error_not_found, Fentry* ent) {
         options.dir_id = path.pid;
         options.flags = error_not_found ? O_EXCL : 0;
         options.name_hash = DirIndex::Hash(path.name, tmp);
-        if (paranoid_checks_) options.name = path.name;
+        if (paranoid_checks_) {
+          options.name = path.name;
+        }
         UnlinkRet ret;
         s = _Unlink(index_cache_->Value(idxh), options, &ret);
         if (s.ok()) {
@@ -533,7 +537,7 @@ Status MDS::CLI::_Unlink(const DirIndex* idx, const UnlinkOptions& options,
   return s;
 }
 
-Status MDS::CLI::Mkdir(const Slice& p, int mode, Fentry* ent) {
+Status MDS::CLI::Mkdir(const Slice& p, mode_t mode, Fentry* ent) {
   Status s;
   char tmp[20];  // name hash buffer
   PathInfo path;
@@ -629,7 +633,7 @@ Status MDS::CLI::_Mkdir(const DirIndex* idx, const MkdirOptions& options,
   return s;
 }
 
-Status MDS::CLI::Chmod(const Slice& p, int mode, Fentry* ent) {
+Status MDS::CLI::Chmod(const Slice& p, mode_t mode, Fentry* ent) {
   Status s;
   char tmp[20];  // name hash buffer
   PathInfo path;
@@ -650,7 +654,9 @@ Status MDS::CLI::Chmod(const Slice& p, int mode, Fentry* ent) {
         options.dir_id = path.pid;
         options.mode = mode;
         options.name_hash = DirIndex::Hash(path.name, tmp);
-        if (paranoid_checks_) options.name = path.name;
+        if (paranoid_checks_) {
+          options.name = path.name;
+        }
         ChmodRet ret;
         s = _Chmod(index_cache_->Value(idxh), options, &ret);
         if (s.ok()) {
