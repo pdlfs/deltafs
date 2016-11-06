@@ -24,9 +24,6 @@ extern "C" {
 
 static pdlfs::port::OnceType once = PDLFS_ONCE_INIT;
 static pdlfs::Client* client = NULL;
-namespace pdlfs {
-typedef Client::FileInfo FileInfo;
-}
 static inline int NoClient() {
   // XXX: Use no-such-device to indicate failure
   errno = ENODEV;
@@ -39,18 +36,6 @@ static void InitClient() {
     Error(__LOG_ARGS__, "cannot open deltafs client :%s", s.ToString().c_str());
     client = NULL;
   }
-}
-
-static inline void CopyStat(const pdlfs::Stat& stat, struct stat* buf) {
-  buf->st_ino = stat.InodeNo();
-  buf->st_size = stat.FileSize();
-  buf->st_mode = stat.FileMode();
-  buf->st_gid = stat.GroupId();
-  buf->st_uid = stat.UserId();
-  time_t time = stat.ModifyTime() / 1000000;
-  buf->st_mtime = time;
-  buf->st_atime = time;
-  buf->st_ctime = time;
 }
 
 static void SetErrno(const pdlfs::Status& s) {
@@ -92,7 +77,7 @@ int deltafs_open(const char* __path, int __oflags, mode_t __mode,
   s = client->Fopen(__path, __oflags, __mode, &info);
   if (s.ok()) {
     if (__buf != NULL) {
-      CopyStat(info.stat, __buf);
+      pdlfs::__copy_stat(info.stat, __buf);
     }
     return info.fd;
   } else {
@@ -182,7 +167,7 @@ int deltafs_fstat(int __fd, struct stat* __buf) {
   pdlfs::Status s;
   s = client->Fstat(__fd, &stat);
   if (s.ok()) {
-    CopyStat(stat, __buf);
+    pdlfs::__copy_stat(stat, __buf);
     return 0;
   } else {
     SetErrno(s);
@@ -309,7 +294,7 @@ int deltafs_stat(const char* __path, struct stat* __buf) {
   } else {
     s = client->Getattr(__path, &stat);
     if (s.ok()) {
-      CopyStat(stat, __buf);
+      pdlfs::__copy_stat(stat, __buf);
       return 0;
     } else {
       SetErrno(s);

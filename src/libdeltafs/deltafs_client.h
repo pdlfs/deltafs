@@ -12,6 +12,7 @@
 #include "pdlfs-common/fio.h"
 #include "pdlfs-common/map.h"
 
+#include "deltafs_format.h"
 #include "mds_cli.h"
 #include "mds_factory.h"
 
@@ -24,11 +25,6 @@ class Client {
  public:
   static Status Open(Client**);
   ~Client();
-
-  struct FileInfo {
-    Stat stat;
-    int fd;
-  };
 
   Status Fopen(const Slice& path, int flags, mode_t mode, FileInfo*);
   Status Write(int fd, const Slice& data);
