@@ -214,65 +214,79 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
   result->mode = mode;
   result->uid = 0;
   result->gid = 0;
-  if (input.size() == 1) {
-    return s;  // Done; path is root
-  }
 
   input.remove_prefix(1);
-  result->depth++;
-  assert(!input.ends_with("/"));
-  PathInfo backup = *result;
-  const char* p = strchr(input.c_str(), '/');
-  for (; p != NULL; p = strchr(input.c_str(), '/')) {
-    const char* q = input.c_str();
-    input.remove_prefix(p - q + 1);
-    Slice name = Slice(q, p - q);
-    if (!name.empty()) {
-      if (!IsLookupOk(result)) {
-        s = Status::AccessDenied(Slice());
-      } else if (name == "..") {
-        *result = backup;  // Roll back to grandparent
-      } else if (name == ".") {
-        // Do nothing
-      } else {
-        backup = *result;
-        result->depth++;
-        LookupHandle* lh = NULL;
-        s = Lookup(result->pid, name, result->zserver, result->lease_due, &lh);
-        if (s.ok()) {
-          assert(lh != NULL);
-          const LookupStat* stat = lookup_cache_->Value(lh);
-          assert(stat != NULL);
-          result->pid = DirId(stat->RegId(), stat->SnapId(), stat->InodeNo());
-          result->zserver = stat->ZerothServer();
-          if (result->lease_due > stat->LeaseDue()) {
-            result->lease_due = stat->LeaseDue();
+  PathInfo grandgrand_parent = *result;
+  PathInfo grand_parent = *result;
+  if (!input.empty()) {
+    // Start regular path resolution
+    assert(!input.ends_with("/"));
+    const char* p = strchr(input.c_str(), '/');
+    for (; p != NULL; p = strchr(input.c_str(), '/')) {
+      const char* q = input.c_str();
+      input.remove_prefix(p - q + 1);
+      Slice name = Slice(q, p - q);
+      if (!name.empty()) {
+        if (!IsLookupOk(result)) {
+          s = Status::AccessDenied(Slice());
+        } else if (name == "..") {
+          *result = grand_parent;  // Roll back to grandparent
+        } else if (name == ".") {
+          // Do nothing
+        } else {
+          grand_parent.name = result->name;
+          grand_parent.depth = result->depth;
+          grandgrand_parent = grand_parent;
+          result->name = name;
+          result->depth++;
+          grand_parent = *result;
+          LookupHandle* lh = NULL;
+          s = Lookup(result->pid, name, result->zserver, result->lease_due,
+                     &lh);
+          if (s.ok()) {
+            assert(lh != NULL);
+            const LookupStat* stat = lookup_cache_->Value(lh);
+            assert(stat != NULL);
+            result->pid = DirId(stat->RegId(), stat->SnapId(), stat->InodeNo());
+            result->zserver = stat->ZerothServer();
+            if (result->lease_due > stat->LeaseDue()) {
+              result->lease_due = stat->LeaseDue();
+            }
+            result->mode = stat->DirMode();
+            result->uid = stat->UserId();
+            result->gid = stat->GroupId();
+
+            lookup_cache_->Release(lh);
           }
-          result->mode = stat->DirMode();
-          result->uid = stat->UserId();
-          result->gid = stat->GroupId();
-
-          lookup_cache_->Release(lh);
         }
-      }
 
-      if (!s.ok()) {
-        break;
+        if (!s.ok()) {
+          break;
+        }
       }
     }
   }
 
   if (s.ok()) {
-    if (!IsLookupOk(result)) {
-      s = Status::AccessDenied(Slice());
-    } else {
+    if (!input.empty()) {
+      if (!IsLookupOk(result)) {
+        s = Status::AccessDenied(Slice());
+      } else if (input == "..") {
+        *result = grandgrand_parent;
+      } else if (input == ".") {
+        *result = grand_parent;
+      } else {
+        result->name = input;
+        result->depth++;
+      }
+    }
+
+    if (s.ok()) {
 #if VERBOSE >= 8
       Verbose(__LOG_ARGS__, 8, "ResolvePath '%s': pid=%s, name=%s, depth=%d",
-              path.c_str(), result->pid.DebugString().c_str(), input.c_str(),
-              result->depth);
+              path.c_str(), result->pid.DebugString().c_str(),
+              result->name.ToString().c_str(), result->depth);
 #endif
-
-      result->name = input;
     }
   }
 
