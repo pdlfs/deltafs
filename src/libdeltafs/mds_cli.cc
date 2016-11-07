@@ -221,6 +221,7 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
   input.remove_prefix(1);
   result->depth++;
   assert(!input.ends_with("/"));
+  PathInfo backup = *result;
   const char* p = strchr(input.c_str(), '/');
   for (; p != NULL; p = strchr(input.c_str(), '/')) {
     const char* q = input.c_str();
@@ -229,7 +230,12 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
     if (!name.empty()) {
       if (!IsLookupOk(result)) {
         s = Status::AccessDenied(Slice());
+      } else if (name == "..") {
+        *result = backup;  // Roll back to grandparent
+      } else if (name == ".") {
+        // Do nothing
       } else {
+        backup = *result;
         result->depth++;
         LookupHandle* lh = NULL;
         s = Lookup(result->pid, name, result->zserver, result->lease_due, &lh);
@@ -260,9 +266,16 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
     if (!IsLookupOk(result)) {
       s = Status::AccessDenied(Slice());
     } else {
+#if VERBOSE >= 8
+      Verbose(__LOG_ARGS__, 8, "ResolvePath '%s': pid=%s, name=%s, depth=%d",
+              path.c_str(), result->pid.DebugString().c_str(), input.c_str(),
+              result->depth);
+#endif
+
       result->name = input;
     }
   }
+
   return s;
 }
 
