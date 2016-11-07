@@ -218,6 +218,8 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
   input.remove_prefix(1);
   PathInfo grandgrand_parent = *result;
   PathInfo grand_parent = *result;
+  uint64_t lease_due = result->lease_due;
+  int depth = result->depth;
   if (!input.empty()) {
     // Start regular path resolution
     assert(!input.ends_with("/"));
@@ -230,28 +232,26 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
         if (!IsLookupOk(result)) {
           s = Status::AccessDenied(Slice());
         } else if (name == "..") {
+          if (depth > 0) depth--;
           *result = grand_parent;  // Roll back to grandparent
         } else if (name == ".") {
           // Do nothing
         } else {
+          depth++;
           grand_parent.name = result->name;
-          grand_parent.depth = result->depth;
           grandgrand_parent = grand_parent;
           result->name = name;
-          result->depth++;
           grand_parent = *result;
           LookupHandle* lh = NULL;
-          s = Lookup(result->pid, name, result->zserver, result->lease_due,
-                     &lh);
+          s = Lookup(result->pid, name, result->zserver, lease_due, &lh);
           if (s.ok()) {
             assert(lh != NULL);
             const LookupStat* stat = lookup_cache_->Value(lh);
             assert(stat != NULL);
+
+            lease_due = std::min(lease_due, stat->LeaseDue());
             result->pid = DirId(stat->RegId(), stat->SnapId(), stat->InodeNo());
             result->zserver = stat->ZerothServer();
-            if (result->lease_due > stat->LeaseDue()) {
-              result->lease_due = stat->LeaseDue();
-            }
             result->mode = stat->DirMode();
             result->uid = stat->UserId();
             result->gid = stat->GroupId();
@@ -272,16 +272,22 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
       if (!IsLookupOk(result)) {
         s = Status::AccessDenied(Slice());
       } else if (input == "..") {
+        if (depth > 0) depth--;
+        if (depth > 0) depth--;
         *result = grandgrand_parent;
       } else if (input == ".") {
+        if (depth > 0) depth--;
         *result = grand_parent;
       } else {
         result->name = input;
-        result->depth++;
+        depth++;
       }
     }
 
     if (s.ok()) {
+      result->lease_due = lease_due;
+      result->depth = depth;
+
 #if VERBOSE >= 8
       Verbose(__LOG_ARGS__, 8, "ResolvePath '%s': pid=%s, name=%s, depth=%d",
               path.c_str(), result->pid.DebugString().c_str(),
