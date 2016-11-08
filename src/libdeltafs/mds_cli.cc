@@ -382,8 +382,8 @@ Status MDS::CLI::_Fstat(const DirIndex* idx, const FstatOptions& options,
   return s;
 }
 
-Status MDS::CLI::Fcreat(const Slice& p, bool error_if_exists, mode_t mode,
-                        Fentry* ent) {
+Status MDS::CLI::Fcreat(const Slice& p, mode_t mode, Fentry* ent,
+                        bool error_if_exists) {
   Status s;
   char tmp[20];  // name hash buffer
   PathInfo path;
@@ -480,7 +480,7 @@ Status MDS::CLI::_Fcreat(const DirIndex* idx, const FcreatOptions& options,
   return s;
 }
 
-Status MDS::CLI::Unlink(const Slice& p, bool error_if_absent, Fentry* ent) {
+Status MDS::CLI::Unlink(const Slice& p, Fentry* ent, bool error_if_absent) {
   Status s;
   char tmp[20];  // name hash buffer
   PathInfo path;
@@ -568,8 +568,8 @@ Status MDS::CLI::_Unlink(const DirIndex* idx, const UnlinkOptions& options,
   return s;
 }
 
-Status MDS::CLI::Mkdir(const Slice& p, bool error_if_exists, mode_t mode,
-                       Fentry* ent) {
+Status MDS::CLI::Mkdir(const Slice& p, mode_t mode, Fentry* ent,
+                       bool error_if_exists) {
   Status s;
   char tmp[20];  // name hash buffer
   PathInfo path;

@@ -49,11 +49,14 @@ class MDS::CLI {
   ~CLI();
 
   Status Fstat(const Slice& path, Fentry*);
-  Status Fcreat(const Slice& path, bool error_if_exists, mode_t mode, Fentry*);
+  Status Fcreat(const Slice& path, mode_t mode, Fentry* result = NULL,
+                bool error_if_exists = true);
   Status Ftruncate(const Fentry&, uint64_t mtime, uint64_t size);
-  Status Mkdir(const Slice& path, bool error_if_exists, mode_t mode, Fentry*);
-  Status Chmod(const Slice& path, mode_t mode, Fentry*);
-  Status Unlink(const Slice& path, bool error_if_absent, Fentry*);
+  Status Mkdir(const Slice& path, mode_t mode, Fentry* result = NULL,
+               bool error_if_exists = true);
+  Status Chmod(const Slice& path, mode_t mode, Fentry* result = NULL);
+  Status Unlink(const Slice& path, Fentry* result = NULL,
+                bool error_if_absent = true);
   Status Listdir(const Slice& path, std::vector<std::string>* names);
   Status Accessdir(const Slice& path, int mode);
   Status Access(const Slice& path, int mode);

@@ -167,7 +167,7 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
     uint64_t my_time = Env::Default()->NowMicros();
     if ((flags & O_CREAT) == O_CREAT) {
       const bool error_if_exists = (flags & O_EXCL) == O_EXCL;
-      s = mdscli_->Fcreat(path, error_if_exists, mode, &fentry);
+      s = mdscli_->Fcreat(path, mode, &fentry, error_if_exists);
     } else {
       s = mdscli_->Fstat(path, &fentry);
       if (s.ok()) {
@@ -568,11 +568,15 @@ Status Client::Mkfile(const Slice& p, mode_t mode) {
   Status s;
   Slice path = p;
   std::string tmp;
-  static const bool error_if_exists = true;
   s = SanitizePath(&path, &tmp);
   if (s.ok()) {
-    s = mdscli_->Fcreat(path, error_if_exists, mode, NULL);
+    s = mdscli_->Fcreat(path, mode);
   }
+
+#if VERBOSE >= 8
+  Verbose(__LOG_ARGS__, 8, "Mkfile '%s': %s", p.c_str(), C_STR(s));
+#endif
+
   return s;
 }
 
@@ -580,10 +584,9 @@ Status Client::Mkdir(const Slice& p, mode_t mode) {
   Status s;
   Slice path = p;
   std::string tmp;
-  bool error_if_exists = true;
   s = SanitizePath(&path, &tmp);
   if (s.ok()) {
-    s = mdscli_->Mkdir(path, error_if_exists, mode, NULL);
+    s = mdscli_->Mkdir(path, mode);
   }
 
 #if VERBOSE >= 8
@@ -599,8 +602,13 @@ Status Client::Chmod(const Slice& p, mode_t mode) {
   std::string tmp;
   s = SanitizePath(&path, &tmp);
   if (s.ok()) {
-    s = mdscli_->Chmod(path, mode, NULL);
+    s = mdscli_->Chmod(path, mode);
   }
+
+#if VERBOSE >= 8
+  Verbose(__LOG_ARGS__, 8, "Chmod '%s': %s", p.c_str(), C_STR(s));
+#endif
+
   return s;
 }
 
@@ -608,11 +616,10 @@ Status Client::Unlink(const Slice& p) {
   Status s;
   Slice path = p;
   std::string tmp;
-  static const bool error_not_found = true;
   s = SanitizePath(&path, &tmp);
   Fentry fentry;
   if (s.ok()) {
-    s = mdscli_->Unlink(path, error_not_found, &fentry);
+    s = mdscli_->Unlink(path, &fentry);
     if (s.ok()) {
       char tmp[100];
       Slice fentry_encoding = fentry.EncodeTo(tmp);
@@ -620,6 +627,11 @@ Status Client::Unlink(const Slice& p) {
       fio_->Drop(fentry_encoding);
     }
   }
+
+#if VERBOSE >= 8
+  Verbose(__LOG_ARGS__, 8, "Unlink '%s': %s", p.c_str(), C_STR(s));
+#endif
+
   return s;
 }
 
