@@ -188,12 +188,12 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
   const DirId& dir_id = options.dir_id;
   const Slice& name_hash = options.name_hash;
   if (name_hash.empty()) {
-    s = Status::InvalidArgument(Slice("empty name hash"));
+    s = Status::InvalidArgument("empty name hash");
   } else if (paranoid_checks_ && !options.name.empty()) {
     std::string tmp;
     DirIndex::PutHash(&tmp, options.name);
     if (name_hash.compare(tmp) != 0) {
-      s = Status::Corruption(Slice("name and hash don't match"));
+      s = Status::InvalidArgument("name and hash don't match");
     }
   }
 
@@ -226,7 +226,17 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
 
         Slice name;
         s = mdb_->GetNode(dir_id, name_hash, &ret->stat, &name, mdb_tx);
-        // TODO: paranoid checks
+
+        if (s.ok() && paranoid_checks_) {
+          std::string tmp;
+          DirIndex::PutHash(&tmp, name);
+          if (name_hash.compare(tmp) != 0) {
+            s = Status::Corruption("name and hash don't match");
+          }
+
+          Error(__LOG_ARGS__, "%s/%s: %s", options.dir_id.DebugString().c_str(),
+                name.ToString().c_str(), s.ToString().c_str());
+        }
 
         mutex_.Lock();
         if (tx != NULL) {
@@ -274,7 +284,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
     std::string tmp;
     DirIndex::PutHash(&tmp, options.name);
     if (name_hash.compare(tmp) != 0) {
-      s = Status::Corruption("name and hash don't match");
+      s = Status::InvalidArgument("name and hash don't match");
     }
   }
 
@@ -316,9 +326,22 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
             s = Status::AlreadyExists(Slice());
           } else if (!S_ISREG(stat->FileMode())) {
             s = Status::FileExpected(Slice());
-          } else {
-            // TODO: paranoid checks
           }
+
+          if (paranoid_checks_) {
+            std::string tmp;
+            DirIndex::PutHash(&tmp, name);
+            if (name_hash.compare(tmp) != 0) {
+              if (s.ok()) {
+                s = Status::Corruption("name and hash don't match");
+              }
+
+              Error(__LOG_ARGS__, "%s/%s: %s",
+                    options.dir_id.DebugString().c_str(),
+                    name.ToString().c_str(), s.ToString().c_str());
+            }
+          }
+
           entry_exists = true;
         } else if (s.IsNotFound()) {
           uint32_t mode = S_IFREG | (options.mode & ACCESSPERMS);
@@ -335,15 +358,17 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
           s = mdb_->SetNode(dir_id, name_hash, *stat, options.name, mdb_tx);
         }
 
-        if (s.ok() && !entry_exists) {
-          DirInfo dir_info;
-          dir_info.mtime = my_time;
-          dir_info.size = 1 + d->size;
-          s = mdb_->SetInfo(dir_id, dir_info, mdb_tx);
-        }
+        if (!entry_exists) {
+          if (s.ok()) {
+            DirInfo dir_info;
+            dir_info.mtime = my_time;
+            dir_info.size = 1 + d->size;
+            s = mdb_->SetInfo(dir_id, dir_info, mdb_tx);
+          }
 
-        if (s.ok() && !entry_exists) {
-          s = mdb_->Commit(mdb_tx);
+          if (s.ok()) {
+            s = mdb_->Commit(mdb_tx);
+          }
         }
 
         mutex_.Lock();
@@ -393,12 +418,12 @@ Status MDS::SRV::Unlink(const UnlinkOptions& options, UnlinkRet* ret) {
   const DirId& dir_id = options.dir_id;
   const Slice& name_hash = options.name_hash;
   if (name_hash.empty()) {
-    s = Status::InvalidArgument(Slice("empty name hash"));
+    s = Status::InvalidArgument("empty name hash");
   } else if (paranoid_checks_ && !options.name.empty()) {
     std::string tmp;
     DirIndex::PutHash(&tmp, options.name);
     if (name_hash.compare(tmp) != 0) {
-      s = Status::Corruption(Slice("name and hash don't match"));
+      s = Status::InvalidArgument("name and hash don't match");
     }
   }
 
@@ -434,7 +459,18 @@ Status MDS::SRV::Unlink(const UnlinkOptions& options, UnlinkRet* ret) {
         Stat* stat = &ret->stat;
         Slice name;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
-        // TODO: paranoid checks
+
+        if (s.ok() && paranoid_checks_) {
+          std::string tmp;
+          DirIndex::PutHash(&tmp, name);
+          if (name_hash.compare(tmp) != 0) {
+            s = Status::Corruption("name and hash don't match");
+          }
+
+          Error(__LOG_ARGS__, "%s/%s: %s", options.dir_id.DebugString().c_str(),
+                name.ToString().c_str(), s.ToString().c_str());
+        }
+
         if (s.ok()) {
           if (!S_ISREG(stat->FileMode())) {
             s = Status::FileExpected(Slice());
@@ -459,16 +495,17 @@ Status MDS::SRV::Unlink(const UnlinkOptions& options, UnlinkRet* ret) {
           }
         }
 
-        // TODO: online fsck
-        if (s.ok() && entry_exists) {
-          DirInfo dir_info;
-          dir_info.mtime = my_time;
-          dir_info.size = d->size - 1;
-          s = mdb_->SetInfo(dir_id, dir_info, mdb_tx);
-        }
+        if (entry_exists) {
+          if (s.ok()) {
+            DirInfo dir_info;
+            dir_info.mtime = my_time;
+            dir_info.size = d->size - 1;
+            s = mdb_->SetInfo(dir_id, dir_info, mdb_tx);
+          }
 
-        if (s.ok() && entry_exists) {
-          s = mdb_->Commit(mdb_tx);
+          if (s.ok()) {
+            s = mdb_->Commit(mdb_tx);
+          }
         }
 
         mutex_.Lock();
@@ -564,13 +601,22 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
             s = Status::AlreadyExists(Slice());
           } else if (!S_ISDIR(stat->FileMode())) {
             s = Status::DirExpected(Slice());
-          } else if (paranoid_checks_) {
+          }
+
+          if (paranoid_checks_) {
             std::string tmp;
             DirIndex::PutHash(&tmp, name);
             if (name_hash.compare(tmp) != 0) {
-              s = Status::Corruption("name and hash don't match");
+              if (s.ok()) {
+                s = Status::Corruption("name and hash don't match");
+              }
+
+              Error(__LOG_ARGS__, "%s/%s: %s",
+                    options.dir_id.DebugString().c_str(),
+                    name.ToString().c_str(), s.ToString().c_str());
             }
           }
+
           entry_exists = true;
         } else if (s.IsNotFound()) {
           uint32_t mode = S_IFDIR | (options.mode & ACCESSPERMS);
