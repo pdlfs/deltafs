@@ -26,6 +26,8 @@ struct DirId {
 #if !defined(DELTAFS)
   DirId(uint64_t ino) : ino(ino) {}
 #endif
+  DirId(const LookupStat& stat)
+      : reg(stat.RegId()), snap(stat.SnapId()), ino(stat.InodeNo()) {}
   DirId(uint64_t reg, uint64_t snap, uint64_t ino)
       : reg(reg), snap(snap), ino(ino) {}
 
