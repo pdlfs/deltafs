@@ -93,6 +93,7 @@ class MDS {
   MDS_OP(Fcreat)
 
   MDS_OP_OPTIONS(Mkdir) {
+    uint32_t flags;
     uint32_t mode;
     uint32_t uid;
     uint32_t gid;
