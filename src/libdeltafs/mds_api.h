@@ -19,6 +19,7 @@
 #include "pdlfs-common/strutil.h"
 
 namespace pdlfs {
+#define DELTAFS_NAME_MAX 255 /* Max number of chars in a file name */
 
 // The farthest time in future.
 static const uint64_t kMaxMicros = ((0x1ull << 63) - 1);

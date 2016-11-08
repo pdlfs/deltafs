@@ -121,15 +121,18 @@ class MDS::CLI {
   int uid_;
   int gid_;
 
+  friend class MDS;
   // State below is protected by mutex_
   port::Mutex mutex_;
   LookupCache* lookup_cache_;
   IndexCache* index_cache_;
-
-  friend class MDS;
   // No copying allowed
   void operator=(const CLI&);
   CLI(const CLI&);
+
+  static Status NameTooLong() {
+    return Status::InvalidArgument("file name too long");
+  }
 };
 
 }  // namespace pdlfs

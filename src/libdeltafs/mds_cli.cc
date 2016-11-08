@@ -394,6 +394,8 @@ Status MDS::CLI::Fcreat(const Slice& p, mode_t mode, Fentry* ent,
       s = Status::AlreadyExists(Slice());
     } else if (!IsWriteDirOk(&path)) {
       s = Status::AccessDenied(Slice());
+    } else if (path.name.size() > DELTAFS_NAME_MAX) {
+      s = NameTooLong();
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
@@ -580,6 +582,8 @@ Status MDS::CLI::Mkdir(const Slice& p, mode_t mode, Fentry* ent,
       s = Status::AlreadyExists(Slice());
     } else if (!IsWriteDirOk(&path)) {
       s = Status::AccessDenied(Slice());
+    } else if (path.name.size() > DELTAFS_NAME_MAX) {
+      s = NameTooLong();
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
@@ -959,11 +963,9 @@ Status MDS::CLI::Access(const Slice& p, int mode) {
   Fentry entry;
   s = Fstat(p, &entry);
   if (s.ok()) {
-    if ((mode & R_OK) == R_OK && !IsReadOk(&entry.stat)) {
-      s = Status::AccessDenied(Slice());
-    } else if ((mode & W_OK) == W_OK && !IsWriteOk(&entry.stat)) {
-      s = Status::AccessDenied(Slice());
-    } else if ((mode & X_OK) == X_OK && !IsExecOk(&entry.stat)) {
+    if (((mode & R_OK) == R_OK && !IsReadOk(&entry.stat)) ||
+        ((mode & W_OK) == W_OK && !IsWriteOk(&entry.stat)) ||
+        ((mode & X_OK) == X_OK && !IsExecOk(&entry.stat))) {
       s = Status::AccessDenied(Slice());
     }
   }
