@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
       fprintf(stdout,
               "  File: '%s'\n"
               "  Mode: %s\n"
-              "Access: %o\tUser: %s\tGroup: %s\n"
+              "Access: %o  User: %s  Group: %s\n"
               " Mtime: %s"
               "  Size: %llu Bytes\n"
               " Inode: %llu\n",
