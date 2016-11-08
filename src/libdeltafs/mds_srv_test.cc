@@ -100,6 +100,7 @@ class ServerTest {
   int Mkdir(int dir_ino, int nod_no) {
     MDS::MkdirOptions options;
     options.dir_id = DirId(0, 0, dir_ino);
+    options.flags = O_EXCL;
     options.mode = ACCESSPERMS;
     options.uid = 0;
     options.gid = 0;

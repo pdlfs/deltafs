@@ -287,7 +287,7 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
       result->depth = depth;
 
 #if VERBOSE >= 8
-      Verbose(__LOG_ARGS__, 8, "ResolvePath '%s': pid=%s, name=%s, depth=%d",
+      Verbose(__LOG_ARGS__, 8, "ResolvePath '%s' -> pid=%s, name=%s, depth=%d",
               path.c_str(), result->pid.DebugString().c_str(),
               result->name.ToString().c_str(), result->depth);
 #endif
@@ -568,7 +568,8 @@ Status MDS::CLI::_Unlink(const DirIndex* idx, const UnlinkOptions& options,
   return s;
 }
 
-Status MDS::CLI::Mkdir(const Slice& p, mode_t mode, Fentry* ent) {
+Status MDS::CLI::Mkdir(const Slice& p, bool error_if_exists, mode_t mode,
+                       Fentry* ent) {
   Status s;
   char tmp[20];  // name hash buffer
   PathInfo path;
@@ -589,6 +590,7 @@ Status MDS::CLI::Mkdir(const Slice& p, mode_t mode, Fentry* ent) {
         options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
         options.session_id = session_id_;
         options.dir_id = path.pid;
+        options.flags = error_if_exists ? O_EXCL : 0;
         options.mode = mode;
         options.uid = uid_;
         options.gid = gid_;

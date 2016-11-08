@@ -580,10 +580,16 @@ Status Client::Mkdir(const Slice& p, mode_t mode) {
   Status s;
   Slice path = p;
   std::string tmp;
+  bool error_if_exists = true;
   s = SanitizePath(&path, &tmp);
   if (s.ok()) {
-    s = mdscli_->Mkdir(path, mode, NULL);
+    s = mdscli_->Mkdir(path, error_if_exists, mode, NULL);
   }
+
+#if VERBOSE >= 8
+  Verbose(__LOG_ARGS__, 8, "Mkdir '%s': %s", p.c_str(), C_STR(s));
+#endif
+
   return s;
 }
 

@@ -516,12 +516,12 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
   const DirId& dir_id = options.dir_id;
   const Slice& name_hash = options.name_hash;
   if (name_hash.empty() || options.name.empty()) {
-    s = Status::InvalidArgument(Slice());
+    s = Status::InvalidArgument("empty name and hash");
   } else if (paranoid_checks_) {
     std::string tmp;
     DirIndex::PutHash(&tmp, options.name);
     if (name_hash.compare(tmp) != 0) {
-      s = Status::Corruption(Slice());
+      s = Status::InvalidArgument("name and hash don't match");
     }
   }
 
@@ -533,6 +533,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
       Dir::Guard guard(dirs_, ref);
       Dir* const d = ref->value;
       assert(d != NULL);
+      DirLock dl(d);
       s = ProbeDir(d);
       if (s.ok()) {
         int srv_id = d->index.HashToServer(name_hash);
@@ -543,6 +544,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         }
       }
       if (s.ok()) {
+        bool entry_exists = false;
         uint64_t my_time = NowMicros();
         uint64_t my_ino = NextIno();
         DirId my_id(reg_id_, snap_id_, my_ino);
@@ -554,10 +556,23 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         d->tx.Release_Store(tx);
         MDB::Tx* mdb_tx = tx->rep();
 
-        if (mdb_->Exists(dir_id, name_hash, mdb_tx)) {
-          s = Status::AlreadyExists(Slice());
-        } else {
-          Stat* stat = &ret->stat;
+        Stat* stat = &ret->stat;
+        Slice name;
+        s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
+        if (s.ok()) {
+          if ((options.flags & O_EXCL) == O_EXCL) {
+            s = Status::AlreadyExists(Slice());
+          } else if (!S_ISDIR(stat->FileMode())) {
+            s = Status::DirExpected(Slice());
+          } else if (paranoid_checks_) {
+            std::string tmp;
+            DirIndex::PutHash(&tmp, name);
+            if (name_hash.compare(tmp) != 0) {
+              s = Status::Corruption("name and hash don't match");
+            }
+          }
+          entry_exists = true;
+        } else if (s.IsNotFound()) {
           uint32_t mode = S_IFDIR | (options.mode & ACCESSPERMS);
           int rserver = PickupServer(my_id);
           int zserver = rserver % giga_.num_virtual_servers;
@@ -574,19 +589,21 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
           s = mdb_->SetNode(dir_id, name_hash, *stat, options.name, mdb_tx);
         }
 
-        if (s.ok()) {
-          DirInfo dir_info;
-          dir_info.mtime = my_time;
-          dir_info.size = 1 + d->size;
-          s = mdb_->SetInfo(dir_id, dir_info, mdb_tx);
-        }
+        if (!entry_exists) {
+          if (s.ok()) {
+            DirInfo dir_info;
+            dir_info.mtime = my_time;
+            dir_info.size = 1 + d->size;
+            s = mdb_->SetInfo(dir_id, dir_info, mdb_tx);
+          }
 
-        if (s.ok()) {
-          s = mdb_->Commit(mdb_tx);
+          if (s.ok()) {
+            s = mdb_->Commit(mdb_tx);
+          }
         }
 
         mutex_.Lock();
-        if (s.ok()) {
+        if (s.ok() && !entry_exists) {
           d->size = 1 + d->size;
           assert(my_time >= d->mtime);
           d->mtime = my_time;
