@@ -216,8 +216,7 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
   result->gid = 0;
 
   input.remove_prefix(1);
-  PathInfo grandgrand_parent = *result;
-  PathInfo grand_parent = *result;
+  std::vector<PathInfo> parents(2, *result);
   uint64_t lease_due = result->lease_due;
   int depth = result->depth;
   if (!input.empty()) {
@@ -232,25 +231,24 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
         if (!IsLookupOk(result)) {
           s = Status::AccessDenied(Slice());
         } else if (name == "..") {
+          assert(depth + 1 < parents.size());
+          *result = parents[depth + 1];  // grand parent
           if (depth > 0) depth--;
-          *result = grand_parent;  // Roll back to grandparent
         } else if (name == ".") {
           // Do nothing
         } else {
           depth++;
-          grand_parent.name = result->name;
-          grandgrand_parent = grand_parent;
           result->name = name;
-          grand_parent = *result;
+          parents.push_back(*result);
           LookupHandle* lh = NULL;
           s = Lookup(result->pid, name, result->zserver, lease_due, &lh);
           if (s.ok()) {
             assert(lh != NULL);
             const LookupStat* stat = lookup_cache_->Value(lh);
             assert(stat != NULL);
-
             lease_due = std::min(lease_due, stat->LeaseDue());
-            result->pid = DirId(stat->RegId(), stat->SnapId(), stat->InodeNo());
+
+            result->pid = DirId(*stat);
             result->zserver = stat->ZerothServer();
             result->mode = stat->DirMode();
             result->uid = stat->UserId();
@@ -272,12 +270,12 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
       if (!IsLookupOk(result)) {
         s = Status::AccessDenied(Slice());
       } else if (input == "..") {
+        assert(depth < parents.size());
+        *result = parents[depth];  // grand grand parent
         if (depth > 0) depth--;
-        if (depth > 0) depth--;
-        *result = grandgrand_parent;
       } else if (input == ".") {
-        if (depth > 0) depth--;
-        *result = grand_parent;
+        assert(depth + 1 < parents.size());
+        *result = parents[depth + 1];  // grand parent
       } else {
         result->name = input;
         depth++;
