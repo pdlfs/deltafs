@@ -125,7 +125,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
       logfile_number_(0),
       log_(NULL),
       seed_(0),
-      bg_compaction_paused_(false),
+      bg_compaction_paused_(0),
       bg_compaction_scheduled_(false),
       bulk_insert_in_progress_(false),
       manual_compaction_(NULL) {
@@ -700,13 +700,12 @@ void DBImpl::BackgroundCall() {
   } else if (!bg_error_.ok()) {
     // No more background work after a background error.
   } else if (bulk_insert_in_progress_) {
-    // Abort
+    // Yield to bulk insertion
   } else {
     BackgroundCompaction();
   }
 
   bg_compaction_scheduled_ = false;
-
   // Previous compaction may have produced too many files in a level,
   // so reschedule another compaction if needed.
   MaybeScheduleCompaction();
@@ -1336,7 +1335,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       mutex_.Lock();
     } else {
       // Temporarily disable any background compaction
-      bg_compaction_paused_ = true;
+      bg_compaction_paused_++;
       while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
         bg_cv_.Wait();
       }
@@ -1370,9 +1369,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
       mem->Unref();
       bulk_insert_in_progress_ = false;
-
       // Restart background compaction
-      bg_compaction_paused_ = false;
+      assert(bg_compaction_paused_ > 0);
+      bg_compaction_paused_--;
       MaybeScheduleCompaction();
       bg_cv_.SignalAll();
     }
@@ -1551,10 +1550,10 @@ Status DBImpl::BulkInsert(Iterator* iter) {
   Status s;
   SequenceNumber min_seq;
   SequenceNumber max_seq;
-  MutexLock l(&mutex_);
 
+  MutexLock l(&mutex_);
   // Temporarily disable any background compaction
-  bg_compaction_paused_ = true;
+  bg_compaction_paused_++;
   while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
     bg_cv_.Wait();
   }
@@ -1577,9 +1576,9 @@ Status DBImpl::BulkInsert(Iterator* iter) {
   }
 
   bulk_insert_in_progress_ = false;
-
   // Restart background compaction
-  bg_compaction_paused_ = false;
+  assert(bg_compaction_paused_ > 0);
+  bg_compaction_paused_--;
   MaybeScheduleCompaction();
   bg_cv_.SignalAll();
   return s;
@@ -1882,9 +1881,8 @@ Status DBImpl::AddL0Tables(const InsertOptions& options,
   std::sort(names->begin(), names->end());
 
   MutexLock l(&mutex_);
-
   // Temporarily disable any background compaction
-  bg_compaction_paused_ = true;
+  bg_compaction_paused_++;
   while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
     bg_cv_.Wait();
   }
@@ -1892,9 +1890,9 @@ Status DBImpl::AddL0Tables(const InsertOptions& options,
   bulk_insert_in_progress_ = true;
   s = InsertLevel0Tables(&insert);
   bulk_insert_in_progress_ = false;
-
   // Restart background compaction
-  bg_compaction_paused_ = false;
+  assert(bg_compaction_paused_ > 0);
+  bg_compaction_paused_--;
   MaybeScheduleCompaction();
   bg_cv_.SignalAll();
   return s;
