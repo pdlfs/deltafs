@@ -42,6 +42,7 @@ class Client {
   Status Listdir(const Slice& path, std::vector<std::string>*);
   Status Getattr(const Slice& path, Stat*);
   Status Mkfile(const Slice& path, mode_t mode);
+  Status Mkdirs(const Slice& path, mode_t mode);
   Status Mkdir(const Slice& path, mode_t mode);
   Status Chmod(const Slice& path, mode_t mode);
   Status Unlink(const Slice& path);

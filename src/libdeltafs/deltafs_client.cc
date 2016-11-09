@@ -605,6 +605,24 @@ Status Client::Mkfile(const Slice& p, mode_t mode) {
   return s;
 }
 
+Status Client::Mkdirs(const Slice& p, mode_t mode) {
+  Status s;
+  Slice path = p;
+  std::string tmp;
+  s = SanitizePath(&path, &tmp);
+  if (s.ok()) {
+    s = mdscli_->Mkdir(path, mode, NULL, true,  // create_if_missing
+                       false                    // error_if_exists
+                       );
+  }
+
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
+#endif
+
+  return s;
+}
+
 Status Client::Mkdir(const Slice& p, mode_t mode) {
   Status s;
   Slice path = p;

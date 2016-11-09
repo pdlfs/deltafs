@@ -26,6 +26,10 @@ extern "C" {
 #define EHOSTUNREACH ENODEV
 #endif
 
+#ifndef ENOSYS
+#define ENOSYS EPERM
+#endif
+
 static void SetErrno(const pdlfs::Status& s);
 static pdlfs::Status bg_status;
 static pdlfs::port::OnceType once = PDLFS_ONCE_INIT;
@@ -73,7 +77,7 @@ static void SetErrno(const pdlfs::Status& s) {
   } else if (s.IsReadOnly()) {
     errno = EROFS;
   } else if (s.IsNotSupported()) {
-    errno = EPERM;
+    errno = ENOSYS;
   } else if (s.IsInvalidArgument()) {
     errno = EINVAL;
   } else if (s.IsDisconnected()) {
@@ -331,6 +335,23 @@ int deltafs_mkfile(const char* __path, mode_t __mode) {
   }
   pdlfs::Status s;
   s = client->Mkfile(__path, __mode);
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
+int deltafs_mkdirs(const char* __path, mode_t __mode) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+  pdlfs::Status s;
+  s = client->Mkdirs(__path, __mode);
   if (s.ok()) {
     return 0;
   } else {
