@@ -53,7 +53,7 @@ class MDS::CLI {
                 bool error_if_exists = true);
   Status Ftruncate(const Fentry&, uint64_t mtime, uint64_t size);
   Status Mkdir(const Slice& path, mode_t mode, Fentry* result = NULL,
-               bool error_if_exists = true);
+               bool create_if_missing = false, bool error_if_exists = true);
   Status Chmod(const Slice& path, mode_t mode, Fentry* result = NULL);
   Status Unlink(const Slice& path, Fentry* result = NULL,
                 bool error_if_absent = true);
@@ -95,7 +95,10 @@ class MDS::CLI {
     uid_t uid;
     gid_t gid;
   };
-  Status ResolvePath(const Slice& path, PathInfo*);
+  // If path resolution fails due to a missing parent, the path of that
+  // parent is stored in *missing_parent.
+  Status ResolvePath(const Slice& path, PathInfo*,
+                     std::string* missing_parent = NULL);
   // Convenient methods for permission checking
   bool IsReadDirOk(const PathInfo*);
   bool IsWriteDirOk(const PathInfo*);

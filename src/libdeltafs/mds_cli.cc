@@ -197,7 +197,8 @@ bool MDS::CLI::IsLookupOk(const PathInfo* info) {
   }
 }
 
-Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
+Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result,
+                             std::string* missing_parent) {
   mutex_.AssertHeld();
 
   Status s;
@@ -255,6 +256,9 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result) {
             result->gid = stat->GroupId();
 
             lookup_cache_->Release(lh);
+          } else if (s.IsNotFound() && missing_parent != NULL) {
+            const char* r = path.c_str();
+            *missing_parent = std::string(r, p - r);
           }
         }
 
@@ -570,14 +574,28 @@ Status MDS::CLI::_Unlink(const DirIndex* idx, const UnlinkOptions& options,
   return s;
 }
 
-Status MDS::CLI::Mkdir(const Slice& p, mode_t mode, Fentry* ent,
-                       bool error_if_exists) {
+Status MDS::CLI::Mkdir(
+    const Slice& p, mode_t mode, Fentry* ent,
+    bool create_if_missing,  // auto create all missing ancestors
+    bool error_if_exists) {
   Status s;
   char tmp[20];  // name hash buffer
   PathInfo path;
+  std::string missing_parent;
   MutexLock ml(&mutex_);
-  s = ResolvePath(p, &path);
-  if (s.ok()) {
+  s = ResolvePath(p, &path, &missing_parent);
+  if (s.IsNotFound() && create_if_missing) {
+    if (!missing_parent.empty()) {
+      mutex_.Unlock();
+      s = Mkdir(missing_parent, mode, NULL, true, false  // okay if exists
+                );
+      if (s.ok()) {
+        s = Mkdir(p, mode, ent, true,  // retry the original request
+                  error_if_exists);
+      }
+      mutex_.Lock();
+    }
+  } else if (s.ok()) {
     if (path.depth == 0) {
       s = Status::AlreadyExists(Slice());
     } else if (!IsWriteDirOk(&path)) {
