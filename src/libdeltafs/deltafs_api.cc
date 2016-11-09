@@ -22,24 +22,41 @@
 extern "C" {
 #endif
 
+#ifndef EHOSTUNREACH
+#define EHOSTUNREACH ENODEV
+#endif
+
+static void SetErrno(const pdlfs::Status& s);
+static pdlfs::Status bg_status;
 static pdlfs::port::OnceType once = PDLFS_ONCE_INIT;
 static pdlfs::Client* client = NULL;
 static inline int NoClient() {
-  // XXX: Use no-such-device to indicate failure
-  errno = ENODEV;
+  if (!bg_status.ok()) {
+    SetErrno(bg_status);
+  } else {
+    errno = ENODEV;
+  }
   return -1;
 }
 
 static void InitClient() {
-  pdlfs::Status s = pdlfs::Client::Open(&client);
-  if (!s.ok()) {
-    Error(__LOG_ARGS__, "cannot open deltafs client :%s", s.ToString().c_str());
-    client = NULL;
+  if (client == NULL) {
+    pdlfs::Status s = pdlfs::Client::Open(&client);
+    if (!s.ok()) {
+      Error(__LOG_ARGS__, "cannot open deltafs client: %s",
+            s.ToString().c_str());
+      bg_status = s;
+      client = NULL;
+    } else {
+      Info(__LOG_ARGS__, "deltafs client ready");
+    }
   }
 }
 
 static void SetErrno(const pdlfs::Status& s) {
-  if (s.IsNotFound()) {
+  if (s.ok()) {
+    errno = 0;
+  } else if (s.IsNotFound()) {
     errno = ENOENT;
   } else if (s.IsAlreadyExists()) {
     errno = EEXIST;
@@ -59,8 +76,10 @@ static void SetErrno(const pdlfs::Status& s) {
     errno = EPERM;
   } else if (s.IsInvalidArgument()) {
     errno = EINVAL;
-  } else if (!s.ok()) {
-    errno = EIO;  // TODO: map more error types
+  } else if (s.IsDisconnected()) {
+    errno = EHOSTUNREACH;
+  } else {
+    errno = EIO;
   }
 }
 
