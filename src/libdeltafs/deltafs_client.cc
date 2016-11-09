@@ -22,11 +22,16 @@
 
 namespace pdlfs {
 
-// Helper for getting status strings.
-#define C_STR(s) s.ToString().c_str()
-
 // XXX: make this configurable?
 static const int kMaxOpenFileDescriptors = 1000;
+
+// Helper for getting status strings.
+#define C_STR(status) status.ToString().c_str()
+#define OP_VERBOSE_LEVEL 8
+#define OP_STATUS(op, path, status) \
+  "%s '%s': %s", op, path.c_str(), C_STR(status)
+#define OP_VERBOSE(path, status) \
+  Verbose(__LOG_ARGS__, OP_VERBOSE_LEVEL, OP_STATUS(__func__, path, status))
 
 static inline Status FileAccessModeNotMatched() {
   return Status::InvalidFileDescriptor(Slice());
@@ -524,6 +529,11 @@ Status Client::Access(const Slice& p, int mode) {
   if (s.ok()) {
     s = mdscli_->Access(path, mode);
   }
+
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
+#endif
+
   return s;
 }
 
@@ -535,6 +545,11 @@ Status Client::Accessdir(const Slice& p, int mode) {
   if (s.ok()) {
     s = mdscli_->Accessdir(path, mode);
   }
+
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
+#endif
+
   return s;
 }
 
@@ -546,6 +561,11 @@ Status Client::Listdir(const Slice& p, std::vector<std::string>* names) {
   if (s.ok()) {
     s = mdscli_->Listdir(path, names);
   }
+
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
+#endif
+
   return s;
 }
 
@@ -561,6 +581,11 @@ Status Client::Getattr(const Slice& p, Stat* statbuf) {
       *statbuf = ent.stat;
     }
   }
+
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
+#endif
+
   return s;
 }
 
@@ -573,8 +598,8 @@ Status Client::Mkfile(const Slice& p, mode_t mode) {
     s = mdscli_->Fcreat(path, mode);
   }
 
-#if VERBOSE >= 8
-  Verbose(__LOG_ARGS__, 8, "Mkfile '%s': %s", p.c_str(), C_STR(s));
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
 #endif
 
   return s;
@@ -589,8 +614,8 @@ Status Client::Mkdir(const Slice& p, mode_t mode) {
     s = mdscli_->Mkdir(path, mode);
   }
 
-#if VERBOSE >= 8
-  Verbose(__LOG_ARGS__, 8, "Mkdir '%s': %s", p.c_str(), C_STR(s));
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
 #endif
 
   return s;
@@ -605,8 +630,8 @@ Status Client::Chmod(const Slice& p, mode_t mode) {
     s = mdscli_->Chmod(path, mode);
   }
 
-#if VERBOSE >= 8
-  Verbose(__LOG_ARGS__, 8, "Chmod '%s': %s", p.c_str(), C_STR(s));
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
 #endif
 
   return s;
@@ -628,8 +653,8 @@ Status Client::Unlink(const Slice& p) {
     }
   }
 
-#if VERBOSE >= 8
-  Verbose(__LOG_ARGS__, 8, "Unlink '%s': %s", p.c_str(), C_STR(s));
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
 #endif
 
   return s;
