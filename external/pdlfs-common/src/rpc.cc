@@ -206,15 +206,21 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
   if (options.impl == kMargoRPC) {
     rpc = new rpc::MargoRPCImpl(options);
   }
-#elif defined(PDLFS_MERCURY_RPC)
+#endif
+#if defined(PDLFS_MERCURY_RPC)
   if (options.impl == kMercuryRPC) {
     rpc = new rpc::MercuryRPCImpl(options);
   }
 #endif
   if (rpc == NULL) {
+#ifndef NDEBUG
     char msg[] = "No rpc implementation is available\n";
     fwrite(msg, 1, sizeof(msg), stderr);
     abort();
+#else
+    Error(__LOG_ARGS__, "No rpc implementation is available");
+    exit(EXIT_FAILURE);
+#endif
   } else {
     return rpc;
   }
