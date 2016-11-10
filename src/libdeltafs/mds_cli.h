@@ -71,6 +71,7 @@ class MDS::CLI {
 
  private:
   CLI(const MDSCliOptions&);
+  bool HasAccess(int mode, const Stat*);
 
 // REQUIRES: mutex_ has been locked.
 #define HELPER(OP) \

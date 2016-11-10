@@ -979,14 +979,24 @@ bool MDS::CLI::IsExecOk(const Stat* s) {
   }
 }
 
+bool MDS::CLI::HasAccess(int acc_mode, const Stat* s) {
+  if ((acc_mode & R_OK) == R_OK && !IsReadOk(s)) {
+    return false;
+  } else if ((acc_mode & W_OK) == W_OK && !IsWriteOk(s)) {
+    return false;
+  } else if ((acc_mode & X_OK) == X_OK && !IsExecOk(s)) {
+    return false;
+  } else {
+    return true;
+  }
+}
+
 Status MDS::CLI::Access(const Slice& p, int mode) {
   Status s;
   Fentry entry;
   s = Fstat(p, &entry);
   if (s.ok()) {
-    if (((mode & R_OK) == R_OK && !IsReadOk(&entry.stat)) ||
-        ((mode & W_OK) == W_OK && !IsWriteOk(&entry.stat)) ||
-        ((mode & X_OK) == X_OK && !IsExecOk(&entry.stat))) {
+    if (!HasAccess(mode, &entry.stat)) {
       s = Status::AccessDenied(Slice());
     }
   }
