@@ -18,6 +18,9 @@
 #define DELTAFS_DIR_PLFSIO 0x10000
 #define DELTAFS_DIR_MASK 0xf0000
 
+#define DELTAFS_DIR_IS_PLFSIO(mode) \
+  ((mode & DELTAFS_DIR_MASK) == DELTAFS_DIR_PLFSIO)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
