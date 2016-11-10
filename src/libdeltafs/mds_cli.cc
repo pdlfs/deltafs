@@ -587,7 +587,10 @@ Status MDS::CLI::Mkdir(
   if (s.IsNotFound() && create_if_missing) {
     if (!missing_parent.empty()) {
       mutex_.Unlock();
-      s = Mkdir(missing_parent, mode, NULL, true, false  // okay if exists
+      s = Mkdir(missing_parent,
+                mode & ~DELTAFS_DIR_MASK,  // avoid special directory modes
+                NULL, true,  // recursively creating missing parents
+                false        // okay if exists
                 );
       if (s.ok()) {
         s = Mkdir(p, mode, ent, true,  // retry the original request

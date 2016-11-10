@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "deltafs/deltafs_api.h"
 #include "pdlfs-common/fstypes.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/mdb.h"

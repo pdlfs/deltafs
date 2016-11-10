@@ -12,9 +12,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include "mds_srv.h"
 #include "pdlfs-common/dirlock.h"
 #include "pdlfs-common/mutexlock.h"
+
+#include "mds_srv.h"
 
 namespace pdlfs {
 
@@ -321,25 +322,24 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
         Stat* stat = &ret->stat;
         Slice name;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
+
+        if (s.ok() && paranoid_checks_) {
+          std::string tmp;
+          DirIndex::PutHash(&tmp, name);
+          if (name_hash.compare(tmp) != 0) {
+            s = Status::Corruption("name and hash don't match");
+
+            Error(__LOG_ARGS__, "%s/%s: %s",
+                  options.dir_id.DebugString().c_str(), name.ToString().c_str(),
+                  s.ToString().c_str());
+          }
+        }
+
         if (s.ok()) {
           if ((options.flags & O_EXCL) == O_EXCL) {
             s = Status::AlreadyExists(Slice());
           } else if (!S_ISREG(stat->FileMode())) {
             s = Status::FileExpected(Slice());
-          }
-
-          if (paranoid_checks_) {
-            std::string tmp;
-            DirIndex::PutHash(&tmp, name);
-            if (name_hash.compare(tmp) != 0) {
-              if (s.ok()) {
-                s = Status::Corruption("name and hash don't match");
-              }
-
-              Error(__LOG_ARGS__, "%s/%s: %s",
-                    options.dir_id.DebugString().c_str(),
-                    name.ToString().c_str(), s.ToString().c_str());
-            }
           }
 
           entry_exists = true;
@@ -596,6 +596,19 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         Stat* stat = &ret->stat;
         Slice name;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
+
+        if (s.ok() && paranoid_checks_) {
+          std::string tmp;
+          DirIndex::PutHash(&tmp, name);
+          if (name_hash.compare(tmp) != 0) {
+            s = Status::Corruption("name and hash don't match");
+
+            Error(__LOG_ARGS__, "%s/%s: %s",
+                  options.dir_id.DebugString().c_str(), name.ToString().c_str(),
+                  s.ToString().c_str());
+          }
+        }
+
         if (s.ok()) {
           if ((options.flags & O_EXCL) == O_EXCL) {
             s = Status::AlreadyExists(Slice());
@@ -603,23 +616,11 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
             s = Status::DirExpected(Slice());
           }
 
-          if (paranoid_checks_) {
-            std::string tmp;
-            DirIndex::PutHash(&tmp, name);
-            if (name_hash.compare(tmp) != 0) {
-              if (s.ok()) {
-                s = Status::Corruption("name and hash don't match");
-              }
-
-              Error(__LOG_ARGS__, "%s/%s: %s",
-                    options.dir_id.DebugString().c_str(),
-                    name.ToString().c_str(), s.ToString().c_str());
-            }
-          }
-
           entry_exists = true;
         } else if (s.IsNotFound()) {
-          uint32_t mode = S_IFDIR | (options.mode & ACCESSPERMS);
+          uint32_t mode = S_IFDIR;
+          mode |= (options.mode & ACCESSPERMS);
+          mode |= (options.mode & DELTAFS_DIR_MASK);
           int rserver = PickupServer(my_id);
           int zserver = rserver % giga_.num_virtual_servers;
           stat->SetRegId(reg_id_);
