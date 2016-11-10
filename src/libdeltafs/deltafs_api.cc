@@ -52,7 +52,7 @@ static void InitClient() {
       bg_status = s;
       client = NULL;
     } else {
-      Info(__LOG_ARGS__, "deltafs client ready");
+      Verbose(__LOG_ARGS__, 1, "deltafs ready");
     }
   }
 }
