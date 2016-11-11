@@ -15,11 +15,11 @@
 // Used as a special mode to create directories where all
 // I/O operations beneath them will be done in a
 // parallel log-structured manner.
-#define DELTAFS_DIR_PLFSIO 0x10000
+#define DELTAFS_DIR_PLFS_STYLE 0x10000
 #define DELTAFS_DIR_MASK 0xf0000
 
-#define DELTAFS_DIR_IS_PLFSIO(mode) \
-  ((mode & DELTAFS_DIR_MASK) == DELTAFS_DIR_PLFSIO)
+#define DELTAFS_DIR_IS_PLFS_STYLE(mode) \
+  ((mode & DELTAFS_DIR_MASK) == DELTAFS_DIR_PLFS_STYLE)
 
 #ifdef __cplusplus
 extern "C" {

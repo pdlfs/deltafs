@@ -237,7 +237,7 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result,
           if (depth > 0) depth--;
         } else if (name == ".") {
           // Do nothing
-        } else if (DELTAFS_DIR_IS_PLFSIO(result->mode)) {
+        } else if (DELTAFS_DIR_IS_PLFS_STYLE(result->mode)) {
           s = Status::NotSupported("searching under plfs dirs");
         } else {
           depth++;
@@ -326,12 +326,12 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
       stat->SetZerothServer(0);
       stat->SetChangeTime(0);
       stat->SetModifyTime(0);
-    } else if (DELTAFS_DIR_IS_PLFSIO(path.mode)) {
+    } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
       ent->pid = path.pid;
       DirIndex::PutHash(&ent->nhash, path.name);
       ent->zserver = path.zserver;
       Stat* stat = &ent->stat;
-      mode_t mode = DELTAFS_DIR_PLFSIO;
+      mode_t mode = DELTAFS_DIR_PLFS_STYLE;
       mode |= (S_IFREG | (path.mode & ACCESSPERMS));
       mode &= ~S_IXUSR;
       mode &= ~S_IXGRP;
@@ -434,7 +434,7 @@ Status MDS::CLI::Fcreat(const Slice& p, mode_t mode, Fentry* ent,
       s = Status::AlreadyExists(Slice());
     } else if (!IsWriteDirOk(&path)) {
       s = Status::AccessDenied(Slice());
-    } else if (DELTAFS_DIR_IS_PLFSIO(path.mode)) {
+    } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
       if (error_if_exists) {
         s = Status::NotSupported("O_EXCL not supported under plfs dirs");
       } else {
@@ -442,7 +442,7 @@ Status MDS::CLI::Fcreat(const Slice& p, mode_t mode, Fentry* ent,
         DirIndex::PutHash(&ent->nhash, path.name);
         ent->zserver = path.zserver;
         Stat* stat = &ent->stat;
-        mode_t mode = DELTAFS_DIR_PLFSIO;
+        mode_t mode = DELTAFS_DIR_PLFS_STYLE;
         mode |= (S_IFREG | (path.mode & ACCESSPERMS));
         mode &= ~S_IXUSR;
         mode &= ~S_IXGRP;
@@ -557,7 +557,7 @@ Status MDS::CLI::Unlink(const Slice& p, Fentry* ent, bool error_if_absent) {
       s = Status::NotSupported("deleting root directory");
     } else if (!IsWriteDirOk(&path)) {
       s = Status::AccessDenied(Slice());
-    } else if (DELTAFS_DIR_IS_PLFSIO(path.mode)) {
+    } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
       s = Status::NotSupported("deleting files under plfs dirs");
     } else {
       IndexHandle* idxh = NULL;
@@ -665,7 +665,7 @@ Status MDS::CLI::Mkdir(
       s = Status::AlreadyExists(Slice());
     } else if (!IsWriteDirOk(&path)) {
       s = Status::AccessDenied(Slice());
-    } else if (DELTAFS_DIR_IS_PLFSIO(path.mode)) {
+    } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
       s = Status::NotSupported("making dirs under plfs dirs");
     } else if (path.name.size() > DELTAFS_NAME_MAX) {
       s = NameTooLong();
@@ -764,7 +764,7 @@ Status MDS::CLI::Chmod(const Slice& p, mode_t mode, Fentry* ent) {
   if (s.ok()) {
     if (path.depth == 0) {
       s = Status::NotSupported("updating root directory");
-    } else if (DELTAFS_DIR_IS_PLFSIO(path.mode)) {
+    } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
       s = Status::NotSupported("updating files under plfs dirs");
     } else {
       IndexHandle* idxh = NULL;
@@ -929,7 +929,7 @@ Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
   if (s.ok()) {
     if (!IsReadDirOk(&path)) {
       s = Status::AccessDenied(Slice());
-    } else if (DELTAFS_DIR_IS_PLFSIO(path.mode)) {
+    } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
       s = Status::NotSupported("listing files under plfs dirs");
     } else {
       IndexHandle* idxh = NULL;
