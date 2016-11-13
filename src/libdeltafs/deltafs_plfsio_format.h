@@ -23,6 +23,11 @@
 
 namespace pdlfs {
 namespace plfsio {
+// Formats used by keys in the epoch block.
+extern std::string EpochKey(uint32_t epoch, uint32_t table);
+extern Status ParseEpochKey(const Slice& input, uint32_t* epoch,
+                            uint32_t* table);
+
 // TableHandle is a pointer to the extend of a file that stores the index block
 // of a table. Each table handle also stores the smallest key and
 // the largest key of that table.

@@ -7,10 +7,34 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include <stdio.h>
+#include <string.h>
+
 #include "deltafs_plfsio_format.h"
 
 namespace pdlfs {
 namespace plfsio {
+
+Status ParseEpochKey(const Slice& input, uint32_t* epoch, uint32_t* table) {
+  int parsed_epoch;
+  int parsed_table;
+  int r = sscanf(input.data(), "%04d-%04d", &parsed_epoch, &parsed_table);
+  if (r != 2) {
+    return Status::Corruption("bad epoch key");
+  } else {
+    *epoch = parsed_epoch;
+    *table = parsed_table;
+    return Status::OK();
+  }
+}
+
+std::string EpochKey(uint32_t epoch, uint32_t table) {
+  assert(epoch < 9999);
+  assert(table < 9999);
+  char tmp[10];
+  snprintf(tmp, sizeof(tmp), "%04d-%04d", int(epoch), int(table));
+  return tmp;
+}
 
 void TableHandle::EncodeTo(std::string* dst) const {
   // Sanity check that all fields have been set
