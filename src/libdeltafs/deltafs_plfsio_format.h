@@ -23,7 +23,10 @@
 
 namespace pdlfs {
 namespace plfsio {
-// Formats used by keys in the epoch block.
+static const uint32_t kMaxTablesPerEpoch = 9999;
+static const uint32_t kMaxEpoches = 9999;
+
+// Formats used by keys in the epoch index block.
 extern std::string EpochKey(uint32_t epoch, uint32_t table);
 extern Status ParseEpochKey(const Slice& input, uint32_t* epoch,
                             uint32_t* table);
@@ -59,6 +62,30 @@ class TableHandle {
   std::string largest_key_;
   uint64_t offset_;
   uint64_t size_;
+};
+
+// Fixed information stored at the tail end
+// of every log file.
+class Footer {
+ public:
+  Footer();
+
+  // The block handle for the epoch index.
+  const BlockHandle& epoch_index_handle() const { return epoch_index_handle_; }
+  void set_epoch_index_handle(const BlockHandle& h) { epoch_index_handle_ = h; }
+
+  // Total number of epoches
+  uint32_t num_epoches() const { return num_epoches_; }
+  void set_num_epoches(uint32_t num) { num_epoches_ = num; }
+
+  void EncodeTo(std::string* dst) const;
+  Status DecodeFrom(Slice* input);
+
+  enum { kEncodeLength = BlockHandle::kMaxEncodedLength + 4 };
+
+ private:
+  BlockHandle epoch_index_handle_;
+  uint32_t num_epoches_;
 };
 
 }  // namespace plfsio

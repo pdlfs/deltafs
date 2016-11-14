@@ -29,15 +29,14 @@ Status ParseEpochKey(const Slice& input, uint32_t* epoch, uint32_t* table) {
 }
 
 std::string EpochKey(uint32_t epoch, uint32_t table) {
-  assert(epoch < 9999);
-  assert(table < 9999);
+  assert(epoch <= kMaxEpoches);
+  assert(table <= kMaxTablesPerEpoch);
   char tmp[10];
   snprintf(tmp, sizeof(tmp), "%04d-%04d", int(epoch), int(table));
   return tmp;
 }
 
 void TableHandle::EncodeTo(std::string* dst) const {
-  // Sanity check that all fields have been set
   assert(offset_ != ~static_cast<uint64_t>(0));
   assert(size_ != ~static_cast<uint64_t>(0));
   assert(!smallest_key_.empty());
@@ -66,6 +65,35 @@ Status TableHandle::DecodeFrom(Slice* input) {
 inline TableHandle::TableHandle()
     : offset_(~static_cast<uint64_t>(0) /* Invalid offset */),
       size_(~static_cast<uint64_t>(0) /* Invalid size */) {
+  // Empty
+}
+
+void Footer::EncodeTo(std::string* dst) const {
+  assert(num_epoches_ != ~static_cast<uint32_t>(0));
+  epoch_index_handle_.EncodeTo(dst);
+  dst->resize(BlockHandle::kMaxEncodedLength);
+  PutFixed32(dst, num_epoches_);
+}
+
+Status Footer::DecodeFrom(Slice* input) {
+  const char* start = input->data();
+  size_t size = input->size();
+  if (size >= kEncodeLength) {
+    num_epoches_ = DecodeFixed32(start + kEncodeLength - 4);
+  } else {
+    return Status::Corruption("bad footer");
+  }
+
+  Status result = epoch_index_handle_.DecodeFrom(input);
+  if (result.ok()) {
+    // We skip over any leftover data
+    *input = Slice(start + kEncodeLength, size - kEncodeLength);
+  }
+  return result;
+}
+
+inline Footer::Footer()
+    : num_epoches_(~static_cast<uint32_t>(0) /* Invalid num */) {
   // Empty
 }
 
