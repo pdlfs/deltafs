@@ -30,6 +30,7 @@ class WriteBuffer {
   void Add(const Slice& key, const Slice& value);
   Iterator* NewIterator() const;
   void Finish();
+  void Reset();
 
  private:
   // Starting offsets of inserted entries

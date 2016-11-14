@@ -113,6 +113,13 @@ void WriteBuffer::Finish() {
   finished_ = true;
 }
 
+void WriteBuffer::Reset() {
+  num_entries_ = 0;
+  finished_ = false;
+  offsets_.clear();
+  buffer_.clear();
+}
+
 void WriteBuffer::Reserve(uint32_t num_entries, size_t size_per_entry) {
   buffer_.reserve(num_entries * (size_per_entry + 2));
   offsets_.reserve(num_entries);
