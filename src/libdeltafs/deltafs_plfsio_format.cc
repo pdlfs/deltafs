@@ -62,12 +62,6 @@ Status TableHandle::DecodeFrom(Slice* input) {
   }
 }
 
-inline TableHandle::TableHandle()
-    : offset_(~static_cast<uint64_t>(0) /* Invalid offset */),
-      size_(~static_cast<uint64_t>(0) /* Invalid size */) {
-  // Empty
-}
-
 void Footer::EncodeTo(std::string* dst) const {
   assert(num_epoches_ != ~static_cast<uint32_t>(0));
   epoch_index_handle_.EncodeTo(dst);
@@ -90,11 +84,6 @@ Status Footer::DecodeFrom(Slice* input) {
     *input = Slice(start + kEncodeLength, size - kEncodeLength);
   }
   return result;
-}
-
-inline Footer::Footer()
-    : num_epoches_(~static_cast<uint32_t>(0) /* Invalid num */) {
-  // Empty
 }
 
 }  // namespace plfsio

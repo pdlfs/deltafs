@@ -88,5 +88,16 @@ class Footer {
   uint32_t num_epoches_;
 };
 
+inline TableHandle::TableHandle()
+    : offset_(~static_cast<uint64_t>(0) /* Invalid offset */),
+      size_(~static_cast<uint64_t>(0) /* Invalid size */) {
+  // Empty
+}
+
+inline Footer::Footer()
+    : num_epoches_(~static_cast<uint32_t>(0) /* Invalid num */) {
+  // Empty
+}
+
 }  // namespace plfsio
 }  // namespace pdlfs

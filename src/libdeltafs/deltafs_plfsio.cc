@@ -120,7 +120,7 @@ void WriteBuffer::Reserve(uint32_t num_entries, size_t size_per_entry) {
   offsets_.reserve(num_entries);
 }
 
-void WriteBuffer::Append(const Slice& key, const Slice& value) {
+void WriteBuffer::Add(const Slice& key, const Slice& value) {
   assert(!finished_);       // Finish() has not been called
   assert(key.size() != 0);  // Key cannot be empty
   size_t offset = buffer_.size();
@@ -128,6 +128,158 @@ void WriteBuffer::Append(const Slice& key, const Slice& value) {
   PutLengthPrefixedSlice(&buffer_, value);
   offsets_.push_back(offset);
   num_entries_++;
+}
+
+TableLogger::TableLogger(const Options& options, LogFile* data, LogFile* index)
+    : options_(options),
+      data_block_(16),
+      index_block_(1),
+      epoch_block_(1),
+      pending_index_entry_(false),
+      pending_epoch_entry_(false),
+      data_offset_(0),
+      index_offset_(0),
+      data_log_(data),
+      index_log_(index),
+      num_tables_(0),
+      num_epoches_(0),
+      finished_(false) {}
+
+void TableLogger::EndEpoch() {
+  assert(!finished_);  // Finish() has not been called
+  EndTable();
+  if (ok() && num_tables_ != 0) {
+    num_tables_ = 0;
+    assert(num_epoches_ < kMaxEpoches);
+    num_epoches_++;
+  }
+}
+
+void TableLogger::EndTable() {
+  assert(!finished_);  // Finish() has not been called
+  EndBlock();
+  if (!ok()) return;  // Abort
+  if (pending_index_entry_) {
+    assert(data_block_.empty());
+    BytewiseComparator()->FindShortSuccessor(&last_key_);
+    std::string handle_encoding;
+    pending_index_handle_.EncodeTo(&handle_encoding);
+    index_block_.Add(last_key_, handle_encoding);
+    pending_index_entry_ = false;
+  } else if (index_block_.empty()) {
+    return;  // No more work
+  }
+
+  assert(!pending_epoch_entry_);
+  Slice contents = index_block_.Finish();
+  status_ = index_log_->Append(contents);
+
+  if (ok()) {
+    index_block_.Reset();
+    pending_epoch_handle_.set_size(contents.size());
+    pending_epoch_handle_.set_offset(index_offset_);
+    pending_epoch_entry_ = true;
+    index_offset_ += contents.size();
+  }
+
+  if (pending_epoch_entry_) {
+    assert(index_block_.empty());
+    pending_epoch_handle_.set_smallest_key(smallest_key_);
+    BytewiseComparator()->FindShortSuccessor(&largest_key_);
+    pending_epoch_handle_.set_largest_key(largest_key_);
+    std::string handle_encoding;
+    pending_epoch_handle_.EncodeTo(&handle_encoding);
+    epoch_block_.Add(EpochKey(num_epoches_, num_tables_), handle_encoding);
+    pending_epoch_entry_ = false;
+  }
+
+  if (ok()) {
+    smallest_key_.clear();
+    largest_key_.clear();
+    last_key_.clear();
+    assert(num_tables_ < kMaxTablesPerEpoch);
+    num_tables_++;
+  }
+}
+
+void TableLogger::EndBlock() {
+  assert(!finished_);               // Finish() has not been called
+  if (data_block_.empty()) return;  // No more work
+  if (!ok()) return;                // Abort
+  assert(!pending_index_entry_);
+  Slice contents = data_block_.Finish();
+  status_ = data_log_->Append(contents);
+  if (ok()) {
+    data_block_.Reset();
+    pending_index_handle_.set_size(contents.size());
+    pending_index_handle_.set_offset(data_offset_);
+    pending_index_entry_ = true;
+    data_offset_ += contents.size();
+  }
+}
+
+void TableLogger::Add(const Slice& key, const Slice& value) {
+  assert(!finished_);       // Finish() has not been called
+  assert(key.size() != 0);  // Key cannot be empty
+  if (!ok()) return;        // Abort
+  largest_key_ = key.ToString();
+  if (!smallest_key_.empty()) {
+    smallest_key_ = key.ToString();
+  }
+
+  if (!last_key_.empty()) {
+    // Keys within a single table are expected to be added in a sorted order
+    // and we don't allow duplicated keys
+    assert(key.compare(last_key_) > 0);
+  }
+
+  // Add an index entry if there is one pending insertion
+  if (pending_index_entry_) {
+    assert(data_block_.empty());
+    BytewiseComparator()->FindShortestSeparator(&last_key_, key);
+    std::string handle_encoding;
+    pending_index_handle_.EncodeTo(&handle_encoding);
+    index_block_.Add(last_key_, handle_encoding);
+    pending_index_entry_ = false;
+  }
+
+  last_key_ = key.ToString();
+  data_block_.Add(key, value);
+  if (data_block_.CurrentSizeEstimate() >= options_.block_size) {
+    EndBlock();
+  }
+}
+
+Status TableLogger::Finish() {
+  assert(!finished_);
+  EndEpoch();
+  finished_ = true;
+  if (!ok()) return status_;
+  BlockHandle epoch_index_handle;
+  std::string tail;
+  Footer footer;
+
+  assert(!pending_epoch_entry_);
+  Slice contents = epoch_block_.Finish();
+  status_ = index_log_->Append(contents);
+
+  if (ok()) {
+    epoch_index_handle.set_size(contents.size());
+    epoch_index_handle.set_offset(index_offset_);
+    index_offset_ += contents.size();
+  }
+
+  if (ok()) {
+    footer.set_epoch_index_handle(epoch_index_handle);
+    footer.set_num_epoches(num_epoches_);
+    footer.EncodeTo(&tail);
+    status_ = index_log_->Append(tail);
+  }
+
+  if (ok()) {
+    index_offset_ += tail.size();
+  }
+  return status_;
 }
 
 }  // namespace plfsio

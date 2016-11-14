@@ -34,7 +34,7 @@ class WriteBufferTest {
     std::string value;
     test::RandomString(&rnd_, value_size, &value);
     kv_.insert(std::make_pair(key, value));
-    buffer_.Append(key, value);
+    buffer_.Add(key, value);
     num_entries_++;
   }
 
