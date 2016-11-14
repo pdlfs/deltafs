@@ -137,9 +137,9 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
 
 TableLogger::TableLogger(const Options& options, LogSink* data, LogSink* index)
     : options_(options),
-      data_block_(16),
-      index_block_(1),
-      epoch_block_(1),
+      data_block_(kDataBlkRestartInt),
+      index_block_(kNonDataBlkRestartInt),
+      epoch_block_(kNonDataBlkRestartInt),
       pending_index_entry_(false),
       pending_epoch_entry_(false),
       num_tables_(0),

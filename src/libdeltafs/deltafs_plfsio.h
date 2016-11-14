@@ -61,6 +61,8 @@ class TableLogger {
   Status Finish();
 
  private:
+  enum { kDataBlkRestartInt = 16, kNonDataBlkRestartInt = 1 };
+
   // No copying allowed
   void operator=(const TableLogger&);
   TableLogger(const TableLogger&);
