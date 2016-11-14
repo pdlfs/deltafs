@@ -80,8 +80,10 @@ Status Footer::DecodeFrom(Slice* input) {
 
   Status result = epoch_index_handle_.DecodeFrom(input);
   if (result.ok()) {
-    // We skip over any leftover data
-    *input = Slice(start + kEncodeLength, size - kEncodeLength);
+    Slice source(start, size);
+    source.remove_prefix(kEncodeLength);
+    // This skips over any leftover data
+    *input = source;
   }
   return result;
 }

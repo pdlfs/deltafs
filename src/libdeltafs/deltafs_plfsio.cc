@@ -8,8 +8,6 @@
  */
 
 #include "deltafs_plfsio.h"
-#include "pdlfs-common/coding.h"
-#include "pdlfs-common/env.h"
 
 #include <algorithm>
 
@@ -130,19 +128,17 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
   num_entries_++;
 }
 
-TableLogger::TableLogger(const Options& options, LogFile* data, LogFile* index)
+TableLogger::TableLogger(const Options& options, LogSink* data, LogSink* index)
     : options_(options),
       data_block_(16),
       index_block_(1),
       epoch_block_(1),
       pending_index_entry_(false),
       pending_epoch_entry_(false),
-      data_offset_(0),
-      index_offset_(0),
-      data_log_(data),
-      index_log_(index),
       num_tables_(0),
       num_epoches_(0),
+      data_log_(data),
+      index_log_(index),
       finished_(false) {}
 
 void TableLogger::EndEpoch() {
@@ -172,14 +168,14 @@ void TableLogger::EndTable() {
 
   assert(!pending_epoch_entry_);
   Slice contents = index_block_.Finish();
-  status_ = index_log_->Append(contents);
+  uint64_t index_offset = index_log_->Ltell();
+  status_ = index_log_->Lwrite(contents);
 
   if (ok()) {
     index_block_.Reset();
     pending_epoch_handle_.set_size(contents.size());
-    pending_epoch_handle_.set_offset(index_offset_);
+    pending_epoch_handle_.set_offset(index_offset);
     pending_epoch_entry_ = true;
-    index_offset_ += contents.size();
   }
 
   if (pending_epoch_entry_) {
@@ -208,13 +204,13 @@ void TableLogger::EndBlock() {
   if (!ok()) return;                // Abort
   assert(!pending_index_entry_);
   Slice contents = data_block_.Finish();
-  status_ = data_log_->Append(contents);
+  uint64_t data_offset = data_log_->Ltell();
+  status_ = data_log_->Lwrite(contents);
   if (ok()) {
     data_block_.Reset();
     pending_index_handle_.set_size(contents.size());
-    pending_index_handle_.set_offset(data_offset_);
+    pending_index_handle_.set_offset(data_offset);
     pending_index_entry_ = true;
-    data_offset_ += contents.size();
   }
 }
 
@@ -261,24 +257,18 @@ Status TableLogger::Finish() {
 
   assert(!pending_epoch_entry_);
   Slice contents = epoch_block_.Finish();
-  status_ = index_log_->Append(contents);
+  uint64_t index_offset = index_log_->Ltell();
+  status_ = index_log_->Lwrite(contents);
 
   if (ok()) {
     epoch_index_handle.set_size(contents.size());
-    epoch_index_handle.set_offset(index_offset_);
-    index_offset_ += contents.size();
-  }
-
-  if (ok()) {
+    epoch_index_handle.set_offset(index_offset);
     footer.set_epoch_index_handle(epoch_index_handle);
     footer.set_num_epoches(num_epoches_);
     footer.EncodeTo(&tail);
-    status_ = index_log_->Append(tail);
+    status_ = index_log_->Lwrite(tail);
   }
 
-  if (ok()) {
-    index_offset_ += tail.size();
-  }
   return status_;
 }
 

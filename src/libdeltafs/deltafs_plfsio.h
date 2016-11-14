@@ -12,24 +12,11 @@
 #include <string>
 #include <vector>
 
+#include "deltafs_plfsio_api.h"
 #include "deltafs_plfsio_format.h"
 
 namespace pdlfs {
 namespace plfsio {
-
-struct IOOptions {
-  // Approximate size of user data packed per block.
-  // This usually corresponds to the size of each I/O request
-  // sent to the underlying storage.
-  // Default: 128K
-  size_t block_size;
-
-  // Approximate size of user data packed per table.
-  // This corresponds to the size of the in-memory write buffer
-  // we must allocate for each log stream.
-  // Default: 2M
-  size_t table_size;
-};
 
 // Append-only in-memory table implementation.
 class WriteBuffer {
@@ -60,14 +47,8 @@ class WriteBuffer {
 
 // Stores the contents of a list of tables in a set of log files.
 class TableLogger {
-  typedef IOOptions Options;
-
-  typedef WritableFile  // Non-thread-safe un-buffered append-only file
-                        // abstraction
-      LogFile;
-
  public:
-  TableLogger(const Options& options, LogFile* data, LogFile* index);
+  TableLogger(const Options& options, LogSink* data, LogSink* index);
 
   ~TableLogger() {}
 
@@ -97,12 +78,10 @@ class TableLogger {
   BlockHandle pending_index_handle_;
   bool pending_epoch_entry_;
   TableHandle pending_epoch_handle_;
-  uint64_t data_offset_;
-  uint64_t index_offset_;
-  LogFile* data_log_;
-  LogFile* index_log_;
-  uint32_t num_tables_;   // Number of tables generated within an epoch
+  uint32_t num_tables_;   // Number of tables within an epoch
   uint32_t num_epoches_;  // Number of epoches generated
+  LogSink* data_log_;
+  LogSink* index_log_;
   bool finished_;
 };
 
