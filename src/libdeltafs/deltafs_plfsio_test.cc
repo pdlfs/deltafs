@@ -63,12 +63,25 @@ class WriteBufferTest {
   Random rnd_;
 };
 
-TEST(WriteBufferTest, Buffer) {
+TEST(WriteBufferTest, FixedSizedValue) {
   Add(3);
   Add(2);
   Add(1);
   Add(5);
   Add(4);
+
+  Iterator* iter = Flush();
+  CheckFirst(iter);
+  CheckLast(iter);
+  delete iter;
+}
+
+TEST(WriteBufferTest, VariableSizedValue) {
+  Add(3, 16);
+  Add(2, 18);
+  Add(1, 20);
+  Add(5, 14);
+  Add(4, 18);
 
   Iterator* iter = Flush();
   CheckFirst(iter);
