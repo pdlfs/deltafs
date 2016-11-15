@@ -19,6 +19,7 @@
 #include "pdlfs-common/leveldb/iterator.h"
 
 #include "pdlfs-common/coding.h"
+#include "pdlfs-common/env.h"
 
 namespace pdlfs {
 namespace plfsio {

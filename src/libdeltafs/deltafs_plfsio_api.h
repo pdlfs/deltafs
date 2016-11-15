@@ -28,6 +28,11 @@ struct Options {
   // we must allocate for each log stream.
   // Default: 2M
   size_t table_size;
+
+  // Thread pool used to run background compaction jobs
+  // Set to NULL to disable background jobs.
+  // Default: NULL
+  ThreadPool* compaction_pool;
 };
 
 // Abstraction for a non-thread-safe un-buffered

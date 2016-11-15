@@ -18,7 +18,7 @@
 namespace pdlfs {
 namespace plfsio {
 
-// Append-only in-memory table implementation.
+// Non-thread-safe append-only in-memory table.
 class WriteBuffer {
  public:
   explicit WriteBuffer() : num_entries_(0), finished_(false) {}
@@ -46,12 +46,14 @@ class WriteBuffer {
   class Iter;
 };
 
-// Stores the contents of a list of tables in a set of log files.
+// Write table contents into a set of log files.
 class TableLogger {
  public:
   TableLogger(const Options& options, LogSink* data, LogSink* index);
-
   ~TableLogger() {}
+
+  bool ok() const { return status_.ok(); }
+  Status status() const { return status_; }
 
   void Add(const Slice& key, const Slice& value);
   void EndBlock();  // Force the start of a new data block
@@ -66,8 +68,6 @@ class TableLogger {
   // No copying allowed
   void operator=(const TableLogger&);
   TableLogger(const TableLogger&);
-
-  bool ok() const { return status_.ok(); }
 
   Options options_;
   Status status_;
@@ -88,11 +88,31 @@ class TableLogger {
   bool finished_;
 };
 
-// Deltafs plfs-style io api.
-class Writer {
+// Log data as multiple sorted runs of tables.
+class IOLogger {
  public:
+  IOLogger(const Options& options, LogSink* data, LogSink* index);
+  ~IOLogger() {}
+
+  Status Add(const Slice& key, const Slice& value);
+
  private:
-  // XXX: TODO
+  // No copying allowed
+  void operator=(const IOLogger&);
+  IOLogger(const IOLogger&);
+
+  static void BGWork(void*);
+  void MaybeSchedualCompaction();
+  Status PrepareForIncomingWrite();
+  void CompactWriteBuffer();
+  void ResetWriteBuffer();
+
+  Options options_;
+  TableLogger table_runs_;
+  WriteBuffer* mem_buf_;
+  const WriteBuffer* imm_buf_;
+  WriteBuffer buf0_;
+  WriteBuffer buf1_;
 };
 
 }  // namespace plfsio

@@ -258,25 +258,110 @@ Status TableLogger::Finish() {
   EndEpoch();
   finished_ = true;
   if (!ok()) return status_;
+  Slice contents;
   BlockHandle epoch_index_handle;
   std::string tail;
   Footer footer;
 
   assert(!pending_epoch_entry_);
-  Slice contents = epoch_block_.Finish();
-  uint64_t index_offset = index_log_->Ltell();
-  status_ = index_log_->Lwrite(contents);
+  contents = epoch_block_.Finish();
+  epoch_index_handle.set_size(contents.size());
+  epoch_index_handle.set_offset(index_log_->Ltell());
 
-  if (ok()) {
-    epoch_index_handle.set_size(contents.size());
-    epoch_index_handle.set_offset(index_offset);
-    footer.set_epoch_index_handle(epoch_index_handle);
-    footer.set_num_epoches(num_epoches_);
-    footer.EncodeTo(&tail);
+  footer.set_epoch_index_handle(epoch_index_handle);
+  footer.set_num_epoches(num_epoches_);
+  footer.EncodeTo(&tail);
+
+  status_ = index_log_->Lwrite(contents);
+  if (status_.ok()) {
     status_ = index_log_->Lwrite(tail);
   }
 
   return status_;
+}
+
+IOLogger::IOLogger(const Options& options, LogSink* data, LogSink* index)
+    : options_(options),
+      table_runs_(options, data, index),
+      mem_buf_(NULL),
+      imm_buf_(NULL) {
+  mem_buf_ = &buf0_;
+}
+
+Status IOLogger::Add(const Slice& key, const Slice& value) {
+  Status status = PrepareForIncomingWrite();
+  if (status.ok()) {
+    mem_buf_->Add(key, value);
+  }
+
+  return status;
+}
+
+Status IOLogger::PrepareForIncomingWrite() {
+  Status status;
+  assert(mem_buf_ != NULL);
+  if (!table_runs_.ok()) {
+    status = table_runs_.status();
+  } else if (mem_buf_->CurrentBufferSize() < options_.table_size) {
+    // There is room in current write buffer
+  } else if (imm_buf_ != NULL) {
+    status = Status::BufferFull(Slice());
+  } else {
+    // Attempt to switch to a new write buffer
+    mem_buf_->Finish();
+    imm_buf_ = mem_buf_;
+    WriteBuffer* mem_buf = mem_buf_;
+    MaybeSchedualCompaction();
+    if (mem_buf == &buf0_) {
+      mem_buf_ = &buf1_;
+    } else {
+      mem_buf_ = &buf0_;
+    }
+  }
+
+  return status;
+}
+
+void IOLogger::MaybeSchedualCompaction() {
+  if (imm_buf_ != NULL) {
+    if (options_.compaction_pool != NULL) {
+      options_.compaction_pool->Schedule(IOLogger::BGWork, this);
+    } else {
+      // XXX: Directly run in current thread context
+      BGWork(this);
+    }
+  }
+}
+
+void IOLogger::BGWork(void* arg) {
+  IOLogger* io = reinterpret_cast<IOLogger*>(arg);
+  io->CompactWriteBuffer();
+  io->ResetWriteBuffer();
+}
+
+void IOLogger::ResetWriteBuffer() {
+  WriteBuffer* buf = const_cast<WriteBuffer*>(imm_buf_);
+  imm_buf_ = NULL;
+  buf->Reset();
+}
+
+void IOLogger::CompactWriteBuffer() {
+  TableLogger* dest = &table_runs_;
+  const WriteBuffer* buffer = imm_buf_;
+  assert(buffer != NULL);
+  Iterator* iter = buffer->NewIterator();
+  iter->SeekToFirst();
+  for (; iter->Valid(); iter->Next()) {
+    dest->Add(iter->key(), iter->value());
+    if (!dest->ok()) {
+      break;
+    }
+  }
+
+  if (dest->ok()) {
+    dest->EndTable();
+  }
+  delete iter;
 }
 
 }  // namespace plfsio
