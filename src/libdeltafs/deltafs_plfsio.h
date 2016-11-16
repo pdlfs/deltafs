@@ -106,8 +106,8 @@ class IOLogger {
   IOLogger(const IOLogger&);
 
   static void BGWork(void*);
-  void MaybeSchedualCompaction();
-  Status PrepareForIncomingWrite(bool force);
+  void MaybeSchedualCompaction(bool force_epoch);
+  Status PrepareForIncomingWrite(bool force_epoch);
   void CompactWriteBuffer();
 
   const Options& options_;
@@ -115,6 +115,8 @@ class IOLogger {
   port::CondVar bg_cv_;
   // State below is protected by mutex_
   bool has_bg_compaction_;
+  bool pending_epoch_flush_;
+  bool bg_epoch_flush_;
   TableLogger table_logger_;
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;

@@ -33,6 +33,12 @@ struct Options {
   // Set to NULL to disable background jobs.
   // Default: NULL
   ThreadPool* compaction_pool;
+
+  // True if write operations should be performed in a non-blocking manner,
+  // in which case a special status is returned instead of blocking the
+  // writer to wait for space in an in-memory write buffer.
+  // Default: True
+  bool non_blocking;
 };
 
 // Abstraction for a non-thread-safe un-buffered
