@@ -25,7 +25,10 @@ class WriterImpl : public Writer {
   virtual Status MakeEpoch();
 
  private:
+  void MaybeSlowdown();
+
   friend class Writer;
+  Options options_;
   port::Mutex mutex_;
   size_t num_parts_;
   uint32_t part_mask_;
@@ -41,14 +44,27 @@ WriterImpl::~WriterImpl() {
   mutex_.Unlock();
 }
 
+void WriterImpl::MaybeSlowdown() {
+  Env* env = options_.env;
+  uint64_t micros = options_.slowdown_micros;
+  if (micros != 0) {
+    env->SleepForMicroseconds(micros);
+  }
+}
+
 Status WriterImpl::MakeEpoch() {
   Status status;
-  MutexLock l(&mutex_);
-  for (size_t i = 0; i < num_parts_; i++) {
-    status = io_[i]->MakeEpoch();
-    if (!status.ok()) {
-      break;
+  {
+    MutexLock l(&mutex_);
+    for (size_t i = 0; i < num_parts_; i++) {
+      status = io_[i]->MakeEpoch();
+      if (!status.ok()) {
+        break;
+      }
     }
+  }
+  if (status.IsBufferFull()) {
+    MaybeSlowdown();
   }
   return status;
 }
@@ -57,8 +73,13 @@ Status WriterImpl::Append(const Slice& fname, const Slice& data) {
   Status status;
   uint32_t hash = Hash(fname.data(), fname.size(), 0);
   uint32_t part = hash & part_mask_;
-  MutexLock l(&mutex_);
-  status = io_[part]->Add(fname, data);
+  {
+    MutexLock l(&mutex_);
+    status = io_[part]->Add(fname, data);
+  }
+  if (status.IsBufferFull()) {
+    MaybeSlowdown();
+  }
   return status;
 }
 
