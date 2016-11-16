@@ -57,7 +57,7 @@ Status WriterImpl::MakeEpoch() {
   {
     MutexLock l(&mutex_);
     for (size_t i = 0; i < num_parts_; i++) {
-      status = io_[i]->MakeEpoch();
+      status = io_[i]->MakeEpoch(false);
       if (!status.ok()) {
         break;
       }

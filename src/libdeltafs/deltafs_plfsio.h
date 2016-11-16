@@ -89,16 +89,16 @@ class TableLogger {
   bool finished_;
 };
 
-// Log data as multiple sorted runs of tables.
+// Log data as multiple sorted runs of tables. Implementation is thread-safe.
 class IOLogger {
  public:
-  IOLogger(const Options& options, port::Mutex* mu, LogSink* data,
-           LogSink* index);
+  IOLogger(const Options& options, port::Mutex* mu, port::CondVar* cv,
+           LogSink* data, LogSink* index);
   ~IOLogger();
 
   // REQUIRES: mutex_ has been locked
   Status Add(const Slice& key, const Slice& value);
-  Status MakeEpoch();
+  Status MakeEpoch(bool dry_run);
 
  private:
   // No copying allowed
@@ -112,7 +112,7 @@ class IOLogger {
 
   const Options& options_;
   port::Mutex* const mutex_;
-  port::CondVar bg_cv_;
+  port::CondVar* const bg_cv_;
   // State below is protected by mutex_
   bool has_bg_compaction_;
   bool pending_epoch_flush_;

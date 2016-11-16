@@ -280,45 +280,51 @@ Status TableLogger::Finish() {
   return status_;
 }
 
-IOLogger::IOLogger(const Options& options, port::Mutex* mu, LogSink* data,
-                   LogSink* index)
+IOLogger::IOLogger(const Options& options, port::Mutex* mu, port::CondVar* cv,
+                   LogSink* data, LogSink* index)
     : options_(options),
       mutex_(mu),
-      bg_cv_(mu),
+      bg_cv_(cv),
       has_bg_compaction_(false),
       pending_epoch_flush_(false),
       imm_epoch_flush_(false),
       table_logger_(options, data, index),
       mem_buf_(NULL),
       imm_buf_(NULL) {
+  assert(mu != NULL && cv != NULL);
   mem_buf_ = &buf0_;
 }
 
 IOLogger::~IOLogger() {
   mutex_->AssertHeld();
   while (has_bg_compaction_) {
-    bg_cv_.Wait();
+    bg_cv_->Wait();
   }
 }
 
-Status IOLogger::MakeEpoch() {
+// If dry_run is set, we will only check pre-conditions and
+// will not actually schedule any epoch flushes.
+Status IOLogger::MakeEpoch(bool dry_run) {
   mutex_->AssertHeld();
   while (pending_epoch_flush_ ||  // XXX: The last one is still in-progress
          imm_buf_ != NULL) {      // XXX: Has an on-going compaction job
-    if (options_.non_blocking) {
+    if (dry_run || options_.non_blocking) {
       return Status::BufferFull(Slice());
     } else {
-      bg_cv_.Wait();
+      bg_cv_->Wait();
     }
   }
 
-  pending_epoch_flush_ = true;
-  Status status = PrepareForIncomingWrite(true);
-  if (!status.ok()) {
-    pending_epoch_flush_ = false;  // XXX: Avoid blocking future attempts
-  } else if (status.ok() && !options_.non_blocking) {
-    while (pending_epoch_flush_) {
-      bg_cv_.Wait();
+  Status status;
+  if (!dry_run) {
+    pending_epoch_flush_ = true;
+    status = PrepareForIncomingWrite(true);
+    if (!status.ok()) {
+      pending_epoch_flush_ = false;  // XXX: Avoid blocking future attempts
+    } else if (status.ok() && !options_.non_blocking) {
+      while (pending_epoch_flush_) {
+        bg_cv_->Wait();
+      }
     }
   }
 
@@ -351,7 +357,7 @@ Status IOLogger::PrepareForIncomingWrite(bool force) {
         status = Status::BufferFull(Slice());
         break;
       } else {
-        bg_cv_.Wait();
+        bg_cv_->Wait();
       }
     } else {
       // Attempt to switch to a new write buffer
@@ -380,7 +386,7 @@ void IOLogger::MaybeSchedualCompaction() {
     } else {
       // XXX: Directly run in current thread context
       CompactWriteBuffer();
-      bg_cv_.SignalAll();
+      bg_cv_->SignalAll();
     }
   }
 }
@@ -390,7 +396,7 @@ void IOLogger::BGWork(void* arg) {
   io->mutex_->Lock();
   assert(io->has_bg_compaction_);
   io->CompactWriteBuffer();
-  io->bg_cv_.SignalAll();
+  io->bg_cv_->SignalAll();
   io->mutex_->Unlock();
 }
 
