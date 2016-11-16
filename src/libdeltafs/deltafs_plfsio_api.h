@@ -42,14 +42,18 @@ class LogSink {
   LogSink(WritableFile* f, uint64_t s) : file_(f), offset_(s) {}
   LogSink(WritableFile* f) : file_(f), offset_(0) {}
 
-  ~LogSink() {}  // Keep the file open
+  // XXX: Keep the file open
+  ~LogSink() {}
 
   uint64_t Ltell() const { return offset_; }
 
   Status Lwrite(const Slice& data) {
     Status result = file_->Append(data);
     if (result.ok()) {
-      offset_ += data.size();
+      result = file_->Flush();
+      if (result.ok()) {
+        offset_ += data.size();
+      }
     }
     return result;
   }
@@ -57,6 +61,20 @@ class LogSink {
  private:
   WritableFile* file_;
   uint64_t offset_;
+};
+
+class Writer {
+ public:
+  Writer() {}
+  virtual ~Writer();
+
+  virtual Status Append(const Slice& fname, const Slice& data) = 0;
+  virtual Status MakeEpoch() = 0;
+
+ private:
+  // No copying allowed
+  void operator=(const Writer&);
+  Writer(const Writer&);
 };
 
 }  // namespace plfsio

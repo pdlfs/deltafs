@@ -69,7 +69,8 @@ class TableLogger {
   void operator=(const TableLogger&);
   TableLogger(const TableLogger&);
 
-  Options options_;
+  const Options& options_;
+
   Status status_;
   std::string smallest_key_;
   std::string largest_key_;
@@ -91,10 +92,13 @@ class TableLogger {
 // Log data as multiple sorted runs of tables.
 class IOLogger {
  public:
-  IOLogger(const Options& options, LogSink* data, LogSink* index);
-  ~IOLogger() {}
+  IOLogger(const Options& options, port::Mutex* mu, LogSink* data,
+           LogSink* index);
+  ~IOLogger();
 
+  // REQUIRES: mutex_ has been locked
   Status Add(const Slice& key, const Slice& value);
+  Status MakeEpoch();
 
  private:
   // No copying allowed
@@ -103,14 +107,17 @@ class IOLogger {
 
   static void BGWork(void*);
   void MaybeSchedualCompaction();
-  Status PrepareForIncomingWrite();
+  Status PrepareForIncomingWrite(bool force);
   void CompactWriteBuffer();
-  void ResetWriteBuffer();
 
-  Options options_;
-  TableLogger table_runs_;
+  const Options& options_;
+  port::Mutex* const mutex_;
+  port::CondVar bg_cv_;
+  // State below is protected by mutex_
+  bool has_bg_compaction_;
+  TableLogger table_logger_;
   WriteBuffer* mem_buf_;
-  const WriteBuffer* imm_buf_;
+  WriteBuffer* imm_buf_;
   WriteBuffer buf0_;
   WriteBuffer buf1_;
 };

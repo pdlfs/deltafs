@@ -280,16 +280,34 @@ Status TableLogger::Finish() {
   return status_;
 }
 
-IOLogger::IOLogger(const Options& options, LogSink* data, LogSink* index)
+IOLogger::IOLogger(const Options& options, port::Mutex* mu, LogSink* data,
+                   LogSink* index)
     : options_(options),
-      table_runs_(options, data, index),
+      mutex_(mu),
+      bg_cv_(mu),
+      has_bg_compaction_(false),
+      table_logger_(options, data, index),
       mem_buf_(NULL),
       imm_buf_(NULL) {
   mem_buf_ = &buf0_;
 }
 
+IOLogger::~IOLogger() {
+  mutex_->AssertHeld();
+  while (has_bg_compaction_) {
+    bg_cv_.Wait();
+  }
+}
+
+Status IOLogger::MakeEpoch() {
+  mutex_->AssertHeld();
+  Status status = PrepareForIncomingWrite(true);
+  return status;
+}
+
 Status IOLogger::Add(const Slice& key, const Slice& value) {
-  Status status = PrepareForIncomingWrite();
+  mutex_->AssertHeld();
+  Status status = PrepareForIncomingWrite(false);
   if (status.ok()) {
     mem_buf_->Add(key, value);
   }
@@ -297,12 +315,13 @@ Status IOLogger::Add(const Slice& key, const Slice& value) {
   return status;
 }
 
-Status IOLogger::PrepareForIncomingWrite() {
+Status IOLogger::PrepareForIncomingWrite(bool force) {
+  mutex_->AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
-  if (!table_runs_.ok()) {
-    status = table_runs_.status();
-  } else if (mem_buf_->CurrentBufferSize() < options_.table_size) {
+  if (!table_logger_.ok()) {
+    status = table_logger_.status();
+  } else if (!force && mem_buf_->CurrentBufferSize() < options_.table_size) {
     // There is room in current write buffer
   } else if (imm_buf_ != NULL) {
     status = Status::BufferFull(Slice());
@@ -323,45 +342,53 @@ Status IOLogger::PrepareForIncomingWrite() {
 }
 
 void IOLogger::MaybeSchedualCompaction() {
-  if (imm_buf_ != NULL) {
+  mutex_->AssertHeld();
+  if (imm_buf_ != NULL && !has_bg_compaction_) {
+    has_bg_compaction_ = true;
     if (options_.compaction_pool != NULL) {
       options_.compaction_pool->Schedule(IOLogger::BGWork, this);
     } else {
       // XXX: Directly run in current thread context
-      BGWork(this);
+      CompactWriteBuffer();
+      has_bg_compaction_ = false;
+      bg_cv_.SignalAll();
     }
   }
 }
 
 void IOLogger::BGWork(void* arg) {
   IOLogger* io = reinterpret_cast<IOLogger*>(arg);
+  io->mutex_->Lock();
+  assert(io->has_bg_compaction_);
   io->CompactWriteBuffer();
-  io->ResetWriteBuffer();
-}
-
-void IOLogger::ResetWriteBuffer() {
-  WriteBuffer* buf = const_cast<WriteBuffer*>(imm_buf_);
-  imm_buf_ = NULL;
-  buf->Reset();
+  io->has_bg_compaction_ = false;
+  io->bg_cv_.SignalAll();
+  io->mutex_->Unlock();
 }
 
 void IOLogger::CompactWriteBuffer() {
-  TableLogger* dest = &table_runs_;
-  const WriteBuffer* buffer = imm_buf_;
-  assert(buffer != NULL);
-  Iterator* iter = buffer->NewIterator();
-  iter->SeekToFirst();
-  for (; iter->Valid(); iter->Next()) {
-    dest->Add(iter->key(), iter->value());
-    if (!dest->ok()) {
-      break;
+  mutex_->AssertHeld();
+  TableLogger* const dest = &table_logger_;
+  WriteBuffer* const buffer = imm_buf_;
+  if (buffer != NULL) {
+    imm_buf_ = NULL;
+    mutex_->Unlock();
+    Iterator* iter = buffer->NewIterator();
+    iter->SeekToFirst();
+    for (; iter->Valid(); iter->Next()) {
+      dest->Add(iter->key(), iter->value());
+      if (!dest->ok()) {
+        break;
+      }
     }
-  }
 
-  if (dest->ok()) {
-    dest->EndTable();
+    if (dest->ok()) {
+      dest->EndTable();
+    }
+    delete iter;
+    buffer->Reset();
+    mutex_->Lock();
   }
-  delete iter;
 }
 
 }  // namespace plfsio
