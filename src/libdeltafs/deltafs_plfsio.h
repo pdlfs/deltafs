@@ -116,7 +116,7 @@ class IOLogger {
   // State below is protected by mutex_
   bool has_bg_compaction_;
   bool pending_epoch_flush_;
-  bool bg_epoch_flush_;
+  bool imm_epoch_flush_;
   TableLogger table_logger_;
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;

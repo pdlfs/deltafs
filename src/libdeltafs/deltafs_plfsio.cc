@@ -287,7 +287,7 @@ IOLogger::IOLogger(const Options& options, port::Mutex* mu, LogSink* data,
       bg_cv_(mu),
       has_bg_compaction_(false),
       pending_epoch_flush_(false),
-      bg_epoch_flush_(false),
+      imm_epoch_flush_(false),
       table_logger_(options, data, index),
       mem_buf_(NULL),
       imm_buf_(NULL) {
@@ -357,7 +357,7 @@ Status IOLogger::PrepareForIncomingWrite(bool force) {
       // Attempt to switch to a new write buffer
       mem_buf_->Finish();
       imm_buf_ = mem_buf_;
-      if (force) bg_epoch_flush_ = true;
+      if (force) imm_epoch_flush_ = true;
       WriteBuffer* mem_buf = mem_buf_;
       MaybeSchedualCompaction();
       if (mem_buf == &buf0_) {
@@ -396,10 +396,10 @@ void IOLogger::BGWork(void* arg) {
 
 void IOLogger::CompactWriteBuffer() {
   mutex_->AssertHeld();
-  const bool bg_epoch_flush = bg_epoch_flush_;  // XXX: Epoch flush scheduled
+  const WriteBuffer* const buffer = imm_buf_;
+  const bool is_epoch_flush = imm_epoch_flush_;  // XXX: Epoch flush scheduled
   const bool pending_epoch_flush =
       pending_epoch_flush_;  // XXX: Epoch flush requested
-  const WriteBuffer* const buffer = imm_buf_;
   TableLogger* const dest = &table_logger_;
   if (buffer != NULL) {
     mutex_->Unlock();
@@ -415,24 +415,23 @@ void IOLogger::CompactWriteBuffer() {
     if (dest->ok()) {
       dest->EndTable();
     }
-    if (bg_epoch_flush) {
+    if (is_epoch_flush) {
       dest->EndEpoch();
     }
 
     delete iter;
     mutex_->Lock();
-    if (bg_epoch_flush && pending_epoch_flush) {
+    if (is_epoch_flush && pending_epoch_flush) {
       pending_epoch_flush_ = false;
     }
-    if (bg_epoch_flush) {
-      bg_epoch_flush_ = false;
+    if (is_epoch_flush) {
+      imm_epoch_flush_ = false;
     }
     imm_buf_->Reset();
     imm_buf_ = NULL;
   }
 
   has_bg_compaction_ = false;
-
   // XXX: Try schedule another compaction
   MaybeSchedualCompaction();
 }
