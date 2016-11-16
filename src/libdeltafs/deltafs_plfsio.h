@@ -106,7 +106,7 @@ class IOLogger {
   IOLogger(const IOLogger&);
 
   static void BGWork(void*);
-  void MaybeSchedualCompaction(bool force_epoch);
+  void MaybeSchedualCompaction();
   Status PrepareForIncomingWrite(bool force_epoch);
   void CompactWriteBuffer();
 

@@ -303,8 +303,8 @@ IOLogger::~IOLogger() {
 
 Status IOLogger::MakeEpoch() {
   mutex_->AssertHeld();
-  while (pending_epoch_flush_ ||  // XXX: the last one is still in-progress
-         imm_buf_ != NULL) {      // XXX: has an on-going compaction job
+  while (pending_epoch_flush_ ||  // XXX: The last one is still in-progress
+         imm_buf_ != NULL) {      // XXX: Has an on-going compaction job
     if (options_.non_blocking) {
       return Status::BufferFull(Slice());
     } else {
@@ -315,7 +315,7 @@ Status IOLogger::MakeEpoch() {
   pending_epoch_flush_ = true;
   Status status = PrepareForIncomingWrite(true);
   if (!status.ok()) {
-    pending_epoch_flush_ = false;  // XXX: avoid blocking future attempts
+    pending_epoch_flush_ = false;  // XXX: Avoid blocking future attempts
   } else if (status.ok() && !options_.non_blocking) {
     while (pending_epoch_flush_) {
       bg_cv_.Wait();
@@ -357,8 +357,9 @@ Status IOLogger::PrepareForIncomingWrite(bool force) {
       // Attempt to switch to a new write buffer
       mem_buf_->Finish();
       imm_buf_ = mem_buf_;
+      if (force) bg_epoch_flush_ = true;
       WriteBuffer* mem_buf = mem_buf_;
-      MaybeSchedualCompaction(force);
+      MaybeSchedualCompaction();
       if (mem_buf == &buf0_) {
         mem_buf_ = &buf1_;
       } else {
@@ -370,14 +371,10 @@ Status IOLogger::PrepareForIncomingWrite(bool force) {
   return status;
 }
 
-void IOLogger::MaybeSchedualCompaction(bool force) {
+void IOLogger::MaybeSchedualCompaction() {
   mutex_->AssertHeld();
-  if (imm_buf_ != NULL && !has_bg_compaction_) {
+  if (imm_buf_ != NULL && !has_bg_compaction_) {  // XXX: One job at a time
     has_bg_compaction_ = true;
-    if (force) {
-      assert(!bg_epoch_flush_ && pending_epoch_flush_);
-      bg_epoch_flush_ = true;
-    }
     if (options_.compaction_pool != NULL) {
       options_.compaction_pool->Schedule(IOLogger::BGWork, this);
     } else {
@@ -399,9 +396,9 @@ void IOLogger::BGWork(void* arg) {
 
 void IOLogger::CompactWriteBuffer() {
   mutex_->AssertHeld();
-  const bool bg_epoch_flush = bg_epoch_flush_;  // XXX: epoch flush scheduled
+  const bool bg_epoch_flush = bg_epoch_flush_;  // XXX: Epoch flush scheduled
   const bool pending_epoch_flush =
-      pending_epoch_flush_;  // XXX: epoch flush requested
+      pending_epoch_flush_;  // XXX: Epoch flush requested
   const WriteBuffer* const buffer = imm_buf_;
   TableLogger* const dest = &table_logger_;
   if (buffer != NULL) {
@@ -435,6 +432,9 @@ void IOLogger::CompactWriteBuffer() {
   }
 
   has_bg_compaction_ = false;
+
+  // XXX: Try schedule another compaction
+  MaybeSchedualCompaction();
 }
 
 }  // namespace plfsio
