@@ -303,7 +303,8 @@ IOLogger::~IOLogger() {
 
 Status IOLogger::MakeEpoch() {
   mutex_->AssertHeld();
-  while (pending_epoch_flush_) {
+  while (pending_epoch_flush_ ||  // XXX: the last one is still in-progress
+         imm_buf_ != NULL) {      // XXX: has an on-going compaction job
     if (options_.non_blocking) {
       return Status::BufferFull(Slice());
     } else {
@@ -313,8 +314,10 @@ Status IOLogger::MakeEpoch() {
 
   pending_epoch_flush_ = true;
   Status status = PrepareForIncomingWrite(true);
-  if (!options_.non_blocking) {
-    while (imm_buf_ != NULL) {
+  if (!status.ok()) {
+    pending_epoch_flush_ = false;  // XXX: avoid blocking future attempts
+  } else if (status.ok() && !options_.non_blocking) {
+    while (pending_epoch_flush_) {
       bg_cv_.Wait();
     }
   }
@@ -396,8 +399,9 @@ void IOLogger::BGWork(void* arg) {
 
 void IOLogger::CompactWriteBuffer() {
   mutex_->AssertHeld();
-  const bool pending_epoch_flush = pending_epoch_flush_;
-  const bool bg_epoch_flush = bg_epoch_flush_;
+  const bool bg_epoch_flush = bg_epoch_flush_;  // XXX: epoch flush scheduled
+  const bool pending_epoch_flush =
+      pending_epoch_flush_;  // XXX: epoch flush requested
   const WriteBuffer* const buffer = imm_buf_;
   TableLogger* const dest = &table_logger_;
   if (buffer != NULL) {
@@ -417,19 +421,20 @@ void IOLogger::CompactWriteBuffer() {
     if (bg_epoch_flush) {
       dest->EndEpoch();
     }
+
     delete iter;
     mutex_->Lock();
     if (bg_epoch_flush && pending_epoch_flush) {
       pending_epoch_flush_ = false;
+    }
+    if (bg_epoch_flush) {
+      bg_epoch_flush_ = false;
     }
     imm_buf_->Reset();
     imm_buf_ = NULL;
   }
 
   has_bg_compaction_ = false;
-  if (bg_epoch_flush_) {
-    bg_epoch_flush_ = false;
-  }
 }
 
 }  // namespace plfsio
