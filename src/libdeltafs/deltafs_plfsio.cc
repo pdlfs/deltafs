@@ -287,7 +287,9 @@ IOLogger::IOLogger(const Options& options, port::Mutex* mu, port::CondVar* cv,
       bg_cv_(cv),
       has_bg_compaction_(false),
       pending_epoch_flush_(false),
-      imm_epoch_flush_(false),
+      pending_finish_(false),
+      bg_do_epoch_flush_(false),
+      bg_do_finish_(false),
       table_logger_(options, data, index),
       mem_buf_(NULL),
       imm_buf_(NULL) {
@@ -302,8 +304,43 @@ IOLogger::~IOLogger() {
   }
 }
 
-// If dry_run is set, we will only check pre-conditions and
-// will not actually schedule any epoch flushes.
+// If dry_run is set, we will only check error status and buffer
+// space and will not actually schedule any compactions.
+Status IOLogger::Finish() {
+  mutex_->AssertHeld();
+  while (pending_finish_ ||
+         pending_epoch_flush_ ||  // XXX: The last one is still in-progress
+         imm_buf_ != NULL) {      // XXX: Has an on-going compaction job
+    if (dry_run || options_.non_blocking) {
+      return Status::BufferFull(Slice());
+    } else {
+      bg_cv_->Wait();
+    }
+  }
+
+  Status status;
+  if (dry_run) {
+    // XXX: Only do a status check
+    status = table_logger_.status();
+  } else {
+    pending_finish_ = true;
+    pending_epoch_flush_ = true;
+    status = Prepare(true, true);
+    if (!status.ok()) {
+      pending_epoch_flush_ = false;  // XXX: Avoid blocking future attempts
+      pending_finish_ = false;
+    } else if (status.ok() && !options_.non_blocking) {
+      while (pending_epoch_flush_ || pending_finish_) {
+        bg_cv_->Wait();
+      }
+    }
+  }
+
+  return status;
+}
+
+// If dry_run is set, we will only check error status and buffer
+// space and will not actually schedule any compactions.
 Status IOLogger::MakeEpoch(bool dry_run) {
   mutex_->AssertHeld();
   while (pending_epoch_flush_ ||  // XXX: The last one is still in-progress
@@ -321,7 +358,7 @@ Status IOLogger::MakeEpoch(bool dry_run) {
     status = table_logger_.status();
   } else {
     pending_epoch_flush_ = true;
-    status = PrepareForIncomingWrite(true);
+    status = Prepare(true, false);
     if (!status.ok()) {
       pending_epoch_flush_ = false;  // XXX: Avoid blocking future attempts
     } else if (status.ok() && !options_.non_blocking) {
@@ -336,7 +373,7 @@ Status IOLogger::MakeEpoch(bool dry_run) {
 
 Status IOLogger::Add(const Slice& key, const Slice& value) {
   mutex_->AssertHeld();
-  Status status = PrepareForIncomingWrite(false);
+  Status status = Prepare(false, false);
   if (status.ok()) {
     mem_buf_->Add(key, value);
   }
@@ -344,7 +381,7 @@ Status IOLogger::Add(const Slice& key, const Slice& value) {
   return status;
 }
 
-Status IOLogger::PrepareForIncomingWrite(bool force) {
+Status IOLogger::Prepare(bool force, bool finish) {
   mutex_->AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
@@ -366,7 +403,8 @@ Status IOLogger::PrepareForIncomingWrite(bool force) {
       // Attempt to switch to a new write buffer
       mem_buf_->Finish();
       imm_buf_ = mem_buf_;
-      if (force) imm_epoch_flush_ = true;
+      if (force) bg_do_epoch_flush_ = true;
+      if (finish) bg_do_finish_ = true;
       WriteBuffer* mem_buf = mem_buf_;
       MaybeSchedualCompaction();
       if (mem_buf == &buf0_) {
@@ -406,7 +444,9 @@ void IOLogger::BGWork(void* arg) {
 void IOLogger::CompactWriteBuffer() {
   mutex_->AssertHeld();
   const WriteBuffer* const buffer = imm_buf_;
-  const bool is_epoch_flush = imm_epoch_flush_;  // XXX: Epoch flush scheduled
+  const bool do_finish = bg_do_finish_;
+  const bool pending_finish = pending_finish_;
+  const bool do_epoch_flush = bg_do_epoch_flush_;  // XXX: Epoch flush scheduled
   const bool pending_epoch_flush =
       pending_epoch_flush_;  // XXX: Epoch flush requested
   TableLogger* const dest = &table_logger_;
@@ -422,19 +462,26 @@ void IOLogger::CompactWriteBuffer() {
     }
 
     if (dest->ok()) {
+      // XXX: Empty tables are implicitly discarded
       dest->EndTable();
     }
-    if (is_epoch_flush) {
+    if (do_epoch_flush) {
+      // XXX: Empty epoches are implicitly discarded
       dest->EndEpoch();
+    }
+    if (do_finish) {
+      dest->Finish();
     }
 
     delete iter;
     mutex_->Lock();
-    if (is_epoch_flush && pending_epoch_flush) {
-      pending_epoch_flush_ = false;
+    if (do_epoch_flush) {
+      if (pending_epoch_flush) pending_epoch_flush_ = false;
+      bg_do_epoch_flush_ = false;
     }
-    if (is_epoch_flush) {
-      imm_epoch_flush_ = false;
+    if (do_finish) {
+      if (pending_finish) pending_finish_ = false;
+      bg_do_finish_ = false;
     }
     imm_buf_->Reset();
     imm_buf_ = NULL;

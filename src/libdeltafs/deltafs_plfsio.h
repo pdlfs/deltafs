@@ -99,6 +99,7 @@ class IOLogger {
   // REQUIRES: mutex_ has been locked
   Status Add(const Slice& key, const Slice& value);
   Status MakeEpoch(bool dry_run);
+  Status Finish(bool dry_run);
 
  private:
   // No copying allowed
@@ -107,7 +108,7 @@ class IOLogger {
 
   static void BGWork(void*);
   void MaybeSchedualCompaction();
-  Status PrepareForIncomingWrite(bool force_epoch);
+  Status Prepare(bool force_epoch, bool do_finish);
   void CompactWriteBuffer();
 
   const Options& options_;
@@ -116,7 +117,9 @@ class IOLogger {
   // State below is protected by mutex_
   bool has_bg_compaction_;
   bool pending_epoch_flush_;
-  bool imm_epoch_flush_;
+  bool pending_finish_;
+  bool bg_do_epoch_flush_;
+  bool bg_do_finish_;
   TableLogger table_logger_;
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;
