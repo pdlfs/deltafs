@@ -146,7 +146,16 @@ TableLogger::TableLogger(const Options& options, LogSink* data, LogSink* index)
       num_epoches_(0),
       data_log_(data),
       index_log_(index),
-      finished_(false) {}
+      finished_(false) {
+  assert(index_log_ != NULL && data_log_ != NULL);
+  index_log_->Ref();
+  data_log_->Ref();
+}
+
+TableLogger::~TableLogger() {
+  index_log_->Unref();
+  data_log_->Unref();
+}
 
 void TableLogger::EndEpoch() {
   assert(!finished_);  // Finish() has not been called

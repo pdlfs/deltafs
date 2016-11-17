@@ -51,6 +51,10 @@ struct Options {
   // Default: 0
   int lg_parts;
 
+  // Rank of the process.
+  // Default: 0
+  int rank;
+
   // Env instance used to access raw files stored in the underlying
   // storage system. If NULL, Env::Default() will be used.
   // Default: NULL

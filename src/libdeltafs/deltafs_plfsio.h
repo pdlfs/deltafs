@@ -50,7 +50,7 @@ class WriteBuffer {
 class TableLogger {
  public:
   TableLogger(const Options& options, LogSink* data, LogSink* index);
-  ~TableLogger() {}
+  ~TableLogger();
 
   bool ok() const { return status_.ok(); }
   Status status() const { return status_; }
