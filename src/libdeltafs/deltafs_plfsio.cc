@@ -316,7 +316,10 @@ Status IOLogger::MakeEpoch(bool dry_run) {
   }
 
   Status status;
-  if (!dry_run) {
+  if (dry_run) {
+    // XXX: Only do a status check
+    status = table_logger_.status();
+  } else {
     pending_epoch_flush_ = true;
     status = PrepareForIncomingWrite(true);
     if (!status.ok()) {

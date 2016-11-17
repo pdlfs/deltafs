@@ -46,6 +46,11 @@ struct Options {
   // Default: 0
   uint64_t slowdown_micros;
 
+  // Number of partitions to divide the data. Specified in logarithmic
+  // number so each x will give 2**x partitions.
+  // Default: 0
+  int lg_parts;
+
   // Env instance used to access raw files stored in the underlying
   // storage system. If NULL, Env::Default() will be used.
   // Default: NULL

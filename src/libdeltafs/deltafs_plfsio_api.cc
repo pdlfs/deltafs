@@ -18,7 +18,7 @@ namespace plfsio {
 
 class WriterImpl : public Writer {
  public:
-  WriterImpl(int lg_parts, IOLogger** io);
+  WriterImpl(const Options& options, IOLogger** io);
   virtual ~WriterImpl();
 
   virtual Status Append(const Slice& fname, const Slice& data);
@@ -28,19 +28,26 @@ class WriterImpl : public Writer {
   void MaybeSlowdown();
 
   friend class Writer;
-  Options options_;
+  const Options options_;
   port::Mutex mutex_;
+  port::CondVar cond_var_;
   size_t num_parts_;
   uint32_t part_mask_;
   IOLogger** io_;
 };
 
-WriterImpl::WriterImpl(int lg_parts, IOLogger** io)
-    : num_parts_(1u << lg_parts), part_mask_(num_parts_ - 1), io_(io) {}
+WriterImpl::WriterImpl(const Options& options, IOLogger** io)
+    : options_(options),
+      cond_var_(&mutex_),
+      num_parts_(1u << options.lg_parts),
+      part_mask_(num_parts_ - 1),
+      io_(io) {}
 
 WriterImpl::~WriterImpl() {
   mutex_.Lock();
-  // XXX: TODO
+  for (size_t i = 0; i < num_parts_; i++) {
+    delete io_[i];
+  }
   mutex_.Unlock();
 }
 
@@ -56,13 +63,34 @@ Status WriterImpl::MakeEpoch() {
   Status status;
   {
     MutexLock l(&mutex_);
-    for (size_t i = 0; i < num_parts_; i++) {
-      status = io_[i]->MakeEpoch(false);
-      if (!status.ok()) {
+
+    bool dry_run = true;
+    while (true) {
+      // XXX: Check partition status in a single pass
+      for (size_t i = 0; i < num_parts_; i++) {
+        status = io_[i]->MakeEpoch(dry_run);
+        if (!status.ok()) {
+          break;
+        }
+      }
+      if (status.IsBufferFull() && !options_.non_blocking) {
+        cond_var_.Wait();
+      } else {
         break;
       }
     }
+
+    if (status.ok()) {
+      dry_run = false;
+      for (size_t i = 0; i < num_parts_; i++) {
+        status = io_[i]->MakeEpoch(dry_run);
+        if (!status.ok()) {
+          break;
+        }
+      }
+    }
   }
+
   if (status.IsBufferFull()) {
     MaybeSlowdown();
   }
