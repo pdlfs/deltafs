@@ -104,7 +104,7 @@ class Writer {
 
   // Create an I/O writer instance for a specified directory.
   // Return OK on success, or a non-OK status on errors.
-  static Status Open(const Options& options, const Slice& dirname,
+  static Status Open(const Options& options, const std::string& dirname,
                      Writer** result);
 
   // Append a chuck of data to a specified file under this directory.

@@ -51,17 +51,15 @@ LogSink::~LogSink() {
   delete file_;
 }
 
-static std::string PartitionIndexFileName(const Slice& dirname, int rank,
+static std::string PartitionIndexFileName(const std::string& parent, int rank,
                                           int partition) {
-  std::string parent = dirname.ToString();
   char tmp[20];
   assert(rank < kMaxNumProcesses);
   snprintf(tmp, sizeof(tmp), "/%08d-%03d.idx", rank, partition);
   return parent + tmp;
 }
 
-static std::string DataFileName(const Slice& dirname, int rank) {
-  std::string parent = dirname.ToString();
+static std::string DataFileName(const std::string& parent, int rank) {
   char tmp[20];
   assert(rank < kMaxNumProcesses);
   snprintf(tmp, sizeof(tmp), "/%08d.dat", rank);
@@ -229,7 +227,8 @@ static Status NewLogStream(const std::string& name, Env* env, LogSink** sink) {
   return status;
 }
 
-Status Writer::Open(const Options& opts, const Slice& name, Writer** ptr) {
+Status Writer::Open(const Options& opts, const std::string& name,
+                    Writer** ptr) {
   *ptr = NULL;
   Options options = SanitizeWriteOptions(opts);
   size_t num_parts = 1u << options.lg_parts;
