@@ -97,6 +97,11 @@ class LogSink {
   uint32_t refs_;
 };
 
+// Destroy the contents of the specified directory.
+// Be very careful using this method.
+extern Status DestroyDir(const std::string& dirname, const Options& options);
+
+// Deltafs plfs-style N-1 I/O writer api.
 class Writer {
  public:
   Writer() {}

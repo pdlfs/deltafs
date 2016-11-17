@@ -276,5 +276,26 @@ Status Writer::Open(const Options& opts, const std::string& name,
   return status;
 }
 
+Status DestroyDir(const std::string& dirname, const Options& options) {
+  Status status;
+  Env* env = options.env;
+  if (env == NULL) env = Env::Default();
+  std::vector<std::string> names;
+  status = env->GetChildren(dirname, &names);
+  if (status.ok()) {
+    for (size_t i = 0; i < names.size(); i++) {
+      status = env->DeleteFile(dirname + "/" + names[i]);
+      if (!status.ok()) {
+        break;
+      }
+    }
+
+    // XXX: Ignore error status
+    env->DeleteDir(dirname);
+  }
+
+  return status;
+}
+
 }  // namespace plfsio
 }  // namespace pdlfs
