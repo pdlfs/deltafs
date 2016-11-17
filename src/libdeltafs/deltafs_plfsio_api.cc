@@ -23,6 +23,7 @@ class WriterImpl : public Writer {
 
   virtual Status Append(const Slice& fname, const Slice& data);
   virtual Status MakeEpoch();
+  virtual Status Finish();
 
  private:
   void MaybeSlowdown();
@@ -59,14 +60,54 @@ void WriterImpl::MaybeSlowdown() {
   }
 }
 
+Status WriterImpl::Finish() {
+  Status status;
+  {
+    MutexLock l(&mutex_);
+
+    bool dry_run = true;
+    // XXX: Check partition status in a single pass
+    while (true) {
+      for (size_t i = 0; i < num_parts_; i++) {
+        status = io_[i]->Finish(dry_run);
+        if (!status.ok()) {
+          break;
+        }
+      }
+      if (status.IsBufferFull() && !options_.non_blocking) {
+        // XXX: Wait for buffer space
+        cond_var_.Wait();
+      } else {
+        break;
+      }
+    }
+
+    // XXX: Do it
+    if (status.ok()) {
+      dry_run = false;
+      for (size_t i = 0; i < num_parts_; i++) {
+        status = io_[i]->Finish(dry_run);
+        if (!status.ok()) {
+          break;
+        }
+      }
+    }
+  }
+
+  if (status.IsBufferFull()) {
+    MaybeSlowdown();
+  }
+  return status;
+}
+
 Status WriterImpl::MakeEpoch() {
   Status status;
   {
     MutexLock l(&mutex_);
 
     bool dry_run = true;
+    // XXX: Check partition status in a single pass
     while (true) {
-      // XXX: Check partition status in a single pass
       for (size_t i = 0; i < num_parts_; i++) {
         status = io_[i]->MakeEpoch(dry_run);
         if (!status.ok()) {
@@ -74,12 +115,14 @@ Status WriterImpl::MakeEpoch() {
         }
       }
       if (status.IsBufferFull() && !options_.non_blocking) {
+        // XXX: Wait for buffer space
         cond_var_.Wait();
       } else {
         break;
       }
     }
 
+    // XXX: Do it
     if (status.ok()) {
       dry_run = false;
       for (size_t i = 0; i < num_parts_; i++) {

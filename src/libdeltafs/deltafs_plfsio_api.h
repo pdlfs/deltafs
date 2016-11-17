@@ -90,8 +90,16 @@ class Writer {
   Writer() {}
   virtual ~Writer();
 
+  // Create an I/O writer instance for a specified directory.
+  // Return OK on success, or a non-OK status on errors.
+  static Status Open(const Options& options, const Slice& dirname,
+                     Writer** result);
+
+  // Append a chuck of data to a specified file under this directory.
   virtual Status Append(const Slice& fname, const Slice& data) = 0;
+
   virtual Status MakeEpoch() = 0;
+  virtual Status Finish() = 0;
 
  private:
   // No copying allowed
