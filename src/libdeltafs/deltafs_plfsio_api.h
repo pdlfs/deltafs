@@ -17,16 +17,18 @@ namespace pdlfs {
 namespace plfsio {
 
 struct Options {
+  Options();
+
   // Approximate size of user data packed per block.
   // This usually corresponds to the size of each I/O request
   // sent to the underlying storage.
-  // Default: 128K
+  // Default: 64K
   size_t block_size;
 
   // Approximate size of user data packed per table.
   // This corresponds to the size of the in-memory write buffer
   // we must allocate for each log stream.
-  // Default: 2M
+  // Default: 32M
   size_t table_size;
 
   // Thread pool used to run background compaction jobs.
@@ -38,7 +40,7 @@ struct Options {
   // True if write operations should be performed in a non-blocking manner,
   // in which case a special status is returned instead of blocking the
   // writer to wait for buffer space.
-  // Default: True
+  // Default: false
   bool non_blocking;
 
   // Number of microseconds to slowdown if a writer cannot make progress

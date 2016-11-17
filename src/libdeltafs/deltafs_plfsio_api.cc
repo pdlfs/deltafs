@@ -20,6 +20,18 @@
 namespace pdlfs {
 namespace plfsio {
 
+Options::Options()
+    : block_size(64 << 10),
+      table_size(32 << 20),
+      compaction_pool(NULL),
+      non_blocking(false),
+      slowdown_micros(0),
+      lg_parts(0),
+      rank(0),
+      env(NULL) {}
+
+static const bool kSyncLogBeforeClosing = true;
+
 static const int kMaxNumProcesses = 100000000;  // 100 million
 
 void LogSink::Unref() {
@@ -31,13 +43,11 @@ void LogSink::Unref() {
 }
 
 LogSink::~LogSink() {
-  Status status;
-#if 0
-  status = file_->Sync();
-#endif
-  if (status.ok()) {
-    file_->Close();
+  // XXX: Ignore potential error status
+  if (kSyncLogBeforeClosing) {
+    file_->Sync();
   }
+  file_->Close();
   delete file_;
 }
 
