@@ -7,7 +7,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio.h"
+#include "deltafs_plfsio_internal.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/testharness.h"

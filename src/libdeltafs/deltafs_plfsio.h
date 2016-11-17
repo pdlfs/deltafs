@@ -9,122 +9,114 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <string>
-#include <vector>
+#include <stddef.h>
 
-#include "deltafs_plfsio_api.h"
-#include "deltafs_plfsio_format.h"
+#include "pdlfs-common/env.h"
 
 namespace pdlfs {
 namespace plfsio {
 
-// Non-thread-safe append-only in-memory table.
-class WriteBuffer {
- public:
-  explicit WriteBuffer() : num_entries_(0), finished_(false) {}
-  ~WriteBuffer() {}
+struct Options {
+  Options();
 
-  void Reserve(uint32_t num_entries, size_t size_per_entry);
-  size_t CurrentBufferSize() const { return buffer_.size(); }
-  uint32_t NumEntries() const { return num_entries_; }
-  void Add(const Slice& key, const Slice& value);
-  Iterator* NewIterator() const;
-  void Finish();
-  void Reset();
+  // Approximate size of user data packed per block.
+  // This usually corresponds to the size of each I/O request
+  // sent to the underlying storage.
+  // Default: 64K
+  size_t block_size;
 
- private:
-  // Starting offsets of inserted entries
-  std::vector<uint32_t> offsets_;
-  std::string buffer_;
-  uint32_t num_entries_;
-  bool finished_;
+  // Approximate size of user data packed per table.
+  // This corresponds to the size of the in-memory write buffer
+  // we must allocate for each log stream.
+  // Default: 32M
+  size_t table_size;
 
-  // No copying allowed
-  void operator=(const WriteBuffer&);
-  WriteBuffer(const WriteBuffer&);
+  // Thread pool used to run background compaction jobs.
+  // Set to NULL to disable background jobs so all compactions will
+  // run as foreground jobs.
+  // Default: NULL
+  ThreadPool* compaction_pool;
 
-  class Iter;
+  // True if write operations should be performed in a non-blocking manner,
+  // in which case a special status is returned instead of blocking the
+  // writer to wait for buffer space.
+  // Default: false
+  bool non_blocking;
+
+  // Number of microseconds to slowdown if a writer cannot make progress
+  // because the system has run out of its buffer space.
+  // Default: 0
+  uint64_t slowdown_micros;
+
+  // Number of partitions to divide the data. Specified in logarithmic
+  // number so each x will give 2**x partitions.
+  // Default: 0
+  int lg_parts;
+
+  // Rank of the process.
+  // Default: 0
+  int rank;
+
+  // Env instance used to access raw files stored in the underlying
+  // storage system. If NULL, Env::Default() will be used.
+  // Default: NULL
+  Env* env;
 };
 
-// Write table contents into a set of log files.
-class TableLogger {
+// Abstraction for a non-thread-safe possibly-buffered
+// append-only log stream.
+class LogSink {
  public:
-  TableLogger(const Options& options, LogSink* data, LogSink* index);
-  ~TableLogger();
+  LogSink(WritableFile* f, uint64_t s) : file_(f), offset_(s), refs_(0) {}
+  LogSink(WritableFile* f) : file_(f), offset_(0), refs_(0) {}
 
-  bool ok() const { return status_.ok(); }
-  Status status() const { return status_; }
+  uint64_t Ltell() const { return offset_; }
 
-  void Add(const Slice& key, const Slice& value);
-  void EndBlock();  // Force the start of a new data block
-  void EndTable();  // Force the start of a new table
-  void EndEpoch();  // Force the start of a new epoch
+  Status Lwrite(const Slice& data) {
+    Status result = file_->Append(data);
+    if (result.ok()) {
+      result = file_->Flush();
+      if (result.ok()) {
+        offset_ += data.size();
+      }
+    }
+    return result;
+  }
 
-  Status Finish();
+  void Ref() { refs_++; }
+  void Unref();
 
  private:
-  enum { kDataBlkRestartInt = 16, kNonDataBlkRestartInt = 1 };
-
+  ~LogSink();
   // No copying allowed
-  void operator=(const TableLogger&);
-  TableLogger(const TableLogger&);
+  void operator=(const LogSink&);
+  LogSink(const LogSink&);
 
-  const Options& options_;
-
-  Status status_;
-  std::string smallest_key_;
-  std::string largest_key_;
-  std::string last_key_;
-  BlockBuilder data_block_;
-  BlockBuilder index_block_;
-  BlockBuilder epoch_block_;
-  bool pending_index_entry_;
-  BlockHandle pending_index_handle_;
-  bool pending_epoch_entry_;
-  TableHandle pending_epoch_handle_;
-  uint32_t num_tables_;   // Number of tables within an epoch
-  uint32_t num_epoches_;  // Number of epoches generated
-  LogSink* data_log_;
-  LogSink* index_log_;
-  bool finished_;
+  WritableFile* file_;
+  uint64_t offset_;
+  uint32_t refs_;
 };
 
-// Log data as multiple sorted runs of tables. Implementation is thread-safe.
-class IOLogger {
+class Writer {
  public:
-  IOLogger(const Options& options, port::Mutex* mu, port::CondVar* cv,
-           LogSink* data, LogSink* index);
-  ~IOLogger();
+  Writer() {}
+  virtual ~Writer();
 
-  // REQUIRES: mutex_ has been locked
-  Status Add(const Slice& key, const Slice& value);
-  Status MakeEpoch(bool dry_run);
-  Status Finish(bool dry_run);
+  // Create an I/O writer instance for a specified directory.
+  // Return OK on success, or a non-OK status on errors.
+  static Status Open(const Options& options, const std::string& dirname,
+                     Writer** result);
+
+  // Append a chuck of data to a specified file under this directory.
+  virtual Status Append(const Slice& fname, const Slice& data) = 0;
+
+  virtual Status MakeEpoch() = 0;
+  virtual Status Finish() = 0;
 
  private:
   // No copying allowed
-  void operator=(const IOLogger&);
-  IOLogger(const IOLogger&);
-
-  static void BGWork(void*);
-  void MaybeSchedualCompaction();
-  Status Prepare(bool force_epoch, bool do_finish);
-  void CompactWriteBuffer();
-
-  const Options& options_;
-  port::Mutex* const mutex_;
-  port::CondVar* const bg_cv_;
-  // State below is protected by mutex_
-  bool has_bg_compaction_;
-  bool pending_epoch_flush_;
-  bool pending_finish_;
-  bool bg_do_epoch_flush_;
-  bool bg_do_finish_;
-  TableLogger table_logger_;
-  WriteBuffer* mem_buf_;
-  WriteBuffer* imm_buf_;
-  WriteBuffer buf0_;
-  WriteBuffer buf1_;
+  void operator=(const Writer&);
+  Writer(const Writer&);
 };
 
 }  // namespace plfsio
