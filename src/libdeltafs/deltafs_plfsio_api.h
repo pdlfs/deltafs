@@ -57,15 +57,12 @@ struct Options {
   Env* env;
 };
 
-// Abstraction for a non-thread-safe un-buffered
-// append-only log file.
+// Abstraction for a non-thread-safe possibly-buffered
+// append-only log stream.
 class LogSink {
  public:
-  LogSink(WritableFile* f, uint64_t s) : file_(f), offset_(s) {}
-  LogSink(WritableFile* f) : file_(f), offset_(0) {}
-
-  // XXX: Keep the file open
-  ~LogSink() {}
+  LogSink(WritableFile* f, uint64_t s) : file_(f), offset_(s), refs_(0) {}
+  LogSink(WritableFile* f) : file_(f), offset_(0), refs_(0) {}
 
   uint64_t Ltell() const { return offset_; }
 
@@ -80,9 +77,18 @@ class LogSink {
     return result;
   }
 
+  void Ref() { refs_++; }
+  void Unref();
+
  private:
+  ~LogSink();
+  // No copying allowed
+  void operator=(const LogSink&);
+  LogSink(const LogSink&);
+
   WritableFile* file_;
   uint64_t offset_;
+  uint32_t refs_;
 };
 
 class Writer {

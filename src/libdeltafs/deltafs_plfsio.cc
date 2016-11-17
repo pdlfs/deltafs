@@ -306,7 +306,7 @@ IOLogger::~IOLogger() {
 
 // If dry_run is set, we will only check error status and buffer
 // space and will not actually schedule any compactions.
-Status IOLogger::Finish() {
+Status IOLogger::Finish(bool dry_run) {
   mutex_->AssertHeld();
   while (pending_finish_ ||
          pending_epoch_flush_ ||  // XXX: The last one is still in-progress

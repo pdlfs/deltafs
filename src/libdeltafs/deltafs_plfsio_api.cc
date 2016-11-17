@@ -16,6 +16,25 @@
 namespace pdlfs {
 namespace plfsio {
 
+void LogSink::Unref() {
+  assert(refs_ > 0);
+  refs_--;
+  if (refs_ == 0) {
+    delete this;
+  }
+}
+
+LogSink::~LogSink() {
+  Status status;
+#if 0
+  status = file_->Sync();
+#endif
+  if (status.ok()) {
+    file_->Close();
+  }
+  delete file_;
+}
+
 class WriterImpl : public Writer {
  public:
   WriterImpl(const Options& options, IOLogger** io);
