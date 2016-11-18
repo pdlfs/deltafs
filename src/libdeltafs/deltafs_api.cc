@@ -412,6 +412,17 @@ int deltafs_unlink(const char* __path) {
   }
 }
 
+int deltafs_nonop() {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+
+  return 0;
+}
+
 #ifdef __cplusplus
 }
 #endif

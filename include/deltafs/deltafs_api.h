@@ -12,9 +12,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-// Used as a special mode to create directories where all
-// I/O operations beneath them will be done in a
-// parallel log-structured manner.
+// Used as a mode to create a special type of directories where all
+// I/O operations to files beneath these directories will be performed
+// in a parallel log-structured manner that resembles plfs.
 #define DELTAFS_DIR_PLFS_STYLE 0x10000
 #define DELTAFS_DIR_MASK 0xf0000
 
@@ -25,6 +25,7 @@
 extern "C" {
 #endif
 
+int deltafs_nonop();  // XXX: simply trigger client initialization
 int deltafs_open(const char* __path, int __oflags, mode_t __mode, struct stat*);
 int deltafs_mkfile(const char* __path, mode_t __mode);
 int deltafs_mkdirs(const char* __path, mode_t __mode);
