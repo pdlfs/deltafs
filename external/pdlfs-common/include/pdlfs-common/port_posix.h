@@ -87,6 +87,8 @@
 #endif
 
 namespace pdlfs {
+class Env;
+
 namespace port {
 
 static const bool kLittleEndian = PLATFORM_IS_LITTLE_ENDIAN;
@@ -171,6 +173,14 @@ inline void PthreadCall(const char* label, int result) {
     abort();
   }
 }
+
+// Return a special posix-based Env instance that avoids buffered I/O.
+// Caller should not delete the result.
+extern Env* GetPosixUnBufferedIOEnv();
+
+// Return a regular posix-base Env instance.
+// Caller should not delete the result.
+extern Env* GetPosixEnv();
 
 }  // namespace port
 }  // namespace pdlfs

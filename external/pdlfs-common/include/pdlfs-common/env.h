@@ -189,8 +189,8 @@ class Env {
 
  private:
   // No copying allowed
-  Env(const Env&);
   void operator=(const Env&);
+  Env(const Env&);
 };
 
 // A file abstraction for reading sequentially through a file

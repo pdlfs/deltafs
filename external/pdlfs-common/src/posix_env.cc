@@ -193,7 +193,7 @@ class PosixEnv : public Env {
                                    SequentialFile** result) {
     FILE* f = fopen(fname.c_str(), "r");
     if (f != NULL) {
-      *result = new PosixSequentialFile(fname, f);
+      *result = new PosixBufferedSequentialFile(fname, f);
       return Status::OK();
     } else {
       *result = NULL;
@@ -232,7 +232,7 @@ class PosixEnv : public Env {
   virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
     FILE* f = fopen(fname.c_str(), "w");
     if (f != NULL) {
-      *result = new PosixWritableFile(fname, f);
+      *result = new PosixBufferedWritableFile(fname, f);
       return Status::OK();
     } else {
       *result = NULL;
@@ -461,6 +461,48 @@ class PosixEnv : public Env {
   MmapLimiter mmap_limit_;
 };
 
+class PosixUnBufferedIOWrapper : public EnvWrapper {
+ public:
+  PosixUnBufferedIOWrapper(Env* base) : EnvWrapper(base) {}
+
+  virtual ~PosixUnBufferedIOWrapper() {}
+
+  virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
+    int fd = open(fname.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+    if (fd != -1) {
+      *result = new PosixWritableFile(fname, fd);
+      return Status::OK();
+    } else {
+      *result = NULL;
+      return IOError(fname, errno);
+    }
+  }
+
+  virtual Status NewRandomAccessFile(const Slice& fname,
+                                     RandomAccessFile** result) {
+    int fd = open(fname.c_str(), O_RDONLY);
+    if (fd != -1) {
+      *result = new PosixRandomAccessFile(fname, fd);
+      return Status::OK();
+    } else {
+      *result = NULL;
+      return IOError(fname, errno);
+    }
+  }
+
+  virtual Status NewSequentialFile(const Slice& fname,
+                                   SequentialFile** result) {
+    int fd = open(fname.c_str(), O_RDONLY);
+    if (fd != -1) {
+      *result = new PosixSequentialFile(fname, fd);
+      return Status::OK();
+    } else {
+      *result = NULL;
+      return IOError(fname, errno);
+    }
+  }
+};
+
 static pthread_t PthreadCreate(void* (*start_routine)(void*), void* arg) {
   pthread_t new_th;
   port::PthreadCall("pthread_create",
@@ -554,13 +596,31 @@ ThreadPool* ThreadPool::NewFixed(int num_threads) {
 }
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;
+static Env* posix_unbufio;
 static Env* posix_env;
 
-static void InitGlobalPosixEnv() { posix_env = new PosixEnv; }
+static void InitGlobalPosixEnvs() {
+  Env* base = new PosixEnv;
+  posix_unbufio = new PosixUnBufferedIOWrapper(base);
+  posix_env = base;
+}
+
+namespace port {
+Env* GetPosixEnv() {
+  pthread_once(&once, &InitGlobalPosixEnvs);
+  return posix_env;
+}
+
+Env* GetPosixUnBufferedIOEnv() {
+  pthread_once(&once, &InitGlobalPosixEnvs);
+  return posix_unbufio;
+}
+}  // namespace port
 
 Env* Env::Default() {
-  pthread_once(&once, &InitGlobalPosixEnv);
-  return posix_env;
+  Env* result = port::GetPosixEnv();
+  assert(result != NULL);
+  return result;
 }
 
 }  // namespace pdlfs
