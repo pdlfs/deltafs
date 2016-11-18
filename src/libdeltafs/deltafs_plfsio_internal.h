@@ -110,6 +110,7 @@ class IOLogger {
   void MaybeSchedualCompaction();
   Status Prepare(bool force_epoch, bool do_finish);
   void CompactWriteBuffer();
+  void DoCompaction();
 
   const Options& options_;
   port::Mutex* const mutex_;

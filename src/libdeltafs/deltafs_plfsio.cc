@@ -235,6 +235,8 @@ Status Writer::Open(const Options& opts, const std::string& name,
   int rank = options.rank;
   Env* env = options.env;
   Status status;
+  // XXX: Ignore error since it may already exist
+  env->CreateDir(name);
 
   WriterImpl* impl = new WriterImpl(options);
   std::vector<LogSink*> index(num_parts, NULL);
@@ -258,6 +260,7 @@ Status Writer::Open(const Options& opts, const std::string& name,
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
     impl->io_ = io;
+    *ptr = impl;
   } else {
     delete impl;
   }

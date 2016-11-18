@@ -18,9 +18,9 @@
 namespace pdlfs {
 namespace plfsio {
 
-class WriteBufferTest {
+class WriterBufTest {
  public:
-  WriteBufferTest(uint32_t seed = 301) : num_entries_(0), rnd_(seed) {}
+  explicit WriterBufTest(uint32_t seed = 301) : num_entries_(0), rnd_(seed) {}
 
   Iterator* Flush() {
     buffer_.Finish();
@@ -63,7 +63,7 @@ class WriteBufferTest {
   Random rnd_;
 };
 
-TEST(WriteBufferTest, FixedSizedValue) {
+TEST(WriterBufTest, FixedSizedValue) {
   Add(3);
   Add(2);
   Add(1);
@@ -76,7 +76,7 @@ TEST(WriteBufferTest, FixedSizedValue) {
   delete iter;
 }
 
-TEST(WriteBufferTest, VariableSizedValue) {
+TEST(WriterBufTest, VariableSizedValue) {
   Add(3, 16);
   Add(2, 18);
   Add(1, 20);
@@ -87,6 +87,32 @@ TEST(WriteBufferTest, VariableSizedValue) {
   CheckFirst(iter);
   CheckLast(iter);
   delete iter;
+}
+
+class WriterTest {
+ public:
+  explicit WriterTest() {
+    dirname_ = test::TmpDir() + "/plfsio_test";
+    DestroyDir(dirname_, Options());
+    options_.compaction_pool = ThreadPool::NewFixed(1);
+    options_.env = Env::Default();
+    Status status = Writer::Open(options_, dirname_, &writer_);
+    ASSERT_OK(status);
+  }
+
+  ~WriterTest() {
+    delete writer_;
+    delete options_.compaction_pool;
+  }
+
+  Options options_;
+  std::string dirname_;
+  Writer* writer_;
+};
+
+TEST(WriterTest, Empty) {
+  ASSERT_OK(writer_->MakeEpoch());
+  ASSERT_OK(writer_->Finish());
 }
 
 }  // namespace plfsio

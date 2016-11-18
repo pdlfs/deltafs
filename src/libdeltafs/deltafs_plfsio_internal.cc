@@ -417,6 +417,7 @@ Status IOLogger::Prepare(bool force, bool finish) {
       if (finish) bg_do_finish_ = true;
       WriteBuffer* mem_buf = mem_buf_;
       MaybeSchedualCompaction();
+      finish = force = false;
       if (mem_buf == &buf0_) {
         mem_buf_ = &buf1_;
       } else {
@@ -436,8 +437,7 @@ void IOLogger::MaybeSchedualCompaction() {
       options_.compaction_pool->Schedule(IOLogger::BGWork, this);
     } else {
       // XXX: Directly run in current thread context
-      CompactWriteBuffer();
-      bg_cv_->SignalAll();
+      DoCompaction();
     }
   }
 }
@@ -445,61 +445,63 @@ void IOLogger::MaybeSchedualCompaction() {
 void IOLogger::BGWork(void* arg) {
   IOLogger* io = reinterpret_cast<IOLogger*>(arg);
   io->mutex_->Lock();
-  assert(io->has_bg_compaction_);
-  io->CompactWriteBuffer();
-  io->bg_cv_->SignalAll();
+  io->DoCompaction();
   io->mutex_->Unlock();
+}
+
+void IOLogger::DoCompaction() {
+  mutex_->AssertHeld();
+  assert(has_bg_compaction_);
+  if (imm_buf_ != NULL) CompactWriteBuffer();
+  has_bg_compaction_ = false;
+  MaybeSchedualCompaction();
+  bg_cv_->SignalAll();
 }
 
 void IOLogger::CompactWriteBuffer() {
   mutex_->AssertHeld();
   const WriteBuffer* const buffer = imm_buf_;
+  assert(buffer != NULL);
   const bool do_finish = bg_do_finish_;
   const bool pending_finish = pending_finish_;
   const bool do_epoch_flush = bg_do_epoch_flush_;  // XXX: Epoch flush scheduled
   const bool pending_epoch_flush =
       pending_epoch_flush_;  // XXX: Epoch flush requested
   TableLogger* const dest = &table_logger_;
-  if (buffer != NULL) {
-    mutex_->Unlock();
-    Iterator* iter = buffer->NewIterator();
-    iter->SeekToFirst();
-    for (; iter->Valid(); iter->Next()) {
-      dest->Add(iter->key(), iter->value());
-      if (!dest->ok()) {
-        break;
-      }
+  mutex_->Unlock();
+  Iterator* iter = buffer->NewIterator();
+  iter->SeekToFirst();
+  for (; iter->Valid(); iter->Next()) {
+    dest->Add(iter->key(), iter->value());
+    if (!dest->ok()) {
+      break;
     }
-
-    if (dest->ok()) {
-      // XXX: Empty tables are implicitly discarded
-      dest->EndTable();
-    }
-    if (do_epoch_flush) {
-      // XXX: Empty epoches are implicitly discarded
-      dest->EndEpoch();
-    }
-    if (do_finish) {
-      dest->Finish();
-    }
-
-    delete iter;
-    mutex_->Lock();
-    if (do_epoch_flush) {
-      if (pending_epoch_flush) pending_epoch_flush_ = false;
-      bg_do_epoch_flush_ = false;
-    }
-    if (do_finish) {
-      if (pending_finish) pending_finish_ = false;
-      bg_do_finish_ = false;
-    }
-    imm_buf_->Reset();
-    imm_buf_ = NULL;
   }
 
-  has_bg_compaction_ = false;
-  // XXX: Try schedule another compaction
-  MaybeSchedualCompaction();
+  if (dest->ok()) {
+    // XXX: Empty tables are implicitly discarded
+    dest->EndTable();
+  }
+  if (do_epoch_flush) {
+    // XXX: Empty epoches are implicitly discarded
+    dest->EndEpoch();
+  }
+  if (do_finish) {
+    dest->Finish();
+  }
+
+  delete iter;
+  mutex_->Lock();
+  if (do_epoch_flush) {
+    if (pending_epoch_flush) pending_epoch_flush_ = false;
+    bg_do_epoch_flush_ = false;
+  }
+  if (do_finish) {
+    if (pending_finish) pending_finish_ = false;
+    bg_do_finish_ = false;
+  }
+  imm_buf_->Reset();
+  imm_buf_ = NULL;
 }
 
 }  // namespace plfsio
