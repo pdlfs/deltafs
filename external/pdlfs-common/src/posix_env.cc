@@ -468,7 +468,7 @@ class PosixUnBufferedIOWrapper : public EnvWrapper {
   virtual ~PosixUnBufferedIOWrapper() {}
 
   virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
-    int fd = open(fname.c_str(), O_WRONLY | O_CREAT | O_TRUNC);
+    int fd = open(fname.c_str(), O_WRONLY | O_CREAT | O_TRUNC, DEFFILEMODE);
     if (fd != -1) {
       *result = new PosixWritableFile(fname, fd);
       return Status::OK();
