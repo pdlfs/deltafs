@@ -49,6 +49,9 @@
 # note: package config files for external packages must be preinstalled in 
 #       CMAKE_INSTALL_PATH or on CMAKE_PREFIX_PATH, except as noted.
 #
+# pdlfs-common extras:
+#   -DPDLFS_EXAMPLES=ON                    -- build example programs
+#
 
 #
 # PDLFS_COMMON_LIBNAME allows clients to do custom compile-time configuration
@@ -71,4 +74,16 @@ include (cmake-options)
 # handle all the common PDLFS options using cmake/pdlfs-options.cmake
 include (pdlfs-options)
 
+# local options
+set (PDLFS_EXAMPLES "OFF" CACHE BOOL "Build examples programs")
+set (PDLFS_TOOLS "OFF" CACHE BOOL "Enable pdlfs tool programs")
+
 add_subdirectory (src)
+
+if (PDLFS_EXAMPLES)
+add_subdirectory (examples)
+endif ()
+
+if (PDLFS_TOOLS)
+add_subdirectory (tools)
+endif ()
