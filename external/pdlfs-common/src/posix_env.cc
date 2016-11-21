@@ -606,21 +606,27 @@ static void InitGlobalPosixEnvs() {
 }
 
 namespace port {
-Env* GetPosixEnv() {
+namespace posix {
+Env* GetDefaultEnv() {
   pthread_once(&once, &InitGlobalPosixEnvs);
   return posix_env;
 }
 
-Env* GetPosixUnBufferedIOEnv() {
+Env* GetUnBufferedIOEnv() {
   pthread_once(&once, &InitGlobalPosixEnvs);
   return posix_unbufio;
 }
+}  // namespace posix
 }  // namespace port
 
 Env* Env::Default() {
-  Env* result = port::GetPosixEnv();
+#if !defined(PDLFS_PLATFORM_POSIX)
+#error "This code should not compile"
+#else
+  Env* result = port::posix::GetDefaultEnv();
   assert(result != NULL);
   return result;
+#endif
 }
 
 }  // namespace pdlfs

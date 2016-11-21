@@ -174,13 +174,14 @@ inline void PthreadCall(const char* label, int result) {
   }
 }
 
+namespace posix {
 // Return a special posix-based Env instance that avoids buffered I/O.
 // Caller should not delete the result.
-extern Env* GetPosixUnBufferedIOEnv();
+extern Env* GetUnBufferedIOEnv();
 
 // Return a regular posix-base Env instance.
 // Caller should not delete the result.
-extern Env* GetPosixEnv();
-
+extern Env* GetDefaultEnv();
+}  // namespace posix
 }  // namespace port
 }  // namespace pdlfs
