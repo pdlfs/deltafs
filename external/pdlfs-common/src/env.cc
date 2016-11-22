@@ -11,15 +11,21 @@
 #include <stdio.h>
 
 #include "pdlfs-common/env.h"
+
+#include "pdlfs-common/buffered_file.h"
+#include "pdlfs-common/lazy_env.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
-#ifdef PDLFS_RADOS
+
+#if defined(PDLFS_RADOS)
 #include "pdlfs-common/rados/rados_ld.h"
 #endif
+
 #if defined(PDLFS_PLATFORM_POSIX)
 #include "posix_logger.h"
 #endif
+
 #if defined(PDLFS_GLOG)
 #include <glog/logging.h>
 #endif

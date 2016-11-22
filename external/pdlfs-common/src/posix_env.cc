@@ -639,6 +639,7 @@ ThreadPool* ThreadPool::NewFixed(int num_threads) {
 }
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;
+
 static Env* posix_dio;
 static Env* posix_unbufio;
 static Env* posix_env;
