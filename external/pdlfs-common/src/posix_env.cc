@@ -461,6 +461,49 @@ class PosixEnv : public Env {
   MmapLimiter mmap_limit_;
 };
 
+class PosixDirectIOWrapper : public EnvWrapper {
+ public:
+  PosixDirectIOWrapper(Env* base) : EnvWrapper(base) {}
+
+  virtual ~PosixDirectIOWrapper() {}
+
+  virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
+    int fd = open(fname.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_DIRECT,
+                  DEFFILEMODE);
+    if (fd != -1) {
+      *result = new PosixWritableFile(fname, fd);
+      return Status::OK();
+    } else {
+      *result = NULL;
+      return IOError(fname, errno);
+    }
+  }
+
+  virtual Status NewRandomAccessFile(const Slice& fname,
+                                     RandomAccessFile** result) {
+    int fd = open(fname.c_str(), O_RDONLY);
+    if (fd != -1) {
+      *result = new PosixRandomAccessFile(fname, fd);
+      return Status::OK();
+    } else {
+      *result = NULL;
+      return IOError(fname, errno);
+    }
+  }
+
+  virtual Status NewSequentialFile(const Slice& fname,
+                                   SequentialFile** result) {
+    int fd = open(fname.c_str(), O_RDONLY);
+    if (fd != -1) {
+      *result = new PosixSequentialFile(fname, fd);
+      return Status::OK();
+    } else {
+      *result = NULL;
+      return IOError(fname, errno);
+    }
+  }
+};
+
 class PosixUnBufferedIOWrapper : public EnvWrapper {
  public:
   PosixUnBufferedIOWrapper(Env* base) : EnvWrapper(base) {}
@@ -596,11 +639,13 @@ ThreadPool* ThreadPool::NewFixed(int num_threads) {
 }
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;
+static Env* posix_dio;
 static Env* posix_unbufio;
 static Env* posix_env;
 
 static void InitGlobalPosixEnvs() {
   Env* base = new PosixEnv;
+  posix_dio = new PosixDirectIOWrapper(base);
   posix_unbufio = new PosixUnBufferedIOWrapper(base);
   posix_env = base;
 }
@@ -615,6 +660,11 @@ Env* GetDefaultEnv() {
 Env* GetUnBufferedIOEnv() {
   pthread_once(&once, &InitGlobalPosixEnvs);
   return posix_unbufio;
+}
+
+Env* GetDirectIOEnv() {
+  pthread_once(&once, &InitGlobalPosixEnvs);
+  return posix_dio;
 }
 }  // namespace posix
 }  // namespace port

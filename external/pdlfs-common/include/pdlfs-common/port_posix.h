@@ -175,6 +175,10 @@ inline void PthreadCall(const char* label, int result) {
 }
 
 namespace posix {
+// Return a special posix-based Env instance that performs direct I/O.
+// Caller should not delete the result.
+extern Env* GetDirectIOEnv();
+
 // Return a special posix-based Env instance that avoids buffered I/O.
 // Caller should not delete the result.
 extern Env* GetUnBufferedIOEnv();
