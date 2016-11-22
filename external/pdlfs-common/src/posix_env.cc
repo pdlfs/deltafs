@@ -461,6 +461,7 @@ class PosixEnv : public Env {
   MmapLimiter mmap_limit_;
 };
 
+#if defined(PDLFS_OS_LINUX)
 class PosixDirectIOWrapper : public EnvWrapper {
  public:
   PosixDirectIOWrapper(Env* base) : EnvWrapper(base) {}
@@ -503,6 +504,7 @@ class PosixDirectIOWrapper : public EnvWrapper {
     }
   }
 };
+#endif
 
 class PosixUnBufferedIOWrapper : public EnvWrapper {
  public:
@@ -646,8 +648,12 @@ static Env* posix_env;
 
 static void InitGlobalPosixEnvs() {
   Env* base = new PosixEnv;
-  posix_dio = new PosixDirectIOWrapper(base);
   posix_unbufio = new PosixUnBufferedIOWrapper(base);
+#if defined(PDLFS_OS_LINUX)
+  posix_dio = new PosixDirectIOWrapper(base);
+#else
+  posix_dio = NULL;
+#endif
   posix_env = base;
 }
 
