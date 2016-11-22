@@ -9,6 +9,8 @@
 
 #include "rados_env.h"
 
+#include "pdlfs-common/buffered_file.h"
+
 namespace pdlfs {
 namespace rados {
 
@@ -112,12 +114,17 @@ Status RadosEnv::NewRandomAccessFile(const Slice& fname, RandomAccessFile** r) {
   }
 }
 
+static inline bool IsLogFile(const Slice& fname) {
+  return TryResolveFileType(fname) == kLogFile;
+}
+
 Status RadosEnv::NewWritableFile(const Slice& fname, WritableFile** r) {
   if (FileOnRados(fname)) {
     Status s = osd_env_->NewWritableFile(fname, r);
-    if (s.ok() && wal_write_buffer_ > 0) {
-      if (TryResolveFileType(fname) == kLogFile) {
-        *r = new RadosUnsafeBufferedWritableFile(*r, wal_write_buffer_);
+    if (s.ok() && wal_buf_size_ > 0) {
+      assert(*r != NULL);
+      if (IsLogFile(fname)) {
+        *r = new UnsafeBufferedWritableFile(*r, wal_buf_size_);
       }
     }
     return s;

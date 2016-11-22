@@ -71,7 +71,7 @@ Status RadosConn::OpenEnv(Env** result, const std::string& rados_root,
   if (s.ok()) {
     RadosEnv* env = new RadosEnv(base_env);
     env->rados_root_ = rados_root;
-    env->wal_write_buffer_ = 1 << 17;  // 128 kB
+    env->wal_buf_size_ = 1 << 17;  // 128 kB
     env->owns_osd_ = owns_osd;
     env->osd_env_ = new OSDEnv(osd);
     env->osd_ = osd;

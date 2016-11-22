@@ -40,7 +40,7 @@ class RadosEnv : public EnvWrapper {
 
   RadosEnv(Env* e) : EnvWrapper(e) {}
   friend class RadosConn;
-  size_t wal_write_buffer_;
+  size_t wal_buf_size_;
   std::string rados_root_;
   OSDEnv* osd_env_;
   bool owns_osd_;
@@ -78,81 +78,6 @@ inline bool OnRados(FileType type) {
       return false;
   }
 }
-
-// Buffer a certain amount of data before writing to Rados.
-// The "Flush" call is always ignored and only "Sync" is respected.
-// May lose data for clients that only call "Flush" to ensure
-// data durability. To avoid losing application states, clients
-// are expected to call "Sync" at a certain time interval,
-// such as every 5 seconds.
-class RadosUnsafeBufferedWritableFile : public WritableFile {
- private:
-  size_t buffer_size_;
-  std::string space_;
-  WritableFile* file_;
-
-  Status DoFlush() {
-    if (!space_.empty()) {
-      Status s = file_->Append(space_);
-      if (s.ok()) {
-        space_.clear();
-      }
-      return s;
-    } else {
-      return Status::OK();
-    }
-  }
-
- public:
-  RadosUnsafeBufferedWritableFile(WritableFile* file, size_t buffer_size)
-      : buffer_size_(buffer_size), file_(file) {
-    space_.reserve(2 * buffer_size_);
-  }
-
-  virtual ~RadosUnsafeBufferedWritableFile() { delete file_; }
-
-  virtual Status Append(const Slice& data) {
-    if (space_.size() + data.size() <= 2 * buffer_size_) {
-      AppendSliceTo(&space_, data);
-      if (space_.size() >= buffer_size_) {
-        return DoFlush();
-      } else {
-        return Status::OK();
-      }
-    } else {
-      Status s = DoFlush();
-      if (s.ok()) {
-        if (data.size() <= buffer_size_) {
-          AppendSliceTo(&space_, data);
-        } else {
-          s = file_->Append(data);
-        }
-      }
-      return s;
-    }
-  }
-
-  virtual Status Close() {
-    Status s = DoFlush();
-    if (s.ok()) {
-      s = file_->Close();
-    }
-    return s;
-  }
-
-  virtual Status Flush() {
-    assert(space_.size() < buffer_size_);
-    return Status::OK();
-  }
-
-  virtual Status Sync() {
-    Status s = DoFlush();
-    if (s.ok()) {
-      s = file_->Sync();
-    }
-    return s;
-  }
-};
 
 }  // namespace rados
 }  // namespace pdlfs
