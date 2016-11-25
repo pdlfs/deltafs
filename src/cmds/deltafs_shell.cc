@@ -13,6 +13,7 @@
 #define DELTAFS_PS1 "Deltafs (v" PDLFS_COMMON_VERSION ") > "
 #include "deltafs/deltafs_api.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -40,6 +41,15 @@ static time_t shutting_down_timestamp = 0;
 // True if user has requested shutdown by typing "exit" at command line
 static bool shutting_down_requested = false;
 
+static void Error(const char* msg, ...) {
+  va_list va;
+  va_start(va, msg);
+  char tmp[500];
+  vsnprintf(tmp, sizeof(tmp), msg, va);
+  perror(tmp);
+  va_end(va);
+}
+
 static void Print(const char* msg, ...) {
   va_list va;
   va_start(va, msg);
@@ -51,7 +61,7 @@ static void Print(const char* msg, ...) {
 static void HandleIntSignal() {
   const time_t current = time(NULL);
   if (!shutting_down_signaled || current - shutting_down_timestamp > 1) {
-    Print("\n[Type ctrl+c again to force exit]\n");
+    Print("\n[Type ctrl+c again to force termination]\n");
     Print(DELTAFS_PS1);
     shutting_down_timestamp = current;
     shutting_down_signaled = true;
@@ -77,16 +87,17 @@ static void PrintWelcomeMessage() {
       "  XX        XX               XX                  XX\n"
       "  XX         XX              XX   XX             XX\n"
       "  XX          XX             XX   XX             XXXXXXXXX\n"
-      "  XX           XX  XXXXXXX   XX XXXXXXXXXXXXXXX  XX          XX\n"
-      "  XX          XX  XX     XX  XX   XX       XX XX XX       XX\n"
-      "  XX         XX  XX       XX XX   XX      XX  XX XX     XX\n"
-      "  XX        XX   XXXXXXXXXX  XX   XX     XX   XX XX     XXXXXXXX\n"
+      "  XX           XX  XXXXXXX   XX XXXXXXXXXXXXXXX  XX         XX\n"
+      "  XX          XX  XX     XX  XX   XX       XX XX XX      XX\n"
+      "  XX         XX  XX       XX XX   XX      XX  XX XX    XX\n"
+      "  XX        XX   XXXXXXXXXX  XX   XX     XX   XX XX    XXXXXXXX\n"
       "  XX       XX    XX          XX   XX    XX    XX XX           XX\n"
       "  XX      XX      XX      XX XX   XX X    XX  XX XX         XX\n"
       "  XXXXXXXXX        XXXXXXX   XX    XX        XX  XX      XX\n"
       "\n\n"
       "Type help to see all available commands.\n"
-      "Type exit to quit.\n\n");
+      "Type exit to quit.\n\n"
+      "\n");
 }
 
 static void PrintUsage() {
@@ -111,23 +122,25 @@ static void Listdir(const std::string& path) {
   };
   int n = 0;
   if (deltafs_listdir(path.c_str(), DirLister::Print, &n) != 0) {
-    perror("Fail to list directory");
+    Error("cannot list directory '%s'", path.c_str());
   } else {
     Print("== %d entries\n", n);
   }
 }
 
 static void Mkdir(const std::string& path) {
-  if (deltafs_mkdir(path.c_str(), ACCESSPERMS) != 0) {
-    perror("Fail to make directory");
+  static const mode_t mode = 0755;
+  if (deltafs_mkdir(path.c_str(), mode) != 0) {
+    Error("cannot make directory '%s'", path.c_str());
   } else {
     Print("OK\n");
   }
 }
 
 static void Mkfile(const std::string& path) {
-  if (deltafs_mkfile(path.c_str(), ACCESSPERMS) != 0) {
-    perror("Fail to create regular file");
+  static const mode_t mode = 0644;
+  if (deltafs_mkfile(path.c_str(), mode) != 0) {
+    Error("cannot create file '%s'", path.c_str());
   } else {
     Print("OK\n");
   }
@@ -139,7 +152,7 @@ static void Cat(const std::string& path) {
   struct stat ignored_stat;
   int fd = deltafs_open(path.c_str(), O_RDONLY, 0, &ignored_stat);
   if (fd == -1) {
-    perror("Cannot open file");
+    Error("cannot open file '%s'", path.c_str());
   } else {
     ssize_t n = 0;
     while ((n = deltafs_pread(fd, buf, 4096, off)) > 0) {
@@ -148,7 +161,7 @@ static void Cat(const std::string& path) {
       off += n;
     }
     if (n == -1) {
-      perror("Cannot read from file");
+      Error("cannot read file '%s'", path.c_str());
     }
     deltafs_close(fd);
   }
@@ -159,13 +172,13 @@ static void CopyFromLocal(const std::string& src, const std::string& dst) {
   size_t off = 0;
   int fd = open(src.c_str(), O_RDONLY);
   if (fd == -1) {
-    perror("Cannot open source file");
+    Error("cannot open source file '%s'", src.c_str());
   } else {
     struct stat ignored_stat;
     int dfd = deltafs_open(dst.c_str(), O_WRONLY | O_CREAT, ACCESSPERMS,
                            &ignored_stat);
     if (dfd == -1) {
-      perror("Cannot open destination file");
+      Error("cannot open file '%s'", dst.c_str());
     } else {
       ssize_t nr = 0;
       ssize_t nw = 0;
@@ -174,16 +187,16 @@ static void CopyFromLocal(const std::string& src, const std::string& dst) {
         if (nw == nr) {
           off += nw;
         } else {
-          perror("Cannot write into destination file");
+          Error("cannot access file '%s'", dst.c_str());
         }
       }
       if (nr == -1) {
-        perror("Cannot read from source file");
+        Error("cannot access source file '%s'", src.c_str());
       }
       deltafs_close(dfd);
     }
     close(fd);
-    printf("OK\n");
+    Print("OK\n");
   }
 }
 
@@ -227,7 +240,7 @@ int main(int argc, char* argv[]) {
   std::string usage("Sample usage: ");
   usage += argv[0];
   google::SetUsageMessage(usage);
-  google::SetVersionString("1.0");
+  google::SetVersionString(PDLFS_COMMON_VERSION);
   google::ParseCommandLineFlags(&argc, &argv, true);
 #endif
 #if defined(PDLFS_GLOG)
