@@ -95,7 +95,11 @@ class CondVar;
 class Mutex {
  public:
   Mutex();
+#ifndef NDEBUG
+  void AssertHeld();
+#else
   void AssertHeld() {}
+#endif
   void Lock();
   void Unlock();
   ~Mutex();
@@ -105,8 +109,8 @@ class Mutex {
   pthread_mutex_t mu_;
 
   // No copying
-  Mutex(const Mutex&);
   void operator=(const Mutex&);
+  Mutex(const Mutex&);
 };
 
 class CondVar {
@@ -120,6 +124,10 @@ class CondVar {
   ~CondVar();
 
  private:
+  // No copying
+  void operator=(const CondVar&);
+  CondVar(const CondVar&);
+
   pthread_cond_t cv_;
   Mutex* mu_;
 };

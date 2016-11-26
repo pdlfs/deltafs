@@ -37,6 +37,29 @@ Mutex::Mutex() {
 #endif
 }
 
+#ifndef NDEBUG
+void Mutex::AssertHeld() {
+  int r = pthread_mutex_trylock(&mu_);
+  if (r == 0) {
+    r = EINVAL;  // Unexpectedly lock the mutex.
+  } else if (r == EAGAIN) {
+    // The mutex could not be acquired because the maximum number of recursive
+    // locks for mutex has been exceeded.
+    // This error should never get returned.
+  } else if (r == EBUSY) {
+    // The mutex could not be acquired because it was already locked.
+    return;  // OK
+  } else if (r == EPERM) {
+    // The current thread does not own the mutex.
+  } else if (r == EDEADLK) {
+    // The current thread already owns the mutex.
+    return;  // OK
+  }
+
+  PthreadCall("pthread_mutex_trylock", r);  // Abort
+}
+#endif
+
 Mutex::~Mutex() {
   PthreadCall("pthread_mutex_destroy", pthread_mutex_destroy(&mu_));
 }
@@ -71,8 +94,7 @@ bool CondVar::TimedWait(uint64_t micro) {
   int r = pthread_cond_timedwait(&cv_, &mu_->mu_, &ts);
   if (r != 0) {
     if (r != ETIMEDOUT) {
-      perror("pthread_cond_timedwait failed");
-      abort();
+      PthreadCall("pthread_cond_timedwait", r);  // Abort
     } else {
       return true;  // Timeout!
     }

@@ -61,7 +61,10 @@ static Status OSCopyFile(const Slice& s, const Slice& t) {
 class MmapLimiter {
  public:
   // Up to 1000 mmaps for 64-bit binaries; none for smaller pointer sizes.
-  MmapLimiter() { SetAllowed(sizeof(void*) >= 8 ? 1000 : 0); }
+  MmapLimiter() {
+    MutexLock l(&mu_);
+    SetAllowed(sizeof(void*) >= 8 ? 1000 : 0);
+  }
 
   // If another mmap slot is available, acquire it and return true.
   // Else return false.
