@@ -66,6 +66,7 @@ static void HandleIntSignal() {
     shutting_down_timestamp = current;
     shutting_down_signaled = true;
   } else {
+    Print("\n");
     exit(EXIT_FAILURE);
   }
 }
@@ -102,14 +103,14 @@ static void PrintWelcomeMessage() {
 
 static void PrintUsage() {
   Print(
-      "== Deltafs shell (wip)\n\n"
+      "== Deltafs shell (still work-in-progress)\n\n"
+      "cd <path>\n\tChange current directory\n\n"
       "ls <path>\n\tList the children of a given directory\n\n"
       "mkdir <path>\n\tMake a new directory\n\n"
       "mkfile <path>\n\tMake a new file\n\n"
       "cpfrom <local_path> <deltafs_path>\n\t"
       "Copy a file from the local file system to deltafs\n\n"
       "cat <path>\n\tPrint the content of a file\n\n"
-      "chdir <path>\n\tChange current directory\n\n"
       "\n");
 }
 
@@ -124,6 +125,7 @@ static void Chdir(int argc, char* argv[]) {
 }
 
 static void Listdir(int argc, char* argv[]) {
+  static const char* argv2[2] = {NULL, "."};
   struct DirLister {
     static int Print(const char* name, void* arg) {
       ++(*reinterpret_cast<int*>(arg));
@@ -131,13 +133,17 @@ static void Listdir(int argc, char* argv[]) {
       return 0;
     }
   };
+  if (argc == 1) {
+    argv = (char**)argv2;
+    argc = 2;
+  }
   for (int i = 1; i < argc; i++) {
     int n = 0;
     if (deltafs_listdir(argv[i], DirLister::Print, &n) != 0) {
       Error("cannot list directory '%s'", argv[i]);
       break;
     } else {
-      Print("==%d entries\n", n);
+      Print("== %d entries\n", n);
     }
   }
 }
@@ -243,10 +249,10 @@ static void Exec(const std::vector<std::string>& inputs) {
     CopyFromLocal(argc, &argv[0]);
   } else if (cmd == "cat") {
     Cat(argc, &argv[0]);
-  } else if (cmd == "chdir") {
+  } else if (cmd == "cd") {
     Chdir(argc, &argv[0]);
   } else {
-    Error("No such command\n");
+    Print("No such command\n\n");
     PrintUsage();
   }
 }
