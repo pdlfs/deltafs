@@ -109,7 +109,18 @@ static void PrintUsage() {
       "cpfrom <local_path> <deltafs_path>\n\t"
       "Copy a file from the local file system to deltafs\n\n"
       "cat <path>\n\tPrint the content of a file\n\n"
+      "chdir <path>\n\tChange current directory\n\n"
       "\n");
+}
+
+static void Chdir(int argc, char* argv[]) {
+  if (argc >= 2) {
+    if (deltafs_chdir(argv[1]) != 0) {
+      Error("cannot chdir '%s'", argv[1]);
+    } else {
+      Print("OK\n");
+    }
+  }
 }
 
 static void Listdir(int argc, char* argv[]) {
@@ -201,6 +212,9 @@ static void CopyFromLocal(int argc, char* argv[]) {
     }
     if (dfd == -1 || nr < 0 || nw < 0) {
       Error("cannot copy to file '%s'", argv[i]);
+      break;
+    } else {
+      Print("OK\n");
     }
   }
   close(fd);
@@ -229,6 +243,8 @@ static void Exec(const std::vector<std::string>& inputs) {
     CopyFromLocal(argc, &argv[0]);
   } else if (cmd == "cat") {
     Cat(argc, &argv[0]);
+  } else if (cmd == "chdir") {
+    Chdir(argc, &argv[0]);
   } else {
     Error("No such command\n");
     PrintUsage();
