@@ -433,9 +433,9 @@ class PosixEnv : public Env {
   virtual void SleepForMicroseconds(int micros) { usleep(micros); }
 
   virtual Status FetchHostname(std::string* hostname) {
-    char buf[HOST_NAME_MAX];
+    char buf[PDLFS_HOST_NAME_MAX];
     Status s;
-    if (gethostname(buf, HOST_NAME_MAX) == -1) {
+    if (gethostname(buf, sizeof(buf)) == -1) {
       s = IOError("gethostname", errno);
     } else {
       *hostname = buf;

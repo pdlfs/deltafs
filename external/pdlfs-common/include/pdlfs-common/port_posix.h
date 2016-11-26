@@ -53,9 +53,6 @@
 #include <snappy.h>
 #endif
 #include <limits.h>
-#ifndef HOST_NAME_MAX
-#define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
-#endif
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -89,6 +86,7 @@ class Env;
 
 namespace port {
 
+#define PDLFS_HOST_NAME_MAX _POSIX_HOST_NAME_MAX
 static const bool kLittleEndian = PLATFORM_IS_LITTLE_ENDIAN;
 #undef PLATFORM_IS_LITTLE_ENDIAN
 
