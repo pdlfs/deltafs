@@ -112,7 +112,7 @@ static void PrintUsage() {
       "\n");
 }
 
-static void Listdir(const std::string& path) {
+static void Listdir(int argc, char* argv[]) {
   struct DirLister {
     static int Print(const char* name, void* arg) {
       ++(*reinterpret_cast<int*>(arg));
@@ -120,87 +120,99 @@ static void Listdir(const std::string& path) {
       return 0;
     }
   };
-  int n = 0;
-  if (deltafs_listdir(path.c_str(), DirLister::Print, &n) != 0) {
-    Error("cannot list directory '%s'", path.c_str());
-  } else {
-    Print("== %d entries\n", n);
-  }
-}
-
-static void Mkdir(const std::string& path) {
-  static const mode_t mode = 0755;
-  if (deltafs_mkdir(path.c_str(), mode) != 0) {
-    Error("cannot make directory '%s'", path.c_str());
-  } else {
-    Print("OK\n");
-  }
-}
-
-static void Mkfile(const std::string& path) {
-  static const mode_t mode = 0644;
-  if (deltafs_mkfile(path.c_str(), mode) != 0) {
-    Error("cannot create file '%s'", path.c_str());
-  } else {
-    Print("OK\n");
-  }
-}
-
-static void Cat(const std::string& path) {
-  char buf[5000];
-  size_t off = 0;
-  struct stat ignored_stat;
-  int fd = deltafs_open(path.c_str(), O_RDONLY, 0, &ignored_stat);
-  if (fd == -1) {
-    Error("cannot open file '%s'", path.c_str());
-  } else {
-    ssize_t n = 0;
-    while ((n = deltafs_pread(fd, buf, 4096, off)) > 0) {
-      buf[n] = 0;
-      fprintf(stdout, "%s", buf);
-      off += n;
-    }
-    if (n == -1) {
-      Error("cannot read file '%s'", path.c_str());
-    }
-    deltafs_close(fd);
-  }
-}
-
-static void CopyFromLocal(const std::string& src, const std::string& dst) {
-  char buf[5000];
-  size_t off = 0;
-  int fd = open(src.c_str(), O_RDONLY);
-  if (fd == -1) {
-    Error("cannot open source file '%s'", src.c_str());
-  } else {
-    struct stat ignored_stat;
-    int dfd = deltafs_open(dst.c_str(), O_WRONLY | O_CREAT, ACCESSPERMS,
-                           &ignored_stat);
-    if (dfd == -1) {
-      Error("cannot open file '%s'", dst.c_str());
+  for (int i = 1; i < argc; i++) {
+    int n = 0;
+    if (deltafs_listdir(argv[i], DirLister::Print, &n) != 0) {
+      Error("cannot list directory '%s'", argv[i]);
+      break;
     } else {
-      ssize_t nr = 0;
-      ssize_t nw = 0;
+      Print("==%d entries\n", n);
+    }
+  }
+}
+
+static void Mkdir(int argc, char* argv[]) {
+  static const mode_t mode = 0755;  // XXX: make this an argument?
+  for (int i = 1; i < argc; i++) {
+    if (deltafs_mkdir(argv[i], mode) != 0) {
+      Error("cannot make directory '%s'", argv[i]);
+      break;
+    } else {
+      Print("OK\n");
+    }
+  }
+}
+
+static void Mkfile(int argc, char* argv[]) {
+  static const mode_t mode = 0644;  // XXX: make this an argument?
+  for (int i = 1; i < argc; i++) {
+    if (deltafs_mkfile(argv[i], mode) != 0) {
+      Error("cannot create file '%s'", argv[i]);
+      break;
+    } else {
+      Print("OK\n");
+    }
+  }
+}
+
+static void Cat(int argc, char* argv[]) {
+  char buf[5000];
+  for (int i = 1; i < argc; i++) {
+    ssize_t nr = 0;
+    off_t off = 0;
+    int fd = deltafs_open(argv[i], O_RDONLY, 0, NULL);
+    if (fd != -1) {
+      while ((nr = deltafs_pread(fd, buf, 4096, off)) > 0) {
+        buf[nr] = 0;
+        Print("%s", pdlfs::EscapeString(buf).c_str());
+        off += nr;
+      }
+    }
+    if (fd == -1 || nr < 0) {
+      Error("cannot access file '%s'", argv[i]);
+      break;
+    }
+  }
+}
+
+static void CopyFromLocal(int argc, char* argv[]) {
+  if (argc < 2) return;
+  int fd = open(argv[1], O_RDONLY);
+  if (fd == -1) {
+    Error("cannot open source file '%s'", argv[1]);
+    return;
+  }
+  char buf[5000];
+  static const mode_t mode = 0644;  // XXX: make this an argument?
+  for (int i = 2; i < argc; i++) {
+    ssize_t nr = 0, nw = 0;
+    off_t off = 0;
+    int dfd = deltafs_open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, mode, NULL);
+    if (dfd != -1) {
       while ((nr = read(fd, buf, 4096)) > 0) {
         nw = deltafs_pwrite(dfd, buf, nr, off);
         if (nw == nr) {
           off += nw;
         } else {
-          Error("cannot access file '%s'", dst.c_str());
+          break;
         }
-      }
-      if (nr == -1) {
-        Error("cannot access source file '%s'", src.c_str());
       }
       deltafs_close(dfd);
     }
-    close(fd);
-    Print("OK\n");
+    if (dfd == -1 || nr < 0 || nw < 0) {
+      Error("cannot copy to file '%s'", argv[i]);
+    }
   }
+  close(fd);
 }
 
 static void Exec(const std::vector<std::string>& inputs) {
+  assert(inputs.size() != 0);
+  const int argc = inputs.size();
+  std::vector<char*> argv;
+  for (size_t i = 0; i < inputs.size(); i++) {
+    argv.push_back(const_cast<char*>(inputs[i].c_str()));
+  }
   pdlfs::Slice cmd = inputs[0];
   if (cmd == "help" || cmd == "?") {
     PrintUsage();
@@ -208,27 +220,18 @@ static void Exec(const std::vector<std::string>& inputs) {
     Print("exit\n");
     shutting_down_requested = true;
   } else if (cmd == "ls") {
-    for (size_t i = 1; i < inputs.size(); i++) {
-      Listdir(inputs[i]);
-    }
+    Listdir(argc, &argv[0]);
   } else if (cmd == "mkdir") {
-    for (size_t i = 1; i < inputs.size(); i++) {
-      Mkdir(inputs[i]);
-    }
+    Mkdir(argc, &argv[0]);
   } else if (cmd == "mkfile") {
-    for (size_t i = 1; i < inputs.size(); i++) {
-      Mkfile(inputs[i]);
-    }
+    Mkfile(argc, &argv[0]);
   } else if (cmd == "cpfrom") {
-    for (size_t i = 2; i < inputs.size(); i++) {
-      CopyFromLocal(inputs[1], inputs[i]);
-    }
+    CopyFromLocal(argc, &argv[0]);
   } else if (cmd == "cat") {
-    for (size_t i = 1; i < inputs.size(); i++) {
-      Cat(inputs[i]);
-    }
+    Cat(argc, &argv[0]);
   } else {
-    fprintf(stderr, "Command not found\n");
+    Error("No such command\n");
+    PrintUsage();
   }
 }
 
