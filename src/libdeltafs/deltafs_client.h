@@ -46,6 +46,8 @@ class Client {
   Status Mkdir(const Slice& path, mode_t mode);
   Status Chmod(const Slice& path, mode_t mode);
   Status Unlink(const Slice& path);
+  Status Chroot(const Slice& path);
+  Status Chdir(const Slice& path);
 
  private:
   class Builder;
@@ -74,8 +76,12 @@ class Client {
     }
   };
 
-  // State below are protected by mutex_
+  // State below is protected by mutex_
   port::Mutex mutex_;
+  Status ExpandPath(Slice* path, std::string* scratch);
+  bool has_root_changed_;
+  std::string curroot_;  // Set by chroot
+  std::string curdir_;   // Set by chdir
   File* FetchFile(int fd);
   size_t Alloc(File*);
   File* Free(size_t idx);

@@ -87,6 +87,40 @@ static void SetErrno(const pdlfs::Status& s) {
   }
 }
 
+int deltafs_chroot(const char* __path) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+  pdlfs::Status s;
+  s = client->Chroot(__path);
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
+int deltafs_chdir(const char* __path) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+  pdlfs::Status s;
+  s = client->Chdir(__path);
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
 int deltafs_open(const char* __path, int __oflags, mode_t __mode,
                  struct stat* __buf) {
   if (client == NULL) {

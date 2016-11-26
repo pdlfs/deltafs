@@ -42,6 +42,7 @@ static inline Status BadDescriptor() {
 }
 
 Client::Client() {
+  has_root_changed_ = false;
   dummy_.prev = &dummy_;
   dummy_.next = &dummy_;
   max_open_fds_ = kMaxOpenFileDescriptors;
@@ -118,8 +119,8 @@ void Client::Unref(File* f) {
   }
 }
 
-// If path is valid, remove tailing slashes and return OK.
-// Otherwise, return a non-OK status.
+// Sanitize path by removing all tailing slashes.
+// Return OK if the resulting path is non-empty, or a non-OK status otherwise.
 // NOTE: *path is used both as an input and output parameter.
 static Status SanitizePath(Slice* path, std::string* scratch) {
   if (path->size() > 1 && (*path)[path->size() - 1] == '/') {
@@ -129,11 +130,42 @@ static Status SanitizePath(Slice* path, std::string* scratch) {
     }
     *path = *scratch;
   }
-  if (path->empty() || (*path)[0] != '/') {
-    return Status::InvalidArgument("relative or empty path");
+  if (path->empty()) {
+    return Status::InvalidArgument("path is empty");
   } else {
     return Status::OK();
   }
+}
+
+// Sanitize the given path. After that:
+// If path is relative, current directory is used to obtain the final path.
+// If path is absolute, current root is used to obtain the final path.
+// NOTE: *path is used both as an input and output parameter.
+Status Client::ExpandPath(Slice* path, std::string* scratch) {
+  Status s = SanitizePath(path, scratch);
+  if (!s.ok()) {
+    // Path is not valid
+  } else if ((*path)[0] == '/') {  // Absolute path
+    if (has_root_changed_) {
+      MutexLock l(&mutex_);
+      if (has_root_changed_) {
+        *scratch = curroot_ + path->ToString();
+        *path = *scratch;
+      }
+    }
+  } else {  // Relative path
+    MutexLock l(&mutex_);
+    if (curdir_.size() != 0) {
+      *scratch = curdir_ + "/" + path->ToString();
+      *path = *scratch;
+    } else {
+      std::string r = "/";
+      *scratch = r + path->ToString();
+      *path = *scratch;
+    }
+  }
+
+  return s;
 }
 
 // Open a file for I/O operations. Return OK on success.
@@ -153,7 +185,7 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
   Status s;
   Slice path = p;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = ExpandPath(&path, &tmp);
   if (!s.ok()) {
     return s;
   }
@@ -525,7 +557,7 @@ Status Client::Access(const Slice& p, int mode) {
   Status s;
   Slice path = p;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = ExpandPath(&path, &tmp);
   if (s.ok()) {
     s = mdscli_->Access(path, mode);
   }
@@ -541,7 +573,7 @@ Status Client::Accessdir(const Slice& p, int mode) {
   Status s;
   Slice path = p;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = ExpandPath(&path, &tmp);
   if (s.ok()) {
     s = mdscli_->Accessdir(path, mode);
   }
@@ -557,7 +589,7 @@ Status Client::Listdir(const Slice& p, std::vector<std::string>* names) {
   Status s;
   Slice path = p;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = ExpandPath(&path, &tmp);
   if (s.ok()) {
     s = mdscli_->Listdir(path, names);
   }
@@ -573,7 +605,7 @@ Status Client::Getattr(const Slice& p, Stat* statbuf) {
   Status s;
   Slice path = p;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = ExpandPath(&path, &tmp);
   if (s.ok()) {
     Fentry ent;
     s = mdscli_->Fstat(path, &ent);
@@ -593,7 +625,7 @@ Status Client::Mkfile(const Slice& p, mode_t mode) {
   Status s;
   Slice path = p;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = ExpandPath(&path, &tmp);
   if (s.ok()) {
     s = mdscli_->Fcreat(path, mode);
   }
@@ -609,7 +641,7 @@ Status Client::Mkdirs(const Slice& p, mode_t mode) {
   Status s;
   Slice path = p;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = ExpandPath(&path, &tmp);
   if (s.ok()) {
     s = mdscli_->Mkdir(path, mode, NULL, true,  // create_if_missing
                        false                    // error_if_exists
@@ -627,7 +659,7 @@ Status Client::Mkdir(const Slice& p, mode_t mode) {
   Status s;
   Slice path = p;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = ExpandPath(&path, &tmp);
   if (s.ok()) {
     s = mdscli_->Mkdir(path, mode);
   }
@@ -643,7 +675,7 @@ Status Client::Chmod(const Slice& p, mode_t mode) {
   Status s;
   Slice path = p;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = ExpandPath(&path, &tmp);
   if (s.ok()) {
     s = mdscli_->Chmod(path, mode);
   }
@@ -659,7 +691,7 @@ Status Client::Unlink(const Slice& p) {
   Status s;
   Slice path = p;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = ExpandPath(&path, &tmp);
   Fentry fentry;
   if (s.ok()) {
     s = mdscli_->Unlink(path, &fentry);
@@ -675,6 +707,51 @@ Status Client::Unlink(const Slice& p) {
   OP_VERBOSE(p, s);
 #endif
 
+  return s;
+}
+
+Status Client::Chroot(const Slice& p) {
+  Status s;
+  Slice path = p;
+  std::string tmp;
+  s = SanitizePath(&path, &tmp);
+  if (s.ok()) {
+    assert(path.size() != 0);
+    if (path[0] != '/') {
+      s = Status::InvalidArgument("path is relative");
+    } else {
+      s = mdscli_->Accessdir(path, F_OK);
+    }
+  }
+  if (s.ok()) {
+    MutexLock l(&mutex_);
+    has_root_changed_ = true;
+    curroot_ = path.ToString();
+    if (curroot_ == "/") {
+      has_root_changed_ = false;
+      curroot_.clear();
+    }
+  }
+  return s;
+}
+
+Status Client::Chdir(const Slice& p) {
+  Status s;
+  Slice path = p;
+  std::string tmp;
+  s = SanitizePath(&path, &tmp);
+  if (s.ok()) {
+    assert(path.size() != 0);
+    if (path[0] != '/') {
+      s = Status::InvalidArgument("path is relative");
+    } else {
+      s = mdscli_->Accessdir(path, F_OK);
+    }
+  }
+  if (s.ok()) {
+    MutexLock l(&mutex_);
+    curdir_ = path.ToString();
+  }
   return s;
 }
 
