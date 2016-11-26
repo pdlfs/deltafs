@@ -925,6 +925,7 @@ Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
   std::string fake_path = p.ToString();
   fake_path += "/_";
   PathInfo path;
+  MutexLock ml(&mutex_);
   s = ResolvePath(fake_path, &path);
   if (s.ok()) {
     if (!IsReadDirOk(&path)) {
