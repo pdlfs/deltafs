@@ -552,13 +552,13 @@ Status Client::Close(int fd) {
   return s;
 }
 
-Status Client::Access(const Slice& p, int mode) {
+Status Client::Access(const Slice& path, int mode) {
   Status s;
-  Slice path = p;
+  Slice p = path;
   std::string tmp;
-  s = ExpandPath(&path, &tmp);
+  s = ExpandPath(&p, &tmp);
   if (s.ok()) {
-    s = mdscli_->Access(path, mode);
+    s = mdscli_->Access(p, mode);
   }
 
 #if VERBOSE >= OP_VERBOSE_LEVEL
@@ -568,13 +568,13 @@ Status Client::Access(const Slice& p, int mode) {
   return s;
 }
 
-Status Client::Accessdir(const Slice& p, int mode) {
+Status Client::Accessdir(const Slice& path, int mode) {
   Status s;
-  Slice path = p;
+  Slice p = path;
   std::string tmp;
-  s = ExpandPath(&path, &tmp);
+  s = ExpandPath(&p, &tmp);
   if (s.ok()) {
-    s = mdscli_->Accessdir(path, mode);
+    s = mdscli_->Accessdir(p, mode);
   }
 
 #if VERBOSE >= OP_VERBOSE_LEVEL
@@ -584,13 +584,13 @@ Status Client::Accessdir(const Slice& p, int mode) {
   return s;
 }
 
-Status Client::Listdir(const Slice& p, std::vector<std::string>* names) {
+Status Client::Listdir(const Slice& path, std::vector<std::string>* names) {
   Status s;
-  Slice path = p;
+  Slice p = path;
   std::string tmp;
-  s = ExpandPath(&path, &tmp);
+  s = ExpandPath(&p, &tmp);
   if (s.ok()) {
-    s = mdscli_->Listdir(path, names);
+    s = mdscli_->Listdir(p, names);
   }
 
 #if VERBOSE >= OP_VERBOSE_LEVEL
@@ -600,14 +600,14 @@ Status Client::Listdir(const Slice& p, std::vector<std::string>* names) {
   return s;
 }
 
-Status Client::Getattr(const Slice& p, Stat* statbuf) {
+Status Client::Getattr(const Slice& path, Stat* statbuf) {
   Status s;
-  Slice path = p;
+  Slice p = path;
   std::string tmp;
-  s = ExpandPath(&path, &tmp);
+  s = ExpandPath(&p, &tmp);
   if (s.ok()) {
     Fentry ent;
-    s = mdscli_->Fstat(path, &ent);
+    s = mdscli_->Fstat(p, &ent);
     if (s.ok()) {
       *statbuf = ent.stat;
     }
@@ -620,13 +620,13 @@ Status Client::Getattr(const Slice& p, Stat* statbuf) {
   return s;
 }
 
-Status Client::Mkfile(const Slice& p, mode_t mode) {
+Status Client::Mkfile(const Slice& path, mode_t mode) {
   Status s;
-  Slice path = p;
+  Slice p = path;
   std::string tmp;
-  s = ExpandPath(&path, &tmp);
+  s = ExpandPath(&p, &tmp);
   if (s.ok()) {
-    s = mdscli_->Fcreat(path, mode);
+    s = mdscli_->Fcreat(p, mode);
   }
 
 #if VERBOSE >= OP_VERBOSE_LEVEL
@@ -636,14 +636,14 @@ Status Client::Mkfile(const Slice& p, mode_t mode) {
   return s;
 }
 
-Status Client::Mkdirs(const Slice& p, mode_t mode) {
+Status Client::Mkdirs(const Slice& path, mode_t mode) {
   Status s;
-  Slice path = p;
+  Slice p = path;
   std::string tmp;
-  s = ExpandPath(&path, &tmp);
+  s = ExpandPath(&p, &tmp);
   if (s.ok()) {
-    s = mdscli_->Mkdir(path, mode, NULL, true,  // create_if_missing
-                       false                    // error_if_exists
+    s = mdscli_->Mkdir(p, mode, NULL, true,  // create_if_missing
+                       false                 // error_if_exists
                        );
   }
 
@@ -654,13 +654,13 @@ Status Client::Mkdirs(const Slice& p, mode_t mode) {
   return s;
 }
 
-Status Client::Mkdir(const Slice& p, mode_t mode) {
+Status Client::Mkdir(const Slice& path, mode_t mode) {
   Status s;
-  Slice path = p;
+  Slice p = path;
   std::string tmp;
-  s = ExpandPath(&path, &tmp);
+  s = ExpandPath(&p, &tmp);
   if (s.ok()) {
-    s = mdscli_->Mkdir(path, mode);
+    s = mdscli_->Mkdir(p, mode);
   }
 
 #if VERBOSE >= OP_VERBOSE_LEVEL
@@ -670,13 +670,13 @@ Status Client::Mkdir(const Slice& p, mode_t mode) {
   return s;
 }
 
-Status Client::Chmod(const Slice& p, mode_t mode) {
+Status Client::Chmod(const Slice& path, mode_t mode) {
   Status s;
-  Slice path = p;
+  Slice p = path;
   std::string tmp;
-  s = ExpandPath(&path, &tmp);
+  s = ExpandPath(&p, &tmp);
   if (s.ok()) {
-    s = mdscli_->Chmod(path, mode);
+    s = mdscli_->Chmod(p, mode);
   }
 
 #if VERBOSE >= OP_VERBOSE_LEVEL
@@ -686,14 +686,14 @@ Status Client::Chmod(const Slice& p, mode_t mode) {
   return s;
 }
 
-Status Client::Unlink(const Slice& p) {
+Status Client::Unlink(const Slice& path) {
   Status s;
-  Slice path = p;
+  Slice p = path;
   std::string tmp;
-  s = ExpandPath(&path, &tmp);
+  s = ExpandPath(&p, &tmp);
   Fentry fentry;
   if (s.ok()) {
-    s = mdscli_->Unlink(path, &fentry);
+    s = mdscli_->Unlink(p, &fentry);
     if (s.ok()) {
       char tmp[100];
       Slice fentry_encoding = fentry.EncodeTo(tmp);
@@ -709,53 +709,63 @@ Status Client::Unlink(const Slice& p) {
   return s;
 }
 
-Status Client::Chroot(const Slice& p) {
+Status Client::Chroot(const Slice& path) {
   Status s;
-  Slice path = p;
+  Slice p = path;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = SanitizePath(&p, &tmp);
   if (s.ok()) {
-    assert(path.size() != 0);
-    if (path[0] != '/') {
+    assert(p.size() != 0);
+    if (p[0] != '/') {
       s = Status::InvalidArgument("path is relative");
     } else {
-      s = mdscli_->Accessdir(path, F_OK);
+      s = mdscli_->Accessdir(p, F_OK);
     }
   }
   if (s.ok()) {
     MutexLock l(&mutex_);
     has_curroot_set_.NoBarrier_Store(this);
-    curroot_ = path.ToString();
+    curroot_ = p.ToString();
     if (curroot_ == "/") {
       has_curroot_set_.NoBarrier_Store(NULL);
       curroot_.clear();
     }
   }
+
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
+#endif
+
   return s;
 }
 
-Status Client::Chdir(const Slice& p) {
+Status Client::Chdir(const Slice& path) {
   Status s;
-  Slice path = p;
+  Slice p = path;
   std::string tmp;
-  s = SanitizePath(&path, &tmp);
+  s = SanitizePath(&p, &tmp);
   if (s.ok()) {
-    assert(path.size() != 0);
-    if (path[0] != '/') {
+    assert(p.size() != 0);
+    if (p[0] != '/') {
       s = Status::InvalidArgument("path is relative");
     } else {
-      s = mdscli_->Accessdir(path, F_OK);
+      s = mdscli_->Accessdir(p, F_OK);
     }
   }
   if (s.ok()) {
     MutexLock l(&mutex_);
     has_curdir_set_.NoBarrier_Store(this);
-    curdir_ = path.ToString();
+    curdir_ = p.ToString();
     if (curdir_ == "/") {
       has_curdir_set_.NoBarrier_Store(NULL);
       curdir_.clear();
     }
   }
+
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
+#endif
+
   return s;
 }
 
