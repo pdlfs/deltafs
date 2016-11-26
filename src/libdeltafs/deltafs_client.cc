@@ -713,14 +713,9 @@ Status Client::Chroot(const Slice& path) {
   Status s;
   Slice p = path;
   std::string tmp;
-  s = SanitizePath(&p, &tmp);
+  s = ExpandPath(&p, &tmp);
   if (s.ok()) {
-    assert(p.size() != 0);
-    if (p[0] != '/') {
-      s = Status::InvalidArgument("path is relative");
-    } else {
-      s = mdscli_->Accessdir(p, F_OK);
-    }
+    s = mdscli_->Accessdir(p, F_OK);
   }
   if (s.ok()) {
     MutexLock l(&mutex_);
@@ -743,14 +738,9 @@ Status Client::Chdir(const Slice& path) {
   Status s;
   Slice p = path;
   std::string tmp;
-  s = SanitizePath(&p, &tmp);
+  s = ExpandPath(&p, &tmp);
   if (s.ok()) {
-    assert(p.size() != 0);
-    if (p[0] != '/') {
-      s = Status::InvalidArgument("path is relative");
-    } else {
-      s = mdscli_->Accessdir(p, F_OK);
-    }
+    s = mdscli_->Accessdir(p, F_OK);
   }
   if (s.ok()) {
     MutexLock l(&mutex_);
