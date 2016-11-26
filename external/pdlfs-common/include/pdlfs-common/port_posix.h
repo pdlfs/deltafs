@@ -48,7 +48,6 @@
 #else
 #include <endian.h>
 #endif
-#include <errno.h>
 #include <pthread.h>
 #ifdef PDLFS_SNAPPY
 #include <snappy.h>
@@ -58,7 +57,6 @@
 #define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
 #endif
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
@@ -167,12 +165,7 @@ inline bool GetHeapProfile(void (*func)(void*, const char*, int), void* arg) {
   return false;
 }
 
-inline void PthreadCall(const char* label, int result) {
-  if (result != 0) {
-    fprintf(stderr, "pthread %s: %s\n", label, strerror(result));
-    abort();
-  }
-}
+extern void PthreadCall(const char* label, int result);
 
 namespace posix {
 // Return a special posix-based Env instance that performs direct I/O.

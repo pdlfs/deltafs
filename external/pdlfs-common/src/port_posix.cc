@@ -12,11 +12,29 @@
 
 #include "pdlfs-common/port_posix.h"
 
+#include <errno.h>
+#include <stdio.h>
+
 namespace pdlfs {
 namespace port {
 
+void PthreadCall(const char* label, int result) {
+  if (result != 0) {
+    fprintf(stderr, "pthread %s: %s\n", label, strerror(result));
+    abort();
+  }
+}
+
 Mutex::Mutex() {
+#ifndef NDEBUG
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+  PthreadCall("pthread_mutex_init", pthread_mutex_init(&mu_, &attr));
+  pthread_mutexattr_destroy(&attr);
+#else
   PthreadCall("pthread_mutex_init", pthread_mutex_init(&mu_, NULL));
+#endif
 }
 
 Mutex::~Mutex() {
