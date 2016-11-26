@@ -980,6 +980,7 @@ Status MDS::CLI::Accessdir(const Slice& p, int mode) {
   fake_path += "/_";
   PathInfo path;
   static const bool kPrefetchDirIndex = false;
+  MutexLock ml(&mutex_);
   s = ResolvePath(fake_path, &path);
   if (s.ok()) {
     if ((mode & R_OK) == R_OK && !IsReadDirOk(&path)) {
