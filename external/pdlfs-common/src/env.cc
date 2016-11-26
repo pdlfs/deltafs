@@ -73,7 +73,7 @@ Env* Env::Open(const Slice& env_name, const Slice& env_conf) {
 }
 
 static void EmitLog(Logger* info_log, const char* fmt, va_list ap) {
-  info_log->Logv("pdlfs-xxx.cc", 0, 0, 3, fmt, ap);
+  info_log->Logv("pdlfs.xx", 0, 0, 3, fmt, ap);
 }
 
 void Log(Logger* info_log, const char* fmt, ...) {
