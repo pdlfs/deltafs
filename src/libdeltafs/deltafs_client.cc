@@ -42,7 +42,8 @@ static inline Status BadDescriptor() {
 }
 
 Client::Client() {
-  has_root_changed_ = false;
+  has_curroot_set_.Release_Store(NULL);
+  has_curdir_set_.Release_Store(NULL);
   dummy_.prev = &dummy_;
   dummy_.next = &dummy_;
   max_open_fds_ = kMaxOpenFileDescriptors;
@@ -146,16 +147,14 @@ Status Client::ExpandPath(Slice* path, std::string* scratch) {
   if (!s.ok()) {
     // Path is not valid
   } else if ((*path)[0] == '/') {  // Absolute path
-    if (has_root_changed_) {
+    if (has_curroot_set_.Acquire_Load()) {
       MutexLock l(&mutex_);
-      if (has_root_changed_) {
-        *scratch = curroot_ + path->ToString();
-        *path = *scratch;
-      }
+      *scratch = curroot_ + path->ToString();
+      *path = *scratch;
     }
   } else {  // Relative path
-    MutexLock l(&mutex_);
-    if (curdir_.size() != 0) {
+    if (has_curdir_set_.Acquire_Load()) {
+      MutexLock l(&mutex_);
       *scratch = curdir_ + "/" + path->ToString();
       *path = *scratch;
     } else {
@@ -725,10 +724,10 @@ Status Client::Chroot(const Slice& p) {
   }
   if (s.ok()) {
     MutexLock l(&mutex_);
-    has_root_changed_ = true;
+    has_curroot_set_.NoBarrier_Store(this);
     curroot_ = path.ToString();
     if (curroot_ == "/") {
-      has_root_changed_ = false;
+      has_curroot_set_.NoBarrier_Store(NULL);
       curroot_.clear();
     }
   }
@@ -750,7 +749,12 @@ Status Client::Chdir(const Slice& p) {
   }
   if (s.ok()) {
     MutexLock l(&mutex_);
+    has_curdir_set_.NoBarrier_Store(this);
     curdir_ = path.ToString();
+    if (curdir_ == "/") {
+      has_curdir_set_.NoBarrier_Store(NULL);
+      curdir_.clear();
+    }
   }
   return s;
 }

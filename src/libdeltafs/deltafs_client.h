@@ -79,9 +79,10 @@ class Client {
   // State below is protected by mutex_
   port::Mutex mutex_;
   Status ExpandPath(Slice* path, std::string* scratch);
-  bool has_root_changed_;
+  port::AtomicPointer has_curroot_set_;
   std::string curroot_;  // Set by chroot
-  std::string curdir_;   // Set by chdir
+  port::AtomicPointer has_curdir_set_;
+  std::string curdir_;  // Set by chdir
   File* FetchFile(int fd);
   size_t Alloc(File*);
   File* Free(size_t idx);
