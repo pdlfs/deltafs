@@ -165,6 +165,7 @@ Status Client::ExpandPath(Slice* path, std::string* scratch) {
   return s;
 }
 
+// Apply the current mask set by umask.
 mode_t Client::MaskMode(mode_t mode) {
   mode_t mask = reinterpret_cast<intptr_t>(mask_.Acquire_Load());
   return ~mask & mode;
@@ -333,11 +334,13 @@ Status Client::Fstat(int fd, Stat* statbuf) {
       ent.stat.SetUserId(file->uid);
       assert(file->fh != NULL);
       file->refs++;
-      mutex_.Unlock();
-      uint64_t mtime;
-      uint64_t size;
-      s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size);
-      mutex_.Lock();
+      uint64_t mtime = 0;
+      uint64_t size = 0;
+      if (S_ISREG(file->mode)) {
+        mutex_.Unlock();
+        s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size);
+        mutex_.Lock();
+      }
       if (s.ok()) {
         ent.stat.SetModifyTime(mtime);
         ent.stat.SetFileSize(size);
@@ -435,14 +438,14 @@ Status Client::Fdatasync(int fd) {
     uint32_t seq_flush = file->seq_flush;
     file->refs++;
     mutex_.Unlock();
-    static const bool kForceSync = true;
-    s = fio_->Flush(file->fentry_encoding(), file->fh, kForceSync);
+    const bool force = true;
+    s = fio_->Flush(file->fentry_encoding(), file->fh, force);
     if (s.ok() && seq_flush < seq_write) {
       uint64_t mtime;
       uint64_t size;
-      static const bool kSkipCache = true;
+      const bool no_cache = true;
       s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size,
-                     kSkipCache);
+                     no_cache);
       if (s.ok()) {
         Fentry fentry;
         Slice encoding = file->fentry_encoding();
@@ -556,19 +559,22 @@ Status Client::Close(int fd) {
   if (file == NULL) {
     return BadDescriptor();
   } else {
-    assert(file->fh != NULL);
     assert(file->refs > 0);
-    while (file->seq_flush < file->seq_write) {
-      mutex_.Unlock();
-      Status s_ = Flush(fd);
-      mutex_.Lock();
-      if (!s_.ok()) {
-        Error(__LOG_ARGS__, "fail to close file: %s", C_STR(s_));
-        break;
+    Free(fd);  // Release file descriptor slot
+
+    if (S_ISREG(file->mode)) {
+      assert(file->fh != NULL);
+      while (file->seq_flush < file->seq_write) {
+        mutex_.Unlock();
+        Status s_ = Flush(fd);
+        mutex_.Lock();
+        if (!s_.ok()) {
+          Error(__LOG_ARGS__, "fail to close file: %s", C_STR(s_));
+          break;
+        }
       }
     }
 
-    Free(fd);
     Unref(file);
   }
 
@@ -736,9 +742,10 @@ Status Client::Unlink(const Slice& path) {
 }
 
 mode_t Client::Umask(mode_t mode) {
-  mode &= ACCESSPERMS;
+  mode &= ACCESSPERMS;  // Discard unrelated bits
   mode_t result = reinterpret_cast<intptr_t>(mask_.Acquire_Load());
   mask_.Release_Store(reinterpret_cast<void*>(mode));
+
   return result;
 }
 
@@ -748,12 +755,14 @@ Status Client::Chroot(const Slice& path) {
   std::string tmp;
   s = ExpandPath(&p, &tmp);
   if (s.ok()) {
-    s = mdscli_->Accessdir(p, F_OK);
+    s = mdscli_->Accessdir(p, X_OK);
   }
+
   if (s.ok()) {
     MutexLock l(&mutex_);
-    has_curroot_set_.NoBarrier_Store(this);
+    has_curroot_set_.NoBarrier_Store(this);  // any non-NULL value is ok
     curroot_ = p.ToString();
+
     if (curroot_ == "/") {
       has_curroot_set_.NoBarrier_Store(NULL);
       curroot_.clear();
@@ -773,12 +782,14 @@ Status Client::Chdir(const Slice& path) {
   std::string tmp;
   s = ExpandPath(&p, &tmp);
   if (s.ok()) {
-    s = mdscli_->Accessdir(p, F_OK);
+    s = mdscli_->Accessdir(p, X_OK);
   }
+
   if (s.ok()) {
     MutexLock l(&mutex_);
-    has_curdir_set_.NoBarrier_Store(this);
+    has_curdir_set_.NoBarrier_Store(this);  // any non-NULL value is ok
     curdir_ = p.ToString();
+
     if (curdir_ == "/") {
       has_curdir_set_.NoBarrier_Store(NULL);
       curdir_.clear();
@@ -793,21 +804,25 @@ Status Client::Chdir(const Slice& path) {
 }
 
 Status Client::Getcwd(char* buf, size_t size) {
-  Status s;
   if (buf == NULL) {
-    s = Status::InvalidArgument(Slice());
-  } else {
-    std::string curdir = "/";
-    if (has_curdir_set_.Acquire_Load()) {
-      MutexLock ml(&mutex_);
-      curdir = curdir_;
-    }
-    if (size >= curdir.size() + 1) {
-      strncpy(buf, curdir.c_str(), curdir.size() + 1);
-    } else {
-      s = Status::Range(Slice());
-    }
+    return Status::InvalidArgument(Slice());
+  } else if (size == 0) {
+    return Status::Range(Slice());
   }
+
+  Status s;
+  std::string curdir = "/";
+  if (has_curdir_set_.Acquire_Load()) {
+    MutexLock ml(&mutex_);
+    curdir = curdir_;
+  }
+
+  if (size >= curdir.size() + 1) {
+    strncpy(buf, curdir.c_str(), curdir.size() + 1);
+  } else {
+    s = Status::Range(Slice());
+  }
+
   return s;
 }
 
