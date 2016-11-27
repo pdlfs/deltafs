@@ -68,6 +68,7 @@ class Status {
   DEF_ERR(DirMarkedDeleted);
   DEF_ERR(InvalidFileDescriptor);
   DEF_ERR(TooManyOpens);
+  DEF_ERR(Range);
 
 #undef DEF_ERR
 
@@ -102,7 +103,8 @@ class Status {
     kDirMarkedDeleted = 21,
     kInvalidFileDescriptor = 22,
     kTooManyOpens = 23,
-    kUnknownError = 24
+    kRange = 24,
+    kUnknownError = 25
   };
 
   static const int kMaxCode = kUnknownError - 1;
