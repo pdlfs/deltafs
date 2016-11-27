@@ -182,7 +182,8 @@ mode_t Client::MaskMode(mode_t mode) {
 // Only a fixed amount of file can be opened simultaneously.
 // A process may open a same file multiple times and obtain multiple file
 // descriptors that point to distinct open file entries.
-// TODO: allow processed to open directories.
+// If the opened file is a directory, O_RDONLY must and only that
+// can be specified.
 Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
   Status s;
   Slice path = p;
@@ -190,11 +191,6 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
   s = ExpandPath(&path, &tmp);
   if (!s.ok()) {
     return s;
-  }
-
-  // XXX: enable open directories
-  if ((flags & O_DIRECTORY) == O_DIRECTORY) {
-    return Status::NotSupported("cannot open directories");
   }
 
   MutexLock ml(&mutex_);
@@ -211,8 +207,14 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
     } else {
       s = mdscli_->Fstat(path, &fentry);
       if (s.ok()) {
-        if (!S_ISREG(fentry.stat.FileMode())) {
-          s = Status::FileExpected(Slice());
+        if (!S_ISDIR(fentry.stat.FileMode())) {
+          if ((flags & O_DIRECTORY) == O_DIRECTORY) {
+            s = Status::DirExpected(Slice());
+          }
+        } else {
+          if ((flags & O_ACCMODE) != O_RDONLY) {
+            s = Status::FileExpected(Slice());
+          }
         }
       }
     }
@@ -227,9 +229,7 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
 #endif
 
     // Verify I/O permissions
-    if (s.ok()) {
-      assert(S_ISREG(fentry.stat.FileMode()));
-
+    if (s.ok() && S_ISREG(fentry.stat.FileMode())) {
       if ((flags & O_ACCMODE) != O_RDONLY) {
         if (!mdscli_->IsWriteOk(&fentry.stat)) {
           s = Status::AccessDenied(Slice());
@@ -243,17 +243,22 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
       }
     }
 
-    // Link file objects
-    Fio::Handle* fh = NULL;
     uint64_t mtime = 0;
     uint64_t size = 0;
     Slice fentry_encoding;
     char tmp[100];
+
     if (s.ok()) {
       fentry_encoding = fentry.EncodeTo(tmp);
+
       mtime = fentry.stat.ModifyTime();
       size = fentry.stat.FileSize();
+    }
 
+    // Link file objects
+    Fio::Handle* fh = NULL;
+
+    if (s.ok() && S_ISREG(fentry.stat.FileMode())) {
       if (fentry.stat.ChangeTime() < my_time) {
         const bool create_if_missing = true;  // Allow lazy object creation
         const bool truncate_if_exists =
@@ -349,6 +354,8 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
+  } else if (S_ISDIR(file->mode)) {
+    return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
     return FileAccessModeNotMatched();
   } else {
@@ -371,6 +378,8 @@ Status Client::Write(int fd, const Slice& data) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
+  } else if (S_ISDIR(file->mode)) {
+    return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
     return FileAccessModeNotMatched();
   } else {
@@ -393,6 +402,8 @@ Status Client::Ftruncate(int fd, uint64_t len) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
+  } else if (S_ISDIR(file->mode)) {
+    return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
     return FileAccessModeNotMatched();
   } else {
@@ -416,6 +427,8 @@ Status Client::Fdatasync(int fd) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     s = BadDescriptor();
+  } else if (S_ISDIR(file->mode)) {
+    s = Status::NotSupported(Slice());
   } else if ((file->flags & O_ACCMODE) != O_RDONLY) {
     assert(file->fh != NULL);
     uint32_t seq_write = file->seq_write;
@@ -457,6 +470,8 @@ Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
+  } else if (S_ISDIR(file->mode)) {
+    return FileAccessModeNotMatched();
   } else if (!IsReadOk(file)) {
     return FileAccessModeNotMatched();
   } else {
@@ -477,6 +492,8 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
+  } else if (S_ISDIR(file->mode)) {
+    return FileAccessModeNotMatched();
   } else if (!IsReadOk(file)) {
     return FileAccessModeNotMatched();
   } else {
@@ -498,6 +515,8 @@ Status Client::Flush(int fd) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     s = BadDescriptor();
+  } else if (S_ISDIR(file->mode)) {
+    s = Status::NotSupported(Slice());
   } else if ((file->flags & O_ACCMODE) != O_RDONLY) {
     assert(file->fh != NULL);
     uint32_t seq_write = file->seq_write;
