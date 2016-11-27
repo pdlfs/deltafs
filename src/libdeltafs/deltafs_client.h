@@ -47,6 +47,7 @@ class Client {
   Status Chmod(const Slice& path, mode_t mode);
   Status Unlink(const Slice& path);
 
+  mode_t Umask(mode_t mode);
   Status Getcwd(char* buf, size_t size);
   Status Chroot(const Slice& path);
   Status Chdir(const Slice& path);
@@ -80,6 +81,8 @@ class Client {
 
   // State below is protected by mutex_
   port::Mutex mutex_;
+  mode_t MaskMode(mode_t mode);
+  port::AtomicPointer mask_;  // Can be updated by umask
   Status ExpandPath(Slice* path, std::string* scratch);
   port::AtomicPointer has_curroot_set_;
   std::string curroot_;  // Set by chroot

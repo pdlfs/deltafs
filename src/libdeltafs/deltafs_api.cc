@@ -147,6 +147,18 @@ int deltafs_chdir(const char* __path) {
   }
 }
 
+mode_t deltafs_umask(mode_t __mode) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      NoClient();
+      return 0;
+    }
+  }
+
+  return client->Umask(__mode);
+}
+
 int deltafs_open(const char* __path, int __oflags, mode_t __mode,
                  struct stat* __buf) {
   if (client == NULL) {

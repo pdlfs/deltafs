@@ -42,6 +42,7 @@ static inline Status BadDescriptor() {
 }
 
 Client::Client() {
+  mask_.Release_Store(reinterpret_cast<void*>(S_IWGRP | S_IWOTH));
   has_curroot_set_.Release_Store(NULL);
   has_curdir_set_.Release_Store(NULL);
   dummy_.prev = &dummy_;
@@ -167,6 +168,11 @@ Status Client::ExpandPath(Slice* path, std::string* scratch) {
   return s;
 }
 
+mode_t Client::MaskMode(mode_t mode) {
+  mode_t mask = reinterpret_cast<intptr_t>(mask_.Acquire_Load());
+  return ~mask & mode;
+}
+
 // Open a file for I/O operations. Return OK on success.
 // If O_CREAT is specified and the file does not exist, it will be created.
 // If both O_CREAT and O_EXCL are specified and the file exists,
@@ -200,6 +206,7 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
   } else {
     mutex_.Unlock();
     Fentry fentry;
+    mode = MaskMode(mode);
     uint64_t my_time = Env::Default()->NowMicros();
     if ((flags & O_CREAT) == O_CREAT) {
       const bool error_if_exists = (flags & O_EXCL) == O_EXCL;
@@ -626,6 +633,7 @@ Status Client::Mkfile(const Slice& path, mode_t mode) {
   std::string tmp;
   s = ExpandPath(&p, &tmp);
   if (s.ok()) {
+    mode = MaskMode(mode);
     s = mdscli_->Fcreat(p, mode);
   }
 
@@ -642,6 +650,7 @@ Status Client::Mkdirs(const Slice& path, mode_t mode) {
   std::string tmp;
   s = ExpandPath(&p, &tmp);
   if (s.ok()) {
+    mode = MaskMode(mode);
     s = mdscli_->Mkdir(p, mode, NULL, true,  // create_if_missing
                        false                 // error_if_exists
                        );
@@ -660,6 +669,7 @@ Status Client::Mkdir(const Slice& path, mode_t mode) {
   std::string tmp;
   s = ExpandPath(&p, &tmp);
   if (s.ok()) {
+    mode = MaskMode(mode);
     s = mdscli_->Mkdir(p, mode);
   }
 
@@ -707,6 +717,13 @@ Status Client::Unlink(const Slice& path) {
 #endif
 
   return s;
+}
+
+mode_t Client::Umask(mode_t mode) {
+  mode &= ACCESSPERMS;
+  mode_t result = reinterpret_cast<intptr_t>(mask_.Acquire_Load());
+  mask_.Release_Store(reinterpret_cast<void*>(mode));
+  return result;
 }
 
 Status Client::Chroot(const Slice& path) {
