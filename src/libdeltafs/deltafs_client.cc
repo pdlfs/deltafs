@@ -139,8 +139,8 @@ static Status SanitizePath(Slice* path, std::string* scratch) {
 }
 
 // Sanitize the given path. After that:
-// If path is relative, current directory is used to obtain the final path.
-// If path is absolute, current root is used to obtain the final path.
+// If path is relative, the current working directory is used to obtain the
+// final path. If path is absolute, the current root directory is used.
 // NOTE: *path is used both as an input and output parameter.
 Status Client::ExpandPath(Slice* path, std::string* scratch) {
   Status s = SanitizePath(path, scratch);
@@ -756,6 +756,25 @@ Status Client::Chdir(const Slice& path) {
   OP_VERBOSE(p, s);
 #endif
 
+  return s;
+}
+
+Status Client::Getcwd(char* buf, size_t size) {
+  Status s;
+  if (buf == NULL) {
+    s = Status::InvalidArgument(Slice());
+  } else {
+    std::string curdir = "/";
+    if (has_curdir_set_.Acquire_Load()) {
+      MutexLock ml(&mutex_);
+      curdir = curdir_;
+    }
+    if (size >= curdir.size() + 1) {
+      strncpy(buf, curdir.c_str(), curdir.size() + 1);
+    } else {
+      s = Status::Range(Slice());
+    }
+  }
   return s;
 }
 

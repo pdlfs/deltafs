@@ -46,6 +46,8 @@ class Client {
   Status Mkdir(const Slice& path, mode_t mode);
   Status Chmod(const Slice& path, mode_t mode);
   Status Unlink(const Slice& path);
+
+  Status Getcwd(char* buf, size_t size);
   Status Chroot(const Slice& path);
   Status Chdir(const Slice& path);
 

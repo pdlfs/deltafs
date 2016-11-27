@@ -104,7 +104,7 @@ static void PrintWelcomeMessage() {
 static void PrintUsage() {
   Print(
       "== Deltafs shell (still work-in-progress)\n\n"
-      "cd <path>\n\tChange current directory\n\n"
+      "cd <path>\n\tChange the current working directory\n\n"
       "ls <path>\n\tList the children of a given directory\n\n"
       "mkdir <path>\n\tMake a new directory\n\n"
       "mkfile <path>\n\tMake a new file\n\n"

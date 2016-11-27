@@ -30,6 +30,10 @@ extern "C" {
 #define ENOSYS EPERM
 #endif
 
+#ifndef ENOBUFS
+#define ENOBUFS ENOMEM
+#endif
+
 static void SetErrno(const pdlfs::Status& s);
 static pdlfs::Status bg_status;
 static pdlfs::port::OnceType once = PDLFS_ONCE_INIT;
@@ -82,8 +86,30 @@ static void SetErrno(const pdlfs::Status& s) {
     errno = EINVAL;
   } else if (s.IsDisconnected()) {
     errno = EHOSTUNREACH;
+  } else if (s.IsBufferFull()) {
+    errno = ENOBUFS;
+  } else if (s.IsRange()) {
+    errno = ERANGE;
   } else {
     errno = EIO;
+  }
+}
+
+char* deltafs_getcwd(char* __buf, size_t __sz) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      NoClient();
+      return NULL;
+    }
+  }
+  pdlfs::Status s;
+  s = client->Getcwd(__buf, __sz);
+  if (s.ok()) {
+    return __buf;
+  } else {
+    SetErrno(s);
+    return NULL;
   }
 }
 
