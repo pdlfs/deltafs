@@ -333,13 +333,15 @@ Status Client::Fstat(int fd, Stat* statbuf) {
       ent.stat.SetGroupId(file->gid);
       ent.stat.SetUserId(file->uid);
       assert(file->fh != NULL);
-      file->refs++;
+      file->refs++;  // Ref
       uint64_t mtime = 0;
       uint64_t size = 0;
       if (S_ISREG(file->mode)) {
         mutex_.Unlock();
         s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size);
         mutex_.Lock();
+      } else {
+        // FIXME
       }
       if (s.ok()) {
         ent.stat.SetModifyTime(mtime);
@@ -357,6 +359,12 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
+    if (!S_ISDIR(file->mode)) {
+      // TODO: write into a file under a pdlfs dir
+    }
+
+    return FileAccessModeNotMatched();
   } else if (S_ISDIR(file->mode)) {
     return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
@@ -364,7 +372,7 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   } else {
     Status s;
     assert(file->fh != NULL);
-    file->refs++;
+    file->refs++;  // Ref
     mutex_.Unlock();
     s = fio_->Pwrite(file->fentry_encoding(), file->fh, data, off);
     mutex_.Lock();
@@ -381,6 +389,12 @@ Status Client::Write(int fd, const Slice& data) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
+    if (!S_ISDIR(file->mode)) {
+      // TODO: write into a file under a pdlfs dir
+    }
+
+    return FileAccessModeNotMatched();
   } else if (S_ISDIR(file->mode)) {
     return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
@@ -388,7 +402,7 @@ Status Client::Write(int fd, const Slice& data) {
   } else {
     Status s;
     assert(file->fh != NULL);
-    file->refs++;
+    file->refs++;  // Ref
     mutex_.Unlock();
     s = fio_->Write(file->fentry_encoding(), file->fh, data);
     mutex_.Lock();
@@ -405,6 +419,8 @@ Status Client::Ftruncate(int fd, uint64_t len) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
+    return FileAccessModeNotMatched();
   } else if (S_ISDIR(file->mode)) {
     return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
@@ -412,7 +428,7 @@ Status Client::Ftruncate(int fd, uint64_t len) {
   } else {
     Status s;
     assert(file->fh != NULL);
-    file->refs++;
+    file->refs++;  // Ref
     mutex_.Unlock();
     s = fio_->Truncate(file->fentry_encoding(), file->fh, len);
     mutex_.Lock();
@@ -430,22 +446,24 @@ Status Client::Fdatasync(int fd) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     s = BadDescriptor();
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
+    s = Status::NotSupported(Slice());  // FIXME
+
   } else if (S_ISDIR(file->mode)) {
-    s = Status::NotSupported(Slice());
+    s = Status::NotSupported(Slice());  // FIXME
+
   } else if ((file->flags & O_ACCMODE) != O_RDONLY) {
     assert(file->fh != NULL);
     uint32_t seq_write = file->seq_write;
     uint32_t seq_flush = file->seq_flush;
-    file->refs++;
+    file->refs++;  // Ref
     mutex_.Unlock();
-    const bool force = true;
-    s = fio_->Flush(file->fentry_encoding(), file->fh, force);
+    s = fio_->Flush(file->fentry_encoding(), file->fh, true /*force*/);
     if (s.ok() && seq_flush < seq_write) {
       uint64_t mtime;
       uint64_t size;
-      const bool no_cache = true;
       s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size,
-                     no_cache);
+                     true /*skip_cache*/);
       if (s.ok()) {
         Fentry fentry;
         Slice encoding = file->fentry_encoding();
@@ -463,7 +481,10 @@ Status Client::Fdatasync(int fd) {
       }
     }
     Unref(file);
+  } else {
+    // Nothing to sync
   }
+
   return s;
 }
 
@@ -473,6 +494,12 @@ Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
+    if (!S_ISDIR(file->mode)) {
+      // TODO: read a file from a plfs dir
+    }
+
+    return FileAccessModeNotMatched();
   } else if (S_ISDIR(file->mode)) {
     return FileAccessModeNotMatched();
   } else if (!IsReadOk(file)) {
@@ -480,7 +507,7 @@ Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
   } else {
     Status s;
     assert(file->fh != NULL);
-    file->refs++;
+    file->refs++;  // Ref
     mutex_.Unlock();
     Slice e = file->fentry_encoding();
     s = fio_->Pread(e, file->fh, result, off, size, scratch);
@@ -495,6 +522,12 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     return BadDescriptor();
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
+    if (!S_ISDIR(file->mode)) {
+      // TODO: read a file from a plfs dir
+    }
+
+    return FileAccessModeNotMatched();
   } else if (S_ISDIR(file->mode)) {
     return FileAccessModeNotMatched();
   } else if (!IsReadOk(file)) {
@@ -502,7 +535,7 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
   } else {
     Status s;
     assert(file->fh != NULL);
-    file->refs++;
+    file->refs++;  // Ref
     mutex_.Unlock();
     Slice e = file->fentry_encoding();
     s = fio_->Read(e, file->fh, result, size, scratch);
@@ -518,13 +551,21 @@ Status Client::Flush(int fd) {
   File* file = FetchFile(fd);
   if (file == NULL) {
     s = BadDescriptor();
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
+    if (S_ISDIR(file->mode)) {
+      // TODO: force the generation of a new epoch
+    } else {
+      // Ignore it
+    }
+
   } else if (S_ISDIR(file->mode)) {
-    s = Status::NotSupported(Slice());
+    // Nothing to flush
+
   } else if ((file->flags & O_ACCMODE) != O_RDONLY) {
     assert(file->fh != NULL);
     uint32_t seq_write = file->seq_write;
     uint32_t seq_flush = file->seq_flush;
-    file->refs++;
+    file->refs++;  // Ref
     mutex_.Unlock();
     s = fio_->Flush(file->fentry_encoding(), file->fh);
     if (s.ok() && seq_flush < seq_write) {
@@ -548,7 +589,10 @@ Status Client::Flush(int fd) {
       }
     }
     Unref(file);
+  } else {
+    // Nothing to flush
   }
+
   return s;
 }
 
@@ -559,21 +603,24 @@ Status Client::Close(int fd) {
   if (file == NULL) {
     return BadDescriptor();
   } else {
-    assert(file->refs > 0);
-    Free(fd);  // Release file descriptor slot
+    if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
+      if (S_ISDIR(file->mode)) {
+        // XXX: TODO
+      } else {
+        // Do nothing
+      }
 
-    if (S_ISREG(file->mode)) {
-      assert(file->fh != NULL);
+    } else if (S_ISREG(file->mode)) {
       while (file->seq_flush < file->seq_write) {
         mutex_.Unlock();
-        Status s_ = Flush(fd);
+        Flush(fd);  // Ignore errors
         mutex_.Lock();
-        if (!s_.ok()) {
-          Error(__LOG_ARGS__, "fail to close file: %s", C_STR(s_));
-          break;
-        }
       }
+    } else {
+      // Do nothing
     }
+
+    Free(fd);  // Release fd slot
 
     Unref(file);
   }
