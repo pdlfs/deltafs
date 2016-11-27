@@ -35,6 +35,9 @@ extern std::string MDSTracing();
 // server may potentially have multiple addrs.
 // e.g. 10.0.0.1:10000&10.0.0.1:20000
 extern std::string MetadataSrvAddrs();
+// Return the max number of files that could be opened per client process.
+// e.g. 1024
+extern std::string MaxNumOfOpenFiles();
 // Return the size of lease table at each metadata server.
 // e.g. 4096, 16k
 extern std::string SizeOfSrvLeaseTable();

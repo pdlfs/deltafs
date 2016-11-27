@@ -22,9 +22,6 @@
 
 namespace pdlfs {
 
-// XXX: make this configurable?
-static const int kMaxOpenFileDescriptors = 1000;
-
 // Helper for getting status strings.
 #define C_STR(status) status.ToString().c_str()
 #define OP_VERBOSE_LEVEL 8
@@ -41,13 +38,13 @@ static inline Status BadDescriptor() {
   return Status::InvalidFileDescriptor(Slice());
 }
 
-Client::Client() {
+Client::Client(size_t max_open_files) {
   mask_.Release_Store(reinterpret_cast<void*>(S_IWGRP | S_IWOTH));
   has_curroot_set_.Release_Store(NULL);
   has_curdir_set_.Release_Store(NULL);
   dummy_.prev = &dummy_;
   dummy_.next = &dummy_;
-  max_open_fds_ = kMaxOpenFileDescriptors;
+  max_open_fds_ = max_open_files;
   fds_ = new File*[max_open_fds_]();
   num_open_fds_ = 0;
   fd_slot_ = 0;
@@ -850,6 +847,7 @@ class Client::Builder {
   BlkDBOptions blkdbopts_;
   BlkDB* blkdb_;
   Fio* fio_;
+  size_t max_open_files_;
   int cli_id_;
   int session_id_;
   int uid_;
@@ -1026,12 +1024,18 @@ void Client::Builder::OpenDB() {
 void Client::Builder::OpenMDSCli() {
   uint64_t idx_cache_sz;
   uint64_t lookup_cache_sz;
+  uint64_t max_open_files;
 
   if (ok()) {
     status_ = config::LoadSizeOfCliIndexCache(&idx_cache_sz);
     if (ok()) {
       status_ = config::LoadSizeOfCliLookupCache(&lookup_cache_sz);
     }
+  }
+
+  if (ok()) {
+    status_ = config::LoadMaxNumOfOpenFiles(&max_open_files);
+    max_open_files_ = max_open_files;
   }
 
   if (ok()) {
@@ -1082,7 +1086,7 @@ Client* Client::Builder::BuildClient() {
 #endif
 
   if (ok()) {
-    Client* cli = new Client;
+    Client* cli = new Client(max_open_files_);
     cli->mdscli_ = mdscli_;
     cli->mdsfty_ = mdsfty_;
     cli->fio_ = fio_;

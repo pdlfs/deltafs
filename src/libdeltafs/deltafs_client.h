@@ -54,7 +54,7 @@ class Client {
 
  private:
   class Builder;
-  Client();  // Called only by Client::Builder
+  Client(size_t max_open_files);  // Called only by Client::Builder
   // No copying allowed
   void operator=(const Client&);
   Client(const Client&);
