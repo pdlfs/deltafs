@@ -104,6 +104,7 @@ static void PrintWelcomeMessage() {
 static void PrintUsage() {
   Print(
       "== Deltafs shell (still work-in-progress)\n\n"
+      "pwd\n\tPrint the current working directory\n\n"
       "cd <path>\n\tChange the current working directory\n\n"
       "ls <path>\n\tList the children of a given directory\n\n"
       "mkdir <path>\n\tMake a new directory\n\n"
@@ -112,6 +113,16 @@ static void PrintUsage() {
       "Copy a file from the local file system to deltafs\n\n"
       "cat <path>\n\tPrint the content of a file\n\n"
       "\n");
+}
+
+static void Getcwd(int argc, char* argv[]) {
+  char tmp[4096];
+  char* p = deltafs_getcwd(tmp, sizeof(tmp));
+  if (p == NULL) {
+    Error("cannot getcwd");
+  } else {
+    Print("%s\n", p);
+  }
 }
 
 static void Chdir(int argc, char* argv[]) {
@@ -251,6 +262,8 @@ static void Exec(const std::vector<std::string>& inputs) {
     Cat(argc, &argv[0]);
   } else if (cmd == "cd") {
     Chdir(argc, &argv[0]);
+  } else if (cmd == "pwd") {
+    Getcwd(argc, &argv[0]);
   } else {
     Print("No such command\n\n");
     PrintUsage();
