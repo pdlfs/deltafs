@@ -10,7 +10,9 @@
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/strutil.h"
-#define DELTAFS_PS1 "Deltafs (v" PDLFS_COMMON_VERSION ") > "
+#define DELTAFS_PS1_ "Deltafs (v" PDLFS_COMMON_VERSION "):%s$ "
+static const char* __DELTAFS_PS1__();
+#define DELTAFS_PS1 (__DELTAFS_PS1__())
 #include "deltafs/deltafs_api.h"
 
 #include <errno.h>
@@ -33,6 +35,15 @@
 #if defined(PDLFS_GLOG)
 #include <glog/logging.h>
 #endif
+
+static const char* __DELTAFS_PS1__() {
+  static char cwd[4096] = {0};
+  static char tmp[5000] = {0};
+  const char* p = deltafs_getcwd(cwd, sizeof(cwd));
+  if (p == NULL) p = "?";
+  snprintf(tmp, sizeof(tmp), DELTAFS_PS1_, p);
+  return tmp;
+}
 
 // True if user has requested shutdown by sending the ctrl+c signal
 static bool shutting_down_signaled = false;
@@ -126,17 +137,20 @@ static void Getcwd(int argc, char* argv[]) {
 }
 
 static void Chdir(int argc, char* argv[]) {
-  if (argc >= 2) {
-    if (deltafs_chdir(argv[1]) != 0) {
-      Error("cannot chdir '%s'", argv[1]);
-    } else {
-      Print("OK\n");
-    }
+  static char* argv2[2] = {NULL, (char*)"/"};
+  if (argc <= 1) {
+    argv = argv2;  // XXX: cd /
+    argc = 2;
+  }
+  if (deltafs_chdir(argv[1]) != 0) {
+    Error("cannot chdir '%s'", argv[1]);
+  } else {
+    Print("OK\n");
   }
 }
 
 static void Listdir(int argc, char* argv[]) {
-  static const char* argv2[2] = {NULL, "."};
+  static char* argv2[2] = {NULL, (char*)"."};
   struct DirLister {
     static int Print(const char* name, void* arg) {
       ++(*reinterpret_cast<int*>(arg));
@@ -144,8 +158,8 @@ static void Listdir(int argc, char* argv[]) {
       return 0;
     }
   };
-  if (argc == 1) {
-    argv = (char**)argv2;
+  if (argc <= 1) {
+    argv = argv2;  // XXX: ls .
     argc = 2;
   }
   for (int i = 1; i < argc; i++) {
