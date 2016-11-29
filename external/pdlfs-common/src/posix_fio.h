@@ -114,8 +114,8 @@ class PosixFio : public Fio {
     return s;
   }
 
-  virtual Status Stat(const Slice& fentry, Handle* fh, uint64_t* mtime,
-                      uint64_t* size, bool skip_cache = false) {
+  virtual Status Fstat(const Slice& fentry, Handle* fh, uint64_t* mtime,
+                       uint64_t* size, bool skip_cache = false) {
     Status s;
     int fd = reinterpret_cast<intptr_t>(fh);
     struct stat buf;
@@ -193,7 +193,7 @@ class PosixFio : public Fio {
     return s;
   }
 
-  virtual Status Truncate(const Slice& fentry, Handle* fh, uint64_t size) {
+  virtual Status Ftruncate(const Slice& fentry, Handle* fh, uint64_t size) {
     Status s;
     int fd = reinterpret_cast<intptr_t>(fh);
     int r = ftruncate(fd, size);
@@ -225,6 +225,33 @@ class PosixFio : public Fio {
   virtual Status Close(const Slice& fentry, Handle* fh) {
     close(reinterpret_cast<intptr_t>(fh));
     return Status::OK();
+  }
+
+  virtual Status Truncate(const Slice& fentry, uint64_t size) {
+    Status s;
+    std::string fname = root_ + "/";
+    fname += ToFileName(fentry);
+    int r = truncate(fname.c_str(), size);
+    if (r != 0) {
+      return IOError(fname, errno);
+    } else {
+      return s;
+    }
+  }
+
+  virtual Status Stat(const Slice& fentry, uint64_t* mtime, uint64_t* size) {
+    Status s;
+    std::string fname = root_ + "/";
+    fname += ToFileName(fentry);
+    struct stat buf;
+    int r = stat(fname.c_str(), &buf);
+    if (r != 0) {
+      return IOError(fname, errno);
+    } else {
+      *mtime = 1000ULL * 1000ULL * buf.st_mtime;
+      *size = buf.st_size;
+      return s;
+    }
   }
 
   virtual Status Drop(const Slice& fentry) {

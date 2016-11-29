@@ -60,8 +60,8 @@ BlkDB::~BlkDB() {
   }
 }
 
-Status BlkDB::Stat(const Slice& fentry, Handle* fh, uint64_t* mtime,
-                   uint64_t* size, bool skip_cache) {
+Status BlkDB::Fstat(const Slice& fentry, Handle* fh, uint64_t* mtime,
+                    uint64_t* size, bool skip_cache) {
   Status s;
   assert(fh != NULL);
   const Stream* stream = reinterpret_cast<Stream*>(fh);
@@ -193,13 +193,21 @@ Status BlkDB::Open(const Slice& fentry, bool create_if_missing,
   return s;
 }
 
+Status BlkDB::Truncate(const Slice& fentry, uint64_t size) {
+  return Status::NotSupported(Slice());
+}
+
+Status BlkDB::Stat(const Slice& fentry, uint64_t* mtime, uint64_t* size) {
+  return Status::NotSupported(Slice());
+}
+
 Status BlkDB::Drop(const Slice& fentry) {
   // Dropping a stream involving deleting a whole range of DB
   // records and we currently don't support it.
   return Status::NotSupported(Slice());
 }
 
-Status BlkDB::Truncate(const Slice& fentry, Handle* fh, uint64_t size) {
+Status BlkDB::Ftruncate(const Slice& fentry, Handle* fh, uint64_t size) {
   return Status::NotSupported(Slice());
 }
 

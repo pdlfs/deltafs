@@ -47,6 +47,11 @@ struct BlkDBOptions {
 };
 
 class BlkDB : public Fio {
+  Status WriteTo(Stream*, const Slice& fentry, const Slice& data, uint64_t off);
+
+  Status ReadFrom(Stream*, const Slice& fentry, Slice* result, uint64_t off,
+                  uint64_t size, char* scratch);
+
   static const KeyType kHeaderType = kDataDesType;
 
  public:
@@ -57,8 +62,8 @@ class BlkDB : public Fio {
   virtual Status Open(const Slice& fentry, bool create_if_missing,
                       bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
                       Handle** fh);
-  virtual Status Stat(const Slice& fentry, Handle* fh, uint64_t* mtime,
-                      uint64_t* size, bool skip_cache = false);
+  virtual Status Fstat(const Slice& fentry, Handle* fh, uint64_t* mtime,
+                       uint64_t* size, bool skip_cache = false);
   virtual Status Write(const Slice& fentry, Handle* fh, const Slice& data);
   virtual Status Pwrite(const Slice& fentry, Handle* fh, const Slice& data,
                         uint64_t off);
@@ -66,17 +71,16 @@ class BlkDB : public Fio {
                       uint64_t size, char* scratch);
   virtual Status Pread(const Slice& fentry, Handle* fh, Slice* result,
                        uint64_t off, uint64_t size, char* scratch);
-  virtual Status Truncate(const Slice& fentry, Handle* fh, uint64_t size);
+  virtual Status Ftruncate(const Slice& fentry, Handle* fh, uint64_t size);
   virtual Status Flush(const Slice& fentry, Handle* fh,
                        bool force_sync = false);
   virtual Status Close(const Slice& fentry, Handle* fh);
+
+  virtual Status Truncate(const Slice& fentry, uint64_t size);
+  virtual Status Stat(const Slice& fentry, uint64_t* mtime, uint64_t* size);
   virtual Status Drop(const Slice& fentry);
 
  private:
-  Status WriteTo(Stream*, const Slice& fentry, const Slice& data, uint64_t off);
-  Status ReadFrom(Stream*, const Slice& fentry, Slice* result, uint64_t off,
-                  uint64_t size, char* scratch);
-
   // No copying allowed
   void operator=(const BlkDB&);
   BlkDB(const BlkDB&);
