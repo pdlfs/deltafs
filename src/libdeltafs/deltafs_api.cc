@@ -501,6 +501,24 @@ int deltafs_unlink(const char* __path) {
   }
 }
 
+int deltafs_truncate(const char* __path, off_t __len) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+
+  pdlfs::Status s;
+  s = client->Truncate(__path, __len);
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
 int deltafs_creat(const char* __path, mode_t __mode) {
   return deltafs_open(__path, O_CREAT | O_WRONLY | O_TRUNC, __mode);
 }

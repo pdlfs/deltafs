@@ -800,20 +800,51 @@ Status Client::Chmod(const Slice& path, mode_t mode) {
   return s;
 }
 
+Status Client::Truncate(const Slice& path, uint64_t len) {
+  Status s;
+  Slice p = path;
+  std::string tmp;
+  s = ExpandPath(&p, &tmp);
+
+  Fentry ent;
+  char encoding_space[100];
+  Slice encoding;
+  if (s.ok()) {
+    s = mdscli_->Fstat(p, &ent);
+    if (s.ok()) {
+      encoding = ent.EncodeTo(encoding_space);
+    }
+  }
+
+  if (s.ok()) {
+    s = fio_->Truncate(encoding, len);
+  }
+
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
+#endif
+
+  return s;
+}
+
 Status Client::Unlink(const Slice& path) {
   Status s;
   Slice p = path;
   std::string tmp;
   s = ExpandPath(&p, &tmp);
-  Fentry fentry;
+
+  Fentry ent;
+  char encoding_space[100];
+  Slice encoding;
   if (s.ok()) {
-    s = mdscli_->Unlink(p, &fentry);
+    s = mdscli_->Unlink(p, &ent);
     if (s.ok()) {
-      char tmp[100];
-      Slice fentry_encoding = fentry.EncodeTo(tmp);
-      // XXX: garbage collection
-      fio_->Drop(fentry_encoding);
+      encoding = ent.EncodeTo(encoding_space);
     }
+  }
+
+  if (s.ok()) {
+    fio_->Drop(encoding);
   }
 
 #if VERBOSE >= OP_VERBOSE_LEVEL
