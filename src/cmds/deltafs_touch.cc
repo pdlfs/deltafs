@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
 #endif
   static const mode_t mode = DEFFILEMODE;
   for (int i = 1; i < argc; i++) {
-    int fd = deltafs_open(argv[i], O_CREAT | O_WRONLY, mode, NULL);
+    int fd = deltafs_open(argv[i], O_CREAT | O_WRONLY, mode);
     if (fd != -1) {
       deltafs_close(fd);
     } else {

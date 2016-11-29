@@ -159,8 +159,8 @@ mode_t deltafs_umask(mode_t __mode) {
   return client->Umask(__mode);
 }
 
-int deltafs_open(const char* __path, int __oflags, mode_t __mode,
-                 struct stat* __buf) {
+int deltafs_openstat(const char* __path, int __oflags, mode_t __mode,
+                     struct stat* __buf) {
   if (client == NULL) {
     pdlfs::port::InitOnce(&once, InitClient);
     if (client == NULL) {
@@ -482,6 +482,14 @@ int deltafs_unlink(const char* __path) {
     SetErrno(s);
     return -1;
   }
+}
+
+int deltafs_creat(const char* __path, mode_t __mode) {
+  return deltafs_open(__path, O_CREAT | O_WRONLY | O_TRUNC, __mode);
+}
+
+int deltafs_open(const char* __path, int __oflags, mode_t __mode) {
+  return deltafs_openstat(__path, __oflags, __mode, NULL);
 }
 
 int deltafs_nonop() {

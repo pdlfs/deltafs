@@ -202,7 +202,7 @@ static void Cat(int argc, char* argv[]) {
   for (int i = 1; i < argc; i++) {
     ssize_t nr = 0;
     off_t off = 0;
-    int fd = deltafs_open(argv[i], O_RDONLY, 0, NULL);
+    int fd = deltafs_open(argv[i], O_RDONLY, 0);
     if (fd != -1) {
       while ((nr = deltafs_pread(fd, buf, 4096, off)) > 0) {
         buf[nr] = 0;
@@ -229,7 +229,7 @@ static void CopyFromLocal(int argc, char* argv[]) {
   for (int i = 2; i < argc; i++) {
     ssize_t nr = 0, nw = 0;
     off_t off = 0;
-    int dfd = deltafs_open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, mode, NULL);
+    int dfd = deltafs_open(argv[i], O_WRONLY | O_CREAT | O_TRUNC, mode);
     if (dfd != -1) {
       while ((nr = read(fd, buf, 4096)) > 0) {
         nw = deltafs_pwrite(dfd, buf, nr, off);

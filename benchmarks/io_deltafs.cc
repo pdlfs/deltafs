@@ -26,9 +26,9 @@
 namespace pdlfs {
 namespace ioclient {
 
-static const mode_t kFilePerms =
+static const mode_t IO_FILEPERMS =
     (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);  // rw-r--r--
-static const mode_t kDirPerms =
+static const mode_t IO_DIRPERMS =
     (S_IRWXU | S_IRGRP | S_IROTH | S_IXGRP | S_IXOTH);  // rwxr-x-r-x
 
 static Status IOError(const std::string& target) {
@@ -95,7 +95,7 @@ Status DeltafsClient::NewFile(const std::string& path) {
   if (kVVerbose) printf("deltafs_mkfile %s...\n", p);
 #endif
   Status s;
-  int r = deltafs_mkfile(p, kFilePerms);
+  int r = deltafs_mkfile(p, IO_FILEPERMS);
   if (r != 0) {
     s = IOError(path);
   }
@@ -127,7 +127,7 @@ Status DeltafsClient::MakeDirectory(const std::string& path) {
   if (kVVerbose) printf("deltafs_mkdir %s...\n", p);
 #endif
   Status s;
-  int r = deltafs_mkdir(p, kDirPerms);
+  int r = deltafs_mkdir(p, IO_DIRPERMS);
   if (r != 0) {
     s = IOError(path);
   }
@@ -162,7 +162,7 @@ Status DeltafsClient::Append(const std::string& path, const char* data,
 #endif
   Status s;
   struct stat statbuf;
-  int fd = deltafs_open(p, O_WRONLY | O_CREAT, kFilePerms, &statbuf);
+  int fd = deltafs_openstat(p, O_WRONLY | O_CREAT, IO_FILEPERMS, &statbuf);
   if (fd == -1) {
     s = IOError(path);
   } else {
