@@ -39,8 +39,9 @@ class Client {
 
   Status Access(const Slice& path, int mode);
   Status Accessdir(const Slice& path, int mode);
-  Status Listdir(const Slice& path, std::vector<std::string>*);
-  Status Getattr(const Slice& path, Stat*);
+  Status Listdir(const Slice& path, std::vector<std::string>* names);
+  Status Lstat(const Slice& path, Stat* result);
+  Status Getattr(const Slice& path, Stat* result);
   Status Mkfile(const Slice& path, mode_t mode);
   Status Mkdirs(const Slice& path, mode_t mode);
   Status Mkdir(const Slice& path, mode_t mode);

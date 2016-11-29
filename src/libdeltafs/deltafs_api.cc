@@ -172,7 +172,7 @@ int deltafs_openstat(const char* __path, int __oflags, mode_t __mode,
   s = client->Fopen(__path, __oflags, __mode, &info);
   if (s.ok()) {
     if (__buf != NULL) {
-      pdlfs::__copy_stat(info.stat, __buf);
+      pdlfs::__cpstat(info.stat, __buf);
     }
     return info.fd;
   } else {
@@ -262,7 +262,7 @@ int deltafs_fstat(int __fd, struct stat* __buf) {
   pdlfs::Status s;
   s = client->Fstat(__fd, &stat);
   if (s.ok()) {
-    pdlfs::__copy_stat(stat, __buf);
+    pdlfs::__cpstat(stat, __buf);
     return 0;
   } else {
     SetErrno(s);
@@ -375,6 +375,26 @@ int deltafs_listdir(const char* __path, deltafs_filler_t __filler,
   }
 }
 
+int deltafs_getattr(const char* __path, struct stat* __buf) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+
+  pdlfs::Stat stat;
+  pdlfs::Status s;
+  s = client->Getattr(__path, &stat);
+  if (s.ok()) {
+    pdlfs::__cpstat(stat, __buf);
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
 int deltafs_stat(const char* __path, struct stat* __buf) {
   if (client == NULL) {
     pdlfs::port::InitOnce(&once, InitClient);
@@ -382,19 +402,16 @@ int deltafs_stat(const char* __path, struct stat* __buf) {
       return NoClient();
     }
   }
+
   pdlfs::Stat stat;
   pdlfs::Status s;
-  if (strcmp(__path, "/.deltafs") == 0) {
-    return 0;  // XXX: reserved for admin usage
+  s = client->Lstat(__path, &stat);
+  if (s.ok()) {
+    pdlfs::__cpstat(stat, __buf);
+    return 0;
   } else {
-    s = client->Getattr(__path, &stat);
-    if (s.ok()) {
-      pdlfs::__copy_stat(stat, __buf);
-      return 0;
-    } else {
-      SetErrno(s);
-      return -1;
-    }
+    SetErrno(s);
+    return -1;
   }
 }
 

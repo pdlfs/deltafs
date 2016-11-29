@@ -338,7 +338,7 @@ Status Client::Fstat(int fd, Stat* statbuf) {
       uint64_t size = 0;
       if (S_ISREG(file->mode)) {
         mutex_.Unlock();
-        s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size);
+        s = fio_->Fstat(file->fentry_encoding(), file->fh, &mtime, &size);
         mutex_.Lock();
       } else {
         // FIXME
@@ -430,7 +430,7 @@ Status Client::Ftruncate(int fd, uint64_t len) {
     assert(file->fh != NULL);
     file->refs++;  // Ref
     mutex_.Unlock();
-    s = fio_->Truncate(file->fentry_encoding(), file->fh, len);
+    s = fio_->Ftruncate(file->fentry_encoding(), file->fh, len);
     mutex_.Lock();
     if (s.ok()) {
       file->seq_write++;
@@ -462,8 +462,8 @@ Status Client::Fdatasync(int fd) {
     if (s.ok() && seq_flush < seq_write) {
       uint64_t mtime;
       uint64_t size;
-      s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size,
-                     true /*skip_cache*/);
+      s = fio_->Fstat(file->fentry_encoding(), file->fh, &mtime, &size,
+                      true /*skip_cache*/);
       if (s.ok()) {
         Fentry fentry;
         Slice encoding = file->fentry_encoding();
@@ -571,7 +571,7 @@ Status Client::Flush(int fd) {
     if (s.ok() && seq_flush < seq_write) {
       uint64_t mtime;
       uint64_t size;
-      s = fio_->Stat(file->fentry_encoding(), file->fh, &mtime, &size);
+      s = fio_->Fstat(file->fentry_encoding(), file->fh, &mtime, &size);
       if (s.ok()) {
         Fentry fentry;
         Slice encoding = file->fentry_encoding();
@@ -676,13 +676,48 @@ Status Client::Listdir(const Slice& path, std::vector<std::string>* names) {
   return s;
 }
 
+Status Client::Lstat(const Slice& path, Stat* statbuf) {
+  Status s;
+  Slice p = path;
+  std::string tmp;
+  s = ExpandPath(&p, &tmp);
+
+  Fentry ent;
+  char encoding_space[100];
+  Slice encoding;
+  if (s.ok()) {
+    s = mdscli_->Fstat(p, &ent);
+    if (s.ok()) {
+      encoding = ent.EncodeTo(encoding_space);
+      *statbuf = ent.stat;
+    }
+  }
+
+  if (s.ok()) {
+    uint64_t mtime;
+    uint64_t size;
+    s = fio_->Stat(encoding, &mtime, &size);
+    if (s.ok()) {
+      statbuf->SetModifyTime(mtime);
+      statbuf->SetFileSize(size);
+    }
+  }
+
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
+#endif
+
+  return s;
+}
+
 Status Client::Getattr(const Slice& path, Stat* statbuf) {
   Status s;
   Slice p = path;
   std::string tmp;
   s = ExpandPath(&p, &tmp);
+
+  Fentry ent;
   if (s.ok()) {
-    Fentry ent;
     s = mdscli_->Fstat(p, &ent);
     if (s.ok()) {
       *statbuf = ent.stat;

@@ -26,7 +26,7 @@ struct FileInfo {
 #define DELTAFS_SEC(micros) ((micros) / 1000000ULL)
 #define DELTAFS_NSEC(micros) (((micros) % 1000000ULL) * 1000ULL)
 
-inline void __copy_stat(const Stat& src, struct stat* buf) {
+inline void __cpstat(const Stat& src, struct stat* buf) {
   buf->st_ino = src.InodeNo();
   buf->st_size = src.FileSize();
   buf->st_mode = src.FileMode();
