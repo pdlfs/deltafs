@@ -560,7 +560,7 @@ void MDS::RPC::SRV::CHOWN(Msg& in, Msg& out) {
   Status s;
   ChownOptions options;
   ChownRet ret;
-  assert(in.op == kChmod);
+  assert(in.op == kChown);
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetLengthPrefixedSlice(&input, &options.name_hash) ||
@@ -639,7 +639,7 @@ void MDS::RPC::SRV::UPERM(Msg& in, Msg& out) {
   Status s;
   UpermOptions options;
   UpermRet ret;
-  assert(in.op == kChmod);
+  assert(in.op == kUperm);
   Slice input = in.contents;
   if (!GetDirId(&input, &options.dir_id) ||
       !GetLengthPrefixedSlice(&input, &options.name_hash) ||
