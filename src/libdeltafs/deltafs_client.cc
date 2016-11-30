@@ -800,6 +800,22 @@ Status Client::Chmod(const Slice& path, mode_t mode) {
   return s;
 }
 
+Status Client::Chown(const Slice& path, uid_t usr, gid_t grp) {
+  Status s;
+  Slice p = path;
+  std::string tmp;
+  s = ExpandPath(&p, &tmp);
+  if (s.ok()) {
+    s = mdscli_->Chown(p, usr, grp);
+  }
+
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
+#endif
+
+  return s;
+}
+
 Status Client::Truncate(const Slice& path, uint64_t len) {
   Status s;
   Slice p = path;

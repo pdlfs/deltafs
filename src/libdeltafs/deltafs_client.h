@@ -47,12 +47,14 @@ class Client {
   Status Mkdirs(const Slice& path, mode_t mode);
   Status Mkdir(const Slice& path, mode_t mode);
   Status Chmod(const Slice& path, mode_t mode);
+  Status Chown(const Slice& path, uid_t usr, gid_t grp);
   Status Unlink(const Slice& path);
 
-  mode_t Umask(mode_t mode);
   Status Getcwd(char* buf, size_t size);
   Status Chroot(const Slice& path);
   Status Chdir(const Slice& path);
+
+  mode_t Umask(mode_t mode);
 
  private:
   class Builder;

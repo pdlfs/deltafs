@@ -473,8 +473,27 @@ int deltafs_chmod(const char* __path, mode_t __mode) {
       return NoClient();
     }
   }
+
   pdlfs::Status s;
   s = client->Chmod(__path, __mode);
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
+int deltafs_chown(const char* __path, uid_t __usr, gid_t __grp) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+
+  pdlfs::Status s;
+  s = client->Chown(__path, __usr, __grp);
   if (s.ok()) {
     return 0;
   } else {

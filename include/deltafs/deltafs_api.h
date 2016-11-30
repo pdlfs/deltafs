@@ -38,6 +38,7 @@ int deltafs_mkfile(const char* __path, mode_t __mode);
 int deltafs_mkdirs(const char* __path, mode_t __mode);
 int deltafs_mkdir(const char* __path, mode_t __mode);
 int deltafs_chmod(const char* __path, mode_t __mode);
+int deltafs_chown(const char* __path, uid_t __usr, gid_t __grp);
 int deltafs_stat(const char* __path, struct stat* __stbuf);
 int deltafs_truncate(const char* __path, off_t __len);
 int deltafs_access(const char* __path, int __mode);
