@@ -55,6 +55,7 @@ class MDS::CLI {
   Status Mkdir(const Slice& path, mode_t mode, Fentry* result = NULL,
                bool create_if_missing = false, bool error_if_exists = true);
   Status Chmod(const Slice& path, mode_t mode, Fentry* result = NULL);
+  Status Chown(const Slice& path, uid_t usr, gid_t grp, Fentry* result = NULL);
   Status Unlink(const Slice& path, Fentry* result = NULL,
                 bool error_if_absent = true);
   Status Listdir(const Slice& path, std::vector<std::string>* names);
@@ -82,6 +83,7 @@ class MDS::CLI {
   HELPER(Fcreat);
   HELPER(Mkdir);
   HELPER(Chmod);
+  HELPER(Chown);
   HELPER(Unlink);
 
 #undef HELPER

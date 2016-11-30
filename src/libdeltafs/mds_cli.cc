@@ -765,7 +765,7 @@ Status MDS::CLI::Chmod(const Slice& p, mode_t mode, Fentry* ent) {
     if (path.depth == 0) {
       s = Status::NotSupported("updating root directory");
     } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
-      s = Status::NotSupported("updating files under plfs dirs");
+      s = Status::NotSupported("chmod under plfs dirs");
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
@@ -814,6 +814,95 @@ Status MDS::CLI::_Chmod(const DirIndex* idx, const ChmodOptions& options,
       size_t server = latest_idx->HashToServer(options.name_hash);
       assert(server < giga_.num_servers);
       s = factory_->Get(server)->Chmod(options, ret);
+    } catch (Redirect& re) {
+      if (tmp_idx == NULL) {
+        tmp_idx = new DirIndex(&giga_);
+        tmp_idx->Update(*idx);
+      }
+      if (--remaining_redirects == 0 || !tmp_idx->Update(re)) {
+        s = Status::Corruption("bad giga+ index");
+      } else {
+        s = Status::TryAgain(Slice());
+      }
+      assert(tmp_idx != NULL);
+      latest_idx = tmp_idx;
+    }
+  } while (s.IsTryAgain());
+
+  mutex_.Lock();
+  if (tmp_idx != NULL) {
+    if (s.ok()) {
+      const DirId& pid = options.dir_id;
+      IndexHandle* h = index_cache_->Insert(pid, tmp_idx);
+      index_cache_->Release(h);
+    } else {
+      delete tmp_idx;
+    }
+  }
+
+  return s;
+}
+
+Status MDS::CLI::Chown(const Slice& p, uid_t usr, gid_t grp, Fentry* ent) {
+  Status s;
+  char tmp[20];  // name hash buffer
+  PathInfo path;
+  MutexLock ml(&mutex_);
+  s = ResolvePath(p, &path);
+  if (s.ok()) {
+    if (path.depth == 0) {
+      s = Status::NotSupported("updating root directory");
+    } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
+      s = Status::NotSupported("chown under plfs dirs");
+    } else {
+      IndexHandle* idxh = NULL;
+      s = FetchIndex(path.pid, path.zserver, &idxh);
+      if (s.ok()) {
+        assert(idxh != NULL);
+        IndexGuard idxg(index_cache_, idxh);
+        ChownOptions options;
+        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.session_id = session_id_;
+        options.dir_id = path.pid;
+        options.uid = usr;
+        options.gid = grp;
+        options.name_hash = DirIndex::Hash(path.name, tmp);
+        if (paranoid_checks_) {
+          options.name = path.name;
+        }
+        ChownRet ret;
+        s = _Chown(index_cache_->Value(idxh), options, &ret);
+        if (s.ok()) {
+          if (ent != NULL) {
+            ent->pid = path.pid;
+            ent->nhash = options.name_hash.ToString();
+            ent->zserver = path.zserver;
+            ent->stat = ret.stat;
+          }
+        }
+      }
+    }
+  }
+
+  return s;
+}
+
+Status MDS::CLI::_Chown(const DirIndex* idx, const ChownOptions& options,
+                        ChownRet* ret) {
+  Status s;
+  mutex_.AssertHeld();
+  DirIndex* tmp_idx = NULL;
+  assert(idx != NULL);
+  const DirIndex* latest_idx = idx;
+  int remaining_redirects = max_redirects_allowed_;
+  mutex_.Unlock();
+
+  do {
+    try {
+      assert(latest_idx != NULL);
+      size_t server = latest_idx->HashToServer(options.name_hash);
+      assert(server < giga_.num_servers);
+      s = factory_->Get(server)->Chown(options, ret);
     } catch (Redirect& re) {
       if (tmp_idx == NULL) {
         tmp_idx = new DirIndex(&giga_);
