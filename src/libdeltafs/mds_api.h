@@ -20,19 +20,19 @@
 #include "pdlfs-common/strutil.h"
 
 namespace pdlfs {
-#define DELTAFS_NON_MOD (~static_cast<uint32_t>(0)) /* Invalid file mode */
-
-#define DELTAFS_NON_UID (~static_cast<uint32_t>(0)) /* Invalid uid */
-#define DELTAFS_NON_GID (~static_cast<uint32_t>(0)) /* Invalid gid */
-
-#define DELTAFS_NAME_MAX 255 /* Max number of chars in a file name */
-
-// The farthest time in future.
-static const uint64_t kMaxMicros = ((0x1ull << 63) - 1);
 
 class Env;
 class Fio;
 class MDB;
+
+#define DELTAFS_MAX_MICROS ((uint64_t(1) << 63) - 1) /* Max future */
+
+#define DELTAFS_NON_MOD (~uint32_t(0)) /* Invalid file mode */
+
+#define DELTAFS_NON_UID (~uint32_t(0)) /* Invalid uid */
+#define DELTAFS_NON_GID (~uint32_t(0)) /* Invalid gid */
+
+#define DELTAFS_NAME_MAX 255 /* Max number of chars in a file name */
 
 struct MDSEnv {
   std::string output_conf;

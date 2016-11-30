@@ -29,7 +29,7 @@ Status MDS::CLI::FetchIndex(const DirId& id, int zserver,
 
     DirIndex* idx = new DirIndex(&giga_);
     ReadidxOptions options;
-    options.op_due = kMaxMicros;
+    options.op_due = DELTAFS_MAX_MICROS;
     options.session_id = session_id_;
     options.dir_id = id;
     ReadidxRet ret;
@@ -73,7 +73,7 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
       assert(idxh != NULL);
       IndexGuard idxg(index_cache_, idxh);
       LookupOptions options;
-      options.op_due = atomic_path_resolution_ ? op_due : kMaxMicros;
+      options.op_due = atomic_path_resolution_ ? op_due : DELTAFS_MAX_MICROS;
       options.session_id = session_id_;
       options.dir_id = pid;
       options.name_hash = nhash;
@@ -207,7 +207,7 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result,
   assert(input[0] == '/');
   const static mode_t perm = ACCESSPERMS & ~S_IWOTH;
   const static mode_t mode = S_IFDIR | perm;
-  result->lease_due = kMaxMicros;
+  result->lease_due = DELTAFS_MAX_MICROS;
   result->pid = DirId(0, 0, 0);
   result->zserver = 0;
   result->name = "/";
@@ -353,7 +353,8 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
         assert(idxh != NULL);
         IndexGuard idxg(index_cache_, idxh);
         FstatOptions options;
-        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.op_due =
+            atomic_path_resolution_ ? path.lease_due : DELTAFS_MAX_MICROS;
         options.session_id = session_id_;
         options.dir_id = path.pid;
         options.name_hash = DirIndex::Hash(path.name, tmp);
@@ -467,7 +468,8 @@ Status MDS::CLI::Fcreat(const Slice& p, mode_t mode, Fentry* ent,
         assert(idxh != NULL);
         IndexGuard idxg(index_cache_, idxh);
         FcreatOptions options;
-        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.op_due =
+            atomic_path_resolution_ ? path.lease_due : DELTAFS_MAX_MICROS;
         options.session_id = session_id_;
         options.dir_id = path.pid;
         options.flags = error_if_exists ? O_EXCL : 0;
@@ -566,7 +568,8 @@ Status MDS::CLI::Unlink(const Slice& p, Fentry* ent, bool error_if_absent) {
         assert(idxh != NULL);
         IndexGuard idxg(index_cache_, idxh);
         UnlinkOptions options;
-        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.op_due =
+            atomic_path_resolution_ ? path.lease_due : DELTAFS_MAX_MICROS;
         options.session_id = session_id_;
         options.dir_id = path.pid;
         options.flags = error_if_absent ? O_EXCL : 0;
@@ -676,7 +679,8 @@ Status MDS::CLI::Mkdir(
         assert(idxh != NULL);
         IndexGuard idxg(index_cache_, idxh);
         MkdirOptions options;
-        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.op_due =
+            atomic_path_resolution_ ? path.lease_due : DELTAFS_MAX_MICROS;
         options.session_id = session_id_;
         options.dir_id = path.pid;
         options.flags = error_if_exists ? O_EXCL : 0;
@@ -773,7 +777,8 @@ Status MDS::CLI::Chmod(const Slice& p, mode_t mode, Fentry* ent) {
         assert(idxh != NULL);
         IndexGuard idxg(index_cache_, idxh);
         ChmodOptions options;
-        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.op_due =
+            atomic_path_resolution_ ? path.lease_due : DELTAFS_MAX_MICROS;
         options.session_id = session_id_;
         options.dir_id = path.pid;
         options.mode = mode;
@@ -861,7 +866,8 @@ Status MDS::CLI::Chown(const Slice& p, uid_t usr, gid_t grp, Fentry* ent) {
         assert(idxh != NULL);
         IndexGuard idxg(index_cache_, idxh);
         ChownOptions options;
-        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.op_due =
+            atomic_path_resolution_ ? path.lease_due : DELTAFS_MAX_MICROS;
         options.session_id = session_id_;
         options.dir_id = path.pid;
         options.uid = usr;
@@ -956,7 +962,7 @@ Status MDS::CLI::Ftruncate(const Fentry& ent, uint64_t mtime, uint64_t size) {
     const DirIndex* idx = index_cache_->Value(idxh);
     assert(idx != NULL);
     TruncOptions options;  // TODO: add file id to options
-    options.op_due = kMaxMicros;
+    options.op_due = DELTAFS_MAX_MICROS;
     options.session_id = session_id_;
     options.dir_id = ent.pid;
     options.name_hash = ent.nhash;
@@ -1031,7 +1037,8 @@ Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
         const DirIndex* idx = index_cache_->Value(idxh);
         assert(idx != NULL);
         ListdirOptions options;
-        options.op_due = atomic_path_resolution_ ? path.lease_due : kMaxMicros;
+        options.op_due =
+            atomic_path_resolution_ ? path.lease_due : DELTAFS_MAX_MICROS;
         options.session_id = session_id_;
         options.dir_id = path.pid;
         ListdirRet ret;
