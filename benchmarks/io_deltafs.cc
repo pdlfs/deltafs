@@ -69,12 +69,11 @@ static inline void print(const Status& s) {
 Status DeltafsClient::Init() {
   Status s;
 #if VERBOSE >= 10
-  if (kVVerbose) printf("deltafs_stat /.deltafs...\n");
+  if (kVVerbose) printf("deltafs_init...\n");
 #endif
-  struct stat ignored_stat;
-  int r = deltafs_stat("/.deltafs", &ignored_stat);
+  int r = deltafs_nonop();
   if (r != 0) {
-    s = IOError("/.deltafs");
+    s = IOError(".");
   }
 #if VERBOSE >= 10
   if (kVVerbose) print(s);
