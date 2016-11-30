@@ -694,12 +694,14 @@ Status Client::Lstat(const Slice& path, Stat* statbuf) {
   }
 
   if (s.ok()) {
-    uint64_t mtime;
-    uint64_t size;
-    s = fio_->Stat(encoding, &mtime, &size);
-    if (s.ok()) {
-      statbuf->SetModifyTime(mtime);
-      statbuf->SetFileSize(size);
+    if (S_ISREG(statbuf->FileMode())) {
+      uint64_t mtime;
+      uint64_t size;
+      s = fio_->Stat(encoding, &mtime, &size);
+      if (s.ok()) {
+        statbuf->SetModifyTime(mtime);
+        statbuf->SetFileSize(size);
+      }
     }
   }
 
