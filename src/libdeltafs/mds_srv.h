@@ -29,6 +29,8 @@ class MDS::SRV : public MDS {
   DEC_OP(Fcreat)
   DEC_OP(Mkdir)
   DEC_OP(Chmod)
+  DEC_OP(Chown)
+  DEC_OP(Uperm)
   DEC_OP(Utime)
   DEC_OP(Trunc)
   DEC_OP(Unlink)
@@ -79,5 +81,35 @@ class MDS::SRV : public MDS {
   void operator=(const SRV&);
   SRV(const SRV&);
 };
+
+inline Status MDS::SRV::Chmod(const ChmodOptions& options, ChmodRet* ret) {
+  UpermRet uperm_ret;
+  UpermOptions uperm_options;
+  *static_cast<BaseOptions*>(&uperm_options) =
+      static_cast<const BaseOptions&>(options);
+  uperm_options.mode = options.mode;
+  uperm_options.uid = DELTAFS_NON_UID;
+  uperm_options.gid = DELTAFS_NON_GID;
+  Status s = Uperm(uperm_options, &uperm_ret);
+  if (s.ok()) {
+    ret->stat = uperm_ret.stat;
+  }
+  return s;
+}
+
+inline Status MDS::SRV::Chown(const ChownOptions& options, ChownRet* ret) {
+  UpermRet uperm_ret;
+  UpermOptions uperm_options;
+  *static_cast<BaseOptions*>(&uperm_options) =
+      static_cast<const BaseOptions&>(options);
+  uperm_options.uid = options.uid;
+  uperm_options.gid = options.gid;
+  uperm_options.mode = DELTAFS_NON_MOD;
+  Status s = Uperm(uperm_options, &uperm_ret);
+  if (s.ok()) {
+    ret->stat = uperm_ret.stat;
+  }
+  return s;
+}
 
 }  // namespace pdlfs

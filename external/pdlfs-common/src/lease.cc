@@ -22,7 +22,7 @@ LeaseOptions::LeaseOptions()
     : max_lease_duration(1000 * 1000), max_num_leases(4096) {}
 
 bool Lease::busy() const {
-  if (state == kWriteState) {
+  if (state == kLeaseLocked) {
     return true;
   } else {
     return Env::Default()->NowMicros() < due;

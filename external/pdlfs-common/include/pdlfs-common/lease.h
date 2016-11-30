@@ -23,22 +23,30 @@ struct LeaseOptions {
   size_t max_num_leases;
 };
 
+class LeaseTable;
+
 // Lease states
 // ------------
-// a) If kFreeState, the lease is not being shared by any client;
-// b) If kReadState, the lease may be shared among multiple clients and
-// each incoming lookup request may extend the expiration time of the lease;
-// a lease in read state but with a due in the past is considered free
-// because all clients at the moment must have already discarded the lease;
-// c) If kWriteState, the lease may be shared among multiple clients and
-// there is an on-going write operation that modifies the contents of the lease;
-// the write operation must wait until the lease expires before applying and
-// publishing any changes; each lookup request must not further extend the
-// expiration time of the lease but may choose to wait until that write
-// operation finishes so a new expiration time may be set.
-enum LeaseState { kFreeState, kReadState, kWriteState };
-
-class LeaseTable;
+//
+// a) kLeaseFree
+//    the lease is not being shared by any client;
+//
+// b) kLeaseShared
+//    the lease may be shared among multiple clients and each incoming lookup
+//    request may extend the expiration time of the lease;
+//    a lease in this state but with a due in the past is considered free
+//    because all clients at the moment must have already discarded the
+//    lease anyway;
+//
+// c) kLeaseLocked
+//    the lease may be shared among multiple clients and there is an
+//    outstanding write operation that tries to update the lease;
+//    this write operation will have to wait until the lease expires before
+//    applying and publishing its changes;
+//    each lookup request must not further extend the lease expiration time
+//    but may choose to wait until that write operation finishes
+//    so a new expiration time may be set.
+enum LeaseState { kLeaseFree, kLeaseShared, kLeaseLocked };
 
 struct Lease {
   typedef LeaseEntry Ref;

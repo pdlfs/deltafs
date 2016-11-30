@@ -20,6 +20,11 @@
 #include "pdlfs-common/strutil.h"
 
 namespace pdlfs {
+#define DELTAFS_NON_MOD (~static_cast<uint32_t>(0)) /* Invalid file mode */
+
+#define DELTAFS_NON_UID (~static_cast<uint32_t>(0)) /* Invalid uid */
+#define DELTAFS_NON_GID (~static_cast<uint32_t>(0)) /* Invalid gid */
+
 #define DELTAFS_NAME_MAX 255 /* Max number of chars in a file name */
 
 // The farthest time in future.
@@ -106,6 +111,21 @@ class MDS {
   MDS_OP_OPTIONS(Chmod) { uint32_t mode; };
   MDS_OP_RET(Chmod) { Stat stat; };
   MDS_OP(Chmod)
+
+  MDS_OP_OPTIONS(Chown) {
+    uint32_t uid;
+    uint32_t gid;
+  };
+  MDS_OP_RET(Chown) { Stat stat; };
+  MDS_OP(Chown)
+
+  MDS_OP_OPTIONS(Uperm) {
+    uint32_t mode;
+    uint32_t uid;
+    uint32_t gid;
+  };
+  MDS_OP_RET(Uperm) { Stat stat; };
+  MDS_OP(Uperm)
 
   MDS_OP_OPTIONS(Utime) {
     uint64_t atime;
@@ -195,6 +215,8 @@ class MDSWrapper : public MDS {
   DEF_OP(Fcreat)
   DEF_OP(Mkdir)
   DEF_OP(Chmod)
+  DEF_OP(Chown)
+  DEF_OP(Uperm)
   DEF_OP(Utime)
   DEF_OP(Trunc)
   DEF_OP(Unlink)
@@ -253,6 +275,8 @@ class MDSTracer : public MDSWrapper {
   DEF_OP(Fcreat)
   DEF_OP(Mkdir)
   DEF_OP(Chmod)
+  DEF_OP(Chown)
+  DEF_OP(Uperm)
   DEF_OP(Utime)
   DEF_OP(Trunc)
   DEF_OP(Unlink)
@@ -285,6 +309,8 @@ class MDS::RPC::CLI : public MDS {
   DEC_OP(Fcreat)
   DEC_OP(Mkdir)
   DEC_OP(Chmod)
+  DEC_OP(Chown)
+  DEC_OP(Uperm)
   DEC_OP(Utime)
   DEC_OP(Trunc)
   DEC_OP(Unlink)
@@ -316,6 +342,8 @@ class MDS::RPC::SRV : public rpc::If {
   DEC_RPC(MKDIR)
   DEC_RPC(FCRET)
   DEC_RPC(CHMOD)
+  DEC_RPC(CHOWN)
+  DEC_RPC(UPERM)
   DEC_RPC(UTIME)
   DEC_RPC(TRUNC)
   DEC_RPC(UNLNK)
