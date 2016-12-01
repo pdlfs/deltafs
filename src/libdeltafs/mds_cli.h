@@ -48,16 +48,17 @@ class MDS::CLI {
   static CLI* Open(const MDSCliOptions&);
   ~CLI();
 
-  Status Fstat(const Slice& path, Fentry*);
+  Status Fstat(const Slice& path, Fentry* result = NULL,
+               const Fentry* at = NULL);
   Status Fcreat(const Slice& path, mode_t mode, Fentry* result = NULL,
-                bool error_if_exists = true);
+                bool error_if_exists = true, const Fentry* at = NULL);
   Status Ftruncate(const Fentry&, uint64_t mtime, uint64_t size);
   Status Mkdir(const Slice& path, mode_t mode, Fentry* result = NULL,
                bool create_if_missing = false, bool error_if_exists = true);
   Status Chmod(const Slice& path, mode_t mode, Fentry* result = NULL);
   Status Chown(const Slice& path, uid_t usr, gid_t grp, Fentry* result = NULL);
   Status Unlink(const Slice& path, Fentry* result = NULL,
-                bool error_if_absent = true);
+                bool error_if_absent = true, const Fentry* at = NULL);
   Status Listdir(const Slice& path, std::vector<std::string>* names);
   Status Accessdir(const Slice& path, int mode);
   Status Access(const Slice& path, int mode);
@@ -66,18 +67,19 @@ class MDS::CLI {
   gid_t gid() const { return gid_; }
 
   // Convenient methods for general access control
-  bool IsReadOk(const Stat*);
-  bool IsWriteOk(const Stat*);
-  bool IsExecOk(const Stat*);
+  bool HasAccess(int mode, const Stat* stat);
+
+  bool IsReadOk(const Stat* st);
+  bool IsWriteOk(const Stat* st);
+  bool IsExecOk(const Stat* st);
 
  private:
   CLI(const MDSCliOptions&);
-  bool HasAccess(int mode, const Stat*);
 
-// REQUIRES: mutex_ has been locked.
 #define HELPER(OP) \
   Status _##OP(const DirIndex*, const OP##Options& opts, OP##Ret* ret)
 
+  // REQUIRES: mutex_ has been locked.
   HELPER(Lookup);
   HELPER(Fstat);
   HELPER(Fcreat);
@@ -88,8 +90,11 @@ class MDS::CLI {
 
 #undef HELPER
 
+  // Result of a successful path resolution
   struct PathInfo {
     DirId pid;
+    char tmp[DELTAFS_NAME_HASH_BUFSIZE];
+    Slice nhash;  // Empty iff path is root or pseudo root
     Slice name;
     uint64_t lease_due;
     int zserver;
@@ -98,9 +103,12 @@ class MDS::CLI {
     uid_t uid;
     gid_t gid;
   };
+  // If at is not NULL, path resolution will start from that instead of root.
   // If path resolution fails due to a missing parent, the path of that
-  // parent is stored in *missing_parent.
-  Status ResolvePath(const Slice& path, PathInfo*,
+  // parent will be stored in *missing_parent.
+  // REQUIRES: path is not empty and must be absolute
+  // REQUIRES: *at must be a directory
+  Status ResolvePath(const Slice& path, PathInfo* info, const Fentry* at = NULL,
                      std::string* missing_parent = NULL);
   // Convenient methods for permission checking
   bool IsReadDirOk(const PathInfo*);

@@ -198,23 +198,33 @@ bool MDS::CLI::IsLookupOk(const PathInfo* info) {
 }
 
 Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result,
-                             std::string* missing_parent) {
+                             const Fentry* at, std::string* missing_parent) {
   mutex_.AssertHeld();
 
   Status s;
   Slice input(path);
   assert(input.size() != 0);
   assert(input[0] == '/');
-  const static mode_t perm = ACCESSPERMS & ~S_IWOTH;
-  const static mode_t mode = S_IFDIR | perm;
+  static const mode_t perm = ACCESSPERMS & ~S_IWOTH;
+  static const mode_t mode = S_IFDIR | perm;
   result->lease_due = DELTAFS_MAX_MICROS;
-  result->pid = DirId(0, 0, 0);
-  result->zserver = 0;
   result->name = "/";
   result->depth = 0;
-  result->mode = mode;
-  result->uid = 0;
-  result->gid = 0;
+
+  if (at != NULL) {
+    const Stat* const stat = &at->stat;
+    result->pid = DirId(*stat);
+    result->zserver = stat->ZerothServer();
+    result->mode = stat->FileMode();
+    result->uid = stat->UserId();
+    result->gid = stat->GroupId();
+  } else {
+    result->pid = DirId(0, 0, 0);
+    result->zserver = 0;
+    result->mode = mode;
+    result->uid = 0;
+    result->gid = 0;
+  }
 
   input.remove_prefix(1);
   std::vector<PathInfo> parents(2, *result);
@@ -283,6 +293,7 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result,
         assert(depth + 1 < parents.size());
         *result = parents[depth + 1];  // grand parent
       } else {
+        result->nhash = DirIndex::Hash(input, result->tmp);
         result->name = input;
         depth++;
       }
@@ -291,44 +302,84 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result,
     if (s.ok()) {
       result->lease_due = lease_due;
       result->depth = depth;
-
-#if VERBOSE >= 8
-      Verbose(__LOG_ARGS__, 8, "ResolvePath '%s' -> pid=%s, name=%s, depth=%d",
-              path.c_str(), result->pid.DebugString().c_str(),
-              result->name.ToString().c_str(), result->depth);
-#endif
     }
   }
+
+#if VERBOSE >= 8
+  if (s.ok()) {
+    Verbose(__LOG_ARGS__, 8, "%s at pid=%s %s -> pid=%s, name=%s, depth=%d",
+            __func__, at != NULL ? at->pid.DebugString().c_str()
+                                 : DirId(0, 0, 0).DebugString().c_str(),
+            path.c_str(), result->pid.DebugString().c_str(),
+            result->name.ToString().c_str(), result->depth);
+
+  } else {
+    Verbose(__LOG_ARGS__, 8, "%s at pid=%s %s: %s", __func__,
+            at != NULL ? at->pid.DebugString().c_str()
+                       : DirId(0, 0, 0).DebugString().c_str(),
+            path.c_str(), s.ToString().c_str());
+  }
+#endif
 
   return s;
 }
 
-Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
+Status MDS::CLI::Fstat(const Slice& p, Fentry* ent, const Fentry* at) {
   Status s;
-  char tmp[20];  // name hash buffer
+  if (at != NULL) {
+    const Stat* const stat = &at->stat;
+    if (!S_ISDIR(stat->FileMode())) {
+      return Status::InvalidArgument(Slice());
+    }
+  }
+
   PathInfo path;
   MutexLock ml(&mutex_);
-  s = ResolvePath(p, &path);
+  s = ResolvePath(p, &path, at);
   if (s.ok()) {
-    if (path.depth == 0) {  // XXX: root directory
-      ent->pid = DirId(0, 0, 0);
-      ent->nhash = "";
-      ent->zserver = 0;
-      Stat* stat = &ent->stat;
-      mode_t mode = S_IFDIR | (ACCESSPERMS & ~S_IWOTH);
-      stat->SetRegId(0);
-      stat->SetSnapId(0);
-      stat->SetInodeNo(0);
-      stat->SetFileMode(mode);
-      stat->SetFileSize(0);
-      stat->SetUserId(0);
-      stat->SetGroupId(0);
-      stat->SetZerothServer(0);
-      stat->SetChangeTime(0);
-      stat->SetModifyTime(0);
+    if (path.depth == 0) {
+      if (at == NULL || at->nhash.empty()) {
+        ent->pid = DirId(0, 0, 0);
+        ent->zserver = 0;
+        Stat* stat = &ent->stat;
+        mode_t mode = S_IFDIR | (ACCESSPERMS & ~S_IWOTH);
+        stat->SetRegId(0);
+        stat->SetSnapId(0);
+        stat->SetInodeNo(0);
+        stat->SetFileMode(mode);
+        stat->SetFileSize(0);
+        stat->SetUserId(0);
+        stat->SetGroupId(0);
+        stat->SetZerothServer(0);
+        stat->SetChangeTime(0);
+        stat->SetModifyTime(0);
+      } else {
+        IndexHandle* idxh = NULL;
+        s = FetchIndex(at->pid, at->zserver, &idxh);
+        if (s.ok()) {
+          assert(idxh != NULL);
+          IndexGuard idxg(index_cache_, idxh);
+          FstatOptions options;
+          options.op_due = DELTAFS_MAX_MICROS;
+          options.session_id = session_id_;
+          options.dir_id = at->pid;
+          options.name_hash = at->nhash;
+          FstatRet ret;
+          s = _Fstat(index_cache_->Value(idxh), options, &ret);
+          if (s.ok()) {
+            if (ent != NULL) {
+              ent->pid = at->pid;
+              ent->nhash = at->nhash;
+              ent->zserver = at->zserver;
+              ent->stat = ret.stat;
+            }
+          }
+        }
+      }
+
     } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
       ent->pid = path.pid;
-      DirIndex::PutHash(&ent->nhash, path.name);
+      ent->nhash = path.nhash.ToString();
       ent->zserver = path.zserver;
       Stat* stat = &ent->stat;
       mode_t mode = DELTAFS_DIR_PLFS_STYLE;
@@ -346,6 +397,7 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
       stat->SetZerothServer(path.zserver);
       stat->SetChangeTime(0);  // XXXZQ: FIX ME
       stat->SetModifyTime(0);
+
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
@@ -357,7 +409,7 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
             atomic_path_resolution_ ? path.lease_due : DELTAFS_MAX_MICROS;
         options.session_id = session_id_;
         options.dir_id = path.pid;
-        options.name_hash = DirIndex::Hash(path.name, tmp);
+        options.name_hash = path.nhash;
         if (paranoid_checks_) {
           options.name = path.name;
         }
@@ -366,7 +418,7 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent) {
         if (s.ok()) {
           if (ent != NULL) {
             ent->pid = path.pid;
-            ent->nhash = options.name_hash.ToString();
+            ent->nhash = path.nhash.ToString();
             ent->zserver = path.zserver;
             ent->stat = ret.stat;
           }
@@ -424,23 +476,30 @@ Status MDS::CLI::_Fstat(const DirIndex* idx, const FstatOptions& options,
 }
 
 Status MDS::CLI::Fcreat(const Slice& p, mode_t mode, Fentry* ent,
-                        bool error_if_exists) {
+                        bool error_if_exists, const Fentry* at) {
   Status s;
-  char tmp[20];  // name hash buffer
+  if (at != NULL) {
+    const Stat* const stat = &at->stat;
+    if (!S_ISDIR(stat->FileMode())) {
+      return Status::InvalidArgument(Slice());
+    }
+  }
+
   PathInfo path;
   MutexLock ml(&mutex_);
-  s = ResolvePath(p, &path);
+  s = ResolvePath(p, &path, at);
   if (s.ok()) {
     if (path.depth == 0) {
       s = Status::AlreadyExists(Slice());
     } else if (!IsWriteDirOk(&path)) {
       s = Status::AccessDenied(Slice());
+
     } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
       if (error_if_exists) {
         s = Status::NotSupported("O_EXCL not supported under plfs dirs");
       } else {
         ent->pid = path.pid;
-        DirIndex::PutHash(&ent->nhash, path.name);
+        ent->nhash = path.nhash.ToString();
         ent->zserver = path.zserver;
         Stat* stat = &ent->stat;
         mode_t mode = DELTAFS_DIR_PLFS_STYLE;
@@ -459,6 +518,7 @@ Status MDS::CLI::Fcreat(const Slice& p, mode_t mode, Fentry* ent,
         stat->SetChangeTime(0);  // XXXZQ: FIX ME
         stat->SetModifyTime(0);
       }
+
     } else if (path.name.size() > DELTAFS_NAME_MAX) {
       s = NameTooLong();
     } else {
@@ -476,14 +536,14 @@ Status MDS::CLI::Fcreat(const Slice& p, mode_t mode, Fentry* ent,
         options.mode = mode;
         options.uid = uid_;
         options.gid = gid_;
-        options.name_hash = DirIndex::Hash(path.name, tmp);
+        options.name_hash = path.nhash;
         options.name = path.name;
         FcreatRet ret;
         s = _Fcreat(index_cache_->Value(idxh), options, &ret);
         if (s.ok()) {
           if (ent != NULL) {
             ent->pid = path.pid;
-            ent->nhash = options.name_hash.ToString();
+            ent->nhash = path.nhash.ToString();
             ent->zserver = path.zserver;
             ent->stat = ret.stat;
           }
@@ -548,19 +608,28 @@ Status MDS::CLI::_Fcreat(const DirIndex* idx, const FcreatOptions& options,
   return s;
 }
 
-Status MDS::CLI::Unlink(const Slice& p, Fentry* ent, bool error_if_absent) {
+Status MDS::CLI::Unlink(const Slice& p, Fentry* ent, bool error_if_absent,
+                        const Fentry* at) {
   Status s;
-  char tmp[20];  // name hash buffer
+  if (at != NULL) {
+    const Stat* const stat = &at->stat;
+    if (!S_ISDIR(stat->FileMode())) {
+      return Status::InvalidArgument(Slice());
+    }
+  }
+
   PathInfo path;
   MutexLock ml(&mutex_);
-  s = ResolvePath(p, &path);
+  s = ResolvePath(p, &path, at);
   if (s.ok()) {
     if (path.depth == 0) {
-      s = Status::NotSupported("deleting root directory");
+      s = Status::FileExpected(Slice());
     } else if (!IsWriteDirOk(&path)) {
       s = Status::AccessDenied(Slice());
+
     } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
-      s = Status::NotSupported("deleting files under plfs dirs");
+      s = Status::NotSupported("unlink files under plfs dirs");
+
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
@@ -573,7 +642,7 @@ Status MDS::CLI::Unlink(const Slice& p, Fentry* ent, bool error_if_absent) {
         options.session_id = session_id_;
         options.dir_id = path.pid;
         options.flags = error_if_absent ? O_EXCL : 0;
-        options.name_hash = DirIndex::Hash(path.name, tmp);
+        options.name_hash = path.nhash;
         if (paranoid_checks_) {
           options.name = path.name;
         }
@@ -582,7 +651,7 @@ Status MDS::CLI::Unlink(const Slice& p, Fentry* ent, bool error_if_absent) {
         if (s.ok()) {
           if (ent != NULL) {
             ent->pid = path.pid;
-            ent->nhash = options.name_hash.ToString();
+            ent->nhash = path.nhash.ToString();
             ent->zserver = path.zserver;
             ent->stat = ret.stat;
           }
@@ -644,11 +713,10 @@ Status MDS::CLI::Mkdir(
     bool create_if_missing,  // auto create all missing ancestors
     bool error_if_exists) {
   Status s;
-  char tmp[20];  // name hash buffer
   PathInfo path;
   std::string missing_parent;
   MutexLock ml(&mutex_);
-  s = ResolvePath(p, &path, &missing_parent);
+  s = ResolvePath(p, &path, NULL, &missing_parent);
   if (s.IsNotFound() && create_if_missing) {
     if (!missing_parent.empty()) {
       mutex_.Unlock();
@@ -663,13 +731,16 @@ Status MDS::CLI::Mkdir(
       }
       mutex_.Lock();
     }
+
   } else if (s.ok()) {
     if (path.depth == 0) {
       s = Status::AlreadyExists(Slice());
     } else if (!IsWriteDirOk(&path)) {
       s = Status::AccessDenied(Slice());
+
     } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
-      s = Status::NotSupported("making dirs under plfs dirs");
+      s = Status::NotSupported("mkdir under plfs dirs");
+
     } else if (path.name.size() > DELTAFS_NAME_MAX) {
       s = NameTooLong();
     } else {
@@ -687,14 +758,14 @@ Status MDS::CLI::Mkdir(
         options.mode = mode;
         options.uid = uid_;
         options.gid = gid_;
-        options.name_hash = DirIndex::Hash(path.name, tmp);
+        options.name_hash = path.nhash;
         options.name = path.name;
         MkdirRet ret;
         s = _Mkdir(index_cache_->Value(idxh), options, &ret);
         if (s.ok()) {
           if (ent != NULL) {
             ent->pid = path.pid;
-            ent->nhash = options.name_hash.ToString();
+            ent->nhash = path.nhash.ToString();
             ent->zserver = path.zserver;
             ent->stat = ret.stat;
           }
@@ -761,7 +832,6 @@ Status MDS::CLI::_Mkdir(const DirIndex* idx, const MkdirOptions& options,
 
 Status MDS::CLI::Chmod(const Slice& p, mode_t mode, Fentry* ent) {
   Status s;
-  char tmp[20];  // name hash buffer
   PathInfo path;
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path);
@@ -782,7 +852,7 @@ Status MDS::CLI::Chmod(const Slice& p, mode_t mode, Fentry* ent) {
         options.session_id = session_id_;
         options.dir_id = path.pid;
         options.mode = mode;
-        options.name_hash = DirIndex::Hash(path.name, tmp);
+        options.name_hash = path.nhash;
         if (paranoid_checks_) {
           options.name = path.name;
         }
@@ -791,7 +861,7 @@ Status MDS::CLI::Chmod(const Slice& p, mode_t mode, Fentry* ent) {
         if (s.ok()) {
           if (ent != NULL) {
             ent->pid = path.pid;
-            ent->nhash = options.name_hash.ToString();
+            ent->nhash = path.nhash.ToString();
             ent->zserver = path.zserver;
             ent->stat = ret.stat;
           }
@@ -850,7 +920,6 @@ Status MDS::CLI::_Chmod(const DirIndex* idx, const ChmodOptions& options,
 
 Status MDS::CLI::Chown(const Slice& p, uid_t usr, gid_t grp, Fentry* ent) {
   Status s;
-  char tmp[20];  // name hash buffer
   PathInfo path;
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path);
@@ -872,7 +941,7 @@ Status MDS::CLI::Chown(const Slice& p, uid_t usr, gid_t grp, Fentry* ent) {
         options.dir_id = path.pid;
         options.uid = usr;
         options.gid = grp;
-        options.name_hash = DirIndex::Hash(path.name, tmp);
+        options.name_hash = path.nhash;
         if (paranoid_checks_) {
           options.name = path.name;
         }
@@ -881,7 +950,7 @@ Status MDS::CLI::Chown(const Slice& p, uid_t usr, gid_t grp, Fentry* ent) {
         if (s.ok()) {
           if (ent != NULL) {
             ent->pid = path.pid;
-            ent->nhash = options.name_hash.ToString();
+            ent->nhash = path.nhash.ToString();
             ent->zserver = path.zserver;
             ent->stat = ret.stat;
           }
@@ -1015,8 +1084,8 @@ Status MDS::CLI::Ftruncate(const Fentry& ent, uint64_t mtime, uint64_t size) {
 
 Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
   Status s;
-  assert(!p.empty());
-  if (p.size() != 1) assert(!p.ends_with("/"));
+  assert(p.size() != 0);
+  assert(p.size() == 1 || !p.ends_with("/"));
   std::string fake_path = p.ToString();
   fake_path += "/_";
   PathInfo path;
@@ -1026,7 +1095,7 @@ Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
     if (!IsReadDirOk(&path)) {
       s = Status::AccessDenied(Slice());
     } else if (DELTAFS_DIR_IS_PLFS_STYLE(path.mode)) {
-      s = Status::NotSupported("listing files under plfs dirs");
+      s = Status::NotSupported("listdir under plfs dirs");
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
@@ -1065,17 +1134,17 @@ Status MDS::CLI::Listdir(const Slice& p, std::vector<std::string>* names) {
       }
     }
   }
+
   return s;
 }
 
 Status MDS::CLI::Accessdir(const Slice& p, int mode) {
   Status s;
-  assert(!p.empty());
-  if (p.size() != 1) assert(!p.ends_with("/"));
+  assert(p.size() != 0);
+  assert(p.size() == 1 || !p.ends_with("/"));
   std::string fake_path = p.ToString();
   fake_path += "/_";
   PathInfo path;
-  static const bool kPrefetchDirIndex = false;
   MutexLock ml(&mutex_);
   s = ResolvePath(fake_path, &path);
   if (s.ok()) {
@@ -1085,7 +1154,7 @@ Status MDS::CLI::Accessdir(const Slice& p, int mode) {
       s = Status::AccessDenied(Slice());
     } else if ((mode & X_OK) == X_OK && !IsLookupOk(&path)) {
       s = Status::AccessDenied(Slice());
-    } else if (kPrefetchDirIndex) {
+    } else if (false) {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
       if (s.ok()) {

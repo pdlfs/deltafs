@@ -32,6 +32,8 @@ class MDB;
 #define DELTAFS_NON_UID (~uint32_t(0)) /* Invalid uid */
 #define DELTAFS_NON_GID (~uint32_t(0)) /* Invalid gid */
 
+#define DELTAFS_NAME_HASH_BUFSIZE 24
+
 #define DELTAFS_NAME_MAX 255 /* Max number of chars in a file name */
 
 struct MDSEnv {
