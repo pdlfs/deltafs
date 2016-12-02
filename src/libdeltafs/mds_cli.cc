@@ -337,8 +337,8 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent, const Fentry* at) {
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path, at);
   if (s.ok()) {
-    if (path.depth == 0) {
-      if (at == NULL || at->nhash.empty()) {
+    if (path.depth == 0) {  // Path is root or pseudo root
+      if (at == NULL || DirId(at->stat) == DirId(0, 0, 0)) {
         ent->pid = DirId(0, 0, 0);
         ent->zserver = 0;
         Stat* stat = &ent->stat;
@@ -353,7 +353,9 @@ Status MDS::CLI::Fstat(const Slice& p, Fentry* ent, const Fentry* at) {
         stat->SetZerothServer(0);
         stat->SetChangeTime(0);
         stat->SetModifyTime(0);
+
       } else {
+        assert(at->nhash.size() != 0);
         IndexHandle* idxh = NULL;
         s = FetchIndex(at->pid, at->zserver, &idxh);
         if (s.ok()) {
@@ -520,7 +522,7 @@ Status MDS::CLI::Fcreat(const Slice& p, mode_t mode, Fentry* ent,
       }
 
     } else if (path.name.size() > DELTAFS_NAME_MAX) {
-      s = NameTooLong();
+      s = FileNameExceeedsLimit();
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);
@@ -742,7 +744,7 @@ Status MDS::CLI::Mkdir(
       s = Status::NotSupported("mkdir under plfs dirs");
 
     } else if (path.name.size() > DELTAFS_NAME_MAX) {
-      s = NameTooLong();
+      s = FileNameExceeedsLimit();
     } else {
       IndexHandle* idxh = NULL;
       s = FetchIndex(path.pid, path.zserver, &idxh);

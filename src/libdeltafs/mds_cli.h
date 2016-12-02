@@ -143,10 +143,10 @@ class MDS::CLI {
   // No copying allowed
   void operator=(const CLI&);
   CLI(const CLI&);
-
-  static Status NameTooLong() {
-    return Status::InvalidArgument("file name too long");
-  }
 };
+
+inline Status FileNameExceeedsLimit() {
+  return Status::InvalidArgument("file name too long");
+}
 
 }  // namespace pdlfs
