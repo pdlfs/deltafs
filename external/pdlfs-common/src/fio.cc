@@ -77,40 +77,62 @@ Slice Fentry::ExtractUntypedKeyPrefix(const Slice& encoding) {
 
 bool Fentry::DecodeFrom(Slice* input) {
   Slice key_prefix;
-  Slice sli;
-  uint32_t u32;
+  uint64_t parent_reg;
+  uint64_t parent_snap;
+  uint64_t parent_ino;
+  uint32_t parent_zserver;
+  Slice tmp_nhash;
+  uint32_t mode;
+  uint32_t uid;
+  uint32_t gid;
+  uint32_t tmp_zserver;
   if (!GetLengthPrefixedSlice(input, &key_prefix)) {
     return false;
   }
 #if defined(DELTAFS)
-  if (!GetVarint64(input, &pid.reg) || !GetVarint64(input, &pid.snap)) {
+  else if (!GetVarint64(input, &parent_reg) ||
+           !GetVarint64(input, &parent_snap)) {
     return false;
   }
 #endif
-  if (!GetVarint64(input, &pid.ino) || !GetLengthPrefixedSlice(input, &sli) ||
-      !GetVarint32(input, &u32)) {
+  else if (!GetVarint64(input, &parent_ino) ||
+           !GetLengthPrefixedSlice(input, &tmp_nhash) ||
+           !GetVarint32(input, &parent_zserver) || !GetVarint32(input, &mode) ||
+           !GetVarint32(input, &uid) || !GetVarint32(input, &gid) ||
+           !GetVarint32(input, &tmp_zserver)) {
     return false;
   } else {
+    pid = DirId(parent_reg, parent_snap, parent_ino);
+    nhash = tmp_nhash.ToString();
+    zserver = parent_zserver;
     Key key(key_prefix);
+#if defined(DELTAFS)
     stat.SetRegId(key.reg_id());
     stat.SetSnapId(key.snap_id());
+#endif
     stat.SetInodeNo(key.inode());
-    nhash = sli.ToString();
-    zserver = u32;
+    stat.SetFileMode(mode);
+    stat.SetUserId(uid);
+    stat.SetGroupId(gid);
+    stat.SetZerothServer(tmp_zserver);
     return true;
   }
 }
 
 // The encoding has the following format:
-//
+// --------------------------------------------
 //   key_prefix_length      varint32
 //   key_prefix             char[key_prefix_length]
-//   reg_id of parent dir   varint64
-//   snap_id of parent dir  varint64
+//   reg_id of parent dir   varint64 (deltafs only)
+//   snap_id of parent dir  varint64 (deltafs only)
 //   ino_no of parent dir   varint64
 //   nhash_length           varint32
 //   nhash                  char[nhash_length]
 //   zserver of parent dir  varint32
+//   mode                   varint32
+//   user_id                varint32
+//   group_id               varint32
+//   zserver                varint32
 Slice Fentry::EncodeTo(char* scratch) const {
   char* p = scratch;
 
@@ -124,6 +146,10 @@ Slice Fentry::EncodeTo(char* scratch) const {
   p = EncodeVarint64(p, pid.ino);
   p = EncodeLengthPrefixedSlice(p, nhash);
   p = EncodeVarint32(p, zserver);
+  p = EncodeVarint32(p, stat.FileMode());
+  p = EncodeVarint32(p, stat.UserId());
+  p = EncodeVarint32(p, stat.GroupId());
+  p = EncodeVarint32(p, stat.ZerothServer());
 
   return Slice(scratch, p - scratch);
 }

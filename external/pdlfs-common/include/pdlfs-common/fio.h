@@ -16,7 +16,7 @@ namespace pdlfs {
 
 // Path and metadata information on an open file.
 struct Fentry {
-  Fentry() {}
+  Fentry() {}  // Intentionally uninitialized for performance
   bool DecodeFrom(Slice* input);
   Slice EncodeTo(char* scratch) const;
   static Slice ExtractUntypedKeyPrefix(const Slice& encoding);
