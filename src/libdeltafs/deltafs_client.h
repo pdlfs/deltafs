@@ -69,12 +69,9 @@ class Client {
     File* next;
     File* prev;
     Fio::Handle* fh;
-    mode_t mode;
-    uid_t uid;
-    gid_t gid;
     int flags;
-    uint32_t seq_write;  // Latest write
-    uint32_t seq_flush;  // Latest metadata update
+    uint32_t seq_flush;  // Latest file metadata update
+    uint32_t seq_write;  // Latest data write
     int refs;
 
     char encoding_data[1];  // Beginning of fentry encoding
@@ -92,7 +89,7 @@ class Client {
   std::string curroot_;  // Set by chroot
   port::AtomicPointer has_curdir_set_;
   std::string curdir_;  // Set by chdir
-  File* FetchFile(int fd);
+  File* FetchFile(int fd, Fentry*);
   size_t Alloc(File*);
   File* Free(size_t idx);
   size_t Open(const Slice& encoding, int flags, const Stat&, Fio::Handle*);

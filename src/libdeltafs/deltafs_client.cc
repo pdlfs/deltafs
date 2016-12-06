@@ -89,9 +89,6 @@ size_t Client::Open(const Slice& encoding, int flags, const Stat& stat,
   File* file = static_cast<File*>(malloc(sizeof(File) + encoding.size() - 1));
   memcpy(file->encoding_data, encoding.data(), encoding.size());
   file->encoding_length = encoding.size();
-  file->mode = stat.FileMode();
-  file->gid = stat.GroupId();
-  file->uid = stat.UserId();
   file->next = &dummy_;
   file->prev = dummy_.prev;
   file->prev->next = file;
@@ -308,64 +305,62 @@ bool Client::IsWriteOk(const File* f) {
 }
 
 // REQUIRES: mutex_ has been locked.
-Client::File* Client::FetchFile(int fd) {
+Client::File* Client::FetchFile(int fd, Fentry* ent) {
   size_t index = fd;
   if (index < max_open_fds_) {
-    return fds_[index];
+    File* f = fds_[index];
+    if (f != NULL) {
+      Slice input = f->fentry_encoding();
+      ent->DecodeFrom(&input);
+    }
+    return f;
   } else {
     return NULL;
   }
 }
 
 Status Client::Fstat(int fd, Stat* statbuf) {
+  Status s;
   MutexLock ml(&mutex_);
-  File* file = FetchFile(fd);
+  Fentry ent;
+  File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
   } else {
-    Status s;
-    Fentry ent;
-    Slice encoding = file->fentry_encoding();
-    if (!ent.DecodeFrom(&encoding)) {
-      s = Status::Corruption(Slice());
+    assert(file->fh != NULL);
+    file->refs++;  // Ref
+    uint64_t mtime = 0;
+    uint64_t size = 0;
+    if (S_ISREG(ent.file_mode())) {
+      mutex_.Unlock();
+      s = fio_->Fstat(file->fentry_encoding(), file->fh, &mtime, &size);
+      mutex_.Lock();
     } else {
-      ent.stat.SetFileMode(file->mode);
-      ent.stat.SetGroupId(file->gid);
-      ent.stat.SetUserId(file->uid);
-      assert(file->fh != NULL);
-      file->refs++;  // Ref
-      uint64_t mtime = 0;
-      uint64_t size = 0;
-      if (S_ISREG(file->mode)) {
-        mutex_.Unlock();
-        s = fio_->Fstat(file->fentry_encoding(), file->fh, &mtime, &size);
-        mutex_.Lock();
-      } else {
-        // FIXME
-      }
-      if (s.ok()) {
-        ent.stat.SetModifyTime(mtime);
-        ent.stat.SetFileSize(size);
-        *statbuf = ent.stat;
-      }
-      Unref(file);
+      // FIXME
     }
+    if (s.ok()) {
+      ent.stat.SetModifyTime(mtime);
+      ent.stat.SetFileSize(size);
+      *statbuf = ent.stat;
+    }
+    Unref(file);
     return s;
   }
 }
 
 Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   MutexLock ml(&mutex_);
-  File* file = FetchFile(fd);
+  Fentry ent;
+  File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
-  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
-    if (!S_ISDIR(file->mode)) {
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+    if (!S_ISDIR(ent->file_mode())) {
       // TODO: write into a file under a pdlfs dir
     }
 
     return FileAccessModeNotMatched();
-  } else if (S_ISDIR(file->mode)) {
+  } else if (S_ISDIR(ent.file_mode())) {
     return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
     return FileAccessModeNotMatched();
@@ -386,16 +381,17 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
 
 Status Client::Write(int fd, const Slice& data) {
   MutexLock ml(&mutex_);
-  File* file = FetchFile(fd);
+  Fentry ent;
+  File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
-  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
-    if (!S_ISDIR(file->mode)) {
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+    if (!S_ISDIR(ent.file_mode())) {
       // TODO: write into a file under a pdlfs dir
     }
 
     return FileAccessModeNotMatched();
-  } else if (S_ISDIR(file->mode)) {
+  } else if (S_ISDIR(ent.file_mode())) {
     return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
     return FileAccessModeNotMatched();
@@ -416,12 +412,13 @@ Status Client::Write(int fd, const Slice& data) {
 
 Status Client::Ftruncate(int fd, uint64_t len) {
   MutexLock ml(&mutex_);
-  File* file = FetchFile(fd);
+  Fentry ent;
+  File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
-  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
     return FileAccessModeNotMatched();
-  } else if (S_ISDIR(file->mode)) {
+  } else if (S_ISDIR(ent.file_mode())) {
     return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
     return FileAccessModeNotMatched();
@@ -443,13 +440,14 @@ Status Client::Ftruncate(int fd, uint64_t len) {
 Status Client::Fdatasync(int fd) {
   Status s;
   MutexLock ml(&mutex_);
-  File* file = FetchFile(fd);
+  Fentry ent;
+  File* file = FetchFile(fd.& ent);
   if (file == NULL) {
     s = BadDescriptor();
-  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
     s = Status::NotSupported(Slice());  // FIXME
 
-  } else if (S_ISDIR(file->mode)) {
+  } else if (S_ISDIR(ent.file_mode())) {
     s = Status::NotSupported(Slice());  // FIXME
 
   } else if ((file->flags & O_ACCMODE) != O_RDONLY) {
@@ -491,16 +489,17 @@ Status Client::Fdatasync(int fd) {
 Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
                      char* scratch) {
   MutexLock ml(&mutex_);
-  File* file = FetchFile(fd);
+  Fentry ent;
+  File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
-  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
-    if (!S_ISDIR(file->mode)) {
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+    if (!S_ISDIR(ent.file_mode())) {
       // TODO: read a file from a plfs dir
     }
 
     return FileAccessModeNotMatched();
-  } else if (S_ISDIR(file->mode)) {
+  } else if (S_ISDIR(ent.file_mode())) {
     return FileAccessModeNotMatched();
   } else if (!IsReadOk(file)) {
     return FileAccessModeNotMatched();
@@ -519,16 +518,17 @@ Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
 
 Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
   MutexLock ml(&mutex_);
-  File* file = FetchFile(fd);
+  Fentry ent;
+  File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
-  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
-    if (!S_ISDIR(file->mode)) {
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+    if (!S_ISDIR(ent.file_mode())) {
       // TODO: read a file from a plfs dir
     }
 
     return FileAccessModeNotMatched();
-  } else if (S_ISDIR(file->mode)) {
+  } else if (S_ISDIR(ent.file_mode())) {
     return FileAccessModeNotMatched();
   } else if (!IsReadOk(file)) {
     return FileAccessModeNotMatched();
@@ -548,17 +548,18 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
 Status Client::Flush(int fd) {
   Status s;
   MutexLock ml(&mutex_);
-  File* file = FetchFile(fd);
+  Fentry ent;
+  File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     s = BadDescriptor();
-  } else if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
-    if (S_ISDIR(file->mode)) {
+  } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+    if (S_ISDIR(ent.file_mode())) {
       // TODO: force the generation of a new epoch
     } else {
       // Ignore it
     }
 
-  } else if (S_ISDIR(file->mode)) {
+  } else if (S_ISDIR(ent.file_mode())) {
     // Nothing to flush
 
   } else if ((file->flags & O_ACCMODE) != O_RDONLY) {
@@ -599,18 +600,19 @@ Status Client::Flush(int fd) {
 Status Client::Close(int fd) {
   Status s;
   MutexLock ml(&mutex_);
-  File* file = FetchFile(fd);
+  Fentry ent;
+  File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
   } else {
-    if (DELTAFS_DIR_IS_PLFS_STYLE(file->mode)) {
-      if (S_ISDIR(file->mode)) {
+    if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+      if (S_ISDIR(ent.file_mode())) {
         // XXX: TODO
       } else {
         // Do nothing
       }
 
-    } else if (S_ISREG(file->mode)) {
+    } else if (S_ISREG(ent.file_mode())) {
       while (file->seq_flush < file->seq_write) {
         mutex_.Unlock();
         Flush(fd);  // Ignore errors
