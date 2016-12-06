@@ -28,12 +28,12 @@ TEST(FioTest, EncodeDecode) {
   stat1->SetUserId(8);
   stat1->SetGroupId(9);
   stat1->SetZerothServer(10);
-  char tmp1[200];
+  char tmp1[DELTAFS_FENTRY_BUFSIZE];
   Slice encoding1 = entry1.EncodeTo(tmp1);
   Slice input = encoding1;
   bool ok = entry2.DecodeFrom(&input);
   ASSERT_TRUE(ok);
-  char tmp2[200];
+  char tmp2[DELTAFS_FENTRY_BUFSIZE];
   Slice encoding2 = entry2.EncodeTo(tmp2);
   ASSERT_EQ(encoding1, encoding2);
 }

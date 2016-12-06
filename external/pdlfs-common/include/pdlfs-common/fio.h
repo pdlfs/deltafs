@@ -13,13 +13,18 @@
 #include "pdlfs-common/mdb.h"
 
 namespace pdlfs {
+#define DELTAFS_FENTRY_BUFSIZE 200 /* Buffer size for fentry encoding */
 
 // Path and metadata information on an open file.
 struct Fentry {
   Fentry() {}  // Intentionally uninitialized for performance
-  bool DecodeFrom(Slice* input);
-  Slice EncodeTo(char* scratch) const;
+
+  // Extract only the key prefix from a given encoding
   static Slice ExtractUntypedKeyPrefix(const Slice& encoding);
+
+  Slice EncodeTo(char* scratch) const;
+  bool DecodeFrom(Slice* input);
+
   DirId pid;          // Parent directory
   std::string nhash;  // Name hash
   int zserver;        // Zeroth server of the parent directory

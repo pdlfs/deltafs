@@ -56,7 +56,7 @@ class BlkDBTest {
     ent.stat.SetInodeNo(id);
     uint64_t ignored_mtime;
     uint64_t ignored_size;
-    char tmp[100];
+    char tmp[DELTAFS_FENTRY_BUFSIZE];
     Slice encoding = ent.EncodeTo(tmp);
     Fio::Handle* fh;
     Status s =

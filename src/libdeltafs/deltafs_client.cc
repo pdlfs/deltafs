@@ -244,13 +244,13 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
       }
     }
 
+    char tmp[DELTAFS_FENTRY_BUFSIZE];
+    Slice encoding;
     uint64_t mtime = 0;
     uint64_t size = 0;
-    Slice fentry_encoding;
-    char tmp[100];
 
     if (s.ok()) {
-      fentry_encoding = fentry.EncodeTo(tmp);
+      encoding = fentry.EncodeTo(tmp);
 
       mtime = fentry.stat.ModifyTime();
       size = fentry.stat.FileSize();
@@ -264,11 +264,11 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
         const bool create_if_missing = true;  // Allow lazy object creation
         const bool truncate_if_exists =
             (flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC) == O_TRUNC;
-        s = fio_->Open(fentry_encoding, create_if_missing, truncate_if_exists,
-                       &mtime, &size, &fh);
+        s = fio_->Open(encoding, create_if_missing, truncate_if_exists, &mtime,
+                       &size, &fh);
       } else {
         // File doesn't exist before so we explicit create it
-        s = fio_->Creat(fentry_encoding, &fh);
+        s = fio_->Creat(encoding, &fh);
       }
     }
 
@@ -277,13 +277,13 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
       if (num_open_fds_ >= max_open_fds_) {
         s = Status::TooManyOpens(Slice());
         if (fh != NULL) {
-          fio_->Close(fentry_encoding, fh);
+          fio_->Close(encoding, fh);
         }
       } else {
         fentry.stat.SetFileSize(size);
         fentry.stat.SetModifyTime(mtime);
 
-        info->fd = Open(fentry_encoding, flags, fentry.stat, fh);
+        info->fd = Open(encoding, flags, fentry.stat, fh);
         info->stat = fentry.stat;
       }
     }
@@ -683,12 +683,12 @@ Status Client::Lstat(const Slice& path, Stat* statbuf) {
   s = ExpandPath(&p, &tmp);
 
   Fentry ent;
-  char encoding_space[100];
+  char encoding_buf[DELTAFS_FENTRY_BUFSIZE];
   Slice encoding;
   if (s.ok()) {
     s = mdscli_->Fstat(p, &ent);
     if (s.ok()) {
-      encoding = ent.EncodeTo(encoding_space);
+      encoding = ent.EncodeTo(encoding_buf);
       *statbuf = ent.stat;
     }
   }
@@ -825,12 +825,12 @@ Status Client::Truncate(const Slice& path, uint64_t len) {
   s = ExpandPath(&p, &tmp);
 
   Fentry ent;
-  char encoding_space[100];
+  char encoding_buf[DELTAFS_FENTRY_BUFSIZE];
   Slice encoding;
   if (s.ok()) {
     s = mdscli_->Fstat(p, &ent);
     if (s.ok()) {
-      encoding = ent.EncodeTo(encoding_space);
+      encoding = ent.EncodeTo(encoding_buf);
     }
   }
 
@@ -852,12 +852,12 @@ Status Client::Unlink(const Slice& path) {
   s = ExpandPath(&p, &tmp);
 
   Fentry ent;
-  char encoding_space[100];
+  char encoding_buf[DELTAFS_FENTRY_BUFSIZE];
   Slice encoding;
   if (s.ok()) {
     s = mdscli_->Unlink(p, &ent);
     if (s.ok()) {
-      encoding = ent.EncodeTo(encoding_space);
+      encoding = ent.EncodeTo(encoding_buf);
     }
   }
 
