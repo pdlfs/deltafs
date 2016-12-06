@@ -196,16 +196,16 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
     s = Status::TooManyOpens(Slice());
   } else {
     mutex_.Unlock();
-    Fentry fentry;
+    Fentry ent;
     mode = MaskMode(mode);
     uint64_t my_time = Env::Default()->NowMicros();
     if ((flags & O_CREAT) == O_CREAT) {
       const bool error_if_exists = (flags & O_EXCL) == O_EXCL;
-      s = mdscli_->Fcreat(path, mode, &fentry, error_if_exists);
+      s = mdscli_->Fcreat(path, mode, &ent, error_if_exists);
     } else {
-      s = mdscli_->Fstat(path, &fentry);
+      s = mdscli_->Fstat(path, &ent);
       if (s.ok()) {
-        if (!S_ISDIR(fentry.stat.FileMode())) {
+        if (!S_ISDIR(ent.file_mode())) {
           if ((flags & O_DIRECTORY) == O_DIRECTORY) {
             s = Status::DirExpected(Slice());
           }
@@ -220,22 +220,22 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
 #if VERBOSE >= 10
     if (s.ok()) {
       Verbose(__LOG_ARGS__, 10, "Fopen: %s -> inode=[%llu:%llu:%llu]",
-              path.c_str(), (unsigned long long)fentry.stat.RegId(),
-              (unsigned long long)fentry.stat.SnapId(),
-              (unsigned long long)fentry.stat.InodeNo());
+              path.c_str(), (unsigned long long)ent.stat.RegId(),
+              (unsigned long long)ent.stat.SnapId(),
+              (unsigned long long)ent.stat.InodeNo());
     }
 #endif
 
     // Verify I/O permissions
-    if (s.ok() && S_ISREG(fentry.stat.FileMode())) {
+    if (s.ok() && S_ISREG(ent.file_mode())) {
       if ((flags & O_ACCMODE) != O_RDONLY) {
-        if (!mdscli_->IsWriteOk(&fentry.stat)) {
+        if (!mdscli_->IsWriteOk(&ent.stat)) {
           s = Status::AccessDenied(Slice());
         }
       }
 
       if (s.ok() && (flags & O_ACCMODE) != O_WRONLY) {
-        if (!mdscli_->IsReadOk(&fentry.stat)) {
+        if (!mdscli_->IsReadOk(&ent.stat)) {
           s = Status::AccessDenied(Slice());
         }
       }
@@ -247,17 +247,17 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
     uint64_t size = 0;
 
     if (s.ok()) {
-      encoding = fentry.EncodeTo(tmp);
+      encoding = ent.EncodeTo(tmp); // Compact representation
 
-      mtime = fentry.stat.ModifyTime();
-      size = fentry.stat.FileSize();
+      mtime = ent.stat.ModifyTime();
+      size = ent.stat.FileSize();
     }
 
     // Link file objects
     Fio::Handle* fh = NULL;
 
-    if (s.ok() && S_ISREG(fentry.stat.FileMode())) {
-      if (fentry.stat.ChangeTime() < my_time) {
+    if (s.ok() && S_ISREG(ent.file_mode())) {
+      if (ent.stat.ChangeTime() < my_time) {
         const bool create_if_missing = true;  // Allow lazy object creation
         const bool truncate_if_exists =
             (flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC) == O_TRUNC;
@@ -277,11 +277,11 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
           fio_->Close(encoding, fh);
         }
       } else {
-        fentry.stat.SetFileSize(size);
-        fentry.stat.SetModifyTime(mtime);
+        ent.stat.SetFileSize(size);
+        ent.stat.SetModifyTime(mtime);
 
-        info->fd = Open(encoding, flags, fentry.stat, fh);
-        info->stat = fentry.stat;
+        info->fd = Open(encoding, flags, ent.stat, fh);
+        info->stat = ent.stat;
       }
     }
   }
@@ -355,7 +355,7 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   if (file == NULL) {
     return BadDescriptor();
   } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
-    if (!S_ISDIR(ent->file_mode())) {
+    if (!S_ISDIR(ent.file_mode())) {
       // TODO: write into a file under a pdlfs dir
     }
 
@@ -441,7 +441,7 @@ Status Client::Fdatasync(int fd) {
   Status s;
   MutexLock ml(&mutex_);
   Fentry ent;
-  File* file = FetchFile(fd.& ent);
+  File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     s = BadDescriptor();
   } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
