@@ -159,6 +159,25 @@ mode_t deltafs_umask(mode_t __mode) {
   return client->Umask(__mode);
 }
 
+int deltafs_openat(int fd, const char* __path, int __oflags, mode_t __mode) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+
+  pdlfs::FileInfo info;
+  pdlfs::Status s;
+  s = client->Fopenat(fd, __path, __oflags, __mode, &info);
+  if (s.ok()) {
+    return info.fd;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
 int deltafs_openstat(const char* __path, int __oflags, mode_t __mode,
                      struct stat* __buf) {
   if (client == NULL) {
@@ -167,6 +186,7 @@ int deltafs_openstat(const char* __path, int __oflags, mode_t __mode,
       return NoClient();
     }
   }
+
   pdlfs::FileInfo info;
   pdlfs::Status s;
   s = client->Fopen(__path, __oflags, __mode, &info);

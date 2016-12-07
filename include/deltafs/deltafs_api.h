@@ -33,6 +33,7 @@ char* deltafs_getcwd(char* __buf, size_t __sz);
 int deltafs_creat(const char* __path, mode_t __mode);
 int deltafs_open(const char* __path, int __oflags, mode_t __mode);
 int deltafs_openstat(const char* __path, int __oflags, mode_t, struct stat*);
+int deltafs_openat(int fd, const char* __path, int __oflags, mode_t __mode);
 int deltafs_getattr(const char* __path, struct stat* __stbuf);
 int deltafs_mkfile(const char* __path, mode_t __mode);
 int deltafs_mkdirs(const char* __path, mode_t __mode);
