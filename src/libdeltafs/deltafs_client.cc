@@ -84,8 +84,7 @@ Client::File* Client::Free(size_t index) {
 
 // REQUIRES: less than "max_open_files_" files have been opened.
 // REQUIRES: mutex_ has been locked.
-size_t Client::Open(const Slice& encoding, int flags, const Stat& stat,
-                    Fio::Handle* fh) {
+size_t Client::Open(const Slice& encoding, int flags, Fio::Handle* fh) {
   File* file = static_cast<File*>(malloc(sizeof(File) + encoding.size() - 1));
   memcpy(file->encoding_data, encoding.data(), encoding.size());
   file->encoding_length = encoding.size();
@@ -168,23 +167,31 @@ mode_t Client::MaskMode(mode_t mode) {
   return ~mask & mode;
 }
 
-// Open a file for I/O operations. Return OK on success.
-// If O_CREAT is specified and the file does not exist, it will be created.
-// If both O_CREAT and O_EXCL are specified and the file exists,
-// error is returned.
-// If O_TRUNC is specified and the file already exists and is a regular
-// file and the open mode allows writing, it will be truncated to length 0.
-// In addition to opening the file, a file descriptor is allocated
-// to represent the file. The current length of the file is also returned along
-// with the file descriptor.
-// Only a fixed amount of file can be opened simultaneously.
-// A process may open a same file multiple times and obtain multiple file
-// descriptors that point to distinct open file entries.
-// If the opened file is a directory, O_RDONLY must and only that
-// can be specified.
-Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
+// Open a file or a directory below a specific directory.
+// The input path is always considered relative.
+Status Client::Fopenat(int fd, const Slice& input, int flags, mode_t mode,
+                       FileInfo* info) {
+  Fentry ent;
+  MutexLock ml(&mutex_);
+  File* file = FetchFile(fd, &ent);
+  if (file == NULL) {
+    return BadDescriptor();
+  } else if (num_open_fds_ >= max_open_fds_) {
+    return Status::TooManyOpens(Slice());
+  } else {
+    Status s;
+    std::string path = "/";
+    path += input.ToString();
+    s = InternalOpen(path, flags, mode, &ent, info);
+    return s;
+  }
+}
+
+// Open a specific file or directory.
+Status Client::Fopen(const Slice& input, int flags, mode_t mode,
+                     FileInfo* info) {
   Status s;
-  Slice path = p;
+  Slice path = input;
   std::string tmp;
   s = ExpandPath(&path, &tmp);
   if (!s.ok()) {
@@ -195,96 +202,139 @@ Status Client::Fopen(const Slice& p, int flags, mode_t mode, FileInfo* info) {
   if (num_open_fds_ >= max_open_fds_) {
     s = Status::TooManyOpens(Slice());
   } else {
-    mutex_.Unlock();
-    Fentry ent;
-    mode = MaskMode(mode);
-    uint64_t my_time = Env::Default()->NowMicros();
-    if ((flags & O_CREAT) == O_CREAT) {
-      const bool error_if_exists = (flags & O_EXCL) == O_EXCL;
-      s = mdscli_->Fcreat(path, mode, &ent, error_if_exists);
-    } else {
-      s = mdscli_->Fstat(path, &ent);
-      if (s.ok()) {
-        if (!S_ISDIR(ent.file_mode())) {
-          if ((flags & O_DIRECTORY) == O_DIRECTORY) {
-            s = Status::DirExpected(Slice());
-          }
-        } else {
-          if ((flags & O_ACCMODE) != O_RDONLY) {
-            s = Status::FileExpected(Slice());
-          }
-        }
-      }
-    }
+    s = InternalOpen(path, flags, mode, NULL, info);
+  }
 
-#if VERBOSE >= 10
+  return s;
+}
+
+// Open a file for I/O operations. Return OK on success.
+// If O_CREAT is specified and the file does not exist, it will be created. If
+// both O_CREAT and O_EXCL are specified and the file exists, error is returned.
+// If O_TRUNC is specified and the file already exists and is a regular
+// file and the open mode allows for writing, it will be truncated to length 0.
+// In addition to opening the file, a file descriptor is allocated to
+// hold the file. The current length of the file is also returned along
+// with the file descriptor.
+// Only a fixed amount of file can be opened simultaneously.
+// A process may open a same file multiple times and obtain multiple file
+// descriptors that point to distinct open file entries.
+// If O_DIRECTORY is specified and the open file is not a directory,
+// error is returned. If O_DIRECTORY is not specified and the open file is a
+// directory, the directory shall be opened as if O_DIRECTORY is specified.
+// If the opened file is a regular directory, O_RDONLY must be specified.
+// If the opened file is a pdlfs directory, either O_RDONLY or O_WDONLY must
+// be specified.
+// REQUIRES: mutex_ has been locked.
+Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
+                            const Fentry* at, FileInfo* info) {
+  Status s;
+  mutex_.Unlock();
+  Fentry ent;
+  mode = MaskMode(mode);
+  uint64_t my_time = Env::Default()->NowMicros();
+  if ((flags & O_CREAT) == O_CREAT) {
+    const bool error_if_exists = (flags & O_EXCL) == O_EXCL;
+    s = mdscli_->Fcreat(path, mode, &ent, error_if_exists, at);
+  } else {
+    s = mdscli_->Fstat(path, &ent, at);
     if (s.ok()) {
-      Verbose(__LOG_ARGS__, 10, "Fopen: %s -> inode=[%llu:%llu:%llu]",
-              path.c_str(), (unsigned long long)ent.stat.RegId(),
-              (unsigned long long)ent.stat.SnapId(),
-              (unsigned long long)ent.stat.InodeNo());
-    }
-#endif
-
-    // Verify I/O permissions
-    if (s.ok() && S_ISREG(ent.file_mode())) {
-      if ((flags & O_ACCMODE) != O_RDONLY) {
-        if (!mdscli_->IsWriteOk(&ent.stat)) {
-          s = Status::AccessDenied(Slice());
-        }
-      }
-
-      if (s.ok() && (flags & O_ACCMODE) != O_WRONLY) {
-        if (!mdscli_->IsReadOk(&ent.stat)) {
-          s = Status::AccessDenied(Slice());
-        }
-      }
-    }
-
-    char tmp[DELTAFS_FENTRY_BUFSIZE];
-    Slice encoding;
-    uint64_t mtime = 0;
-    uint64_t size = 0;
-
-    if (s.ok()) {
-      encoding = ent.EncodeTo(tmp); // Compact representation
-
-      mtime = ent.stat.ModifyTime();
-      size = ent.stat.FileSize();
-    }
-
-    // Link file objects
-    Fio::Handle* fh = NULL;
-
-    if (s.ok() && S_ISREG(ent.file_mode())) {
-      if (ent.stat.ChangeTime() < my_time) {
-        const bool create_if_missing = true;  // Allow lazy object creation
-        const bool truncate_if_exists =
-            (flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC) == O_TRUNC;
-        s = fio_->Open(encoding, create_if_missing, truncate_if_exists, &mtime,
-                       &size, &fh);
-      } else {
-        // File doesn't exist before so we explicit create it
-        s = fio_->Creat(encoding, &fh);
-      }
-    }
-
-    mutex_.Lock();
-    if (s.ok()) {
-      if (num_open_fds_ >= max_open_fds_) {
-        s = Status::TooManyOpens(Slice());
-        if (fh != NULL) {
-          fio_->Close(encoding, fh);
+      if (S_ISDIR(ent.file_mode())) {
+        if (!DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode()) &&
+            (flags & O_ACCMODE) != O_RDONLY) {
+          s = Status::FileExpected(Slice());
+        } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode()) &&
+                   (flags & O_ACCMODE) == O_RDWR) {
+          s = Status::InvalidArgument(Slice());
         }
       } else {
-        ent.stat.SetFileSize(size);
-        ent.stat.SetModifyTime(mtime);
-
-        info->fd = Open(encoding, flags, ent.stat, fh);
-        info->stat = ent.stat;
+        if ((flags & O_DIRECTORY) == O_DIRECTORY) {
+          s = Status::DirExpected(Slice());
+        }
       }
     }
   }
+
+#if VERBOSE >= 10
+  if (s.ok()) {
+    Verbose(__LOG_ARGS__, 10, "Fopen: %s -> inode=[%llu:%llu:%llu]",
+            path.c_str(), (unsigned long long)ent.stat.RegId(),
+            (unsigned long long)ent.stat.SnapId(),
+            (unsigned long long)ent.stat.InodeNo());
+  }
+#endif
+
+  // Verify I/O permissions
+  if (s.ok() && S_ISREG(ent.file_mode())) {
+    if ((flags & O_ACCMODE) != O_RDONLY) {
+      if (!mdscli_->IsWriteOk(&ent.stat)) {
+        s = Status::AccessDenied(Slice());
+      }
+    }
+
+    if (s.ok() && (flags & O_ACCMODE) != O_WRONLY) {
+      if (!mdscli_->IsReadOk(&ent.stat)) {
+        s = Status::AccessDenied(Slice());
+      }
+    }
+  }
+
+  char tmp[DELTAFS_FENTRY_BUFSIZE];
+  Slice encoding;
+  uint64_t mtime = 0;
+  uint64_t size = 0;
+
+  if (s.ok()) {
+    encoding = ent.EncodeTo(tmp);  // Compact representation
+
+    mtime = ent.stat.ModifyTime();
+    size = ent.stat.FileSize();
+  }
+
+  // Link file objects
+  Fio::Handle* fh = NULL;
+
+  if (s.ok()) {
+    if (!DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+      if (S_ISREG(ent.file_mode())) {
+        if (ent.stat.ChangeTime() < my_time) {
+          const bool create_if_missing = true;  // Allow lazy object creation
+          const bool truncate_if_exists =
+              (flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC) == O_TRUNC;
+          s = fio_->Open(encoding, create_if_missing, truncate_if_exists,
+                         &mtime, &size, &fh);
+        } else {
+          // File doesn't exist before so we explicit create it
+          s = fio_->Creat(encoding, &fh);
+        }
+      } else {
+        // Do nothing
+      }
+    } else {
+      if (S_ISDIR(ent.file_mode())) {
+        // TODO
+      } else {
+        // Do nothing
+      }
+    }
+  }
+
+  mutex_.Lock();
+  if (s.ok()) {
+    if (num_open_fds_ >= max_open_fds_) {
+      s = Status::TooManyOpens(Slice());
+      if (fh != NULL) {
+        fio_->Close(encoding, fh);
+      }
+    } else {
+      ent.stat.SetFileSize(size);
+      ent.stat.SetModifyTime(mtime);
+
+      info->fd = Open(encoding, flags, fh);
+      info->stat = ent.stat;
+    }
+  }
+
   return s;
 }
 
@@ -320,13 +370,13 @@ Client::File* Client::FetchFile(int fd, Fentry* ent) {
 }
 
 Status Client::Fstat(int fd, Stat* statbuf) {
-  Status s;
   MutexLock ml(&mutex_);
   Fentry ent;
   File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
   } else {
+    Status s;
     assert(file->fh != NULL);
     file->refs++;  // Ref
     uint64_t mtime = 0;

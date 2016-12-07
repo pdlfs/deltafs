@@ -26,7 +26,9 @@ class Client {
   static Status Open(Client**);
   ~Client();
 
-  Status Fopen(const Slice& path, int flags, mode_t mode, FileInfo*);
+  Status Fopen(const Slice& path, int flags, mode_t mode, FileInfo* result);
+  Status Fopenat(int fd, const Slice& path, int flags, mode_t mode,
+                 FileInfo* reuslt);
   Status Write(int fd, const Slice& data);
   Status Pwrite(int fd, const Slice& data, uint64_t off);
   Status Read(int fd, Slice* result, uint64_t size, char* buf);
@@ -63,6 +65,10 @@ class Client {
   void operator=(const Client&);
   Client(const Client&);
 
+  // REQUIRES: mutex_ has been locked
+  Status InternalOpen(const Slice& p, int flags, mode_t mode, const Fentry* at,
+                      FileInfo* result);
+
   // State for each opened file
   struct File {
     size_t encoding_length;
@@ -92,7 +98,7 @@ class Client {
   File* FetchFile(int fd, Fentry*);
   size_t Alloc(File*);
   File* Free(size_t idx);
-  size_t Open(const Slice& encoding, int flags, const Stat&, Fio::Handle*);
+  size_t Open(const Slice& encoding, int flags, Fio::Handle*);
   bool IsWriteOk(const File*);
   bool IsReadOk(const File*);
   void Unref(File*);
