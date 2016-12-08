@@ -22,7 +22,7 @@ class MargoServer : public If {
     RPCOptions options;
     options.env = env_;
     options.num_io_threads = 4;
-    options.uri = "bmi+tcp://10101";
+    options.uri = "bmi+tcp://localhost:10101";
     options.fs = this;
     bool listen = true;
     rpc_ = new MargoRPC(listen, options);

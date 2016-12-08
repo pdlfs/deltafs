@@ -15,7 +15,7 @@
 namespace pdlfs {
 namespace rpc {
 
-static const std::string kProto = "bmi+tcp://";
+static const std::string kProto = "bmi+tcp://127.0.0.1:10101";
 // True if multiple client threads can call RPC simultaneously
 static const bool kAllowConcurrentRPC = false;
 
@@ -28,12 +28,12 @@ class MercuryServer : public If {
     options.env = env_;
     options.extra_workers = pool_;
     options.num_io_threads = 2;
-    options.uri = kProto + "10101";
+    options.uri = kProto;
     options.fs = this;
     bool listen = true;
     rpc_ = new MercuryRPC(listen, options);
     looper_ = new MercuryRPC::LocalLooper(rpc_, options);
-    self_ = new MercuryRPC::Client(rpc_, kProto + "127.0.0.1:10101");
+    self_ = new MercuryRPC::Client(rpc_, kProto);
     looper_->Start();
     rpc_->Ref();
   }
