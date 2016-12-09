@@ -10,7 +10,7 @@ cmake=1               # for bootstrapping
 autopkg=1             # automake, autoconf, libtool
 gcc=1                 # used only on linux
 misc=1                # snappy gflags glog (small stuff only)
-ssio=1                # margo  (pulls in all margo's depends too)
+ssio=2                # margo  (pulls in all margo's depends too)
 mpich=1               # gets its own version because it is big
 
 # get current set of versions
