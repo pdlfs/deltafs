@@ -1,5 +1,7 @@
-/build/
-/build_config.mk
-/out-static/
-/out-shared/
 /nbproject/
+/build/
+*.dylib
+*.so
+*.a
+*.o
+
