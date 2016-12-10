@@ -73,11 +73,9 @@ class VPICbench {
     }
   }
 
-  Status Mkdir(int step_id) {
+  Status MkStep(int step_id) {
     Status s;
-    char tmp[256];
-    snprintf(tmp, sizeof(tmp), "/particles/T.%d", step_id);
-    s = io_->MakeDirectory(tmp);
+    // TODO
     if (options_.ignore_errors) {
       return Status::OK();
     } else {
@@ -88,8 +86,8 @@ class VPICbench {
   Status WriteParticle(int step_id, long long particle_id) {
     Status s;
     char tmp[256];
-    snprintf(tmp, sizeof(tmp), "/particles/T.%d/p_%lld", step_id, particle_id);
-    char data[32];  // four 64-bit integers
+    snprintf(tmp, sizeof(tmp), "/particles/p_%lld", particle_id);
+    char data[32];  // possibly eight 32-bit float numbers
     {
       char* p = data;
       for (int i = 0; i < sizeof(data) / 8; i++) {
@@ -147,23 +145,18 @@ class VPICbench {
     return report;
   }
 
-  // Create a dump directory.  Each client writes a random disjoint subset
-  // of particles.  If in relaxed consistency mode, every client will
-  // create a dump directory.  Return a status report with
-  // local timing and error counts.
+  // In each dump, every client writes a random disjoint subset of particles.
+  // Return a status report with local timing and error counts.
   VPICbenchReport Dump() {
     double start = MPI_Wtime();
     VPICbenchReport report;
     report.errors = 0;
     report.ops = 0;
-    Status s;
-    if (options_.rank == 0 || options_.relaxed_consistency) {
-      s = Mkdir(dump_seq_);
-      if (!s.ok()) {
-        report.errors++;
-      } else {
-        report.ops++;
-      }
+    Status s = MkStep(dump_seq_);
+    if (!s.ok()) {
+      report.errors++;
+    } else {
+      report.ops++;
     }
     if (s.ok()) {
       const uint64_t num_particles = NumberParticles();
@@ -220,20 +213,26 @@ static void Print(const char* msg) {
 
 static void Help(const char* prog, FILE* out) {
   fprintf(out,
-          "%s [options] <io_type> <io_conf>\n\nOptions:\n\n"
+          "%s [options] <io_type> <io_conf>\n\n"
+          "IO types: deltafs, posix\n\n"
+          "Deltafs IO confs:\n\n"
+          "  \"DELTAFS_Verbose?10|DELTAFS_LogToStderr?true\"\n\n"
+          "Posix IO confs:\n\n"
+          "  \"mount_point=/tmp/ioclient\"\n\n"
+          "Options:\n\n"
           "  --relaxed-consistency  :  "
-          "Executes in relaxed consistency mode\n"
+          "Executes in relaxed consistency mode (default: false)\n"
           "  --ignored-erros        :  "
-          "Continue running even on errors\n"
+          "Continue running even on errors (default: false)\n"
           "  --seed=n               :  "
-          "Set the random seed\n"
+          "Set the random seed (default: 301)\n"
           "  --num-dumps=n          :  "
-          "Total number of particle dumps\n"
+          "Total number of particle dumps (default: 1)\n"
           "  --ppc=n                :  "
-          "Number of particles per grid cell\n"
+          "Number of particles per grid cell (default: 2)\n"
           "  --x/y/z=n              :  "
-          "3d grid dimensions\n\n"
-          "Deltafs benchmark\n",
+          "3d grid dimensions (default: 2)\n\n"
+          "Deltafs VPIC IO benchmark\n",
           prog);
 }
 

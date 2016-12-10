@@ -201,10 +201,10 @@ static void MaybeLogToStderr() {
 
 static void InstallDeltafsOpts(const IOClientOptions& options) {
   std::vector<std::string> confs;
-  SplitString(&confs, options.conf_str);
+  SplitString(&confs, options.conf_str, "|");
   for (size_t i = 0; i < confs.size(); i++) {
     std::vector<std::string> kv;
-    SplitString(&kv, confs[i], ':', 1);
+    SplitString(&kv, confs[i], '?', 1);
     if (kv.size() == 2) {
       const char* k = kv[0].c_str();
       const char* v = kv[1].c_str();
@@ -220,7 +220,7 @@ static void InstallDeltafsOpts(const IOClientOptions& options) {
     }
   }
 
-  // XXX: Must get called before glog is initialized
+  // XXX: must run before glog is initialized
   MaybeSetVerboseLevel();
   MaybeLogToStderr();
 }
