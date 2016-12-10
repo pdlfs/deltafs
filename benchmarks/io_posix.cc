@@ -51,13 +51,21 @@ class PosixClient : public IOClient {
  public:
   explicit PosixClient() : mp_size_(0) {}
   virtual ~PosixClient() {}
+  struct PosixDir : public Dir {
+    explicit PosixDir(int fd) : fd(fd) {}
+    virtual ~PosixDir() {}
+    int fd;
+  };
 
   // Common FS operations
   virtual Status NewFile(const std::string& path);
   virtual Status DelFile(const std::string& path);
-  virtual Status MakeDirectory(const std::string& path);
+  virtual Status MakeDir(const std::string& path);
   virtual Status GetAttr(const std::string& path);
-  virtual Status Append(const std::string& path, const char*, size_t);
+  virtual Status OpenDir(const std::string& path, Dir**);
+  virtual Status CloseDir(Dir* dir);
+  virtual Status AppendAt(Dir* dir, const std::string& file, const char* data,
+                          size_t size);
 
   virtual Status Dispose();
   virtual Status Init();
@@ -97,7 +105,7 @@ Status PosixClient::NewFile(const std::string& path) {
   if (mknod(filename, S_IRWXU | S_IRWXG | S_IRWXO, S_IFREG) != 0) {
     s = IOError(path_buf_);
   } else {
-    s = Status::OK();
+    // Do nothing
   }
 #if VERBOSE >= 10
   if (kVVerbose) print(s);
@@ -116,7 +124,7 @@ Status PosixClient::DelFile(const std::string& path) {
   if (unlink(filename) != 0) {
     s = IOError(path_buf_);
   } else {
-    s = Status::OK();
+    // Do nothing
   }
 #if VERBOSE >= 10
   if (kVVerbose) print(s);
@@ -124,7 +132,7 @@ Status PosixClient::DelFile(const std::string& path) {
   return s;
 }
 
-Status PosixClient::MakeDirectory(const std::string& path) {
+Status PosixClient::MakeDir(const std::string& path) {
   path_buf_.resize(mp_size_);
   path_buf_.append(path);
   const char* dirname = path_buf_.c_str();
@@ -135,7 +143,7 @@ Status PosixClient::MakeDirectory(const std::string& path) {
   if (mkdir(dirname, S_IRWXU | S_IRWXG | S_IRWXO) != 0) {
     s = IOError(path_buf_);
   } else {
-    s = Status::OK();
+    // Do nothing
   }
 #if VERBOSE >= 10
   if (kVVerbose) print(s);
@@ -155,7 +163,7 @@ Status PosixClient::GetAttr(const std::string& path) {
   if (stat(nodename, &statbuf) != 0) {
     s = IOError(path_buf_);
   } else {
-    s = Status::OK();
+    // Do nothing
   }
 #if VERBOSE >= 10
   if (kVVerbose) print(s);
@@ -163,23 +171,52 @@ Status PosixClient::GetAttr(const std::string& path) {
   return s;
 }
 
-Status PosixClient::Append(const std::string& path, const char* data,
-                           size_t size) {
+Status PosixClient::OpenDir(const std::string& path, Dir** dirptr) {
   path_buf_.resize(mp_size_);
   path_buf_.append(path);
-  const char* filename = path_buf_.c_str();
+  const char* dirname = path_buf_.c_str();
 #if VERBOSE >= 10
-  if (kVVerbose) printf("open+w %s...\n", filename);
+  if (kVVerbose) printf("open %s...\n", dirname);
 #endif
   Status s;
-  const mode_t mode = S_IRWXU | S_IRWXG | S_IRWXO;
-  int fd = open(filename, O_WRONLY | O_APPEND | O_CREAT, mode);
+  int fd = open(dirname, O_DIRECTORY | O_RDONLY);
   if (fd == -1) {
     s = IOError(path_buf_);
   } else {
+    *dirptr = new PosixDir(fd);
+  }
+#if VERBOSE >= 10
+  if (kVVerbose) print(s);
+#endif
+  return s;
+}
+
+Status PosixClient::CloseDir(Dir* dir) {
+  Status s;
+  PosixDir* d = reinterpret_cast<PosixDir*>(dir);
+  if (d != NULL) {
+    close(d->fd);
+    delete d;
+  }
+  return s;
+}
+
+Status PosixClient::AppendAt(Dir* dir, const std::string& file,
+                             const char* data, size_t size) {
+  const char* filename = file.c_str();
+  const PosixDir* d = reinterpret_cast<PosixDir*>(dir);
+#if VERBOSE >= 10
+  if (kVVerbose) printf("append %s...\n", filename);
+#endif
+  Status s;
+  int fd = openat(d->fd, filename, O_WRONLY | O_APPEND | O_CREAT,
+                  S_IRWXU | S_IRWXG | S_IRWXO);
+  if (fd == -1) {
+    s = IOError(file);
+  } else {
     ssize_t n = write(fd, data, size);
     if (n != size) {
-      s = IOError(path_buf_);
+      s = IOError(file);
     }
     close(fd);
   }

@@ -50,12 +50,21 @@ class DeltafsClient : public IOClient {
   explicit DeltafsClient() {}
   virtual ~DeltafsClient() {}
 
+  struct DeltafsDir : public Dir {
+    explicit DeltafsDir(int fd) : fd(fd) {}
+    virtual ~DeltafsDir() {}
+    int fd;
+  };
+
   // Common FS operations
   virtual Status NewFile(const std::string& path);
   virtual Status DelFile(const std::string& path);
-  virtual Status MakeDirectory(const std::string& path);
+  virtual Status MakeDir(const std::string& path);
   virtual Status GetAttr(const std::string& path);
-  virtual Status Append(const std::string& path, const char*, size_t);
+  virtual Status OpenDir(const std::string& path, Dir**);
+  virtual Status CloseDir(Dir* dir);
+  virtual Status AppendAt(Dir* dir, const std::string& file, const char* data,
+                          size_t size);
 
   virtual Status Dispose();
   virtual Status Init();
@@ -120,7 +129,7 @@ Status DeltafsClient::DelFile(const std::string& path) {
   return s;
 }
 
-Status DeltafsClient::MakeDirectory(const std::string& path) {
+Status DeltafsClient::MakeDir(const std::string& path) {
   const char* p = path.c_str();
 #if VERBOSE >= 10
   if (kVVerbose) printf("deltafs_mkdir %s...\n", p);
@@ -153,21 +162,50 @@ Status DeltafsClient::GetAttr(const std::string& path) {
   return s;
 }
 
-Status DeltafsClient::Append(const std::string& path, const char* data,
-                             size_t size) {
+Status DeltafsClient::OpenDir(const std::string& path, Dir** dirptr) {
   const char* p = path.c_str();
 #if VERBOSE >= 10
-  if (kVVerbose) printf("deltafs_open+w %s...\n", p);
+  if (kVVerbose) printf("deltafs_open %s...\n", p);
 #endif
   Status s;
-  struct stat statbuf;
-  int fd = deltafs_openstat(p, O_WRONLY | O_CREAT, IO_FILEPERMS, &statbuf);
+  int fd = deltafs_open(p, O_DIRECTORY | O_RDONLY, 0);
   if (fd == -1) {
     s = IOError(path);
   } else {
-    ssize_t n = deltafs_pwrite(fd, data, size, statbuf.st_size);
+    *dirptr = new DeltafsDir(fd);
+  }
+#if VERBOSE >= 10
+  if (kVVerbose) print(s);
+#endif
+  return s;
+}
+
+Status DeltafsClient::CloseDir(Dir* dir) {
+  Status s;
+  DeltafsDir* d = reinterpret_cast<DeltafsDir*>(dir);
+  if (d != NULL) {
+    close(d->fd);
+    delete d;
+  }
+  return s;
+}
+
+Status DeltafsClient::AppendAt(Dir* dir, const std::string& file,
+                               const char* data, size_t size) {
+  const char* f = file.c_str();
+  const DeltafsDir* d = reinterpret_cast<DeltafsDir*>(dir);
+#if VERBOSE >= 10
+  if (kVVerbose) printf("deltafs_append %s...\n", f);
+#endif
+  Status s;
+  int fd =
+      deltafs_openat(d->fd, f, O_WRONLY | O_CREAT | O_APPEND, IO_FILEPERMS);
+  if (fd == -1) {
+    s = IOError(file);
+  } else {
+    ssize_t n = deltafs_write(fd, data, size);
     if (n != size) {
-      s = IOError(path);
+      s = IOError(file);
     }
     deltafs_close(fd);
   }
@@ -201,7 +239,7 @@ static void MaybeLogToStderr() {
 
 static void InstallDeltafsOpts(const IOClientOptions& options) {
   std::vector<std::string> confs;
-  SplitString(&confs, options.conf_str, "|");
+  SplitString(&confs, options.conf_str, '|');
   for (size_t i = 0; i < confs.size(); i++) {
     std::vector<std::string> kv;
     SplitString(&kv, confs[i], '?', 1);

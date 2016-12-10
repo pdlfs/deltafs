@@ -27,6 +27,12 @@ struct IOClientOptions {
   int comm_sz;
 };
 
+// Abstract dir handle;
+struct Dir {
+ protected:
+  virtual ~Dir();
+};
+
 // Abstract FS client interface
 class IOClient {
  public:
@@ -42,12 +48,14 @@ class IOClient {
   virtual Status Dispose() = 0;
 
   // Common FS operations
-  virtual Status MakeDirectory(const std::string& path) = 0;
   virtual Status NewFile(const std::string& path) = 0;
   virtual Status DelFile(const std::string& path) = 0;
   virtual Status GetAttr(const std::string& path) = 0;
-  virtual Status Append(const std::string& path, const char* data,
-                        size_t size) = 0;
+  virtual Status OpenDir(const std::string& path, Dir**) = 0;
+  virtual Status AppendAt(Dir* dir, const std::string& file, const char* data,
+                          size_t size) = 0;
+  virtual Status CloseDir(Dir* dir) = 0;
+  virtual Status MakeDir(const std::string& path) = 0;
 
  private:
   // No copying allowed

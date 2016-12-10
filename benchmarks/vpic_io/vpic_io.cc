@@ -65,7 +65,7 @@ class VPICbench {
   }
 
   Status Mkroot() {
-    Status s = io_->MakeDirectory("/particles");
+    Status s = io_->MakeDir("/particles");
     if (options_.ignore_errors) {
       return Status::OK();
     } else {
@@ -96,7 +96,7 @@ class VPICbench {
         p += 8;
       }
     }
-    s = io_->Append(tmp, data, sizeof(data));
+    // TODO
     if (options_.ignore_errors) {
       return Status::OK();
     } else {

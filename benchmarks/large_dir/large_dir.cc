@@ -67,7 +67,7 @@ class LDbench {  // LD stands for large directory
   Status Mkdir(int dir_no) {
     char tmp[256];
     snprintf(tmp, sizeof(tmp), "/d_%d", dir_no);
-    Status s = io_->MakeDirectory(tmp);
+    Status s = io_->MakeDir(tmp);
     if (options_.ignore_errors) {
       return Status::OK();
     } else {
