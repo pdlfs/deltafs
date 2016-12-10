@@ -188,7 +188,8 @@ Status DeltafsClient::CloseDir(Dir* dir) {
   Status s;
   DeltafsDir* d = reinterpret_cast<DeltafsDir*>(dir);
   if (d != NULL) {
-    close(d->fd);
+    deltafs_fdatasync(d->fd);
+    deltafs_close(d->fd);
     delete d;
   }
   return s;
