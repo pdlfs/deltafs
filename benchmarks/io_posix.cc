@@ -51,6 +51,7 @@ class PosixClient : public IOClient {
  public:
   explicit PosixClient() : mp_size_(0) {}
   virtual ~PosixClient() {}
+
   struct PosixDir : public Dir {
     explicit PosixDir(int fd) : fd(fd) {}
     virtual ~PosixDir() {}
@@ -102,7 +103,7 @@ Status PosixClient::NewFile(const std::string& path) {
   if (kVVerbose) printf("mknod %s...\n", filename);
 #endif
   Status s;
-  if (mknod(filename, S_IRWXU | S_IRWXG | S_IRWXO, S_IFREG) != 0) {
+  if (mknod(filename, DEFFILEMODE, S_IFREG) != 0) {
     s = IOError(path_buf_);
   } else {
     // Do nothing
@@ -140,7 +141,7 @@ Status PosixClient::MakeDir(const std::string& path) {
   if (kVVerbose) printf("mkdir %s...\n", dirname);
 #endif
   Status s;
-  if (mkdir(dirname, S_IRWXU | S_IRWXG | S_IRWXO) != 0) {
+  if (mkdir(dirname, ACCESSPERMS & ~S_IWOTH) != 0) {
     s = IOError(path_buf_);
   } else {
     // Do nothing
@@ -209,8 +210,7 @@ Status PosixClient::AppendAt(Dir* dir, const std::string& file,
   if (kVVerbose) printf("append %s...\n", filename);
 #endif
   Status s;
-  int fd = openat(d->fd, filename, O_WRONLY | O_APPEND | O_CREAT,
-                  S_IRWXU | S_IRWXG | S_IRWXO);
+  int fd = openat(d->fd, filename, O_WRONLY | O_APPEND | O_CREAT, DEFFILEMODE);
   if (fd == -1) {
     s = IOError(file);
   } else {

@@ -41,6 +41,9 @@ struct VPICbenchOptions : public ioclient::IOClientOptions {
 
 // REQUIRES: callers are required to initialize all fields
 struct VPICbenchReport {
+  // Error message
+  std::string message;
+  // Runtime
   double duration;
   // Total number of particles dumped
   int ops;
@@ -53,12 +56,15 @@ struct VPICbenchReport {
 class VPICbench {
  public:
   VPICbench(const VPICbenchOptions& options)
-      : dump_seq_(0), options_(options), rnd_(options.seed) {
+      : dump_seq_(0), options_(options), rnd_(options.seed), dir_(NULL) {
     io_ = ioclient::IOClient::Factory(options_);
   }
 
   ~VPICbench() {
     if (io_ != NULL) {
+      if (dir_ != NULL) {
+        io_->CloseDir(dir_);
+      }
       io_->Dispose();
       delete io_;
     }
@@ -66,6 +72,9 @@ class VPICbench {
 
   Status Mkroot() {
     Status s = io_->MakeDir("/particles");
+    if (s.ok()) {
+      s = io_->OpenDir("/particles", &dir_);
+    }
     if (options_.ignore_errors) {
       return Status::OK();
     } else {
@@ -86,7 +95,7 @@ class VPICbench {
   Status WriteParticle(int step_id, long long particle_id) {
     Status s;
     char tmp[256];
-    snprintf(tmp, sizeof(tmp), "/particles/p_%lld", particle_id);
+    snprintf(tmp, sizeof(tmp), "p_%lld", particle_id);
     char data[32];  // possibly eight 32-bit float numbers
     {
       char* p = data;
@@ -96,7 +105,11 @@ class VPICbench {
         p += 8;
       }
     }
-    // TODO
+    if (dir_ == NULL) {
+      s = Status::AssertionFailed("dir not opened");
+    } else {
+      s = io_->AppendAt(dir_, tmp, data, sizeof(data));
+    }
     if (options_.ignore_errors) {
       return Status::OK();
     } else {
@@ -142,6 +155,9 @@ class VPICbench {
     }
 
     report.duration = MPI_Wtime() - start;
+    if (!s.ok()) {
+      report.message = s.ToString();
+    }
     return report;
   }
 
@@ -176,6 +192,9 @@ class VPICbench {
 
     dump_seq_++;
     report.duration = MPI_Wtime() - start;
+    if (!s.ok()) {
+      report.message = s.ToString();
+    }
     return report;
   }
 
@@ -183,12 +202,17 @@ class VPICbench {
   int dump_seq_;
   const VPICbenchOptions options_;
   ioclient::IOClient* io_;
+  ioclient::Dir* dir_;
   Random rnd_;
 };
 
 }  // namespace pdlfs
 
 static pdlfs::VPICbenchReport Merge(const pdlfs::VPICbenchReport& report) {
+  if (!report.message.empty()) {
+    printf("E: %s\n", report.message.c_str());
+  }
+
   pdlfs::VPICbenchReport result;
 
   MPI_Reduce(&report.duration, &result.duration, 1, MPI_DOUBLE, MPI_MAX, 0,
@@ -251,10 +275,10 @@ static pdlfs::VPICbenchOptions ParseOptions(int argc, char** argv) {
 
   {
     std::vector<struct option> optinfo;
-    optinfo.push_back({"relaxed-consistency", 0, NULL, 1});
-    optinfo.push_back({"ignore-errors", 0, NULL, 2});
-    optinfo.push_back({"num-dumps", 1, NULL, 3});
-    optinfo.push_back({"seed", 1, NULL, 4});
+    optinfo.push_back({"relaxed-consistency", 0, NULL, 'r'});
+    optinfo.push_back({"ignore-errors", 0, NULL, 'i'});
+    optinfo.push_back({"num-dumps", 1, NULL, 'd'});
+    optinfo.push_back({"seed", 1, NULL, 's'});
     optinfo.push_back({"ppc", 1, NULL, 'p'});
     optinfo.push_back({"x", 1, NULL, 'x'});
     optinfo.push_back({"y", 1, NULL, 'y'});
@@ -267,16 +291,16 @@ static pdlfs::VPICbenchOptions ParseOptions(int argc, char** argv) {
       int c = getopt_long_only(argc, argv, "h", &optinfo[0], &ignored_index);
       if (c != -1) {
         switch (c) {
-          case 1:
+          case 'r':
             result.relaxed_consistency = true;
             break;
-          case 2:
+          case 'i':
             result.ignore_errors = true;
             break;
-          case 3:
+          case 'd':
             result.num_dumps = atoi(optarg);
             break;
-          case 4:
+          case 's':
             result.seed = atoi(optarg);
             break;
           case 'p':

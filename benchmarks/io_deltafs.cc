@@ -199,7 +199,7 @@ Status DeltafsClient::AppendAt(Dir* dir, const std::string& file,
 #endif
   Status s;
   int fd =
-      deltafs_openat(d->fd, f, O_WRONLY | O_CREAT | O_APPEND, IO_FILEPERMS);
+      deltafs_openat(d->fd, f, O_WRONLY | O_APPEND | O_CREAT, IO_FILEPERMS);
   if (fd == -1) {
     s = IOError(file);
   } else {

@@ -12,6 +12,8 @@
 namespace pdlfs {
 namespace ioclient {
 
+Dir::~Dir() {}
+
 IOClient::~IOClient() {}
 
 IOClient* IOClient::Factory(const IOClientOptions& raw_options) {
