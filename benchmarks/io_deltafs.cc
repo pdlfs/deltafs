@@ -26,6 +26,8 @@
 namespace pdlfs {
 namespace ioclient {
 
+static bool FLAGS_plfsdir = false;
+
 static const mode_t IO_FILEPERMS =
     (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);  // rw-r--r--
 static const mode_t IO_DIRPERMS =
@@ -135,7 +137,8 @@ Status DeltafsClient::MakeDir(const std::string& path) {
   if (kVVerbose) printf("deltafs_mkdir %s...\n", p);
 #endif
   Status s;
-  int r = deltafs_mkdir(p, IO_DIRPERMS);
+  int r = deltafs_mkdir(
+      p, IO_DIRPERMS | (FLAGS_plfsdir ? DELTAFS_DIR_PLFS_STYLE : 0));
   if (r != 0) {
     s = IOError(path);
   }
@@ -168,7 +171,8 @@ Status DeltafsClient::OpenDir(const std::string& path, Dir** dirptr) {
   if (kVVerbose) printf("deltafs_open %s...\n", p);
 #endif
   Status s;
-  int fd = deltafs_open(p, O_DIRECTORY | O_RDONLY, 0);
+  int fd =
+      deltafs_open(p, O_DIRECTORY | (FLAGS_plfsdir ? O_WRONLY : O_RDONLY), 0);
   if (fd == -1) {
     s = IOError(path);
   } else {
@@ -237,6 +241,13 @@ static void MaybeLogToStderr() {
 #endif
 }
 
+static void MaybeEnablePLFSDir() {
+  const char* env = getenv("DELTAFS_PLFSDir");
+  if (env != NULL && strlen(env) != 0) {
+    FLAGS_plfsdir = true;
+  }
+}
+
 static void InstallDeltafsOpts(const IOClientOptions& options) {
   std::vector<std::string> confs;
   SplitString(&confs, options.conf_str, '|');
@@ -258,6 +269,7 @@ static void InstallDeltafsOpts(const IOClientOptions& options) {
     }
   }
 
+  MaybeEnablePLFSDir();
   // XXX: must run before glog is initialized
   MaybeSetVerboseLevel();
   MaybeLogToStderr();
