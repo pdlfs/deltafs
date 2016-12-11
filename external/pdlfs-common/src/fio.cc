@@ -154,4 +154,22 @@ Slice Fentry::EncodeTo(char* scratch) const {
   return Slice(scratch, p - scratch);
 }
 
+static std::string FileModeToString(mode_t mode) {
+  char tmp[10];
+  snprintf(tmp, sizeof(tmp), "%o", mode);
+  return tmp;
+}
+
+std::string Fentry::DebugString() const {
+  std::string result("fentry={");
+  result += "pid=";
+  result += pid.DebugString();
+  result += ", sid=";
+  result += DirId(stat).DebugString();
+  result += ", mode=";
+  result += FileModeToString((stat.FileMode()));
+  result += "}";
+  return result;
+}
+
 }  // namespace pdlfs

@@ -22,6 +22,7 @@ struct Fentry {
   // Extract only the key prefix from a given encoding
   static Slice ExtractUntypedKeyPrefix(const Slice& encoding);
 
+  std::string DebugString() const;
   mode_t file_mode() const { return stat.FileMode(); }
   Slice EncodeTo(char* scratch) const;
   bool DecodeFrom(Slice* input);

@@ -19,6 +19,8 @@
 
 namespace pdlfs {
 
+#define MDS_OP_VERBOSE_LEVEL 8
+
 Status MDS::CLI::FetchIndex(const DirId& id, int zserver,
                             IndexHandle** result) {
   mutex_.AssertHeld();
@@ -305,18 +307,19 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result,
     }
   }
 
-#if VERBOSE >= 8
+#if VERBOSE >= MDS_OP_VERBOSE_LEVEL
   if (s.ok()) {
-    Verbose(__LOG_ARGS__, 8, "%s at pid=%s %s -> pid=%s, name=%s, depth=%d",
-            __func__, at != NULL ? at->pid.DebugString().c_str()
-                                 : DirId(0, 0, 0).DebugString().c_str(),
+    Verbose(__LOG_ARGS__, MDS_OP_VERBOSE_LEVEL,
+            "%s (at pid=%s) %s -> pid=%s, name=%s, depth=%d", __func__,
+            at != NULL ? at->pid.DebugString().c_str()
+                       : DirId(0, 0, 0).DebugString().c_str(),
             path.c_str(), result->pid.DebugString().c_str(),
             result->name.ToString().c_str(), result->depth);
 
   } else {
-    Verbose(__LOG_ARGS__, 8, "%s at pid=%s %s: %s", __func__,
-            at != NULL ? at->pid.DebugString().c_str()
-                       : DirId(0, 0, 0).DebugString().c_str(),
+    Verbose(__LOG_ARGS__, MDS_OP_VERBOSE_LEVEL, "%s (at pid=%s) %s: %s",
+            __func__, at != NULL ? at->pid.DebugString().c_str()
+                                 : DirId(0, 0, 0).DebugString().c_str(),
             path.c_str(), s.ToString().c_str());
   }
 #endif

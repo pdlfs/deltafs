@@ -23,10 +23,11 @@
 namespace pdlfs {
 
 // Helper for getting status strings.
-#define C_STR(status) status.ToString().c_str()
 #define OP_VERBOSE_LEVEL 8
+#define OP_VERY_VERBOSE_LEVEL 10
+#define STATUS_STR(status) status.ToString().c_str()
 #define OP_STATUS(op, path, status) \
-  "%s '%s': %s", op, path.c_str(), C_STR(status)
+  "%s '%s': %s", op, path.c_str(), STATUS_STR(status)
 #define OP_VERBOSE(path, status) \
   Verbose(__LOG_ARGS__, OP_VERBOSE_LEVEL, OP_STATUS(__func__, path, status))
 
@@ -169,41 +170,53 @@ mode_t Client::MaskMode(mode_t mode) {
 
 // Open a file or a directory below a specific directory.
 // The input path is always considered relative.
-Status Client::Fopenat(int fd, const Slice& input, int flags, mode_t mode,
+Status Client::Fopenat(int fd, const Slice& path, int flags, mode_t mode,
                        FileInfo* info) {
+  Status s;
   Fentry ent;
   MutexLock ml(&mutex_);
   File* file = FetchFile(fd, &ent);
   if (file == NULL) {
-    return BadDescriptor();
-  } else if (num_open_fds_ >= max_open_fds_) {
-    return Status::TooManyOpens(Slice());
+    s = BadDescriptor();
+  } else if (num_open_fds_ < max_open_fds_) {
+    std::string p = "/";
+    p += path.ToString();
+    s = InternalOpen(p, flags, mode, &ent, info);
   } else {
-    Status s;
-    std::string path = "/";
-    path += input.ToString();
-    s = InternalOpen(path, flags, mode, &ent, info);
-    return s;
+    s = Status::TooManyOpens(Slice());
   }
+
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  char tmp[20];
+  snprintf(tmp, sizeof(tmp), "#%d + ", fd);
+  std::string p = tmp;
+  p += path.ToString();
+  OP_VERBOSE(p, s);
+#endif
+
+  return s;
 }
 
 // Open a specific file or directory.
-Status Client::Fopen(const Slice& input, int flags, mode_t mode,
+Status Client::Fopen(const Slice& path, int flags, mode_t mode,
                      FileInfo* info) {
   Status s;
-  Slice path = input;
+  Slice p = path;
   std::string tmp;
-  s = ExpandPath(&path, &tmp);
-  if (!s.ok()) {
-    return s;
+  s = ExpandPath(&p, &tmp);
+
+  if (s.ok()) {
+    MutexLock ml(&mutex_);
+    if (num_open_fds_ < max_open_fds_) {
+      s = InternalOpen(p, flags, mode, NULL, info);
+    } else {
+      s = Status::TooManyOpens(Slice());
+    }
   }
 
-  MutexLock ml(&mutex_);
-  if (num_open_fds_ >= max_open_fds_) {
-    s = Status::TooManyOpens(Slice());
-  } else {
-    s = InternalOpen(path, flags, mode, NULL, info);
-  }
+#if VERBOSE >= OP_VERBOSE_LEVEL
+  OP_VERBOSE(p, s);
+#endif
 
   return s;
 }
@@ -234,8 +247,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
   mode = MaskMode(mode);
   uint64_t my_time = Env::Default()->NowMicros();
   if ((flags & O_CREAT) == O_CREAT) {
-    const bool error_if_exists = (flags & O_EXCL) == O_EXCL;
-    s = mdscli_->Fcreat(path, mode, &ent, error_if_exists, at);
+    s = mdscli_->Fcreat(path, mode, &ent, (flags & O_EXCL) == O_EXCL, at);
   } else {
     s = mdscli_->Fstat(path, &ent, at);
     if (s.ok()) {
@@ -255,12 +267,17 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
     }
   }
 
-#if VERBOSE >= 10
+#if VERBOSE >= OP_VERY_VERBOSE_LEVEL
   if (s.ok()) {
-    Verbose(__LOG_ARGS__, 10, "Fopen: %s -> inode=[%llu:%llu:%llu]",
-            path.c_str(), (unsigned long long)ent.stat.RegId(),
-            (unsigned long long)ent.stat.SnapId(),
-            (unsigned long long)ent.stat.InodeNo());
+    Verbose(__LOG_ARGS__, OP_VERY_VERBOSE_LEVEL, "%s (at pid=%s) %s -> %s",
+            __func__, at != NULL ? at->DebugString().c_str()
+                                 : DirId(0, 0, 0).DebugString().c_str(),
+            path.c_str(), ent.DebugString().c_str());
+  } else {
+    Verbose(__LOG_ARGS__, OP_VERY_VERBOSE_LEVEL, "%s (at pid=%s) %s: %s",
+            __func__, at != NULL ? at->DebugString().c_str()
+                                 : DirId(0, 0, 0).DebugString().c_str(),
+            path.c_str(), STATUS_STR(s));
   }
 #endif
 
@@ -1283,23 +1300,23 @@ void Client::Builder::OpenMDSCli() {
 Client* Client::Builder::BuildClient() {
   LoadIds();
 #if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "LoadIds: %s", C_STR(status_));
+  Verbose(__LOG_ARGS__, 10, "LoadIds: %s", STATUS_STR(status_));
 #endif
 
   LoadMDSTopology();
 #if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "LoadMDSTopology: %s", C_STR(status_));
+  Verbose(__LOG_ARGS__, 10, "LoadMDSTopology: %s", STATUS_STR(status_));
 #endif
 
   OpenSession();
 #if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "OpenSession: %s", C_STR(status_));
+  Verbose(__LOG_ARGS__, 10, "OpenSession: %s", STATUS_STR(status_));
 #endif
 
   OpenDB();
   OpenMDSCli();
 #if VERBOSE >= 10
-  Verbose(__LOG_ARGS__, 10, "OpenMDSCli: %s", C_STR(status_));
+  Verbose(__LOG_ARGS__, 10, "OpenMDSCli: %s", STATUS_STR(status_));
 #endif
 
   if (ok()) {

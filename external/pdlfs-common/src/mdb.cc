@@ -16,10 +16,10 @@ namespace pdlfs {
 std::string DirId::DebugString() const {
   char tmp[30];
 #if defined(DELTAFS)
-  snprintf(tmp, sizeof(tmp), "D[%llu:%llu:%llu]", (unsigned long long)reg,
+  snprintf(tmp, sizeof(tmp), "uuid[%llu:%llu:%llu]", (unsigned long long)reg,
            (unsigned long long)snap, (unsigned long long)ino);
 #else
-  snprintf(tmp, sizeof(tmp), "D[%llu]", (unsigned long long)ino);
+  snprintf(tmp, sizeof(tmp), "uuid[%llu]", (unsigned long long)ino);
 #endif
   return tmp;
 }
