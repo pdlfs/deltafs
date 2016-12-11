@@ -26,7 +26,9 @@
 namespace pdlfs {
 namespace ioclient {
 
-static bool FLAGS_plfsdir = false;
+enum { PLFSDIR_DISABLED, PLFSDIR_READ, PLFSDIR_WRITE };
+
+static int FLAGS_plfsdir = PLFSDIR_DISABLED;
 
 static const mode_t IO_FILEPERMS =
     (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);  // rw-r--r--
@@ -138,7 +140,8 @@ Status DeltafsClient::MakeDir(const std::string& path) {
 #endif
   Status s;
   int r = deltafs_mkdir(
-      p, IO_DIRPERMS | (FLAGS_plfsdir ? DELTAFS_DIR_PLFS_STYLE : 0));
+      p, IO_DIRPERMS |
+             (FLAGS_plfsdir != PLFSDIR_DISABLED ? DELTAFS_DIR_PLFS_STYLE : 0));
   if (r != 0) {
     s = IOError(path);
   }
@@ -171,8 +174,12 @@ Status DeltafsClient::OpenDir(const std::string& path, Dir** dirptr) {
   if (kVVerbose) printf("deltafs_open %s...\n", p);
 #endif
   Status s;
-  int fd =
-      deltafs_open(p, O_DIRECTORY | (FLAGS_plfsdir ? O_WRONLY : O_RDONLY), 0);
+  int fd = deltafs_open(
+      p, O_DIRECTORY |
+             (FLAGS_plfsdir != PLFSDIR_DISABLED
+                  ? (FLAGS_plfsdir == PLFSDIR_WRITE ? O_WRONLY : O_RDONLY)
+                  : O_RDONLY),
+      0);
   if (fd == -1) {
     s = IOError(path);
   } else {
@@ -245,7 +252,13 @@ static void MaybeLogToStderr() {
 static void MaybeEnablePLFSDir() {
   const char* env = getenv("DELTAFS_PLFSDir");
   if (env != NULL && strlen(env) != 0) {
-    FLAGS_plfsdir = true;
+    if (strcmp(env, "read") != 0 && strcmp(env, "write") != 0) {
+      FLAGS_plfsdir = PLFSDIR_DISABLED;
+    } else if (env[0] == 'w') {
+      FLAGS_plfsdir = PLFSDIR_WRITE;
+    } else {
+      FLAGS_plfsdir = PLFSDIR_READ;
+    }
   }
 }
 
