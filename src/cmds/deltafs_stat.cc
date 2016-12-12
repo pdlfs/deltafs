@@ -23,6 +23,8 @@
 #include <grp.h>
 #include <pwd.h>
 #include <stdio.h>
+#include <string.h>
+#include <string>
 int main(int argc, char* argv[]) {
 #if defined(PDLFS_GLOG)
   FLAGS_logtostderr = true;

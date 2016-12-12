@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <string.h>
 int main(int argc, char* argv[]) {
 #if defined(PDLFS_GLOG)
   FLAGS_logtostderr = true;
