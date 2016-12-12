@@ -244,24 +244,45 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
   Status s;
   mutex_.Unlock();
   Fentry ent;
-  mode = MaskMode(mode);
   uint64_t my_time = Env::Default()->NowMicros();
+  mode_t my_file_mode = 0;
   if ((flags & O_CREAT) == O_CREAT) {
+    mode = MaskMode(mode);
     s = mdscli_->Fcreat(path, mode, &ent, (flags & O_EXCL) == O_EXCL, at);
   } else {
     s = mdscli_->Fstat(path, &ent, at);
-    if (s.ok()) {
-      if (S_ISDIR(ent.file_mode())) {
-        if (!DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode()) &&
-            (flags & O_ACCMODE) != O_RDONLY) {
-          s = Status::FileExpected(Slice());
-        } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode()) &&
-                   (flags & O_ACCMODE) == O_RDWR) {
-          s = Status::InvalidArgument(Slice());
+  }
+
+  // Verify file modes
+  if (s.ok()) {
+    my_file_mode = ent.file_mode();
+    if (S_ISDIR(my_file_mode)) {
+      if (!DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode) &&
+          (flags & O_ACCMODE) != O_RDONLY) {
+        s = Status::FileExpected(Slice());
+      } else if (DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode) &&
+                 (flags & O_ACCMODE) == O_RDWR) {
+        s = Status::InvalidArgument(Slice());
+      }
+    } else {
+      if ((flags & O_DIRECTORY) == O_DIRECTORY) {
+        s = Status::DirExpected(Slice());
+      }
+    }
+  }
+
+  // Verify I/O permissions
+  if (s.ok()) {
+    if (S_ISREG(my_file_mode) || DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode)) {
+      if ((flags & O_ACCMODE) != O_RDONLY) {
+        if (!mdscli_->IsWriteOk(&ent.stat)) {
+          s = Status::AccessDenied(Slice());
         }
-      } else {
-        if ((flags & O_DIRECTORY) == O_DIRECTORY) {
-          s = Status::DirExpected(Slice());
+      }
+
+      if (s.ok() && (flags & O_ACCMODE) != O_WRONLY) {
+        if (!mdscli_->IsReadOk(&ent.stat)) {
+          s = Status::AccessDenied(Slice());
         }
       }
     }
@@ -281,28 +302,13 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
   }
 #endif
 
-  // Verify I/O permissions
-  if (s.ok() && S_ISREG(ent.file_mode())) {
-    if ((flags & O_ACCMODE) != O_RDONLY) {
-      if (!mdscli_->IsWriteOk(&ent.stat)) {
-        s = Status::AccessDenied(Slice());
-      }
-    }
-
-    if (s.ok() && (flags & O_ACCMODE) != O_WRONLY) {
-      if (!mdscli_->IsReadOk(&ent.stat)) {
-        s = Status::AccessDenied(Slice());
-      }
-    }
-  }
-
   char tmp[DELTAFS_FENTRY_BUFSIZE];
   Slice encoding;
   uint64_t mtime = 0;
   uint64_t size = 0;
 
   if (s.ok()) {
-    encoding = ent.EncodeTo(tmp);  // Compact representation
+    encoding = ent.EncodeTo(tmp);  // Use a compact representation
 
     mtime = ent.stat.ModifyTime();
     size = ent.stat.FileSize();
@@ -312,8 +318,8 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
   Fio::Handle* fh = NULL;
 
   if (s.ok()) {
-    if (!DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
-      if (S_ISREG(ent.file_mode())) {
+    if (!DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode)) {
+      if (S_ISREG(my_file_mode)) {
         if (ent.stat.ChangeTime() < my_time) {
           const bool create_if_missing = true;  // Allow lazy object creation
           const bool truncate_if_exists =
@@ -328,10 +334,10 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
         // Do nothing
       }
     } else {
-      if (S_ISDIR(ent.file_mode())) {
+      if (S_ISDIR(my_file_mode)) {
         // TODO
       } else {
-        // Do nothing
+        // TODO
       }
     }
   }
