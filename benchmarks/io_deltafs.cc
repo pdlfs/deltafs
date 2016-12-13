@@ -66,6 +66,7 @@ class DeltafsClient : public IOClient {
   virtual Status MakeDir(const std::string& path);
   virtual Status GetAttr(const std::string& path);
   virtual Status OpenDir(const std::string& path, Dir**);
+  virtual Status FlushEpoch(Dir* dir);
   virtual Status CloseDir(Dir* dir);
   virtual Status AppendAt(Dir* dir, const std::string& file, const char* data,
                           size_t size);
@@ -191,33 +192,63 @@ Status DeltafsClient::OpenDir(const std::string& path, Dir** dirptr) {
   return s;
 }
 
+Status DeltafsClient::FlushEpoch(Dir* dir) {
+  Status s;
+  assert(dir != NULL);
+  DeltafsDir* d = reinterpret_cast<DeltafsDir*>(dir);
+  char tmp[20];
+  snprintf(tmp, sizeof(tmp), "dir#%d", d->fd);
+#if VERBOSE >= 10
+  if (kVVerbose) printf("deltafs_epoch_flush %s...\n", tmp);
+#endif
+  int r = deltafs_epoch_flush(d->fd, NULL);
+  if (r != 0) {
+    s = IOError(tmp);
+  }
+#if VERBOSE >= 10
+  if (kVVerbose) print(s);
+#endif
+  return s;
+}
+
 Status DeltafsClient::CloseDir(Dir* dir) {
   Status s;
+  assert(dir != NULL);
   DeltafsDir* d = reinterpret_cast<DeltafsDir*>(dir);
-  if (d != NULL) {
-    deltafs_fdatasync(d->fd);
-    deltafs_close(d->fd);
-    delete d;
-  }
+  char tmp[20];
+  snprintf(tmp, sizeof(tmp), "dir#%d", d->fd);
+#if VERBOSE >= 10
+  if (kVVerbose) printf("deltafs_close %s...\n", tmp);
+#endif
+  deltafs_close(d->fd);
+  delete d;
+#if VERBOSE >= 10
+  if (kVVerbose) print(s);
+#endif
   return s;
 }
 
 Status DeltafsClient::AppendAt(Dir* dir, const std::string& file,
                                const char* data, size_t size) {
-  const char* f = file.c_str();
-  const DeltafsDir* d = reinterpret_cast<DeltafsDir*>(dir);
-#if VERBOSE >= 10
-  if (kVVerbose) printf("deltafs_append %s...\n", f);
-#endif
   Status s;
-  int fd =
-      deltafs_openat(d->fd, f, O_WRONLY | O_APPEND | O_CREAT, IO_FILEPERMS);
+  assert(dir != NULL);
+  const DeltafsDir* d = reinterpret_cast<DeltafsDir*>(dir);
+  char tmp[25];
+  snprintf(tmp, sizeof(tmp), "dir#%d + ", d->fd);
+  std::string path = tmp;
+  path += file;
+  const char* p = path.c_str();
+#if VERBOSE >= 10
+  if (kVVerbose) printf("deltafs_append %s...\n", p);
+#endif
+  int fd = deltafs_openat(d->fd, file.c_str(), O_WRONLY | O_APPEND | O_CREAT,
+                          IO_FILEPERMS);
   if (fd == -1) {
-    s = IOError(file);
+    s = IOError(path);
   } else {
     ssize_t n = deltafs_write(fd, data, size);
     if (n != size) {
-      s = IOError(file);
+      s = IOError(path);
     }
     deltafs_close(fd);
   }

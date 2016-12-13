@@ -54,6 +54,7 @@ class IOClient {
   virtual Status OpenDir(const std::string& path, Dir**) = 0;
   virtual Status AppendAt(Dir* dir, const std::string& file, const char* data,
                           size_t size) = 0;
+  virtual Status FlushEpoch(Dir* dir) = 0;
   virtual Status CloseDir(Dir* dir) = 0;
   virtual Status MakeDir(const std::string& path) = 0;
 

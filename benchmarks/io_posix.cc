@@ -68,6 +68,7 @@ class PosixClient : public IOClient {
   virtual Status AppendAt(Dir* dir, const std::string& file, const char* data,
                           size_t size);
 
+  virtual Status FlushEpoch(Dir* dir);
   virtual Status Dispose();
   virtual Status Init();
 
@@ -91,6 +92,11 @@ Status PosixClient::Init() {
 }
 
 Status PosixClient::Dispose() {
+  // Do nothing
+  return Status::OK();
+}
+
+Status PosixClient::FlushEpoch(Dir* dir) {
   // Do nothing
   return Status::OK();
 }

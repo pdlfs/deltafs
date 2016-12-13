@@ -241,7 +241,7 @@ static void Help(const char* prog, FILE* out) {
           "IO types: deltafs, posix\n\n"
           "Deltafs IO confs:\n\n"
           "  \"DELTAFS_Verbose?10|DELTAFS_LogToStderr?true|"
-          "DELTAFS_PLFSDir?true\"\n\n"
+          "DELTAFS_PLFSDir?write|DELTAFS_XXX?YYY\"\n\n"
           "Posix IO confs:\n\n"
           "  \"mount_point=/tmp/ioclient\"\n\n"
           "Options:\n\n"

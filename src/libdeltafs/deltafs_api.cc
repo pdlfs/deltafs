@@ -558,6 +558,12 @@ int deltafs_truncate(const char* __path, off_t __len) {
   }
 }
 
+// XXX: __arg is reserved for future usage
+int deltafs_epoch_flush(int __fd, void* __arg) {
+  return 0;  // TODO
+}
+
+// XXX: Not inlined so it has a name in *.so which can be dlopened by others
 int deltafs_creat(const char* __path, mode_t __mode) {
   return deltafs_open(__path, O_CREAT | O_WRONLY | O_TRUNC, __mode);
 }
