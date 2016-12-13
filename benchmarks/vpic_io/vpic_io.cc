@@ -83,8 +83,7 @@ class VPICbench {
   }
 
   Status MkStep(int step_id) {
-    Status s;
-    // TODO
+    Status s = io_->FlushEpoch(dir_);
     if (options_.ignore_errors) {
       return Status::OK();
     } else {

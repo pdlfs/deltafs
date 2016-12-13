@@ -58,6 +58,15 @@ class PosixClient : public IOClient {
     int fd;
   };
 
+  static inline PosixDir* ToPosixDir(Dir* dir) {
+    assert(dir != NULL);
+#ifndef NDEBUG
+    return dynamic_cast<PosixDir*>(dir);
+#else
+    return static_cast<PosixDir*>(dir);
+#endif
+  }
+
   // Common FS operations
   virtual Status NewFile(const std::string& path);
   virtual Status DelFile(const std::string& path);
@@ -200,7 +209,7 @@ Status PosixClient::OpenDir(const std::string& path, Dir** dirptr) {
 
 Status PosixClient::CloseDir(Dir* dir) {
   Status s;
-  PosixDir* d = reinterpret_cast<PosixDir*>(dir);
+  PosixDir* d = ToPosixDir(dir);
   if (d != NULL) {
     close(d->fd);
     delete d;
@@ -211,7 +220,7 @@ Status PosixClient::CloseDir(Dir* dir) {
 Status PosixClient::AppendAt(Dir* dir, const std::string& file,
                              const char* data, size_t size) {
   const char* filename = file.c_str();
-  const PosixDir* d = reinterpret_cast<PosixDir*>(dir);
+  PosixDir* d = ToPosixDir(dir);
 #if VERBOSE >= 10
   if (kVVerbose) printf("append %s...\n", filename);
 #endif

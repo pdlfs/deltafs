@@ -60,6 +60,15 @@ class DeltafsClient : public IOClient {
     int fd;
   };
 
+  static inline DeltafsDir* ToDeltafsDir(Dir* dir) {
+    assert(dir != NULL);
+#ifndef NDEBUG
+    return dynamic_cast<DeltafsDir*>(dir);
+#else
+    return static_cast<DeltafsDir*>(dir);
+#endif
+  }
+
   // Common FS operations
   virtual Status NewFile(const std::string& path);
   virtual Status DelFile(const std::string& path);
@@ -194,8 +203,7 @@ Status DeltafsClient::OpenDir(const std::string& path, Dir** dirptr) {
 
 Status DeltafsClient::FlushEpoch(Dir* dir) {
   Status s;
-  assert(dir != NULL);
-  DeltafsDir* d = reinterpret_cast<DeltafsDir*>(dir);
+  DeltafsDir* const d = ToDeltafsDir(dir);
   char tmp[20];
   snprintf(tmp, sizeof(tmp), "dir#%d", d->fd);
 #if VERBOSE >= 10
@@ -213,8 +221,7 @@ Status DeltafsClient::FlushEpoch(Dir* dir) {
 
 Status DeltafsClient::CloseDir(Dir* dir) {
   Status s;
-  assert(dir != NULL);
-  DeltafsDir* d = reinterpret_cast<DeltafsDir*>(dir);
+  DeltafsDir* const d = ToDeltafsDir(dir);
   char tmp[20];
   snprintf(tmp, sizeof(tmp), "dir#%d", d->fd);
 #if VERBOSE >= 10
@@ -231,8 +238,7 @@ Status DeltafsClient::CloseDir(Dir* dir) {
 Status DeltafsClient::AppendAt(Dir* dir, const std::string& file,
                                const char* data, size_t size) {
   Status s;
-  assert(dir != NULL);
-  const DeltafsDir* d = reinterpret_cast<DeltafsDir*>(dir);
+  DeltafsDir* const d = ToDeltafsDir(dir);
   char tmp[25];
   snprintf(tmp, sizeof(tmp), "dir#%d + ", d->fd);
   std::string path = tmp;
