@@ -51,10 +51,12 @@ class WritablePlfsDir : public Fio::Handle {
   WritablePlfsDir& operator=(const WritablePlfsDir&);
   WritablePlfsDir(const WritablePlfsDir&);
 
- public:
-  explicit WritablePlfsDir() {}
-  plfsio::Writer* writer;
   int refs;
+
+ public:
+  explicit WritablePlfsDir() : refs(0) {}
+  plfsio::Writer* writer;
+  void Ref() { refs++; }
 
   void Unref() {
     assert(refs > 0);
@@ -135,15 +137,17 @@ size_t Client::Open(const Slice& encoding, int flags, Fio::Handle* fh) {
 }
 
 // REQUIRES: mutex_ has been locked.
-void Client::Unref(File* f, const Fentry& ent) {
+void Client::Unref(File* f, const Fentry& fentry) {
+  mutex_.AssertHeld();
+
   assert(f->refs > 0);
   f->refs--;
   if (f->refs == 0) {
     f->next->prev = f->prev;
     f->prev->next = f->next;
-    if (!DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
-      if (S_ISREG(ent.file_mode())) {
-        fio_->Close(ent, f->fh);
+    if (!DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
+      if (S_ISREG(fentry.file_mode())) {
+        fio_->Close(fentry, f->fh);
       } else {
         assert(f->fh == NULL);
       }
@@ -382,7 +386,6 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
       if (S_ISDIR(my_file_mode)) {
         WritablePlfsDir* d = new WritablePlfsDir;
         d->writer = NULL;
-        d->refs = 0;
 
         fh = d;
       } else if (at != NULL) {
@@ -402,7 +405,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
 
   if (s.ok()) {
     if (DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode)) {
-      ToWritablePlfsDir(fh)->refs++;
+      ToWritablePlfsDir(fh)->Ref();
     }
   }
 
@@ -507,8 +510,7 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
     if (!DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
       s = fio_->Pwrite(fentry, file->fh, data, off);
     } else {
-      plfsio::Writer* writer;
-      writer = ToWritablePlfsDir(file->fh)->writer;
+      plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       s = writer->Append(fentry.nhash, data);
     }
@@ -538,8 +540,7 @@ Status Client::Write(int fd, const Slice& data) {
     if (!DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
       s = fio_->Write(fentry, file->fh, data);
     } else {
-      plfsio::Writer* writer;
-      writer = ToWritablePlfsDir(file->fh)->writer;
+      plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       s = writer->Append(fentry.nhash, data);
     }
