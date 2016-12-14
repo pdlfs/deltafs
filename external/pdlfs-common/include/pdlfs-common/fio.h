@@ -23,7 +23,7 @@ struct Fentry {
   static Slice ExtractUntypedKeyPrefix(const Slice& encoding);
 
   mode_t file_mode() const { return stat.FileMode(); }
-
+  std::string UntypedKeyPrefix() const;
   std::string DebugString() const;
   Slice EncodeTo(char* scratch) const;
   bool DecodeFrom(Slice* input);
@@ -43,27 +43,28 @@ class Fio {
   struct Handle {};
   virtual ~Fio();
 
-  virtual Status Creat(const Slice& fentry, Handle** fh) = 0;
-  virtual Status Open(const Slice& fentry, bool create_if_missing,
+  virtual Status Creat(const Fentry& fentry, Handle** fh) = 0;
+  virtual Status Open(const Fentry& fentry, bool create_if_missing,
                       bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
                       Handle** fh) = 0;
-  virtual Status Fstat(const Slice& fentry, Handle* fh, uint64_t* mtime,
+  virtual Status Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
                        uint64_t* size, bool skip_cache = false) = 0;
-  virtual Status Write(const Slice& fentry, Handle* fh, const Slice& data) = 0;
-  virtual Status Pwrite(const Slice& fentry, Handle* fh, const Slice& data,
+  virtual Status Write(const Fentry& fentry, Handle* fh, const Slice& data) = 0;
+  virtual Status Pwrite(const Fentry& fentry, Handle* fh, const Slice& data,
                         uint64_t off) = 0;
-  virtual Status Read(const Slice& fentry, Handle* fh, Slice* result,
+  virtual Status Read(const Fentry& fentry, Handle* fh, Slice* result,
                       uint64_t size, char* scratch) = 0;
-  virtual Status Pread(const Slice& fentry, Handle* fh, Slice* result,
+  virtual Status Pread(const Fentry& fentry, Handle* fh, Slice* result,
                        uint64_t off, uint64_t size, char* scratch) = 0;
-  virtual Status Ftruncate(const Slice& fentry, Handle* fh, uint64_t size) = 0;
-  virtual Status Flush(const Slice& fentry, Handle* fh,
+  virtual Status Ftrunc(const Fentry& fentry, Handle* fh, uint64_t size) = 0;
+  virtual Status Flush(const Fentry& fentry, Handle* fh,
                        bool force_sync = false) = 0;
-  virtual Status Close(const Slice& fentry, Handle* fh) = 0;
+  virtual Status Close(const Fentry& fentry, Handle* fh) = 0;
 
-  virtual Status Truncate(const Slice& fentry, uint64_t size) = 0;
-  virtual Status Stat(const Slice& fentry, uint64_t* mtime, uint64_t* size) = 0;
-  virtual Status Drop(const Slice& fentry) = 0;
+  virtual Status Trunc(const Fentry& fentry, uint64_t size) = 0;
+  virtual Status Stat(const Fentry& fentry, uint64_t* mtime,
+                      uint64_t* size) = 0;
+  virtual Status Drop(const Fentry& fentry) = 0;
 
  private:
   // No copying allowed

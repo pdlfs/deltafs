@@ -17,8 +17,8 @@ namespace pdlfs {
 class BlkDBTest {
  public:
   struct File {
-    std::string fentry_encoding;
     Fio::Handle* fh;
+    Fentry fentry;
   };
 
   BlkDBTest() {
@@ -47,25 +47,23 @@ class BlkDBTest {
   }
 
   File* Open(int id, bool ocreat = false) {
-    Fentry ent;
-    ent.pid = DirId(0, 0, 0);
-    DirIndex::PutHash(&ent.nhash, Name(id));
-    ent.zserver = 0;
-    ent.stat.SetRegId(0);
-    ent.stat.SetSnapId(0);
-    ent.stat.SetInodeNo(id);
+    Fentry fentry;
+    fentry.pid = DirId(0, 0, 0);
+    DirIndex::PutHash(&fentry.nhash, Name(id));
+    fentry.zserver = 0;
+    fentry.stat.SetRegId(0);
+    fentry.stat.SetSnapId(0);
+    fentry.stat.SetInodeNo(id);
     uint64_t ignored_mtime;
     uint64_t ignored_size;
-    char tmp[DELTAFS_FENTRY_BUFSIZE];
-    Slice encoding = ent.EncodeTo(tmp);
     Fio::Handle* fh;
     Status s =
-        blk_->Open(encoding, ocreat, false, &ignored_mtime, &ignored_size, &fh);
+        blk_->Open(fentry, ocreat, false, &ignored_mtime, &ignored_size, &fh);
     if (!s.ok()) {
       return NULL;
     } else {
       File* f = new File;
-      f->fentry_encoding = encoding.ToString();
+      f->fentry = fentry;
       f->fh = fh;
       return f;
     }
@@ -74,13 +72,13 @@ class BlkDBTest {
   File* Creat(int id) { return Open(id, true); }
 
   void Write(File* f, const Slice& buf, uint64_t off) {
-    ASSERT_OK(blk_->Pwrite(f->fentry_encoding, f->fh, buf, off));
+    ASSERT_OK(blk_->Pwrite(f->fentry, f->fh, buf, off));
   }
 
   std::string Read(File* f, uint64_t off, uint64_t size) {
     char* tmp = new char[size];
     Slice result;
-    ASSERT_OK(blk_->Pread(f->fentry_encoding, f->fh, &result, off, size, tmp));
+    ASSERT_OK(blk_->Pread(f->fentry, f->fh, &result, off, size, tmp));
     std::string data = result.ToString();
     delete[] tmp;
     std::string::iterator it = data.begin();
@@ -93,8 +91,8 @@ class BlkDBTest {
   }
 
   void Close(File* f) {
-    ASSERT_OK(blk_->Flush(f->fentry_encoding, f->fh));
-    blk_->Close(f->fentry_encoding, f->fh);
+    ASSERT_OK(blk_->Flush(f->fentry, f->fh));
+    blk_->Close(f->fentry, f->fh);
     delete f;
   }
 

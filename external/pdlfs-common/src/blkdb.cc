@@ -19,8 +19,8 @@ static inline Status NoMoreUpdates() {
   return Status::IOError("Bad file state");
 }
 
-static inline Slice UntypedKeyPrefix(const Slice& fentry_encoding) {
-  return Fentry::ExtractUntypedKeyPrefix(fentry_encoding);
+static inline std::string UntypedKeyPrefix(const Fentry& fentry) {
+  return fentry.UntypedKeyPrefix();
 }
 
 bool StreamHeader::DecodeFrom(Slice* input) {
@@ -60,7 +60,7 @@ BlkDB::~BlkDB() {
   }
 }
 
-Status BlkDB::Fstat(const Slice& fentry, Handle* fh, uint64_t* mtime,
+Status BlkDB::Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
                     uint64_t* size, bool skip_cache) {
   Status s;
   assert(fh != NULL);
@@ -75,7 +75,7 @@ Status BlkDB::Fstat(const Slice& fentry, Handle* fh, uint64_t* mtime,
   return s;
 }
 
-Status BlkDB::Creat(const Slice& fentry, Handle** fh) {
+Status BlkDB::Creat(const Fentry& fentry, Handle** fh) {
   Status s;
   *fh = NULL;
 
@@ -107,7 +107,7 @@ Status BlkDB::Creat(const Slice& fentry, Handle** fh) {
   return s;
 }
 
-Status BlkDB::Open(const Slice& fentry, bool create_if_missing,
+Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
                    bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
                    Handle** fh) {
   Status s;
@@ -193,21 +193,21 @@ Status BlkDB::Open(const Slice& fentry, bool create_if_missing,
   return s;
 }
 
-Status BlkDB::Truncate(const Slice& fentry, uint64_t size) {
+Status BlkDB::Trunc(const Fentry& fentry, uint64_t size) {
   return Status::NotSupported(Slice());
 }
 
-Status BlkDB::Stat(const Slice& fentry, uint64_t* mtime, uint64_t* size) {
+Status BlkDB::Stat(const Fentry& fentry, uint64_t* mtime, uint64_t* size) {
   return Status::NotSupported(Slice());
 }
 
-Status BlkDB::Drop(const Slice& fentry) {
+Status BlkDB::Drop(const Fentry& fentry) {
   // Dropping a stream involving deleting a whole range of DB
   // records and we currently don't support it.
   return Status::NotSupported(Slice());
 }
 
-Status BlkDB::Ftruncate(const Slice& fentry, Handle* fh, uint64_t size) {
+Status BlkDB::Ftrunc(const Fentry& fentry, Handle* fh, uint64_t size) {
   return Status::NotSupported(Slice());
 }
 
@@ -215,7 +215,7 @@ Status BlkDB::Ftruncate(const Slice& fentry, Handle* fh, uint64_t size) {
 // but not necessarily to the underlying storage, unless "force_sync" is true.
 // Return OK on success. If the stream has not changed since its last
 // flush, no action is taken, unless "force_sync" is true.
-Status BlkDB::Flush(const Slice& fentry, Handle* fh, bool force_sync) {
+Status BlkDB::Flush(const Fentry& fentry, Handle* fh, bool force_sync) {
   Status s;
   assert(fh != NULL);
   Stream* stream = reinterpret_cast<Stream*>(fh);
@@ -255,7 +255,7 @@ Status BlkDB::Flush(const Slice& fentry, Handle* fh, bool force_sync) {
   return s;
 }
 
-Status BlkDB::Close(const Slice& fentry, Handle* fh) {
+Status BlkDB::Close(const Fentry& fentry, Handle* fh) {
   assert(fh != NULL);
   Stream* stream = reinterpret_cast<Stream*>(fh);
   MutexLock ml(&mutex_);
@@ -275,7 +275,7 @@ Status BlkDB::Close(const Slice& fentry, Handle* fh) {
 }
 
 // REQUIRES: mutex_ has been locked.
-Status BlkDB::WriteTo(Stream* stream, const Slice& fentry, const Slice& data,
+Status BlkDB::WriteTo(Stream* stream, const Fentry& fentry, const Slice& data,
                       uint64_t off) {
   uint64_t end = off + data.size();
   mutex_.Unlock();
@@ -307,7 +307,7 @@ Status BlkDB::WriteTo(Stream* stream, const Slice& fentry, const Slice& data,
   return s;
 }
 
-Status BlkDB::Write(const Slice& fentry, Handle* fh, const Slice& data) {
+Status BlkDB::Write(const Fentry& fentry, Handle* fh, const Slice& data) {
   Status s;
   assert(fh != NULL);
   Stream* stream = reinterpret_cast<Stream*>(fh);
@@ -324,7 +324,7 @@ Status BlkDB::Write(const Slice& fentry, Handle* fh, const Slice& data) {
   return s;
 }
 
-Status BlkDB::Pwrite(const Slice& fentry, Handle* fh, const Slice& data,
+Status BlkDB::Pwrite(const Fentry& fentry, Handle* fh, const Slice& data,
                      uint64_t off) {
   Status s;
   assert(fh != NULL);
@@ -369,7 +369,7 @@ bool BlkInfo::ParseFrom(const Slice& k, const Slice& v) {
 }
 
 // REQUIRES: mutex_ has been locked.
-Status BlkDB::ReadFrom(Stream* stream, const Slice& fentry, Slice* result,
+Status BlkDB::ReadFrom(Stream* stream, const Fentry& fentry, Slice* result,
                        uint64_t off, uint64_t size, char* scratch) {
   Status s;
   uint64_t flen = stream->size;
@@ -482,7 +482,7 @@ Status BlkDB::ReadFrom(Stream* stream, const Slice& fentry, Slice* result,
   return s;
 }
 
-Status BlkDB::Read(const Slice& fentry, Handle* fh, Slice* result,
+Status BlkDB::Read(const Fentry& fentry, Handle* fh, Slice* result,
                    uint64_t size, char* scratch) {
   Status s;
   assert(fh != NULL);
@@ -496,7 +496,7 @@ Status BlkDB::Read(const Slice& fentry, Handle* fh, Slice* result,
   return s;
 }
 
-Status BlkDB::Pread(const Slice& fentry, Handle* fh, Slice* result,
+Status BlkDB::Pread(const Fentry& fentry, Handle* fh, Slice* result,
                     uint64_t off, uint64_t size, char* scratch) {
   Status s;
   assert(fh != NULL);

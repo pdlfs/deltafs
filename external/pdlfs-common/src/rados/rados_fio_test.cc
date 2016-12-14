@@ -29,8 +29,8 @@ static void OpenRadosConn() {
 class RadosFioTest {
  public:
   struct File {
-    std::string fentry_encoding;
     Fio::Handle* fh;
+    Fentry fentry;
   };
 
   RadosFioTest() {
@@ -49,25 +49,23 @@ class RadosFioTest {
   }
 
   File* Open(int id, bool ocreat = false, bool otrunc = false) {
-    Fentry ent;
-    ent.pid = DirId(0, 0, 0);
-    DirIndex::PutHash(&ent.nhash, Name(id));
-    ent.zserver = 0;
-    ent.stat.SetRegId(0);
-    ent.stat.SetSnapId(0);
-    ent.stat.SetInodeNo(id);
+    Fentry fentry;
+    fentry.pid = DirId(0, 0, 0);
+    DirIndex::PutHash(&fentry.nhash, Name(id));
+    fentry.zserver = 0;
+    fentry.stat.SetRegId(0);
+    fentry.stat.SetSnapId(0);
+    fentry.stat.SetInodeNo(id);
     uint64_t ignored_mtime;
     uint64_t ignored_size;
-    char tmp[DELTAFS_FENTRY_BUFSIZE];
-    Slice encoding = ent.EncodeTo(tmp);
     Fio::Handle* fh;
-    Status s = fio_->Open(encoding, ocreat, otrunc, &ignored_mtime,
-                          &ignored_size, &fh);
+    Status s =
+        fio_->Open(fentry, ocreat, otrunc, &ignored_mtime, &ignored_size, &fh);
     if (!s.ok()) {
       return NULL;
     } else {
       File* f = new File;
-      f->fentry_encoding = encoding.ToString();
+      f->fentry = fentry;
       f->fh = fh;
       return f;
     }
@@ -76,13 +74,13 @@ class RadosFioTest {
   File* Creat(int id) { return Open(id, true, true); }
 
   void Write(File* f, const Slice& buf, uint64_t off) {
-    ASSERT_OK(fio_->Pwrite(f->fentry_encoding, f->fh, buf, off));
+    ASSERT_OK(fio_->Pwrite(f->fentry, f->fh, buf, off));
   }
 
   std::string Read(File* f, uint64_t off, uint64_t size) {
     char* tmp = new char[size];
     Slice result;
-    ASSERT_OK(fio_->Pread(f->fentry_encoding, f->fh, &result, off, size, tmp));
+    ASSERT_OK(fio_->Pread(f->fentry, f->fh, &result, off, size, tmp));
     std::string data = result.ToString();
     delete tmp;
     std::string::iterator it = data.begin();
@@ -95,8 +93,8 @@ class RadosFioTest {
   }
 
   void Close(File* f) {
-    ASSERT_OK(fio_->Flush(f->fentry_encoding, f->fh));
-    fio_->Close(f->fentry_encoding, f->fh);
+    ASSERT_OK(fio_->Flush(f->fentry, f->fh));
+    fio_->Close(f->fentry, f->fh);
     delete f;
   }
 

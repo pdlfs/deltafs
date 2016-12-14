@@ -75,6 +75,12 @@ Slice Fentry::ExtractUntypedKeyPrefix(const Slice& encoding) {
   return key_prefix;
 }
 
+std::string Fentry::UntypedKeyPrefix() const {
+  KeyType dummy = static_cast<KeyType>(0);
+  Key key(stat, dummy);
+  return key.prefix().ToString();
+}
+
 bool Fentry::DecodeFrom(Slice* input) {
   Slice key_prefix;
   uint64_t parent_reg;

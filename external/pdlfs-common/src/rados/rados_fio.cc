@@ -7,6 +7,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 
 #include "rados_fio.h"
@@ -14,13 +15,13 @@
 namespace pdlfs {
 namespace rados {
 
-static std::string ToOid(const Slice& encoding) {
-  Slice key_prefix = Fentry::ExtractUntypedKeyPrefix(encoding);
+static std::string ToOid(const Fentry& fentry) {
+  std::string key_prefix = fentry.UntypedKeyPrefix();
   char tmp[200];
   sprintf(tmp, "o_");
   char* p = tmp + 2;
   for (size_t i = 0; i < key_prefix.size(); i++) {
-    sprintf(p, "%02x", (unsigned char)key_prefix[i]);
+    sprintf(p, "%02x", static_cast<unsigned char>(key_prefix[i]));
     p += 2;
   }
   return tmp;
@@ -59,9 +60,9 @@ void RadosFio::Unref(RadosFobj* fobj) {
   }
 }
 
-Status RadosFio::Creat(const Slice& fentry_encoding, Handle** fh) {
+Status RadosFio::Creat(const Fentry& fentry, Handle** fh) {
   Status s;
-  std::string oid = ToOid(fentry_encoding);
+  std::string oid = ToOid(fentry);
   rados_ioctx_t fctx;
   int r = rados_ioctx_create(cluster_, pool_name_.c_str(), &fctx);
   if (r != 0) {
@@ -88,11 +89,11 @@ Status RadosFio::Creat(const Slice& fentry_encoding, Handle** fh) {
   return s;
 }
 
-Status RadosFio::Open(const Slice& fentry_encoding, bool create_if_missing,
+Status RadosFio::Open(const Fentry& fentry, bool create_if_missing,
                       bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
                       Handle** fh) {
   Status s;
-  std::string oid = ToOid(fentry_encoding);
+  std::string oid = ToOid(fentry);
   uint64_t obj_size;
   time_t obj_mtime;
   int r = rados_stat(ioctx_, oid.c_str(), &obj_size, &obj_mtime);
@@ -148,10 +149,9 @@ Status RadosFio::Open(const Slice& fentry_encoding, bool create_if_missing,
   return s;
 }
 
-Status RadosFio::Stat(const Slice& fentry_encoding, uint64_t* mtime,
-                      uint64_t* size) {
+Status RadosFio::Stat(const Fentry& fentry, uint64_t* mtime, uint64_t* size) {
   Status s;
-  std::string oid = ToOid(fentry_encoding);
+  std::string oid = ToOid(fentry);
   time_t obj_mtime;
   size_t obj_size;
   int r = rados_stat(ioctx_, oid.c_str(), &obj_size, &obj_mtime);
@@ -164,9 +164,9 @@ Status RadosFio::Stat(const Slice& fentry_encoding, uint64_t* mtime,
   }
 }
 
-Status RadosFio::Truncate(const Slice& fentry_encoding, uint64_t size) {
+Status RadosFio::Trunc(const Fentry& fentry, uint64_t size) {
   Status s;
-  std::string oid = ToOid(fentry_encoding);
+  std::string oid = ToOid(fentry);
   int r = rados_trunc(ioctx_, oid.c_str(), size);
   if (r != 0) {
     return RadosError("rados_trunc", r);
@@ -175,9 +175,9 @@ Status RadosFio::Truncate(const Slice& fentry_encoding, uint64_t size) {
   }
 }
 
-Status RadosFio::Drop(const Slice& fentry_encoding) {
+Status RadosFio::Drop(const Fentry& fentry) {
   Status s;
-  std::string oid = ToOid(fentry_encoding);
+  std::string oid = ToOid(fentry);
   int r = rados_remove(ioctx_, oid.c_str());
   if (r != 0) {
     return RadosError("rados_remove", r);
@@ -186,8 +186,8 @@ Status RadosFio::Drop(const Slice& fentry_encoding) {
   }
 }
 
-Status RadosFio::Fstat(const Slice& fentry_encoding, Handle* fh,
-                       uint64_t* mtime, uint64_t* size, bool skip_cache) {
+Status RadosFio::Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
+                       uint64_t* size, bool skip_cache) {
   Status s;
   assert(fh != NULL);
   RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
@@ -205,7 +205,7 @@ Status RadosFio::Fstat(const Slice& fentry_encoding, Handle* fh,
       mutex_->Unlock();
       uint64_t obj_size;
       time_t obj_mtime;
-      std::string oid = ToOid(fentry_encoding);
+      std::string oid = ToOid(fentry);
       int r = rados_stat(fctx, oid.c_str(), &obj_size, &obj_mtime);
       if (r != 0) {
         s = RadosError("rados_stat", r);
@@ -227,7 +227,7 @@ Status RadosFio::Fstat(const Slice& fentry_encoding, Handle* fh,
   return s;
 }
 
-Status RadosFio::Close(const Slice& fentry_encoding, Handle* fh) {
+Status RadosFio::Close(const Fentry& fentry, Handle* fh) {
   assert(fh != NULL);
   RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
   mutex_->Lock();
@@ -236,8 +236,7 @@ Status RadosFio::Close(const Slice& fentry_encoding, Handle* fh) {
   return Status::OK();
 }
 
-Status RadosFio::Flush(const Slice& fentry_encoding, Handle* fh,
-                       bool force_sync) {
+Status RadosFio::Flush(const Fentry& fentry, Handle* fh, bool force_sync) {
   Status s;
   assert(fh != NULL);
   RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
@@ -269,8 +268,7 @@ Status RadosFio::Flush(const Slice& fentry_encoding, Handle* fh,
   return s;
 }
 
-Status RadosFio::Ftruncate(const Slice& fentry_encoding, Handle* fh,
-                           uint64_t size) {
+Status RadosFio::Ftrunc(const Fentry& fentry, Handle* fh, uint64_t size) {
   Status s;
   assert(fh != NULL);
   RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
@@ -285,7 +283,7 @@ Status RadosFio::Ftruncate(const Slice& fentry_encoding, Handle* fh,
       fctx = ioctx_;
     }
     mutex_->Unlock();
-    std::string oid = ToOid(fentry_encoding);
+    std::string oid = ToOid(fentry);
     int r = rados_trunc(fctx, oid.c_str(), size);
     if (r != 0) {
       s = RadosError("rados_trunc", r);
@@ -305,8 +303,7 @@ Status RadosFio::Ftruncate(const Slice& fentry_encoding, Handle* fh,
   return s;
 }
 
-Status RadosFio::Write(const Slice& fentry_encoding, Handle* fh,
-                       const Slice& buf) {
+Status RadosFio::Write(const Fentry& fentry, Handle* fh, const Slice& buf) {
   Status s;
   assert(fh != NULL);
   RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
@@ -326,7 +323,7 @@ Status RadosFio::Write(const Slice& fentry_encoding, Handle* fh,
       fobj->refs++;
     }
     mutex_->Unlock();
-    std::string oid = ToOid(fentry_encoding);
+    std::string oid = ToOid(fentry);
     if (!force_sync_) {
       rados_completion_t comp;
       rados_aio_create_completion(fobj, NULL, IO_safe, &comp);
@@ -356,8 +353,8 @@ Status RadosFio::Write(const Slice& fentry_encoding, Handle* fh,
   return s;
 }
 
-Status RadosFio::Pwrite(const Slice& fentry_encoding, Handle* fh,
-                        const Slice& buf, uint64_t off) {
+Status RadosFio::Pwrite(const Fentry& fentry, Handle* fh, const Slice& buf,
+                        uint64_t off) {
   Status s;
   assert(fh != NULL);
   RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
@@ -376,7 +373,7 @@ Status RadosFio::Pwrite(const Slice& fentry_encoding, Handle* fh,
       fobj->refs++;
     }
     mutex_->Unlock();
-    std::string oid = ToOid(fentry_encoding);
+    std::string oid = ToOid(fentry);
     if (!force_sync_) {
       rados_completion_t comp;
       rados_aio_create_completion(fobj, NULL, IO_safe, &comp);
@@ -405,7 +402,7 @@ Status RadosFio::Pwrite(const Slice& fentry_encoding, Handle* fh,
   return s;
 }
 
-Status RadosFio::Read(const Slice& fentry_encoding, Handle* fh, Slice* result,
+Status RadosFio::Read(const Fentry& fentry, Handle* fh, Slice* result,
                       uint64_t size, char* scratch) {
   Status s;
   assert(fh != NULL);
@@ -422,7 +419,7 @@ Status RadosFio::Read(const Slice& fentry_encoding, Handle* fh, Slice* result,
       fctx = ioctx_;
     }
     mutex_->Unlock();
-    std::string oid = ToOid(fentry_encoding);
+    std::string oid = ToOid(fentry);
     int n = rados_read(fctx, oid.c_str(), scratch, size, off);
     if (n < 0) {
       s = RadosError("rados_read", n);
@@ -445,7 +442,7 @@ Status RadosFio::Read(const Slice& fentry_encoding, Handle* fh, Slice* result,
   return s;
 }
 
-Status RadosFio::Pread(const Slice& fentry_encoding, Handle* fh, Slice* result,
+Status RadosFio::Pread(const Fentry& fentry, Handle* fh, Slice* result,
                        uint64_t off, uint64_t size, char* scratch) {
   Status s;
   assert(fh != NULL);
@@ -461,7 +458,7 @@ Status RadosFio::Pread(const Slice& fentry_encoding, Handle* fh, Slice* result,
       fctx = ioctx_;
     }
     mutex_->Unlock();
-    std::string oid = ToOid(fentry_encoding);
+    std::string oid = ToOid(fentry);
     int n = rados_read(fctx, oid.c_str(), scratch, size, off);
     if (n < 0) {
       s = RadosError("rados_read", n);

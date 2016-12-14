@@ -47,9 +47,10 @@ struct BlkDBOptions {
 };
 
 class BlkDB : public Fio {
-  Status WriteTo(Stream*, const Slice& fentry, const Slice& data, uint64_t off);
+  Status WriteTo(Stream*, const Fentry& fentry, const Slice& data,
+                 uint64_t off);
 
-  Status ReadFrom(Stream*, const Slice& fentry, Slice* result, uint64_t off,
+  Status ReadFrom(Stream*, const Fentry& fentry, Slice* result, uint64_t off,
                   uint64_t size, char* scratch);
 
   static const KeyType kHeaderType = kDataDesType;
@@ -58,27 +59,27 @@ class BlkDB : public Fio {
   BlkDB(const BlkDBOptions&);
   virtual ~BlkDB();
 
-  virtual Status Creat(const Slice& fentry, Handle** fh);
-  virtual Status Open(const Slice& fentry, bool create_if_missing,
+  virtual Status Creat(const Fentry& fentry, Handle** fh);
+  virtual Status Open(const Fentry& fentry, bool create_if_missing,
                       bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
                       Handle** fh);
-  virtual Status Fstat(const Slice& fentry, Handle* fh, uint64_t* mtime,
+  virtual Status Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
                        uint64_t* size, bool skip_cache = false);
-  virtual Status Write(const Slice& fentry, Handle* fh, const Slice& data);
-  virtual Status Pwrite(const Slice& fentry, Handle* fh, const Slice& data,
+  virtual Status Write(const Fentry& fentry, Handle* fh, const Slice& data);
+  virtual Status Pwrite(const Fentry& fentry, Handle* fh, const Slice& data,
                         uint64_t off);
-  virtual Status Read(const Slice& fentry, Handle* fh, Slice* result,
+  virtual Status Read(const Fentry& fentry, Handle* fh, Slice* result,
                       uint64_t size, char* scratch);
-  virtual Status Pread(const Slice& fentry, Handle* fh, Slice* result,
+  virtual Status Pread(const Fentry& fentry, Handle* fh, Slice* result,
                        uint64_t off, uint64_t size, char* scratch);
-  virtual Status Ftruncate(const Slice& fentry, Handle* fh, uint64_t size);
-  virtual Status Flush(const Slice& fentry, Handle* fh,
+  virtual Status Ftrunc(const Fentry& fentry, Handle* fh, uint64_t size);
+  virtual Status Flush(const Fentry& fentry, Handle* fh,
                        bool force_sync = false);
-  virtual Status Close(const Slice& fentry, Handle* fh);
+  virtual Status Close(const Fentry& fentry, Handle* fh);
 
-  virtual Status Truncate(const Slice& fentry, uint64_t size);
-  virtual Status Stat(const Slice& fentry, uint64_t* mtime, uint64_t* size);
-  virtual Status Drop(const Slice& fentry);
+  virtual Status Trunc(const Fentry& fentry, uint64_t size);
+  virtual Status Stat(const Fentry& fentry, uint64_t* mtime, uint64_t* size);
+  virtual Status Drop(const Fentry& fentry);
 
  private:
   // No copying allowed

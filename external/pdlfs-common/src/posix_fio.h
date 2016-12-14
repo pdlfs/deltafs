@@ -23,13 +23,13 @@
 namespace pdlfs {
 
 class PosixFio : public Fio {
-  static std::string ToFileName(const Slice& encoding) {
-    Slice key_prefix = Fentry::ExtractUntypedKeyPrefix(encoding);
+  static std::string ToFileName(const Fentry& fentry) {
+    std::string key_prefix = fentry.UntypedKeyPrefix();
     char tmp[200];
     sprintf(tmp, "F_");
     char* p = tmp + 2;
     for (size_t i = 0; i < key_prefix.size(); i++) {
-      sprintf(p, "%02X", (unsigned char)key_prefix[i]);
+      sprintf(p, "%02X", static_cast<unsigned char>(key_prefix[i]));
       p += 2;
     }
     return tmp;
@@ -41,9 +41,11 @@ class PosixFio : public Fio {
     root_ = root.ToString();
   }
 
-  virtual ~PosixFio() {}
+  virtual ~PosixFio() {
+    // Do nothing
+  }
 
-  virtual Status Creat(const Slice& fentry, Handle** fh) {
+  virtual Status Creat(const Fentry& fentry, Handle** fh) {
     Status s;
     std::string fname = root_ + "/";
     fname += ToFileName(fentry);
@@ -54,75 +56,47 @@ class PosixFio : public Fio {
       s = IOError(fname, errno);
     }
 
-#if VERBOSE >= 10
-    if (s.ok()) {
-      Slice encoding = fentry;
-      Fentry ent;
-      if (ent.DecodeFrom(&encoding)) {
-        Verbose(__LOG_ARGS__, 10, "posix_creat: [%llu:%llu:%llu] -> %s",
-                (unsigned long long)ent.stat.RegId(),
-                (unsigned long long)ent.stat.SnapId(),
-                (unsigned long long)ent.stat.InodeNo(), fname.c_str());
-      }
-    }
-#endif
-
     return s;
   }
 
-  virtual Status Open(const Slice& fentry, bool create_if_missing,
+  virtual Status Open(const Fentry& fentry, bool create_if_missing,
                       bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
                       Handle** fh) {
     Status s;
     std::string fname = root_ + "/";
     fname += ToFileName(fentry);
+
     int flags = O_RDWR;
-    if (truncate_if_exists) {
-      flags |= O_TRUNC;
-    }
-    if (create_if_missing) {
-      flags |= O_CREAT;
-    }
+    if (truncate_if_exists) flags |= O_TRUNC;
+    if (create_if_missing) flags |= O_CREAT;
+
     int fd = open(fname.c_str(), flags, DEFFILEMODE);
     if (fd != -1) {
-      struct stat buf;
-      int r = fstat(fd, &buf);
+      struct stat statbuf;
+      int r = fstat(fd, &statbuf);
       if (r == 0) {
         *fh = reinterpret_cast<Handle*>(fd);
-        *mtime = 1000ULL * 1000ULL * buf.st_mtime;
-        *size = buf.st_size;
-      } else {
-        s = IOError(fname, errno);
+        *mtime = 1000LLU * 1000LLU * statbuf.st_mtime;
+        *size = statbuf.st_size;
       }
-    } else {
-      s = IOError(fname, errno);
     }
 
-#if VERBOSE >= 10
-    if (s.ok()) {
-      Slice encoding = fentry;
-      Fentry ent;
-      if (ent.DecodeFrom(&encoding)) {
-        Verbose(__LOG_ARGS__, 10, "posix_open: [%llu:%llu:%llu] -> %s",
-                (unsigned long long)ent.stat.RegId(),
-                (unsigned long long)ent.stat.SnapId(),
-                (unsigned long long)ent.stat.InodeNo(), fname.c_str());
-      }
+    if (errno != 0) {
+      s = IOError(fname, errno);
     }
-#endif
 
     return s;
   }
 
-  virtual Status Fstat(const Slice& fentry, Handle* fh, uint64_t* mtime,
+  virtual Status Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
                        uint64_t* size, bool skip_cache = false) {
     Status s;
     int fd = reinterpret_cast<intptr_t>(fh);
-    struct stat buf;
-    int r = fstat(fd, &buf);
+    struct stat statbuf;
+    int r = fstat(fd, &statbuf);
     if (r == 0) {
-      *mtime = 1000ULL * 1000ULL * buf.st_mtime;
-      *size = buf.st_size;
+      *mtime = 1000LLU * 1000LLU * statbuf.st_mtime;
+      *size = statbuf.st_size;
     } else {
       std::string fname = root_ + "/";
       fname += ToFileName(fentry);
@@ -132,7 +106,7 @@ class PosixFio : public Fio {
     return s;
   }
 
-  virtual Status Write(const Slice& fentry, Handle* fh, const Slice& buf) {
+  virtual Status Write(const Fentry& fentry, Handle* fh, const Slice& buf) {
     Status s;
     int fd = reinterpret_cast<intptr_t>(fh);
     ssize_t n = write(fd, buf.data(), buf.size());
@@ -145,7 +119,7 @@ class PosixFio : public Fio {
     return s;
   }
 
-  virtual Status Pwrite(const Slice& fentry, Handle* fh, const Slice& buf,
+  virtual Status Pwrite(const Fentry& fentry, Handle* fh, const Slice& buf,
                         uint64_t off) {
     Status s;
     int fd = reinterpret_cast<intptr_t>(fh);
@@ -159,7 +133,7 @@ class PosixFio : public Fio {
     return s;
   }
 
-  virtual Status Read(const Slice& fentry, Handle* fh, Slice* result,
+  virtual Status Read(const Fentry& fentry, Handle* fh, Slice* result,
                       uint64_t size, char* scratch) {
     Status s;
     int fd = reinterpret_cast<intptr_t>(fh);
@@ -176,7 +150,7 @@ class PosixFio : public Fio {
     return s;
   }
 
-  virtual Status Pread(const Slice& fentry, Handle* fh, Slice* result,
+  virtual Status Pread(const Fentry& fentry, Handle* fh, Slice* result,
                        uint64_t off, uint64_t size, char* scratch) {
     Status s;
     int fd = reinterpret_cast<intptr_t>(fh);
@@ -193,7 +167,7 @@ class PosixFio : public Fio {
     return s;
   }
 
-  virtual Status Ftruncate(const Slice& fentry, Handle* fh, uint64_t size) {
+  virtual Status Ftrunc(const Fentry& fentry, Handle* fh, uint64_t size) {
     Status s;
     int fd = reinterpret_cast<intptr_t>(fh);
     int r = ftruncate(fd, size);
@@ -206,7 +180,7 @@ class PosixFio : public Fio {
     return s;
   }
 
-  virtual Status Flush(const Slice& fentry, Handle* fh,
+  virtual Status Flush(const Fentry& fentry, Handle* fh,
                        bool force_sync = false) {
     Status s;
     if (force_sync) {
@@ -222,12 +196,12 @@ class PosixFio : public Fio {
     return s;
   }
 
-  virtual Status Close(const Slice& fentry, Handle* fh) {
+  virtual Status Close(const Fentry& fentry, Handle* fh) {
     close(reinterpret_cast<intptr_t>(fh));
     return Status::OK();
   }
 
-  virtual Status Truncate(const Slice& fentry, uint64_t size) {
+  virtual Status Trunc(const Fentry& fentry, uint64_t size) {
     Status s;
     std::string fname = root_ + "/";
     fname += ToFileName(fentry);
@@ -239,22 +213,22 @@ class PosixFio : public Fio {
     }
   }
 
-  virtual Status Stat(const Slice& fentry, uint64_t* mtime, uint64_t* size) {
+  virtual Status Stat(const Fentry& fentry, uint64_t* mtime, uint64_t* size) {
     Status s;
     std::string fname = root_ + "/";
     fname += ToFileName(fentry);
-    struct stat buf;
-    int r = stat(fname.c_str(), &buf);
+    struct stat statbuf;
+    int r = stat(fname.c_str(), &statbuf);
     if (r != 0) {
       return IOError(fname, errno);
     } else {
-      *mtime = 1000ULL * 1000ULL * buf.st_mtime;
-      *size = buf.st_size;
+      *mtime = 1000LLU * 1000LLU * statbuf.st_mtime;
+      *size = statbuf.st_size;
       return s;
     }
   }
 
-  virtual Status Drop(const Slice& fentry) {
+  virtual Status Drop(const Fentry& fentry) {
     Status s;
     std::string fname = root_ + "/";
     fname += ToFileName(fentry);
