@@ -208,6 +208,7 @@ ssize_t deltafs_pread(int __fd, void* __buf, size_t __sz, off_t __off) {
       return NoClient();
     }
   }
+
   pdlfs::Slice result;
   pdlfs::Status s;
   s = client->Pread(__fd, &result, __off, __sz, (char*)__buf);
@@ -226,6 +227,7 @@ ssize_t deltafs_read(int __fd, void* __buf, size_t __sz) {
       return NoClient();
     }
   }
+
   pdlfs::Slice result;
   pdlfs::Status s;
   s = client->Read(__fd, &result, __sz, (char*)__buf);
@@ -244,6 +246,7 @@ ssize_t deltafs_pwrite(int __fd, const void* __buf, size_t __sz, off_t __off) {
       return NoClient();
     }
   }
+
   pdlfs::Status s;
   s = client->Pwrite(__fd, pdlfs::Slice((const char*)__buf, __sz), __off);
   if (s.ok()) {
@@ -261,6 +264,7 @@ ssize_t deltafs_write(int __fd, const void* __buf, size_t __sz) {
       return NoClient();
     }
   }
+
   pdlfs::Status s;
   s = client->Write(__fd, pdlfs::Slice((const char*)__buf, __sz));
   if (s.ok()) {
@@ -278,6 +282,7 @@ int deltafs_fstat(int __fd, struct stat* __buf) {
       return NoClient();
     }
   }
+
   pdlfs::Stat stat;
   pdlfs::Status s;
   s = client->Fstat(__fd, &stat);
@@ -297,6 +302,7 @@ int deltafs_ftruncate(int __fd, off_t __len) {
       return NoClient();
     }
   }
+
   pdlfs::Status s;
   s = client->Ftruncate(__fd, __len);
   if (s.ok()) {
@@ -314,8 +320,27 @@ int deltafs_fdatasync(int __fd) {
       return NoClient();
     }
   }
+
   pdlfs::Status s;
   s = client->Fdatasync(__fd);
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
+int deltafs_epoch_flush(int __fd, void* __arg) {
+  if (client == NULL) {
+    pdlfs::port::InitOnce(&once, InitClient);
+    if (client == NULL) {
+      return NoClient();
+    }
+  }
+
+  pdlfs::Status s;
+  s = client->Flush(__fd);
   if (s.ok()) {
     return 0;
   } else {
@@ -556,11 +581,6 @@ int deltafs_truncate(const char* __path, off_t __len) {
     SetErrno(s);
     return -1;
   }
-}
-
-// XXX: __arg is reserved for future usage
-int deltafs_epoch_flush(int __fd, void* __arg) {
-  return 0;  // TODO
 }
 
 // XXX: Not inlined so it has a name in *.so which can be dlopened by others

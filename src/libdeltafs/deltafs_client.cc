@@ -41,14 +41,15 @@ static inline Status BadDescriptor() {
 }
 
 class WritablePlfsDir : public Fio::Handle {
-  // No copying allowed
-  WritablePlfsDir(const WritablePlfsDir&);
-  void operator=(const WritablePlfsDir&);
-
   ~WritablePlfsDir() {
-    // writer->Finish() has been called
-    delete writer;
+    if (writer != NULL) {
+      delete writer;
+    }
   }
+
+  // No copying allowed
+  WritablePlfsDir& operator=(const WritablePlfsDir&);
+  WritablePlfsDir(const WritablePlfsDir&);
 
  public:
   explicit WritablePlfsDir() {}
@@ -583,14 +584,15 @@ Status Client::Fdatasync(int fd) {
   if (file == NULL) {
     return BadDescriptor();
   } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
-    if (S_ISDIR(ent.file_mode())) {
-      plfsio::Writer* writer;
-      writer = ToWritablePlfsDir(file->fh)->writer;
-      assert(writer != NULL);
-      return writer->Sync();
+    Status s;
+    if (!S_ISDIR(ent.file_mode())) {
+      s = FileAccessModeNotMatched();
     } else {
-      return Status::OK();
+      plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
+      assert(writer != NULL);
+      s = writer->Sync();
     }
+    return s;
   } else if (!S_ISREG(ent.file_mode())) {
     return Status::NotSupported(Slice());
   } else if (IsWriteOk(file)) {
@@ -688,14 +690,15 @@ Status Client::Flush(int fd) {
   if (file == NULL) {
     return BadDescriptor();
   } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
-    if (S_ISDIR(ent.file_mode())) {
-      plfsio::Writer* writer;
-      writer = ToWritablePlfsDir(file->fh)->writer;
-      assert(writer != NULL);
-      return writer->MakeEpoch();
+    Status s;
+    if (!S_ISDIR(ent.file_mode())) {
+      s = FileAccessModeNotMatched();
     } else {
-      return Status::OK();
+      plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
+      assert(writer != NULL);
+      s = writer->MakeEpoch();
     }
+    return s;
   } else if (!S_ISREG(ent.file_mode())) {
     return Status::NotSupported(Slice());
   } else if (IsWriteOk(file)) {
@@ -741,12 +744,9 @@ Status Client::Close(int fd) {
   } else {
     if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
       if (S_ISDIR(ent.file_mode())) {
-        plfsio::Writer* writer;
-        writer = ToWritablePlfsDir(file->fh)->writer;
+        plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
         assert(writer != NULL);
         writer->Finish();  // Ignore errors
-      } else {
-        // Do nothing
       }
     } else if (S_ISREG(ent.file_mode())) {
       while (file->seq_flush < file->seq_write) {
@@ -754,8 +754,6 @@ Status Client::Close(int fd) {
         Flush(fd);  // Ignore errors
         mutex_.Lock();
       }
-    } else {
-      // Do nothing
     }
 
     Free(fd);  // Release fd slot
