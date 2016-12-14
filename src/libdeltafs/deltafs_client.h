@@ -65,10 +65,6 @@ class Client {
   void operator=(const Client&);
   Client(const Client&);
 
-  // REQUIRES: mutex_ has been locked
-  Status InternalOpen(const Slice& p, int flags, mode_t mode, const Fentry* at,
-                      FileInfo* result);
-
   // State for each opened file
   struct File {
     size_t encoding_length;
@@ -86,6 +82,18 @@ class Client {
     }
   };
 
+  struct FileAndEntry {
+    const Fentry* ent;
+    File* file;
+  };
+  // REQUIRES: mutex_ has been locked
+  Status InternalOpen(const Slice& p, int flags, mode_t mode, FileAndEntry* at,
+                      FileInfo* result);
+  // REQUIRES: mutex_ has been locked
+  Status InternalFdatasync(File* file, const Fentry& ent);
+  // REQUIRES: mutex_ has been locked
+  Status InternalFlush(File* file, const Fentry& ent);
+
   // State below is protected by mutex_
   port::Mutex mutex_;
   mode_t MaskMode(mode_t mode);
@@ -101,7 +109,7 @@ class Client {
   size_t Open(const Slice& encoding, int flags, Fio::Handle*);
   bool IsWriteOk(const File*);
   bool IsReadOk(const File*);
-  void Unref(File*);
+  void Unref(File*, const Fentry&);
   File dummy_;  // File table as a doubly linked list
   File** fds_;  // File descriptor table
   size_t num_open_fds_;

@@ -72,6 +72,7 @@ class WriterImpl : public Writer {
   virtual ~WriterImpl();
 
   virtual Status Append(const Slice& fname, const Slice& data);
+  virtual Status Sync();
   virtual Status MakeEpoch();
   virtual Status Finish();
 
@@ -202,6 +203,11 @@ Status WriterImpl::Append(const Slice& fname, const Slice& data) {
     MaybeSlowdown();
   }
   return status;
+}
+
+Status WriterImpl::Sync() {
+  // TODO
+  return Status::NotSupported(Slice());
 }
 
 Writer::~Writer() {}

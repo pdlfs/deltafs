@@ -115,6 +115,7 @@ class Writer {
   // Append a chuck of data to a specified file under this directory.
   virtual Status Append(const Slice& fname, const Slice& data) = 0;
 
+  virtual Status Sync() = 0;
   virtual Status MakeEpoch() = 0;
   virtual Status Finish() = 0;
 

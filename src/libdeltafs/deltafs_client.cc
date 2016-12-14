@@ -14,6 +14,7 @@
 
 #include "deltafs_client.h"
 #include "deltafs_conf_loader.h"
+#include "deltafs_plfsio.h"
 #include "pdlfs-common/blkdb.h"
 #include "pdlfs-common/lazy_env.h"
 #include "pdlfs-common/mutexlock.h"
@@ -37,6 +38,36 @@ static inline Status FileAccessModeNotMatched() {
 
 static inline Status BadDescriptor() {
   return Status::InvalidFileDescriptor(Slice());
+}
+
+class WritablePlfsDir : public Fio::Handle {
+  // No copying allowed
+  WritablePlfsDir(const WritablePlfsDir&);
+  void operator=(const WritablePlfsDir&);
+
+  ~WritablePlfsDir() {
+    // writer->Finish() has been called
+    delete writer;
+  }
+
+ public:
+  explicit WritablePlfsDir() {}
+  plfsio::Writer* writer;
+  int refs;
+
+  void Unref() {
+    assert(refs > 0);
+    refs--;
+    if (refs == 0) {
+      delete this;
+    }
+  }
+};
+
+static inline WritablePlfsDir* ToWritablePlfsDir(Fio::Handle* fh) {
+  WritablePlfsDir* dir = static_cast<WritablePlfsDir*>(fh);
+  assert(dir != NULL);
+  return dir;
 }
 
 Client::Client(size_t max_open_files) {
@@ -86,6 +117,7 @@ Client::File* Client::Free(size_t index) {
 // REQUIRES: less than "max_open_files_" files have been opened.
 // REQUIRES: mutex_ has been locked.
 size_t Client::Open(const Slice& encoding, int flags, Fio::Handle* fh) {
+  assert(encoding.size() != 0);
   File* file = static_cast<File*>(malloc(sizeof(File) + encoding.size() - 1));
   memcpy(file->encoding_data, encoding.data(), encoding.size());
   file->encoding_length = encoding.size();
@@ -102,16 +134,24 @@ size_t Client::Open(const Slice& encoding, int flags, Fio::Handle* fh) {
 }
 
 // REQUIRES: mutex_ has been locked.
-void Client::Unref(File* f) {
+void Client::Unref(File* f, const Fentry& ent) {
   assert(f->refs > 0);
   f->refs--;
   if (f->refs == 0) {
     f->next->prev = f->prev;
     f->prev->next = f->next;
-    mutex_.Unlock();
-    fio_->Close(f->fentry_encoding(), f->fh);
+    if (!DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+      if (S_ISREG(ent.file_mode())) {
+        fio_->Close(f->fentry_encoding(), f->fh);
+      } else {
+        assert(f->fh == NULL);
+      }
+    } else if (IsWriteOk(f)) {
+      ToWritablePlfsDir(f->fh)->Unref();
+    } else {
+      // TODO
+    }
     free(f);
-    mutex_.Lock();
   }
 }
 
@@ -165,7 +205,7 @@ Status Client::ExpandPath(Slice* path, std::string* scratch) {
 // Apply the current mask set by umask.
 mode_t Client::MaskMode(mode_t mode) {
   mode_t mask = reinterpret_cast<intptr_t>(mask_.Acquire_Load());
-  return ~mask & mode;
+  return (~mask) & mode;
 }
 
 // Open a file or a directory below a specific directory.
@@ -179,9 +219,12 @@ Status Client::Fopenat(int fd, const Slice& path, int flags, mode_t mode,
   if (file == NULL) {
     s = BadDescriptor();
   } else if (num_open_fds_ < max_open_fds_) {
+    FileAndEntry at;
+    at.file = file;
+    at.ent = &ent;
     std::string p = "/";
     p += path.ToString();
-    s = InternalOpen(p, flags, mode, &ent, info);
+    s = InternalOpen(p, flags, mode, &at, info);
   } else {
     s = Status::TooManyOpens(Slice());
   }
@@ -240,7 +283,7 @@ Status Client::Fopen(const Slice& path, int flags, mode_t mode,
 // be specified.
 // REQUIRES: mutex_ has been locked.
 Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
-                            const Fentry* at, FileInfo* info) {
+                            FileAndEntry* at, FileInfo* info) {
   Status s;
   mutex_.Unlock();
   Fentry ent;
@@ -248,9 +291,9 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
   mode_t my_file_mode = 0;
   if ((flags & O_CREAT) == O_CREAT) {
     mode = MaskMode(mode);
-    s = mdscli_->Fcreat(path, mode, &ent, (flags & O_EXCL) == O_EXCL, at);
+    s = mdscli_->Fcreat(path, mode, &ent, (flags & O_EXCL) == O_EXCL, at->ent);
   } else {
-    s = mdscli_->Fstat(path, &ent, at);
+    s = mdscli_->Fstat(path, &ent, at->ent);
   }
 
   // Verify file modes
@@ -291,12 +334,12 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
 #if VERBOSE >= OP_VERY_VERBOSE_LEVEL
   if (s.ok()) {
     Verbose(__LOG_ARGS__, OP_VERY_VERBOSE_LEVEL, "%s (at pid=%s) %s -> %s",
-            __func__, at != NULL ? at->DebugString().c_str()
+            __func__, at != NULL ? at->ent->DebugString().c_str()
                                  : DirId(0, 0, 0).DebugString().c_str(),
             path.c_str(), ent.DebugString().c_str());
   } else {
     Verbose(__LOG_ARGS__, OP_VERY_VERBOSE_LEVEL, "%s (at pid=%s) %s: %s",
-            __func__, at != NULL ? at->DebugString().c_str()
+            __func__, at != NULL ? at->ent->DebugString().c_str()
                                  : DirId(0, 0, 0).DebugString().c_str(),
             path.c_str(), STATUS_STR(s));
   }
@@ -335,25 +378,49 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
       }
     } else {
       if (S_ISDIR(my_file_mode)) {
-        // TODO
-      } else {
-        // TODO
+        WritablePlfsDir* d = new WritablePlfsDir;
+        d->writer = NULL;
+        d->refs = 0;
+
+        fh = d;
+      } else if (at != NULL) {
+        if (DELTAFS_DIR_IS_PLFS_STYLE(at->ent->file_mode())) {
+          assert(at->file->fh != NULL);
+          fh = at->file->fh;
+        }
+      }
+
+      if (fh == NULL) {
+        s = Status::InvalidArgument(Slice());
       }
     }
   }
 
   mutex_.Lock();
+
+  if (s.ok()) {
+    if (DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode)) {
+      ToWritablePlfsDir(fh)->refs++;
+    }
+  }
+
   if (s.ok()) {
     if (num_open_fds_ >= max_open_fds_) {
       s = Status::TooManyOpens(Slice());
       if (fh != NULL) {
-        fio_->Close(encoding, fh);
+        if (!DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode)) {
+          fio_->Close(encoding, fh);
+        } else if ((flags & O_ACCMODE) == O_WRONLY) {
+          ToWritablePlfsDir(fh)->Unref();
+        } else {
+          // TODO
+        }
       }
     } else {
       ent.stat.SetFileSize(size);
       ent.stat.SetModifyTime(mtime);
 
-      info->fd = Open(encoding, flags, fh);
+      info->fd = Open(encoding, flags, fh);  // fh could be NULL
       info->stat = ent.stat;
     }
   }
@@ -400,23 +467,23 @@ Status Client::Fstat(int fd, Stat* statbuf) {
     return BadDescriptor();
   } else {
     Status s;
-    assert(file->fh != NULL);
     file->refs++;  // Ref
     uint64_t mtime = 0;
     uint64_t size = 0;
-    if (S_ISREG(ent.file_mode())) {
-      mutex_.Unlock();
-      s = fio_->Fstat(file->fentry_encoding(), file->fh, &mtime, &size);
-      mutex_.Lock();
-    } else {
-      // FIXME
+    if (!DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+      if (S_ISREG(ent.file_mode())) {
+        mutex_.Unlock();
+        s = fio_->Fstat(file->fentry_encoding(), file->fh, &mtime, &size);
+        mutex_.Lock();
+      }
     }
     if (s.ok()) {
+      ent.stat.SetChangeTime(0);
       ent.stat.SetModifyTime(mtime);
       ent.stat.SetFileSize(size);
       *statbuf = ent.stat;
     }
-    Unref(file);
+    Unref(file, ent);
     return s;
   }
 }
@@ -427,27 +494,27 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
   File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
-  } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
-    if (!S_ISDIR(ent.file_mode())) {
-      // TODO: write into a file under a pdlfs dir
-    }
-
-    return FileAccessModeNotMatched();
-  } else if (S_ISDIR(ent.file_mode())) {
+  } else if (!S_ISREG(ent.file_mode())) {
     return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
     return FileAccessModeNotMatched();
   } else {
     Status s;
-    assert(file->fh != NULL);
     file->refs++;  // Ref
     mutex_.Unlock();
-    s = fio_->Pwrite(file->fentry_encoding(), file->fh, data, off);
+    if (!DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+      s = fio_->Pwrite(file->fentry_encoding(), file->fh, data, off);
+    } else {
+      plfsio::Writer* writer;
+      writer = ToWritablePlfsDir(file->fh)->writer;
+      assert(writer != NULL);
+      s = writer->Append(ent.nhash, data);
+    }
     mutex_.Lock();
     if (s.ok()) {
       file->seq_write++;
     }
-    Unref(file);
+    Unref(file, ent);
     return s;
   }
 }
@@ -458,27 +525,27 @@ Status Client::Write(int fd, const Slice& data) {
   File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
-  } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
-    if (!S_ISDIR(ent.file_mode())) {
-      // TODO: write into a file under a pdlfs dir
-    }
-
-    return FileAccessModeNotMatched();
-  } else if (S_ISDIR(ent.file_mode())) {
+  } else if (!S_ISREG(ent.file_mode())) {
     return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
     return FileAccessModeNotMatched();
   } else {
     Status s;
-    assert(file->fh != NULL);
     file->refs++;  // Ref
     mutex_.Unlock();
-    s = fio_->Write(file->fentry_encoding(), file->fh, data);
+    if (!DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+      s = fio_->Write(file->fentry_encoding(), file->fh, data);
+    } else {
+      plfsio::Writer* writer;
+      writer = ToWritablePlfsDir(file->fh)->writer;
+      assert(writer != NULL);
+      s = writer->Append(ent.nhash, data);
+    }
     mutex_.Lock();
     if (s.ok()) {
       file->seq_write++;
     }
-    Unref(file);
+    Unref(file, ent);
     return s;
   }
 }
@@ -491,13 +558,12 @@ Status Client::Ftruncate(int fd, uint64_t len) {
     return BadDescriptor();
   } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
     return FileAccessModeNotMatched();
-  } else if (S_ISDIR(ent.file_mode())) {
+  } else if (!S_ISREG(ent.file_mode())) {
     return FileAccessModeNotMatched();
   } else if (!IsWriteOk(file)) {
     return FileAccessModeNotMatched();
   } else {
     Status s;
-    assert(file->fh != NULL);
     file->refs++;  // Ref
     mutex_.Unlock();
     s = fio_->Ftruncate(file->fentry_encoding(), file->fh, len);
@@ -505,57 +571,60 @@ Status Client::Ftruncate(int fd, uint64_t len) {
     if (s.ok()) {
       file->seq_write++;
     }
-    Unref(file);
+    Unref(file, ent);
     return s;
   }
 }
 
 Status Client::Fdatasync(int fd) {
-  Status s;
   MutexLock ml(&mutex_);
   Fentry ent;
   File* file = FetchFile(fd, &ent);
   if (file == NULL) {
-    s = BadDescriptor();
+    return BadDescriptor();
   } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
-    s = Status::NotSupported(Slice());  // FIXME
+    if (S_ISDIR(ent.file_mode())) {
+      plfsio::Writer* writer;
+      writer = ToWritablePlfsDir(file->fh)->writer;
+      assert(writer != NULL);
+      return writer->Sync();
+    } else {
+      return Status::OK();
+    }
+  } else if (!S_ISREG(ent.file_mode())) {
+    return Status::NotSupported(Slice());
+  } else if (IsWriteOk(file)) {
+    return InternalFdatasync(file, ent);
+  } else {
+    return Status::OK();
+  }
+}
 
-  } else if (S_ISDIR(ent.file_mode())) {
-    s = Status::NotSupported(Slice());  // FIXME
-
-  } else if ((file->flags & O_ACCMODE) != O_RDONLY) {
-    assert(file->fh != NULL);
-    uint32_t seq_write = file->seq_write;
-    uint32_t seq_flush = file->seq_flush;
-    file->refs++;  // Ref
-    mutex_.Unlock();
-    s = fio_->Flush(file->fentry_encoding(), file->fh, true /*force*/);
-    if (s.ok() && seq_flush < seq_write) {
-      uint64_t mtime;
-      uint64_t size;
+Status Client::InternalFdatasync(File* file, const Fentry& ent) {
+  Status s;
+  uint64_t mtime;
+  uint64_t size;
+  uint32_t seq_write = file->seq_write;
+  uint32_t seq_flush = file->seq_flush;
+  file->refs++;  // Ref
+  mutex_.Unlock();
+  s = fio_->Flush(file->fentry_encoding(), file->fh, true /*force*/);
+  if (s.ok()) {
+    if (seq_flush < seq_write) {
       s = fio_->Fstat(file->fentry_encoding(), file->fh, &mtime, &size,
                       true /*skip_cache*/);
       if (s.ok()) {
-        Fentry fentry;
-        Slice encoding = file->fentry_encoding();
-        if (fentry.DecodeFrom(&encoding)) {
-          s = mdscli_->Ftruncate(fentry, mtime, size);
-        } else {
-          s = Status::Corruption(Slice());
-        }
+        s = mdscli_->Ftruncate(ent, mtime, size);
       }
     }
-    mutex_.Lock();
-    if (s.ok()) {
-      if (seq_write > file->seq_flush) {
-        file->seq_flush = seq_write;
-      }
-    }
-    Unref(file);
-  } else {
-    // Nothing to sync
   }
-
+  mutex_.Lock();
+  if (s.ok()) {
+    if (seq_write > file->seq_flush) {
+      file->seq_flush = seq_write;
+    }
+  }
+  Unref(file, ent);
   return s;
 }
 
@@ -566,25 +635,22 @@ Status Client::Pread(int fd, Slice* result, uint64_t off, uint64_t size,
   File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
-  } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
-    if (!S_ISDIR(ent.file_mode())) {
-      // TODO: read a file from a plfs dir
-    }
-
-    return FileAccessModeNotMatched();
-  } else if (S_ISDIR(ent.file_mode())) {
+  } else if (!S_ISREG(ent.file_mode())) {
     return FileAccessModeNotMatched();
   } else if (!IsReadOk(file)) {
     return FileAccessModeNotMatched();
   } else {
     Status s;
-    assert(file->fh != NULL);
     file->refs++;  // Ref
     mutex_.Unlock();
-    Slice e = file->fentry_encoding();
-    s = fio_->Pread(e, file->fh, result, off, size, scratch);
+    if (!DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+      Slice encoding = file->fentry_encoding();
+      s = fio_->Pread(encoding, file->fh, result, off, size, scratch);
+    } else {
+      // TODO
+    }
     mutex_.Lock();
-    Unref(file);
+    Unref(file, ent);
     return s;
   }
 }
@@ -595,83 +661,78 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
   File* file = FetchFile(fd, &ent);
   if (file == NULL) {
     return BadDescriptor();
-  } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
-    if (!S_ISDIR(ent.file_mode())) {
-      // TODO: read a file from a plfs dir
-    }
-
-    return FileAccessModeNotMatched();
-  } else if (S_ISDIR(ent.file_mode())) {
+  } else if (!S_ISREG(ent.file_mode())) {
     return FileAccessModeNotMatched();
   } else if (!IsReadOk(file)) {
     return FileAccessModeNotMatched();
   } else {
     Status s;
-    assert(file->fh != NULL);
     file->refs++;  // Ref
     mutex_.Unlock();
-    Slice e = file->fentry_encoding();
-    s = fio_->Read(e, file->fh, result, size, scratch);
+    if (!DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
+      Slice encoding = file->fentry_encoding();
+      s = fio_->Read(encoding, file->fh, result, size, scratch);
+    } else {
+      // TODO
+    }
     mutex_.Lock();
-    Unref(file);
+    Unref(file, ent);
     return s;
   }
 }
 
 Status Client::Flush(int fd) {
-  Status s;
   MutexLock ml(&mutex_);
   Fentry ent;
   File* file = FetchFile(fd, &ent);
   if (file == NULL) {
-    s = BadDescriptor();
+    return BadDescriptor();
   } else if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
     if (S_ISDIR(ent.file_mode())) {
-      // TODO: force the generation of a new epoch
+      plfsio::Writer* writer;
+      writer = ToWritablePlfsDir(file->fh)->writer;
+      assert(writer != NULL);
+      return writer->MakeEpoch();
     } else {
-      // Ignore it
+      return Status::OK();
     }
+  } else if (!S_ISREG(ent.file_mode())) {
+    return Status::NotSupported(Slice());
+  } else if (IsWriteOk(file)) {
+    return InternalFlush(file, ent);
+  } else {
+    return Status::OK();
+  }
+}
 
-  } else if (S_ISDIR(ent.file_mode())) {
-    // Nothing to flush
-
-  } else if ((file->flags & O_ACCMODE) != O_RDONLY) {
-    assert(file->fh != NULL);
-    uint32_t seq_write = file->seq_write;
-    uint32_t seq_flush = file->seq_flush;
-    file->refs++;  // Ref
-    mutex_.Unlock();
-    s = fio_->Flush(file->fentry_encoding(), file->fh);
-    if (s.ok() && seq_flush < seq_write) {
-      uint64_t mtime;
-      uint64_t size;
+Status Client::InternalFlush(File* file, const Fentry& ent) {
+  Status s;
+  uint64_t mtime;
+  uint64_t size;
+  uint32_t seq_write = file->seq_write;
+  uint32_t seq_flush = file->seq_flush;
+  file->refs++;  // Ref
+  mutex_.Unlock();
+  s = fio_->Flush(file->fentry_encoding(), file->fh);
+  if (s.ok()) {
+    if (seq_flush < seq_write) {
       s = fio_->Fstat(file->fentry_encoding(), file->fh, &mtime, &size);
       if (s.ok()) {
-        Fentry fentry;
-        Slice encoding = file->fentry_encoding();
-        if (fentry.DecodeFrom(&encoding)) {
-          s = mdscli_->Ftruncate(fentry, mtime, size);
-        } else {
-          s = Status::Corruption(Slice());
-        }
+        s = mdscli_->Ftruncate(ent, mtime, size);
       }
     }
-    mutex_.Lock();
-    if (s.ok()) {
-      if (seq_write > file->seq_flush) {
-        file->seq_flush = seq_write;
-      }
-    }
-    Unref(file);
-  } else {
-    // Nothing to flush
   }
-
+  mutex_.Lock();
+  if (s.ok()) {
+    if (seq_write > file->seq_flush) {
+      file->seq_flush = seq_write;
+    }
+  }
+  Unref(file, ent);
   return s;
 }
 
 Status Client::Close(int fd) {
-  Status s;
   MutexLock ml(&mutex_);
   Fentry ent;
   File* file = FetchFile(fd, &ent);
@@ -680,11 +741,13 @@ Status Client::Close(int fd) {
   } else {
     if (DELTAFS_DIR_IS_PLFS_STYLE(ent.file_mode())) {
       if (S_ISDIR(ent.file_mode())) {
-        // XXX: TODO
+        plfsio::Writer* writer;
+        writer = ToWritablePlfsDir(file->fh)->writer;
+        assert(writer != NULL);
+        writer->Finish();  // Ignore errors
       } else {
         // Do nothing
       }
-
     } else if (S_ISREG(ent.file_mode())) {
       while (file->seq_flush < file->seq_write) {
         mutex_.Unlock();
@@ -697,10 +760,9 @@ Status Client::Close(int fd) {
 
     Free(fd);  // Release fd slot
 
-    Unref(file);
+    Unref(file, ent);
+    return Status::OK();
   }
-
-  return s;
 }
 
 Status Client::Access(const Slice& path, int mode) {
