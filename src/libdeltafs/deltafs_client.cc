@@ -507,12 +507,13 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
     Status s;
     file->refs++;  // Ref
     mutex_.Unlock();
-    if (!DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
-      s = fio_->Pwrite(fentry, file->fh, data, off);
-    } else {
+    if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
+      // XXX: All writes are considered an append operation
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       s = writer->Append(fentry.nhash, data);
+    } else {
+      s = fio_->Pwrite(fentry, file->fh, data, off);
     }
     mutex_.Lock();
     if (s.ok()) {
@@ -537,12 +538,13 @@ Status Client::Write(int fd, const Slice& data) {
     Status s;
     file->refs++;  // Ref
     mutex_.Unlock();
-    if (!DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
-      s = fio_->Write(fentry, file->fh, data);
-    } else {
+    if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
+      // XXX: All writes are considered an append operation
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       s = writer->Append(fentry.nhash, data);
+    } else {
+      s = fio_->Write(fentry, file->fh, data);
     }
     mutex_.Lock();
     if (s.ok()) {
@@ -579,6 +581,10 @@ Status Client::Ftruncate(int fd, uint64_t len) {
   }
 }
 
+// If fd refers to a plfs directory, we do a forced sync.
+// If fd refers to a plfs file under a plfs directory, we return error.
+// If fd refers to a normal file, we sync its data and update its metadata.
+// If fd refers to a normal directory, we don't yet have that logic.
 Status Client::Fdatasync(int fd) {
   MutexLock ml(&mutex_);
   Fentry fentry;
@@ -587,12 +593,12 @@ Status Client::Fdatasync(int fd) {
     return BadDescriptor();
   } else if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
     Status s;
-    if (!S_ISDIR(fentry.file_mode())) {
-      s = FileAccessModeNotMatched();
-    } else {
+    if (S_ISDIR(fentry.file_mode())) {
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       s = writer->Sync();
+    } else {
+      s = FileAccessModeNotMatched();
     }
     return s;
   } else if (!S_ISREG(fentry.file_mode())) {
@@ -682,6 +688,10 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
   }
 }
 
+// If fd refers to a plfs directory, we do flush epoch.
+// If fd refers to a plfs file under a plfs directory, we return error.
+// If fd refers to a normal file, we flush its data and update its metadata.
+// If fd refers to a normal directory, we don't yet have that logic.
 Status Client::Flush(int fd) {
   MutexLock ml(&mutex_);
   Fentry fentry;
@@ -690,12 +700,12 @@ Status Client::Flush(int fd) {
     return BadDescriptor();
   } else if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
     Status s;
-    if (!S_ISDIR(fentry.file_mode())) {
-      s = FileAccessModeNotMatched();
-    } else {
+    if (S_ISDIR(fentry.file_mode())) {
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       s = writer->MakeEpoch();
+    } else {
+      s = FileAccessModeNotMatched();
     }
     return s;
   } else if (!S_ISREG(fentry.file_mode())) {
@@ -742,16 +752,19 @@ Status Client::Close(int fd) {
     return BadDescriptor();
   } else {
     if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
+      // Ignore write and flush sequences
+      plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
+      assert(writer != NULL);
       if (S_ISDIR(fentry.file_mode())) {
-        plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
-        assert(writer != NULL);
         writer->Finish();  // Ignore errors
       }
-    } else if (S_ISREG(fentry.file_mode())) {
-      while (file->seq_flush < file->seq_write) {
-        mutex_.Unlock();
-        Flush(fd);  // Ignore errors
-        mutex_.Lock();
+    } else {
+      if (S_ISREG(fentry.file_mode())) {
+        while (file->seq_flush < file->seq_write) {
+          mutex_.Unlock();
+          Flush(fd);  // Ignore errors
+          mutex_.Lock();
+        }
       }
     }
 
