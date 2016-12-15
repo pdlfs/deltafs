@@ -43,10 +43,10 @@ class Fio {
   struct Handle {};
   virtual ~Fio();
 
-  virtual Status Creat(const Fentry& fentry, Handle** fh) = 0;
+  virtual Status Creat(const Fentry& fentry, bool append_only, Handle** fh) = 0;
   virtual Status Open(const Fentry& fentry, bool create_if_missing,
-                      bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
-                      Handle** fh) = 0;
+                      bool truncate_if_exists, bool append_only,
+                      uint64_t* mtime, uint64_t* size, Handle** fh) = 0;
   virtual Status Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
                        uint64_t* size, bool skip_cache = false) = 0;
   virtual Status Write(const Fentry& fentry, Handle* fh, const Slice& data) = 0;

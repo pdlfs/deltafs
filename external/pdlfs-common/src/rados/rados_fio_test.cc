@@ -59,8 +59,8 @@ class RadosFioTest {
     uint64_t ignored_mtime;
     uint64_t ignored_size;
     Fio::Handle* fh;
-    Status s =
-        fio_->Open(fentry, ocreat, otrunc, &ignored_mtime, &ignored_size, &fh);
+    Status s = fio_->Open(fentry, ocreat, otrunc, false, &ignored_mtime,
+                          &ignored_size, &fh);
     if (!s.ok()) {
       return NULL;
     } else {

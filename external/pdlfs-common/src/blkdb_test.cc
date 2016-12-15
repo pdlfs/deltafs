@@ -57,8 +57,8 @@ class BlkDBTest {
     uint64_t ignored_mtime;
     uint64_t ignored_size;
     Fio::Handle* fh;
-    Status s =
-        blk_->Open(fentry, ocreat, false, &ignored_mtime, &ignored_size, &fh);
+    Status s = blk_->Open(fentry, ocreat, false, false, &ignored_mtime,
+                          &ignored_size, &fh);
     if (!s.ok()) {
       return NULL;
     } else {

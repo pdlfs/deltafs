@@ -18,7 +18,7 @@ namespace pdlfs {
 
 // Each file is regarded as a stream of variable-size data blocks with
 // each block having an offset, a size, and an extent of file data.
-struct Stream {
+struct Stream : public Fio::Handle {
   Stream() {}
   uint64_t mtime;
   uint64_t size;
@@ -59,27 +59,26 @@ class BlkDB : public Fio {
   BlkDB(const BlkDBOptions&);
   virtual ~BlkDB();
 
-  virtual Status Creat(const Fentry& fentry, Handle** fh);
-  virtual Status Open(const Fentry& fentry, bool create_if_missing,
-                      bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
-                      Handle** fh);
-  virtual Status Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
-                       uint64_t* size, bool skip_cache = false);
-  virtual Status Write(const Fentry& fentry, Handle* fh, const Slice& data);
-  virtual Status Pwrite(const Fentry& fentry, Handle* fh, const Slice& data,
-                        uint64_t off);
-  virtual Status Read(const Fentry& fentry, Handle* fh, Slice* result,
-                      uint64_t size, char* scratch);
-  virtual Status Pread(const Fentry& fentry, Handle* fh, Slice* result,
-                       uint64_t off, uint64_t size, char* scratch);
-  virtual Status Ftrunc(const Fentry& fentry, Handle* fh, uint64_t size);
-  virtual Status Flush(const Fentry& fentry, Handle* fh,
-                       bool force_sync = false);
-  virtual Status Close(const Fentry& fentry, Handle* fh);
+  virtual Status Creat(const Fentry&, bool o_append, Handle**);
+  virtual Status Open(const Fentry&, bool o_creat, bool o_trunc, bool o_append,
+                      uint64_t* mtime, uint64_t* size, Handle**);
+  virtual Status Fstat(const Fentry&, Handle*, uint64_t* mtime, uint64_t* size,
+                       bool skip_cache = false);
 
-  virtual Status Trunc(const Fentry& fentry, uint64_t size);
-  virtual Status Stat(const Fentry& fentry, uint64_t* mtime, uint64_t* size);
-  virtual Status Drop(const Fentry& fentry);
+  virtual Status Write(const Fentry&, Handle*, const Slice& data);
+  virtual Status Pwrite(const Fentry&, Handle*, const Slice& data,
+                        uint64_t off);
+  virtual Status Read(const Fentry&, Handle*, Slice* result, uint64_t size,
+                      char* scratch);
+  virtual Status Pread(const Fentry&, Handle*, Slice* result, uint64_t off,
+                       uint64_t size, char* scratch);
+  virtual Status Ftrunc(const Fentry&, Handle*, uint64_t size);
+  virtual Status Flush(const Fentry&, Handle*, bool force_sync = false);
+  virtual Status Close(const Fentry&, Handle*);
+
+  virtual Status Trunc(const Fentry&, uint64_t size);
+  virtual Status Stat(const Fentry&, uint64_t* mtime, uint64_t* size);
+  virtual Status Drop(const Fentry&);
 
  private:
   // No copying allowed

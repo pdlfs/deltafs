@@ -21,8 +21,9 @@ namespace rados {
 class RadosFio;
 
 // State of each opened file object
-class RadosFobj {
+class RadosFobj : public Fio::Handle {
  public:
+  ~RadosFobj() {}
   RadosFobj(RadosFio* fio) : fio(fio), fctx(NULL) {}
   RadosFio* fio;
   rados_ioctx_t fctx;
@@ -31,6 +32,7 @@ class RadosFobj {
   uint64_t size;   // Cached file size
   uint64_t off;    // Current read/write position
 
+  bool append_only;
   int bg_err;
   int refs;
 };
@@ -38,10 +40,11 @@ class RadosFobj {
 class RadosFio : public Fio {
  public:
   virtual ~RadosFio();
-  virtual Status Creat(const Fentry& fentry, Handle** fh);
+
+  virtual Status Creat(const Fentry& fentry, bool append_only, Handle** fh);
   virtual Status Open(const Fentry& fentry, bool create_if_missing,
-                      bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
-                      Handle** fh);
+                      bool truncate_if_exists, bool append_only,
+                      uint64_t* mtime, uint64_t* size, Handle** fh);
   virtual Status Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
                        uint64_t* size, bool skip_cache = false);
   virtual Status Write(const Fentry& fentry, Handle* fh, const Slice& data);

@@ -16,14 +16,14 @@ namespace pdlfs {
 namespace rados {
 
 static std::string ToOid(const Fentry& fentry) {
-  std::string key_prefix = fentry.UntypedKeyPrefix();
   char tmp[200];
-  sprintf(tmp, "o_");
-  char* p = tmp + 2;
+  char* p = tmp;
+  std::string key_prefix = fentry.UntypedKeyPrefix();
   for (size_t i = 0; i < key_prefix.size(); i++) {
     sprintf(p, "%02x", static_cast<unsigned char>(key_prefix[i]));
     p += 2;
   }
+  sprintf(p, ".fobj");
   return tmp;
 }
 
@@ -60,7 +60,7 @@ void RadosFio::Unref(RadosFobj* fobj) {
   }
 }
 
-Status RadosFio::Creat(const Fentry& fentry, Handle** fh) {
+Status RadosFio::Creat(const Fentry& fentry, bool append_only, Handle** fh) {
   Status s;
   std::string oid = ToOid(fentry);
   rados_ioctx_t fctx;
@@ -72,9 +72,10 @@ Status RadosFio::Creat(const Fentry& fentry, Handle** fh) {
   if (s.ok()) {
     RadosFobj* fobj = new RadosFobj(this);
     fobj->fctx = fctx;
-    fobj->refs = 2;  // One for the handle, one for the next async op
+    fobj->refs = 2;  // One for the returned handle, one for the op
     fobj->mtime = Env::Default()->NowMicros();
     fobj->size = 0;
+    fobj->append_only = append_only;
     fobj->bg_err = 0;
     fobj->off = 0;
 
@@ -83,15 +84,15 @@ Status RadosFio::Creat(const Fentry& fentry, Handle** fh) {
     rados_aio_write_full(fctx, oid.c_str(), comp, "", 0);
     rados_aio_release(comp);
 
-    *fh = reinterpret_cast<Handle*>(fobj);
+    *fh = fobj;
   }
 
   return s;
 }
 
 Status RadosFio::Open(const Fentry& fentry, bool create_if_missing,
-                      bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
-                      Handle** fh) {
+                      bool truncate_if_exists, bool append_only,
+                      uint64_t* mtime, uint64_t* size, Handle** fh) {
   Status s;
   std::string oid = ToOid(fentry);
   uint64_t obj_size;
@@ -101,20 +102,22 @@ Status RadosFio::Open(const Fentry& fentry, bool create_if_missing,
     s = RadosError("rados_stat", r);
   }
 
-  bool need_trunc = false;  // If an explicit truncate operation is needed
+  //  If an explicit truncate operation is needed
+  bool neee_trunc = false;  // Also used to create missing objects
+
   if (s.ok()) {
     if (obj_size != 0 && truncate_if_exists) {
-      obj_mtime = time(NULL);
-      obj_size = 0;
-      need_trunc = true;
+      neee_trunc = true;
     }
   } else if (s.IsNotFound()) {
     if (create_if_missing) {
-      s = Status::OK();
-      obj_mtime = time(NULL);
-      obj_size = 0;
-      need_trunc = true;
+      neee_trunc = true;
     }
+  }
+
+  if (neee_trunc) {
+    obj_mtime = time(NULL);
+    obj_size = 0;
   }
 
   rados_ioctx_t fctx;
@@ -128,22 +131,24 @@ Status RadosFio::Open(const Fentry& fentry, bool create_if_missing,
   if (s.ok()) {
     RadosFobj* fobj = new RadosFobj(this);
     fobj->fctx = fctx;
-    fobj->refs = need_trunc ? 2 : 1;
-    fobj->mtime = 1000ULL * 1000ULL * obj_mtime;
+    fobj->refs = neee_trunc ? 2 : 1;  // One for the handle, one for the op
+    fobj->mtime = 1000LLU * 1000LLU * obj_mtime;
     fobj->size = obj_size;
+    fobj->append_only = append_only;
     fobj->bg_err = 0;
     fobj->off = 0;
 
-    if (need_trunc) {
+    if (neee_trunc) {
       rados_completion_t comp;
       rados_aio_create_completion(fobj, NULL, IO_safe, &comp);
       rados_aio_write_full(fctx, oid.c_str(), comp, "", 0);
       rados_aio_release(comp);
     }
 
-    *fh = reinterpret_cast<Handle*>(fobj);
     *mtime = fobj->mtime;
     *size = fobj->size;
+
+    *fh = fobj;
   }
 
   return s;
@@ -212,7 +217,7 @@ Status RadosFio::Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
       }
       mutex_->Lock();
       if (s.ok()) {
-        fobj->mtime = 1000ULL * 1000ULL * obj_mtime;
+        fobj->mtime = 1000LLU * 1000LLU * obj_mtime;
         fobj->size = obj_size;
       }
     }
@@ -327,10 +332,21 @@ Status RadosFio::Write(const Fentry& fentry, Handle* fh, const Slice& buf) {
     if (!force_sync_) {
       rados_completion_t comp;
       rados_aio_create_completion(fobj, NULL, IO_safe, &comp);
-      rados_aio_write(fctx, oid.c_str(), comp, buf.data(), buf.size(), off);
+      if (!fobj->append_only) {
+        rados_aio_write(fctx, oid.c_str(), comp, buf.data(), buf.size(), off);
+      } else {
+        rados_aio_append(fctx, oid.c_str(), comp, buf.data(), buf.size());
+      }
+
       rados_aio_release(comp);
     } else {
-      int r = rados_write(fctx, oid.c_str(), buf.data(), buf.size(), off);
+      int r = 0;
+      if (!fobj->append_only) {
+        r = rados_write(fctx, oid.c_str(), buf.data(), buf.size(), off);
+      } else {
+        r = rados_append(fctx, oid.c_str(), buf.data(), buf.size());
+      }
+
       if (r != 0) {
         s = RadosError("rados_write", r);
       }
@@ -377,10 +393,21 @@ Status RadosFio::Pwrite(const Fentry& fentry, Handle* fh, const Slice& buf,
     if (!force_sync_) {
       rados_completion_t comp;
       rados_aio_create_completion(fobj, NULL, IO_safe, &comp);
-      rados_aio_write(fctx, oid.c_str(), comp, buf.data(), buf.size(), off);
+      if (!fobj->append_only) {
+        rados_aio_write(fctx, oid.c_str(), comp, buf.data(), buf.size(), off);
+      } else {
+        rados_aio_append(fctx, oid.c_str(), comp, buf.data(), buf.size());
+      }
+
       rados_aio_release(comp);
     } else {
-      int r = rados_write(fctx, oid.c_str(), buf.data(), buf.size(), off);
+      int r = 0;
+      if (!fobj->append_only) {
+        r = rados_write(fctx, oid.c_str(), buf.data(), buf.size(), off);
+      } else {
+        r = rados_append(fctx, oid.c_str(), buf.data(), buf.size());
+      }
+
       if (r != 0) {
         s = RadosError("rados_write", r);
       }

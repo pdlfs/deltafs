@@ -45,32 +45,32 @@ class PosixFio : public Fio {
     // Do nothing
   }
 
-  virtual Status Creat(const Fentry& fentry, Handle** fh) {
+  virtual Status Creat(const Fentry& fentry, bool append_only, Handle** fh) {
     Status s;
+    const int o_append = append_only ? O_APPEND : 0;
     std::string fname = root_ + "/";
     fname += ToFileName(fentry);
-    int fd = open(fname.c_str(), O_RDWR | O_CREAT | O_TRUNC, DEFFILEMODE);
+    const char* f = fname.c_str();
+    int fd = open(f, O_RDWR | O_CREAT | O_TRUNC | o_append, DEFFILEMODE);
     if (fd != -1) {
       *fh = reinterpret_cast<Handle*>(fd);
     } else {
       s = IOError(fname, errno);
     }
-
     return s;
   }
 
   virtual Status Open(const Fentry& fentry, bool create_if_missing,
-                      bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
-                      Handle** fh) {
+                      bool truncate_if_exists, bool append_only,
+                      uint64_t* mtime, uint64_t* size, Handle** fh) {
     Status s;
+    const int o_creat = create_if_missing ? O_CREAT : 0;
+    const int o_trunc = truncate_if_exists ? O_TRUNC : 0;
+    const int o_append = append_only ? O_APPEND : 0;
     std::string fname = root_ + "/";
     fname += ToFileName(fentry);
-
-    int flags = O_RDWR;
-    if (truncate_if_exists) flags |= O_TRUNC;
-    if (create_if_missing) flags |= O_CREAT;
-
-    int fd = open(fname.c_str(), flags, DEFFILEMODE);
+    const char* f = fname.c_str();
+    int fd = open(f, O_RDWR | o_creat | o_trunc | o_append, DEFFILEMODE);
     if (fd != -1) {
       struct stat statbuf;
       int r = fstat(fd, &statbuf);

@@ -75,7 +75,7 @@ Status BlkDB::Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
   return s;
 }
 
-Status BlkDB::Creat(const Fentry& fentry, Handle** fh) {
+Status BlkDB::Creat(const Fentry& fentry, bool append_only, Handle** fh) {
   Status s;
   *fh = NULL;
 
@@ -101,15 +101,15 @@ Status BlkDB::Creat(const Fentry& fentry, Handle** fh) {
     stream->nflus = 0;
     stream->off = 0;
 
-    *fh = reinterpret_cast<Handle*>(stream);
+    *fh = stream;
   }
 
   return s;
 }
 
 Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
-                   bool truncate_if_exists, uint64_t* mtime, uint64_t* size,
-                   Handle** fh) {
+                   bool truncate_if_exists, bool append_only, uint64_t* mtime,
+                   uint64_t* size, Handle** fh) {
   Status s;
   *fh = NULL;
   *mtime = 0;
@@ -186,7 +186,7 @@ Status BlkDB::Open(const Fentry& fentry, bool create_if_missing,
       iter = NULL;
     }
 
-    *fh = reinterpret_cast<Handle*>(stream);
+    *fh = stream;
   }
 
   delete iter;

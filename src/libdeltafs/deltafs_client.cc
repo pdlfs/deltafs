@@ -369,15 +369,16 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
   if (s.ok()) {
     if (!DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode)) {
       if (S_ISREG(my_file_mode)) {
+        const bool append_only = (flags & O_APPEND) == O_APPEND;
         if (fentry.stat.ChangeTime() < my_time) {
           const bool create_if_missing = true;  // Allow lazy object creation
           const bool truncate_if_exists =
               (flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC) == O_TRUNC;
-          s = fio_->Open(fentry, create_if_missing, truncate_if_exists, &mtime,
-                         &size, &fh);
+          s = fio_->Open(fentry, create_if_missing, truncate_if_exists,
+                         append_only, &mtime, &size, &fh);
         } else {
           // File doesn't exist before so we explicit create it
-          s = fio_->Creat(fentry, &fh);
+          s = fio_->Creat(fentry, append_only, &fh);
         }
       } else {
         // Do nothing
