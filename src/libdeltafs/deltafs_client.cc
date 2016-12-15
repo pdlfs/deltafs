@@ -215,20 +215,21 @@ mode_t Client::MaskMode(mode_t mode) {
 
 // Open a file or a directory below a specific directory.
 // The input path is always considered relative.
-Status Client::Fopenat(int fd, const Slice& path, int flags, mode_t mode,
+// XXX: BUG - plfs files currently can only be opened by Fopenat.
+Status Client::Fopenat(int fd, const char* path, int flags, mode_t mode,
                        FileInfo* info) {
   Status s;
-  Fentry ent;
+  Fentry fentry;
   MutexLock ml(&mutex_);
-  File* file = FetchFile(fd, &ent);
+  File* file = FetchFile(fd, &fentry);
   if (file == NULL) {
     s = BadDescriptor();
   } else if (num_open_fds_ < max_open_fds_) {
     FileAndEntry at;
+    at.ent = &fentry;
     at.file = file;
-    at.ent = &ent;
     std::string p = "/";
-    p += path.ToString();
+    p += path;
     s = InternalOpen(p, flags, mode, &at, info);
   } else {
     s = Status::TooManyOpens(Slice());
@@ -238,16 +239,15 @@ Status Client::Fopenat(int fd, const Slice& path, int flags, mode_t mode,
   char tmp[20];
   snprintf(tmp, sizeof(tmp), "#%d + ", fd);
   std::string p = tmp;
-  p += path.ToString();
+  p += path;
   OP_VERBOSE(p, s);
 #endif
 
   return s;
 }
 
-// Open a specific file or directory.
-Status Client::Fopen(const Slice& path, int flags, mode_t mode,
-                     FileInfo* info) {
+// Open a specific file or directory, including plfs directories.
+Status Client::Fopen(const char* path, int flags, mode_t mode, FileInfo* info) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -583,7 +583,7 @@ Status Client::Ftruncate(int fd, uint64_t len) {
 }
 
 // If fd refers to a plfs directory, we do a forced sync.
-// If fd refers to a plfs file under a plfs directory, we return error.
+// If fd refers to a plfs file under a plfs directory, we ignore the request.
 // If fd refers to a normal file, we sync its data and update its metadata.
 // If fd refers to a normal directory, we don't yet have that logic.
 Status Client::Fdatasync(int fd) {
@@ -598,8 +598,6 @@ Status Client::Fdatasync(int fd) {
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       s = writer->Sync();
-    } else {
-      s = FileAccessModeNotMatched();
     }
     return s;
   } else if (!S_ISREG(fentry.file_mode())) {
@@ -690,7 +688,7 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
 }
 
 // If fd refers to a plfs directory, we do flush epoch.
-// If fd refers to a plfs file under a plfs directory, we return error.
+// If fd refers to a plfs file under a plfs directory, we ignore the request.
 // If fd refers to a normal file, we flush its data and update its metadata.
 // If fd refers to a normal directory, we don't yet have that logic.
 Status Client::Flush(int fd) {
@@ -705,8 +703,6 @@ Status Client::Flush(int fd) {
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       s = writer->MakeEpoch();
-    } else {
-      s = FileAccessModeNotMatched();
     }
     return s;
   } else if (!S_ISREG(fentry.file_mode())) {
@@ -776,7 +772,7 @@ Status Client::Close(int fd) {
   }
 }
 
-Status Client::Access(const Slice& path, int mode) {
+Status Client::Access(const char* path, int mode) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -792,7 +788,7 @@ Status Client::Access(const Slice& path, int mode) {
   return s;
 }
 
-Status Client::Accessdir(const Slice& path, int mode) {
+Status Client::Accessdir(const char* path, int mode) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -808,7 +804,7 @@ Status Client::Accessdir(const Slice& path, int mode) {
   return s;
 }
 
-Status Client::Listdir(const Slice& path, std::vector<std::string>* names) {
+Status Client::Listdir(const char* path, std::vector<std::string>* names) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -824,7 +820,7 @@ Status Client::Listdir(const Slice& path, std::vector<std::string>* names) {
   return s;
 }
 
-Status Client::Lstat(const Slice& path, Stat* statbuf) {
+Status Client::Lstat(const char* path, Stat* statbuf) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -857,7 +853,7 @@ Status Client::Lstat(const Slice& path, Stat* statbuf) {
   return s;
 }
 
-Status Client::Getattr(const Slice& path, Stat* statbuf) {
+Status Client::Getattr(const char* path, Stat* statbuf) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -878,7 +874,7 @@ Status Client::Getattr(const Slice& path, Stat* statbuf) {
   return s;
 }
 
-Status Client::Mkfile(const Slice& path, mode_t mode) {
+Status Client::Mkfile(const char* path, mode_t mode) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -895,7 +891,7 @@ Status Client::Mkfile(const Slice& path, mode_t mode) {
   return s;
 }
 
-Status Client::Mkdirs(const Slice& path, mode_t mode) {
+Status Client::Mkdirs(const char* path, mode_t mode) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -914,7 +910,7 @@ Status Client::Mkdirs(const Slice& path, mode_t mode) {
   return s;
 }
 
-Status Client::Mkdir(const Slice& path, mode_t mode) {
+Status Client::Mkdir(const char* path, mode_t mode) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -931,7 +927,7 @@ Status Client::Mkdir(const Slice& path, mode_t mode) {
   return s;
 }
 
-Status Client::Chmod(const Slice& path, mode_t mode) {
+Status Client::Chmod(const char* path, mode_t mode) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -947,7 +943,7 @@ Status Client::Chmod(const Slice& path, mode_t mode) {
   return s;
 }
 
-Status Client::Chown(const Slice& path, uid_t usr, gid_t grp) {
+Status Client::Chown(const char* path, uid_t usr, gid_t grp) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -963,7 +959,7 @@ Status Client::Chown(const Slice& path, uid_t usr, gid_t grp) {
   return s;
 }
 
-Status Client::Truncate(const Slice& path, uint64_t len) {
+Status Client::Truncate(const char* path, uint64_t len) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -984,7 +980,7 @@ Status Client::Truncate(const Slice& path, uint64_t len) {
   return s;
 }
 
-Status Client::Unlink(const Slice& path) {
+Status Client::Unlink(const char* path) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -1013,7 +1009,7 @@ mode_t Client::Umask(mode_t mode) {
   return result;
 }
 
-Status Client::Chroot(const Slice& path) {
+Status Client::Chroot(const char* path) {
   Status s;
   Slice p = path;
   std::string tmp;
@@ -1040,7 +1036,7 @@ Status Client::Chroot(const Slice& path) {
   return s;
 }
 
-Status Client::Chdir(const Slice& path) {
+Status Client::Chdir(const char* path) {
   Status s;
   Slice p = path;
   std::string tmp;

@@ -26,8 +26,8 @@ class Client {
   static Status Open(Client**);
   ~Client();
 
-  Status Fopen(const Slice& path, int flags, mode_t mode, FileInfo* result);
-  Status Fopenat(int fd, const Slice& path, int flags, mode_t mode,
+  Status Fopen(const char* path, int flags, mode_t mode, FileInfo* result);
+  Status Fopenat(int fd, const char* path, int flags, mode_t mode,
                  FileInfo* reuslt);
   Status Write(int fd, const Slice& data);
   Status Pwrite(int fd, const Slice& data, uint64_t off);
@@ -39,22 +39,22 @@ class Client {
   Status Flush(int fd);
   Status Close(int fd);
 
-  Status Access(const Slice& path, int mode);
-  Status Accessdir(const Slice& path, int mode);
-  Status Listdir(const Slice& path, std::vector<std::string>* names);
-  Status Truncate(const Slice& path, uint64_t len);
-  Status Lstat(const Slice& path, Stat* result);
-  Status Getattr(const Slice& path, Stat* result);
-  Status Mkfile(const Slice& path, mode_t mode);
-  Status Mkdirs(const Slice& path, mode_t mode);
-  Status Mkdir(const Slice& path, mode_t mode);
-  Status Chmod(const Slice& path, mode_t mode);
-  Status Chown(const Slice& path, uid_t usr, gid_t grp);
-  Status Unlink(const Slice& path);
+  Status Access(const char* path, int mode);
+  Status Accessdir(const char* path, int mode);
+  Status Listdir(const char* path, std::vector<std::string>* names);
+  Status Truncate(const char* path, uint64_t len);
+  Status Lstat(const char* path, Stat* result);
+  Status Getattr(const char* path, Stat* result);
+  Status Mkfile(const char* path, mode_t mode);
+  Status Mkdirs(const char* path, mode_t mode);
+  Status Mkdir(const char* path, mode_t mode);
+  Status Chmod(const char* path, mode_t mode);
+  Status Chown(const char* path, uid_t usr, gid_t grp);
+  Status Unlink(const char* path);
 
   Status Getcwd(char* buf, size_t size);
-  Status Chroot(const Slice& path);
-  Status Chdir(const Slice& path);
+  Status Chroot(const char* path);
+  Status Chdir(const char* path);
 
   mode_t Umask(mode_t mode);
 
