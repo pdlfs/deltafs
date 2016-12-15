@@ -171,7 +171,7 @@ Status RadosFio::Stat(const Fentry& fentry, uint64_t* mtime, uint64_t* size) {
   if (r != 0) {
     return RadosError("rados_stat", r);
   } else {
-    *mtime = 1000ULL * 1000ULL * obj_mtime;
+    *mtime = 1000LLU * 1000LLU * obj_mtime;
     *size = obj_size;
     return s;
   }
@@ -345,29 +345,34 @@ Status RadosFio::Write(const Fentry& fentry, Handle* fh, const Slice& buf) {
       } else {
         rados_aio_append(fctx, oid.c_str(), comp, buf.data(), buf.size());
       }
-
       rados_aio_release(comp);
     } else {
-      int r = 0;
       if (!fobj->append_only) {
-        r = rados_write(fctx, oid.c_str(), buf.data(), buf.size(), off);
+        int r = rados_write(fctx, oid.c_str(), buf.data(), buf.size(), off);
+        if (r != 0) {
+          s = RadosError("rados_write", r);
+        }
       } else {
-        r = rados_append(fctx, oid.c_str(), buf.data(), buf.size());
-      }
-
-      if (r != 0) {
-        s = RadosError("rados_write", r);
+        int r = rados_append(fctx, oid.c_str(), buf.data(), buf.size());
+        if (r != 0) {
+          s = RadosError("rados_append", r);
+        }
       }
     }
     mutex_->Lock();
     if (s.ok()) {
       uint64_t mtime = Env::Default()->NowMicros();
-      fobj->off = end;
+      if (!fobj->append_only) {
+        fobj->off = end;
+        if (end > fobj->size) {
+          fobj->size = end;
+        }
+      } else {
+        fobj->size += buf.size();
+        fobj->off = 0;
+      }
       if (mtime > fobj->mtime) {
         fobj->mtime = mtime;
-      }
-      if (end > fobj->size) {
-        fobj->size = end;
       }
     }
   }
@@ -406,28 +411,32 @@ Status RadosFio::Pwrite(const Fentry& fentry, Handle* fh, const Slice& buf,
       } else {
         rados_aio_append(fctx, oid.c_str(), comp, buf.data(), buf.size());
       }
-
       rados_aio_release(comp);
     } else {
-      int r = 0;
       if (!fobj->append_only) {
-        r = rados_write(fctx, oid.c_str(), buf.data(), buf.size(), off);
+        int r = rados_write(fctx, oid.c_str(), buf.data(), buf.size(), off);
+        if (r != 0) {
+          s = RadosError("rados_write", r);
+        }
       } else {
-        r = rados_append(fctx, oid.c_str(), buf.data(), buf.size());
-      }
-
-      if (r != 0) {
-        s = RadosError("rados_write", r);
+        int r = rados_append(fctx, oid.c_str(), buf.data(), buf.size());
+        if (r != 0) {
+          s = RadosError("rados_append", r);
+        }
       }
     }
     mutex_->Lock();
     if (s.ok()) {
       uint64_t mtime = Env::Default()->NowMicros();
+      if (!fobj->append_only) {
+        if (end > fobj->size) {
+          fobj->size = end;
+        }
+      } else {
+        fobj->size += buf.size();
+      }
       if (mtime > fobj->mtime) {
         fobj->mtime = mtime;
-      }
-      if (end > fobj->size) {
-        fobj->size = end;
       }
     }
   }
