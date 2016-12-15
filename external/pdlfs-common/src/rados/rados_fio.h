@@ -21,13 +21,13 @@ namespace rados {
 class RadosFio;
 
 // State of each opened file object
-class RadosFobj : public Fio::Handle {
+class RadosFobj {
  public:
-  ~RadosFobj() {}
   RadosFobj(RadosFio* fio) : fio(fio), fctx(NULL) {}
+  ~RadosFobj() {}
+
   RadosFio* fio;
   rados_ioctx_t fctx;
-
   uint64_t mtime;  // Cached last file modification time
   uint64_t size;   // Cached file size
   uint64_t off;    // Current read/write position
@@ -41,27 +41,25 @@ class RadosFio : public Fio {
  public:
   virtual ~RadosFio();
 
-  virtual Status Creat(const Fentry& fentry, bool append_only, Handle** fh);
-  virtual Status Open(const Fentry& fentry, bool create_if_missing,
-                      bool truncate_if_exists, bool append_only,
-                      uint64_t* mtime, uint64_t* size, Handle** fh);
-  virtual Status Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
-                       uint64_t* size, bool skip_cache = false);
-  virtual Status Write(const Fentry& fentry, Handle* fh, const Slice& data);
-  virtual Status Pwrite(const Fentry& fentry, Handle* fh, const Slice& data,
+  virtual Status Creat(const Fentry&, bool o_append, Handle**);
+  virtual Status Open(const Fentry&, bool o_creat, bool o_trunc, bool o_append,
+                      uint64_t* mtime, uint64_t* size, Handle**);
+  virtual Status Fstat(const Fentry&, Handle*, uint64_t* mtime, uint64_t* size,
+                       bool skip_cache = false);
+  virtual Status Write(const Fentry&, Handle*, const Slice& data);
+  virtual Status Pwrite(const Fentry&, Handle*, const Slice& data,
                         uint64_t off);
-  virtual Status Read(const Fentry& fentry, Handle* fh, Slice* result,
-                      uint64_t size, char* scratch);
-  virtual Status Pread(const Fentry& fentry, Handle* fh, Slice* result,
-                       uint64_t off, uint64_t size, char* scratch);
-  virtual Status Ftrunc(const Fentry& fentry, Handle* fh, uint64_t size);
-  virtual Status Flush(const Fentry& fentry, Handle* fh,
-                       bool force_sync = false);
-  virtual Status Close(const Fentry& fentry, Handle* fh);
+  virtual Status Read(const Fentry&, Handle*, Slice* result, uint64_t size,
+                      char* scratch);
+  virtual Status Pread(const Fentry&, Handle*, Slice* result, uint64_t off,
+                       uint64_t size, char* scratch);
+  virtual Status Ftrunc(const Fentry&, Handle*, uint64_t size);
+  virtual Status Flush(const Fentry&, Handle*, bool force_sync = false);
+  virtual Status Close(const Fentry&, Handle*);
 
-  virtual Status Trunc(const Fentry& fentry, uint64_t size);
-  virtual Status Stat(const Fentry& fentry, uint64_t* mtime, uint64_t* size);
-  virtual Status Drop(const Fentry& fentry);
+  virtual Status Trunc(const Fentry&, uint64_t size);
+  virtual Status Stat(const Fentry&, uint64_t* mtime, uint64_t* size);
+  virtual Status Drop(const Fentry&);
 
  private:
   void MaybeSetError(RadosFobj*, int err);

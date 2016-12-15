@@ -62,6 +62,8 @@ void RadosFio::Unref(RadosFobj* fobj) {
 
 Status RadosFio::Creat(const Fentry& fentry, bool append_only, Handle** fh) {
   Status s;
+  RadosFobj* fobj = NULL;
+  *fh = NULL;
   std::string oid = ToOid(fentry);
   rados_ioctx_t fctx;
   int r = rados_ioctx_create(cluster_, pool_name_.c_str(), &fctx);
@@ -70,7 +72,7 @@ Status RadosFio::Creat(const Fentry& fentry, bool append_only, Handle** fh) {
   };
 
   if (s.ok()) {
-    RadosFobj* fobj = new RadosFobj(this);
+    fobj = new RadosFobj(this);
     fobj->fctx = fctx;
     fobj->refs = 2;  // One for the returned handle, one for the op
     fobj->mtime = Env::Default()->NowMicros();
@@ -83,10 +85,12 @@ Status RadosFio::Creat(const Fentry& fentry, bool append_only, Handle** fh) {
     rados_aio_create_completion(fobj, NULL, IO_safe, &comp);
     rados_aio_write_full(fctx, oid.c_str(), comp, "", 0);
     rados_aio_release(comp);
-
-    *fh = fobj;
   }
 
+  if (s.ok()) {
+    *fh = reinterpret_cast<Handle*>(fobj);
+    assert(*fh != NULL);
+  }
   return s;
 }
 
@@ -94,6 +98,8 @@ Status RadosFio::Open(const Fentry& fentry, bool create_if_missing,
                       bool truncate_if_exists, bool append_only,
                       uint64_t* mtime, uint64_t* size, Handle** fh) {
   Status s;
+  RadosFobj* fobj = NULL;
+  *fh = NULL;
   std::string oid = ToOid(fentry);
   uint64_t obj_size;
   time_t obj_mtime;
@@ -129,7 +135,7 @@ Status RadosFio::Open(const Fentry& fentry, bool create_if_missing,
   }
 
   if (s.ok()) {
-    RadosFobj* fobj = new RadosFobj(this);
+    fobj = new RadosFobj(this);
     fobj->fctx = fctx;
     fobj->refs = neee_trunc ? 2 : 1;  // One for the handle, one for the op
     fobj->mtime = 1000LLU * 1000LLU * obj_mtime;
@@ -147,10 +153,12 @@ Status RadosFio::Open(const Fentry& fentry, bool create_if_missing,
 
     *mtime = fobj->mtime;
     *size = fobj->size;
-
-    *fh = fobj;
   }
 
+  if (s.ok()) {
+    *fh = reinterpret_cast<Handle*>(fobj);
+    assert(*fh != NULL);
+  }
   return s;
 }
 
