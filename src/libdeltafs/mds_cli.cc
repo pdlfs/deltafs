@@ -481,15 +481,15 @@ Status MDS::CLI::_Fstat(const DirIndex* idx, const FstatOptions& options,
 }
 
 Status MDS::CLI::Fcreat(const Slice& p, mode_t mode, Fentry* ent,
-                        bool error_if_exists, const Fentry* at) {
-  Status s;
+                        bool error_if_exists, bool* created, const Fentry* at) {
   if (at != NULL) {
     const Stat* const stat = &at->stat;
     if (!S_ISDIR(stat->FileMode())) {
-      return Status::InvalidArgument(Slice());
+      return Status::InvalidFileDescriptor("not a directory");
     }
   }
 
+  Status s;
   PathInfo path;
   MutexLock ml(&mutex_);
   s = ResolvePath(p, &path, at);
@@ -546,6 +546,7 @@ Status MDS::CLI::Fcreat(const Slice& p, mode_t mode, Fentry* ent,
         FcreatRet ret;
         s = _Fcreat(index_cache_->Value(idxh), options, &ret);
         if (s.ok()) {
+          if (created != NULL) *created = ret.created;
           if (ent != NULL) {
             ent->pid = path.pid;
             ent->nhash = path.nhash.ToString();
