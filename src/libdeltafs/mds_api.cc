@@ -236,13 +236,18 @@ Status MDS::RPC::CLI::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
   if (s.ok()) {
     s = stub_->Call(AddOp(in, kFcreat), out);
     if (s.ok()) {
+      Slice contents = out.contents;
       if (out.err == -1) {
-        Redirect re(out.contents.data(), out.contents.size());
+        Redirect re(contents.data(), contents.size());
         throw re;
       } else if (out.err != 0) {
         s = Status::FromCode(out.err);
-      } else if (!ret->stat.DecodeFrom(out.contents)) {
+      } else if (!ret->stat.DecodeFrom(&contents)) {
         s = Status::Corruption(Slice());
+      } else if (contents.empty()) {
+        s = Status::Corruption(Slice());
+      } else {
+        ret->created = contents[0];
       }
     }
   }
@@ -277,6 +282,8 @@ void MDS::RPC::SRV::FCRET(Msg& in, Msg& out) {
   }
   if (s.ok()) {
     out.contents = ret.stat.EncodeTo(out.buf);
+    out.buf[out.contents.size()] = static_cast<char>(ret.created);
+    out.contents = Slice(out.buf, out.contents.size() + 1);
     out.err = 0;
   } else {
     out.err = s.err_code();

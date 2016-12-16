@@ -358,6 +358,8 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
           s = mdb_->SetNode(dir_id, name_hash, *stat, options.name, mdb_tx);
         }
 
+        ret->created = !entry_exists;
+
         if (!entry_exists) {
           if (s.ok()) {
             DirInfo dir_info;

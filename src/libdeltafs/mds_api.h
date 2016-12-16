@@ -98,7 +98,10 @@ class MDS {
     uint32_t uid;
     uint32_t gid;
   };
-  MDS_OP_RET(Fcreat) { Stat stat; };
+  MDS_OP_RET(Fcreat) {
+    unsigned char created;
+    Stat stat;
+  };
   MDS_OP(Fcreat)
 
   MDS_OP_OPTIONS(Mkdir) {
