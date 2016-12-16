@@ -67,100 +67,124 @@ Fio* Fio::Open(const Slice& fio_name, const Slice& fio_conf) {
   }
 }
 
-Slice Fentry::ExtractUntypedKeyPrefix(const Slice& encoding) {
-  Slice key_prefix;
-  Slice input = encoding;
-  GetLengthPrefixedSlice(&input, &key_prefix);
-  assert(!key_prefix.empty());
-  return key_prefix;
-}
-
 std::string Fentry::UntypedKeyPrefix() const {
   KeyType dummy = static_cast<KeyType>(0);
   Key key(stat, dummy);
   return key.prefix().ToString();
 }
 
-bool Fentry::DecodeFrom(Slice* input) {
-  Slice key_prefix;
-  uint64_t parent_reg;
-  uint64_t parent_snap;
-  uint64_t parent_ino;
-  uint32_t parent_zserver;
-  Slice tmp_nhash;
-  uint32_t mode;
-  uint32_t uid;
-  uint32_t gid;
-  uint32_t tmp_zserver;
-  if (!GetLengthPrefixedSlice(input, &key_prefix)) {
-    return false;
-  }
+static bool GetExpandedId(Slice* input, uint64_t* r, uint64_t* s, uint64_t* i) {
 #if defined(DELTAFS)
-  else if (!GetVarint64(input, &parent_reg) ||
-           !GetVarint64(input, &parent_snap)) {
-    return false;
-  }
+  if (!GetVarint64(input, r) || !GetVarint64(input, s)) return false;
+#else
+  *r = 0;
+  *s = 0;
 #endif
-  else if (!GetVarint64(input, &parent_ino) ||
-           !GetLengthPrefixedSlice(input, &tmp_nhash) ||
-           !GetVarint32(input, &parent_zserver) || !GetVarint32(input, &mode) ||
-           !GetVarint32(input, &uid) || !GetVarint32(input, &gid) ||
-           !GetVarint32(input, &tmp_zserver)) {
+  if (!GetVarint64(input, i)) {
     return false;
   } else {
-    pid = DirId(parent_reg, parent_snap, parent_ino);
-    nhash = tmp_nhash.ToString();
-    zserver = parent_zserver;
-    Key key(key_prefix);
-#if defined(DELTAFS)
-    stat.SetRegId(key.reg_id());
-    stat.SetSnapId(key.snap_id());
-#endif
-    stat.SetInodeNo(key.inode());
-    stat.SetFileMode(mode);
-    stat.SetUserId(uid);
-    stat.SetGroupId(gid);
-    stat.SetZerothServer(tmp_zserver);
     return true;
   }
 }
 
+bool Fentry::DecodeFrom(Slice* input) {
+  uint64_t parent_reg;
+  uint64_t parent_snap;
+  uint64_t parent_ino;
+  uint32_t parent_zserver;
+  Slice my_nhash;
+  uint64_t my_reg;
+  uint64_t my_snap;
+  uint64_t my_ino;
+  uint64_t size;
+  uint32_t mode;
+  uint32_t uid;
+  uint32_t gid;
+  uint32_t my_zserver;
+  uint64_t ctime;
+  uint64_t mtime;
+
+  if (!GetExpandedId(input, &parent_reg, &parent_snap, &parent_ino) ||
+      !GetLengthPrefixedSlice(input, &my_nhash) ||
+      !GetVarint32(input, &parent_zserver) ||
+      !GetExpandedId(input, &my_reg, &my_snap, &my_ino) ||
+      !GetVarint64(input, &size) || !GetVarint32(input, &mode) ||
+      !GetVarint32(input, &uid) || !GetVarint32(input, &gid) ||
+      !GetVarint32(input, &my_zserver) || !GetVarint64(input, &ctime) ||
+      !GetVarint64(input, &mtime)) {
+    return false;
+  } else {
+    pid = DirId(parent_reg, parent_snap, parent_ino);
+    nhash = my_nhash.ToString();
+    zserver = parent_zserver;
+    stat.SetRegId(my_reg);
+    stat.SetSnapId(my_snap);
+    stat.SetInodeNo(my_ino);
+    stat.SetFileSize(size);
+    stat.SetFileMode(mode);
+    stat.SetUserId(uid);
+    stat.SetGroupId(gid);
+    stat.SetZerothServer(my_zserver);
+    stat.SetChangeTime(ctime);
+    stat.SetModifyTime(mtime);
+
+    return true;
+  }
+}
+
+static char* EncodeDirId(char* scratch, const DirId& id) {
+  char* p = scratch;
+
+#if defined(DELTAFS)
+  p = EncodeVarint64(p, id.reg);
+  p = EncodeVarint64(p, id.snap);
+#endif
+  p = EncodeVarint64(p, id.ino);
+
+  return p;
+}
+
+static inline char* EncodeStatId(char* scratch, const Stat& stat) {
+  return EncodeDirId(scratch, DirId(stat));
+}
+
 // The encoding has the following format:
 // --------------------------------------------
-//   key_prefix_length      varint32
-//   key_prefix             char[key_prefix_length]
 //   reg_id of parent dir   varint64 (deltafs only)
 //   snap_id of parent dir  varint64 (deltafs only)
 //   ino_no of parent dir   varint64
 //   nhash_length           varint32
 //   nhash                  char[nhash_length]
 //   zserver of parent dir  varint32
+//   reg_id                 varint64 (deltafs only)
+//   snap_id                varint64 (deltafs only)
+//   ino_no                 varint64
+//   size                   varint64
 //   mode                   varint32
 //   user_id                varint32
 //   group_id               varint32
 //   zserver                varint32
+//   change_time            varint64
+//   modify_time            varint64
 Slice Fentry::EncodeTo(char* scratch) const {
   char* p = scratch;
 
-  KeyType dummy = static_cast<KeyType>(0);
-  Key key(stat, dummy);
-  p = EncodeLengthPrefixedSlice(p, key.prefix());
-#if defined(DELTAFS)
-  p = EncodeVarint64(p, pid.reg);
-  p = EncodeVarint64(p, pid.snap);
-#endif
-  p = EncodeVarint64(p, pid.ino);
+  p = EncodeDirId(p, pid);
   p = EncodeLengthPrefixedSlice(p, nhash);
   p = EncodeVarint32(p, zserver);
+  p = EncodeStatId(p, stat);
+  p = EncodeVarint64(p, stat.FileSize());
   p = EncodeVarint32(p, stat.FileMode());
   p = EncodeVarint32(p, stat.UserId());
   p = EncodeVarint32(p, stat.GroupId());
   p = EncodeVarint32(p, stat.ZerothServer());
+  p = EncodeVarint64(p, stat.ChangeTime());
+  p = EncodeVarint64(p, stat.ModifyTime());
 
   return Slice(scratch, p - scratch);
 }
 
-static std::string FileModeToString(mode_t mode) {
+static inline std::string FileModeToString(mode_t mode) {
   char tmp[10];
   snprintf(tmp, sizeof(tmp), "%o", mode);
   return tmp;

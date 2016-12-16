@@ -451,13 +451,18 @@ bool Client::IsWriteOk(const File* f) {
 }
 
 // REQUIRES: mutex_ has been locked.
-Client::File* Client::FetchFile(int fd, Fentry* ent) {
+Client::File* Client::FetchFile(int fd, Fentry* result) {
   size_t index = fd;
   if (index < max_open_fds_) {
     File* f = fds_[index];
     if (f != NULL) {
       Slice input = f->fentry_encoding();
-      ent->DecodeFrom(&input);
+#ifndef NDEBUG
+      bool r = result->DecodeFrom(&input);
+      assert(r);
+#else
+      result->DecodeFrom(&input);
+#endif
     }
     return f;
   } else {
@@ -474,21 +479,20 @@ Status Client::Fstat(int fd, Stat* statbuf) {
   } else {
     Status s;
     file->refs++;  // Ref
-    uint64_t mtime = 0;
-    uint64_t size = 0;
     if (!DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
       if (S_ISREG(fentry.file_mode())) {
         mutex_.Unlock();
+        uint64_t mtime = 0;
+        uint64_t size = 0;
         s = fio_->Fstat(fentry, file->fh, &mtime, &size);
+        if (s.ok()) {
+          fentry.stat.SetModifyTime(mtime);
+          fentry.stat.SetFileSize(size);
+        }
         mutex_.Lock();
       }
     }
-    if (s.ok()) {
-      fentry.stat.SetChangeTime(0);
-      fentry.stat.SetModifyTime(mtime);
-      fentry.stat.SetFileSize(size);
-      *statbuf = fentry.stat;
-    }
+    if (s.ok()) *statbuf = fentry.stat;
     Unref(file, fentry);
     return s;
   }

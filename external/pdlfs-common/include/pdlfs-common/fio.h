@@ -19,9 +19,6 @@ namespace pdlfs {
 struct Fentry {
   Fentry() {}  // Intentionally uninitialized for performance
 
-  // Extract only the key prefix from a given encoding
-  static Slice ExtractUntypedKeyPrefix(const Slice& encoding);
-
   mode_t file_mode() const { return stat.FileMode(); }
   std::string UntypedKeyPrefix() const;
   std::string DebugString() const;
