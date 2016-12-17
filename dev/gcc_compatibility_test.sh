@@ -15,7 +15,7 @@ TEST_compile() {
   cmake .. && make
 }
 
-for ver in 4.4 4.6 4.8 5.4 6.1
+for ver in 4.4 4.5 4.6 4.7 4.8 4.9 5 5.4 6 6.1
 do
   which "gcc-$ver"
   if [ $? -eq 0 ]; then 
