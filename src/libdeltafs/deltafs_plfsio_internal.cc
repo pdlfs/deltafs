@@ -81,31 +81,34 @@ Iterator* WriteBuffer::NewIterator() const {
   return new Iter(this);
 }
 
-void WriteBuffer::Finish() {
-  struct STLLessThan {
-    Slice buffer_;
-    STLLessThan(const std::string& buffer) : buffer_(buffer) {}
-    bool operator()(uint32_t a, uint32_t b) {
-      Slice key_a = GetKey(a);
-      Slice key_b = GetKey(b);
-      assert(!key_a.empty() && !key_b.empty());
-      return key_a < key_b;
-    }
-    Slice GetKey(uint32_t offset) {
-      Slice result;
-      bool ok = GetLengthPrefixedSlice(
-          buffer_.data() + offset,          // Key start
-          buffer_.data() + buffer_.size(),  // Space limit
-          &result);
-      if (ok) {
-        return result;
-      } else {
-        assert(false);
-        return result;
-      }
-    }
-  };
+namespace {
+struct STLLessThan {
+  Slice buffer_;
 
+  STLLessThan(const std::string& buffer) : buffer_(buffer) {}
+  bool operator()(uint32_t a, uint32_t b) {
+    Slice key_a = GetKey(a);
+    Slice key_b = GetKey(b);
+    assert(!key_a.empty() && !key_b.empty());
+    return key_a < key_b;
+  }
+
+  Slice GetKey(uint32_t offset) {
+    Slice result;
+    bool ok = GetLengthPrefixedSlice(buffer_.data() + offset,
+                                     buffer_.data() + buffer_.size(),  // Limit
+                                     &result);
+    if (ok) {
+      return result;
+    } else {
+      assert(false);
+      return result;
+    }
+  }
+};
+}  // namespace
+
+void WriteBuffer::Finish() {
   // Sort entries
   assert(!finished_);
   std::vector<uint32_t>::iterator begin = offsets_.begin();
