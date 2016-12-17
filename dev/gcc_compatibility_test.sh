@@ -1,4 +1,8 @@
-#!/bin/bash -x
+#!/bin/bash
+
+set -x
+set -u
+set -e
 
 topdir=$(cd `dirname $0`/.. && pwd -P)
 
