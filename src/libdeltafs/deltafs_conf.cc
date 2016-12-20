@@ -44,7 +44,6 @@ static void ToLowerCase(std::string* str) {
     if (result.empty()) {                  \
       result = FLAGS_D##n;                 \
     }                                      \
-    ToLowerCase(&result);                  \
     return result;                         \
   }
 
