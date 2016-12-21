@@ -96,6 +96,7 @@ Client::~Client() {
 // REQUIRES: less than "max_open_files_" files have been opened.
 // REQUIRES: mutex_ has been locked.
 size_t Client::Alloc(File* f) {
+  mutex_.AssertHeld();
   assert(num_open_fds_ < max_open_fds_);
   while (fds_[fd_slot_] != NULL) {
     fd_slot_ = (1 + fd_slot_) % max_open_fds_;
@@ -109,6 +110,7 @@ size_t Client::Alloc(File* f) {
 // The associated file entry is not un-referenced.
 // REQUIRES: mutex_ has been locked.
 Client::File* Client::Free(size_t index) {
+  mutex_.AssertHeld();
   File* f = fds_[index];
   assert(f != NULL);
   fds_[index] = NULL;
@@ -139,7 +141,6 @@ size_t Client::Open(const Slice& encoding, int flags, Fio::Handle* fh) {
 // REQUIRES: mutex_ has been locked.
 void Client::Unref(File* f, const Fentry& fentry) {
   mutex_.AssertHeld();
-
   assert(f->refs > 0);
   f->refs--;
   if (f->refs == 0) {
@@ -154,9 +155,12 @@ void Client::Unref(File* f, const Fentry& fentry) {
     } else if (IsWriteOk(f)) {
       ToWritablePlfsDir(f->fh)->Unref();
     } else {
+      assert(false);
       // TODO
     }
     free(f);
+  } else {
+    // Do nothing
   }
 }
 
