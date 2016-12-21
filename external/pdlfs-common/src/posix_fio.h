@@ -47,11 +47,11 @@ class PosixFio : public Fio {
 
   virtual Status Creat(const Fentry& fentry, bool append_only, Handle** fh) {
     Status s;
-    const int o_append = append_only ? O_APPEND : 0;
+    const int o1 = append_only ? O_APPEND : 0;
     std::string fname = root_ + "/";
     fname += ToFileName(fentry);
     const char* f = fname.c_str();
-    int fd = open(f, O_RDWR | O_CREAT | O_TRUNC | o_append, DEFFILEMODE);
+    int fd = open(f, O_RDWR | O_CREAT | O_TRUNC | o1, DEFFILEMODE);
     if (fd != -1) {
       *fh = reinterpret_cast<Handle*>(fd);
     } else {
@@ -64,25 +64,28 @@ class PosixFio : public Fio {
                       bool truncate_if_exists, bool append_only,
                       uint64_t* mtime, uint64_t* size, Handle** fh) {
     Status s;
-    const int o_creat = create_if_missing ? O_CREAT : 0;
-    const int o_trunc = truncate_if_exists ? O_TRUNC : 0;
-    const int o_append = append_only ? O_APPEND : 0;
+    const int o1 = create_if_missing ? O_CREAT : 0;
+    const int o2 = truncate_if_exists ? O_TRUNC : 0;
+    const int o3 = append_only ? O_APPEND : 0;
     std::string fname = root_ + "/";
     fname += ToFileName(fentry);
-    const char* f = fname.c_str();
-    int fd = open(f, O_RDWR | o_creat | o_trunc | o_append, DEFFILEMODE);
-    if (fd != -1) {
-      struct stat statbuf;
-      int r = fstat(fd, &statbuf);
-      if (r == 0) {
-        *fh = reinterpret_cast<Handle*>(fd);
-        *mtime = 1000LLU * 1000LLU * statbuf.st_mtime;
-        *size = statbuf.st_size;
-      }
+    int fd = open(fname.c_str(), O_RDWR | o1 | o2 | o3, DEFFILEMODE);
+    if (fd == -1) {
+      s = IOError(fname, errno);
     }
 
-    if (errno != 0) {
-      s = IOError(fname, errno);
+    if (s.ok()) {
+      struct stat statbuf;
+      int r = fstat(fd, &statbuf);
+      if (r != 0) {
+        s = IOError(fname, errno);
+      } else {
+        *fh = reinterpret_cast<Handle*>(fd);
+        *size = statbuf.st_size;
+        *mtime = statbuf.st_mtime;
+        *mtime *= 1000;
+        *mtime *= 1000;
+      }
     }
 
     return s;
