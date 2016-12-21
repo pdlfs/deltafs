@@ -297,13 +297,13 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
   mutex_.Unlock();
   Fentry fentry;
   mode_t my_file_mode = 0;
-  bool new_file = false;
-  if ((flags & O_CREAT) == O_CREAT) {
-    const bool error_if_exists = (flags & O_EXCL) == O_EXCL;
-    s = mdscli_->Fcreat(path, MaskMode(mode), &fentry, error_if_exists,
-                        &new_file, at->ent);
+  bool is_new = false;  // True when file is newly created
+  if ((flags & O_CREAT) != O_CREAT) {
+    s = mdscli_->Fstat(path, &fentry, at != NULL ? at->ent : NULL);
   } else {
-    s = mdscli_->Fstat(path, &fentry, at->ent);
+    s = mdscli_->Fcreat(path, MaskMode(mode), &fentry,
+                        (flags & O_EXCL) == O_EXCL, &is_new,
+                        at != NULL ? at->ent : NULL);
   }
 
   // Verify file modes
@@ -374,7 +374,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
     if (!DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode)) {
       if (S_ISREG(my_file_mode)) {
         const bool append_only = (flags & O_APPEND) == O_APPEND;
-        if (!new_file) {
+        if (!is_new) {
           const bool create_if_missing = true;  // Allow lazy object creation
           const bool truncate_if_exists =
               (flags & O_ACCMODE) != O_RDONLY && (flags & O_TRUNC) == O_TRUNC;
