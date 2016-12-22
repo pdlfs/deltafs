@@ -1,7 +1,6 @@
 /nbproject/
-/build/
+/build*/
 *.dylib
 *.so
 *.a
 *.o
-
