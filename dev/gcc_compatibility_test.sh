@@ -17,8 +17,11 @@ TEST_compile() {
 
 for ver in 4.4 4.5 4.6 4.7 4.8 4.9 5 5.4 6 6.1
 do
+  set +e
   which "gcc-$ver"
-  if [ $? -eq 0 ]; then 
+  r=$?
+  set -e
+  if [ $r -eq 0 ]; then
     TEST_compile $ver
   fi
 done
