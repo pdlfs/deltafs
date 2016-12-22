@@ -48,8 +48,12 @@
 # for ccmake...
 #
 set (PDLFS_PLATFORM "POSIX" CACHE STRING "Select platform (e.g. POSIX)")
-set (PDLFS_OS "${CMAKE_SYSTEM_NAME}" CACHE 
-              STRING "Select operating system (uname -s)")
+set (PDLFS_TARGET_OS "${CMAKE_SYSTEM_NAME}" CACHE
+              STRING "Select target operating system")
+set (PDLFS_TARGET_OS_VERSION "${CMAKE_SYSTEM_VERSION}" CACHE
+              STRING "Select target operating system version")
+set (PDLFS_OS "${CMAKE_HOST_SYSTEM_NAME}" CACHE
+              STRING "Select host operating system (uname -s)")
 set (PDLFS_GFLAGS "OFF" CACHE
      BOOL "Use GFLAGS (libgflags-dev) for arg parsing")
 set (PDLFS_GLOG "OFF" CACHE
