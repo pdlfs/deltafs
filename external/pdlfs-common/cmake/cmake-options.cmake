@@ -74,19 +74,20 @@ if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" OR
 endif ()
 
 #
-# do not add optimization flags (use default optimization level)
-# when it comes to either Intel or Cray compilers.
+# use O2 (not O3) when it comes to either Intel or Cray compilers. O2 is
+# the default optimization level for these compilers and are often
+# equivalent as O3 in common compilers such as GNU and Clang.
 #
 if (${CMAKE_C_COMPILER_ID} STREQUAL "Intel" OR
     ${CMAKE_C_COMPILER_ID} STREQUAL "Cray")
-    set (CMAKE_C_FLAGS_DEBUG "-g -O0")
-    set (CMAKE_C_FLAGS_RELWITHDEBINFO "-g -DNDEBUG")
-    set (CMAKE_C_FLAGS_RELEASE "-DNDEBUG")
+    set (CMAKE_C_FLAGS_DEBUG "-g")
+    set (CMAKE_C_FLAGS_RELWITHDEBINFO "-g -O2 -DNDEBUG")
+    set (CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG")
 endif ()
 #
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Intel" OR
     ${CMAKE_CXX_COMPILER_ID} STREQUAL "Cray")
-    set (CMAKE_CXX_FLAGS_DEBUG "-g -O0")
-    set (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -DNDEBUG")
-    set (CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG")
+    set (CMAKE_CXX_FLAGS_DEBUG "-g")
+    set (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -O2 -DNDEBUG")
+    set (CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
 endif ()
