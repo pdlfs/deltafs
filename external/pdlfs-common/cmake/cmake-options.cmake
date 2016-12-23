@@ -47,9 +47,10 @@ set (BUILD_TESTS "OFF" CACHE BOOL "Build test programs")
 # sanitizer config
 #
 ###set (as_flags "-fsanitize=address,leak -O1 -fno-omit-frame-pointer")
+#
 set (as_flags "-fsanitize=address -O1 -fno-omit-frame-pointer")
 set (ts_flags "-fsanitize=thread  -O1 -fno-omit-frame-pointer")
-
+#
 if (${CMAKE_C_COMPILER_ID} STREQUAL "GNU" OR
     ${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
     if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
@@ -60,7 +61,7 @@ if (${CMAKE_C_COMPILER_ID} STREQUAL "GNU" OR
         endif ()
     endif ()
 endif ()
-
+#
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" OR
     ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
     if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
@@ -73,8 +74,8 @@ if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" OR
 endif ()
 
 #
-# do not add optimization flags (use default optimization level) when it comes
-# to either Intel or Cray compilers.
+# do not add optimization flags (use default optimization level)
+# when it comes to either Intel or Cray compilers.
 #
 if (${CMAKE_C_COMPILER_ID} STREQUAL "Intel" OR
     ${CMAKE_C_COMPILER_ID} STREQUAL "Cray")
@@ -82,7 +83,7 @@ if (${CMAKE_C_COMPILER_ID} STREQUAL "Intel" OR
     set (CMAKE_C_FLAGS_RELWITHDEBINFO "-g -DNDEBUG")
     set (CMAKE_C_FLAGS_RELEASE "-DNDEBUG")
 endif ()
-
+#
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Intel" OR
     ${CMAKE_CXX_COMPILER_ID} STREQUAL "Cray")
     set (CMAKE_CXX_FLAGS_DEBUG "-g -O0")

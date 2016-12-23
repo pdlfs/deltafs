@@ -1,4 +1,4 @@
-**Transient user-space file system optimized for parallel scientific applications.**
+**Transient file system optimized for high-paralleled indexing on both file data and file system metadata.**
 
 [![Build Status](https://travis-ci.org/pdlfs/deltafs.svg?branch=master)](https://travis-ci.org/pdlfs/deltafs)
 [![License](https://img.shields.io/badge/license-New%20BSD-blue.svg)](COPYING)
