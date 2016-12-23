@@ -44,19 +44,48 @@ set (BUILD_SHARED_LIBS "OFF" CACHE BOOL "Build a shared library")
 set (BUILD_TESTS "OFF" CACHE BOOL "Build test programs")
 
 #
-# sanitizer config (XXX: does not probe compiler to see if sanitizer flags
-# are supported... )
+# sanitizer config
 #
 ###set (as_flags "-fsanitize=address,leak -O1 -fno-omit-frame-pointer")
 set (as_flags "-fsanitize=address -O1 -fno-omit-frame-pointer")
 set (ts_flags "-fsanitize=thread  -O1 -fno-omit-frame-pointer")
-if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-    if (${DEBUG_SANITIZER} STREQUAL "Address")
-        set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
-        set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
-    elseif (${DEBUG_SANITIZER} STREQUAL "Thread")
-        set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
-        set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
+
+if (${CMAKE_C_COMPILER_ID} STREQUAL "GNU" OR
+    ${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
+    if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+        if (${DEBUG_SANITIZER} STREQUAL "Address")
+            set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
+        elseif (${DEBUG_SANITIZER} STREQUAL "Thread")
+            set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
+        endif ()
     endif ()
 endif ()
 
+if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" OR
+    ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+    if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+        if (${DEBUG_SANITIZER} STREQUAL "Address")
+            set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${as_flags}")
+        elseif (${DEBUG_SANITIZER} STREQUAL "Thread")
+            set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${ts_flags}")
+        endif ()
+    endif ()
+endif ()
+
+#
+# do not add optimization flags (use default optimization level) when it comes
+# to either Intel or Cray compilers.
+#
+if (${CMAKE_C_COMPILER_ID} STREQUAL "Intel" OR
+    ${CMAKE_C_COMPILER_ID} STREQUAL "Cray")
+    set (CMAKE_C_FLAGS_DEBUG "-g -O0")
+    set (CMAKE_C_FLAGS_RELWITHDEBINFO "-g -DNDEBUG")
+    set (CMAKE_C_FLAGS_RELEASE "-DNDEBUG")
+endif ()
+
+if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Intel" OR
+    ${CMAKE_CXX_COMPILER_ID} STREQUAL "Cray")
+    set (CMAKE_CXX_FLAGS_DEBUG "-g -O0")
+    set (CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g -DNDEBUG")
+    set (CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG")
+endif ()
