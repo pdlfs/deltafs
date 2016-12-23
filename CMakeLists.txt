@@ -37,6 +37,7 @@
 #   -DPDLFS_SNAPPY=ON                      -- compile in snappy compression
 #     - SNAPPY_INCLUDE_DIR: optional hint for finding snappy.h
 #     - SNAPPY_LIBRARY_DIR: optional hint for finding snappy lib
+#   -DPDLFS_VERBOSE=1                      -- set max log verbose level
 #
 # DELTAFS specific compile time options flags:
 #   -DDELTAFS_BENCHMARKS=ON                -- build our MPI-based benchmarks
@@ -96,4 +97,3 @@ add_subdirectory (src)
 if (DELTAFS_BENCHMARKS)
     add_subdirectory (benchmarks)
 endif ()
-

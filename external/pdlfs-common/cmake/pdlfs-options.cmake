@@ -32,6 +32,7 @@
 #   -DPDLFS_SNAPPY=ON                      -- compile in snappy compression
 #     - SNAPPY_INCLUDE_DIR: optional hint for finding snappy.h
 #     - SNAPPY_LIBRARY_DIR: optional hint for finding snappy lib
+#   -DPDLFS_VERBOSE=1                      -- set max log verbose level
 #
 #
 # note: package config files for external packages must be preinstalled in 
@@ -71,6 +72,14 @@ set (PDLFS_RADOS "OFF" CACHE
      BOOL "Compile in RADOS object store")
 set (PDLFS_SNAPPY "OFF" CACHE
      BOOL "Enable SNAPPY (libsnappy-dev) for compression")
+set (PDLFS_VERBOSE "0" CACHE STRING "Max verbose level in log outputs")
+set_property (CACHE PDLFS_VERBOSE PROPERTY STRINGS "0" "1" "2" "3"
+              "4" "5" "6" "7" "8" "9" "10")
+
+#
+# ensure max log verbose level
+#
+add_compile_options (-DVERBOSE=${PDLFS_VERBOSE})
 
 #
 # now start pulling the parts in.  currently we set find_package to
