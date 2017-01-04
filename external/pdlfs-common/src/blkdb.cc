@@ -15,6 +15,10 @@
 
 namespace pdlfs {
 
+static inline void Error(Logger* L, const char* F, int N, const Status& s) {
+  Error(L, F, N, "BlkDB: %s", s.ToString().c_str());
+}
+
 static inline Status NoMoreUpdates() {
   return Status::IOError("Bad file state");
 }

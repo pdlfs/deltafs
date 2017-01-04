@@ -31,6 +31,15 @@ void Info(Logger* info_log, const char* file, int line, const char* fmt, ...) {
   }
 }
 
+void Warn(Logger* info_log, const char* file, int line, const char* fmt, ...) {
+  if (info_log != NULL) {
+    va_list ap;
+    va_start(ap, fmt);
+    info_log->Logv(file, line, 1, 0, fmt, ap);
+    va_end(ap);
+  }
+}
+
 void Error(Logger* info_log, const char* file, int line, const char* fmt, ...) {
   if (info_log != NULL) {
     va_list ap;

@@ -15,6 +15,10 @@
 namespace pdlfs {
 namespace rados {
 
+static inline void Error(Logger* L, const char* F, int N, const Status& s) {
+  Error(L, F, N, "RADOS: %s", s.ToString().c_str());
+}
+
 static std::string ToOid(const Fentry& fentry) {
   char tmp[200];
   char* p = tmp;

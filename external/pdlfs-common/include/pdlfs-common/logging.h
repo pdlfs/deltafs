@@ -11,14 +11,15 @@
 
 #include "pdlfs-common/env.h"
 
-// Common logging interface that could be used like:
+// Common logging interface designed to be used like:
+//  - Verbose(__LOG_ARGS__, verbose_level, "format string", va_args)
+//  - Info(__LOG_ARGS__, "format string", va_args)
+//  - Warn(__LOG_ARGS__, "format string", va_args)
+//  - Error(__LOG_ARGS__, "format string", va_args)
 //
-//   Verbose(__LOG_ARGS__, verbose_level, "msg_fmt", va_args)
-//   Info(__LOG_ARGS__, "msg_fmt", va_args)
-//   Error(__LOG_ARGS__, "msg_fmt", va_args)
+// If glog is present, all logging will be implemented by that.
+// Otherwise these log entries will go to stderr.
 //
-// If glog is present, all the logging is completed by it, otherwise
-// these log entries will go to stderr.
 namespace pdlfs {
 
 #define __LOG_ARGS__ ::pdlfs::Logger::Default(), __FILE__, __LINE__
@@ -39,6 +40,14 @@ extern void Info(Logger* info_log, const char* file, int line,
 #endif
     ;
 
+// Emit a warning log entry to *info_log if info_log is non-NULL.
+extern void Warn(Logger* info_log, const char* file, int line,
+                 const char* format, ...)
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((__format__(__printf__, 4, 5)))
+#endif
+    ;
+
 // Emit an error log entry to *info_log if info_log is non-NULL.
 extern void Error(Logger* info_log, const char* file, int line,
                   const char* format, ...)
@@ -46,10 +55,5 @@ extern void Error(Logger* info_log, const char* file, int line,
     __attribute__((__format__(__printf__, 4, 5)))
 #endif
     ;
-
-inline void Error(Logger* info_log, const char* file, int line,
-                  const Status& err) {
-  Error(info_log, file, line, "%s", err.ToString().c_str());
-}
 
 }  // namespace pdlfs
