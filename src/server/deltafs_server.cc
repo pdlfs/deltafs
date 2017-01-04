@@ -37,44 +37,40 @@ static void CheckSnappyCompression() {
   // See if snappy is working by attempting to compress a compressible string
   const char text[] = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
   if (!pdlfs::port::Snappy_Compress(text, sizeof(text), &compressed)) {
-    pdlfs::Warn(__LOG_ARGS__, "WARNING: Snappy compression is not enabled");
+    pdlfs::Warn(__LOG_ARGS__, "Snappy compression is not enabled");
   } else if (compressed.size() >= sizeof(text)) {
-    pdlfs::Warn(__LOG_ARGS__, "WARNING: Snappy compression is not effective");
+    pdlfs::Warn(__LOG_ARGS__, "Snappy compression is not effective");
   }
 }
 
 static void PrintWarnings() {
 // Check optimization if GCC
 #if defined(__GNUC__) && !defined(__OPTIMIZE__)
-  const char msg1[] =
-      "WARNING: Optimization is disabled; code unnecessarily slow";
+  const char msg1[] = "Optimization is disabled; code unnecessarily slow";
   pdlfs::Warn(__LOG_ARGS__, msg1);
 #endif
 
 // Check NDEBUG
 #ifndef NDEBUG
-  const char msg2[] =
-      "WARNING: Assertions are enabled; code unnecessarily slow";
+  const char msg2[] = "Assertions are enabled; code unnecessarily slow";
   pdlfs::Warn(__LOG_ARGS__, msg2);
 #endif
 
 // Check GFLAGS
 #ifndef PDLFS_GFLAGS
-  const char msg3[] =
-      "WARNING: Gflags is not enabled; command line arguments are ignored";
+  const char msg3[] = "Gflags is not enabled; some cmd arguments are ignored";
   pdlfs::Warn(__LOG_ARGS__, msg3);
 #endif
 
 // Check GLOG
 #ifndef PDLFS_GLOG
-  const char msg4[] =
-      "WARNING: Glog is not enabled; will log to stderr instead";
+  const char msg4[] = "Glog is not enabled; will log to stderr instead";
   pdlfs::Warn(__LOG_ARGS__, msg4);
 #endif
 
 // Check MPI
 #ifndef DELTAFS_MPI
-  const char msg5[] = "WARNING: MPI is not enabled; no auto bootstrapping";
+  const char msg5[] = "MPI is not enabled; no auto bootstrapping";
   pdlfs::Warn(__LOG_ARGS__, msg5);
 #endif
 }
@@ -139,7 +135,7 @@ int main(int argc, char* argv[]) {
       *slashr = 0;
     }
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.ver -> %s", mpiver);
-    pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.proc (hostname) -> %s", procname);
+    pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.proc -> %s (hostname)", procname);
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.nprocs -> %d", nprocs);
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.rank -> %d", rank);
 #endif
