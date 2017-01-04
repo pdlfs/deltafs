@@ -80,9 +80,12 @@ static void PrintWarnings() {
 }
 
 static pdlfs::MetadataServer* srv = NULL;
+
 #if defined(DELTAFS_MPI)
-static int srv_id = 0;
-static int num_srvs = 1;
+static char procname[MPI_MAX_PROCESSOR_NAME];
+static char mpiver[MPI_MAX_LIBRARY_VERSION_STRING];
+static int nprocs = 1;
+static int rank = 0;
 #endif
 
 static void Shutdown() {
@@ -111,21 +114,39 @@ int main(int argc, char* argv[]) {
   int ignored_return;
   int r = MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &ignored_return);
   if (r == MPI_SUCCESS) {
-    r = MPI_Comm_rank(MPI_COMM_WORLD, &srv_id);
+    r = MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     if (r == MPI_SUCCESS) {
-      r = MPI_Comm_size(MPI_COMM_WORLD, &num_srvs);
+      r = MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+      if (r == MPI_SUCCESS) {
+        r = MPI_Get_processor_name(procname, &ignored_return);
+      }
     }
-    // MPI no longer needed
-    MPI_Finalize();
   }
   if (r == MPI_SUCCESS) {
     char tmp[20];
-    snprintf(tmp, sizeof(tmp), "%d", srv_id);
+    snprintf(tmp, sizeof(tmp), "%d", rank);
     setenv("DELTAFS_InstanceId", tmp, 0);
-    snprintf(tmp, sizeof(tmp), "%d", num_srvs);
+    snprintf(tmp, sizeof(tmp), "%d", nprocs);
     setenv("DELTAFS_NumOfMetadataSrvs", tmp, 0);
+#if VERBOSE >= 1
+    MPI_Get_library_version(mpiver, &ignored_return);
+    char* slashn = strchr(mpiver, '\n');
+    if (slashn != NULL) {
+      *slashn = 0;
+    }
+    char* slashr = strchr(mpiver, '\r');
+    if (slashr != NULL) {
+      *slashr = 0;
+    }
+    pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.ver -> %s", mpiver);
+    pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.proc (hostname) -> %s", procname);
+    pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.nprocs -> %d", nprocs);
+    pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.rank -> %d", rank);
+#endif
+    // MPI no longer needed
+    MPI_Finalize();
   } else {
-    pdlfs::Error(__LOG_ARGS__, "MPI_init failed\n");
+    pdlfs::Error(__LOG_ARGS__, "MPI init failed");
     abort();
   }
 #endif
