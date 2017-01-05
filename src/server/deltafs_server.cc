@@ -44,7 +44,8 @@ static void CheckSnappyCompression() {
 }
 
 static void PrintWarnings() {
-// Check optimization if CC is gcc (this includes icc and craycc) or clang
+// Check optimization if CC is gcc or clang
+// This also works for icc and craycc on linux
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__OPTIMIZE__)
   const char msg1[] = "Optimization is disabled; code unnecessarily slow";
   pdlfs::Warn(__LOG_ARGS__, msg1);
@@ -75,6 +76,10 @@ static void PrintWarnings() {
 #endif
 }
 
+namespace pdlfs {
+extern void PrintSysInfo();
+}
+
 static pdlfs::MetadataServer* srv = NULL;
 
 #if defined(DELTAFS_MPI)
@@ -89,6 +94,7 @@ static void Shutdown() {
     srv->Interrupt();
   }
 }
+
 static void HandleSignal(int signal) {
   if (signal == SIGINT) {
     pdlfs::Info(__LOG_ARGS__, "SIGINT received");
@@ -106,6 +112,7 @@ int main(int argc, char* argv[]) {
 #endif
   PrintWarnings();
   CheckSnappyCompression();
+  pdlfs::PrintSysInfo();
 #if defined(DELTAFS_MPI)
   int ignored_return;
   int r = MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &ignored_return);
