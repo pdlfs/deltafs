@@ -76,15 +76,17 @@ Env* Env::Open(const Slice& env_name, const Slice& env_conf) {
   }
 }
 
-static void EmitLog(Logger* info_log, const char* fmt, va_list ap) {
-  info_log->Logv("pdlfs.xx", 0, 0, 3, fmt, ap);
+static void EmitDBLog(Logger* info_log, const char* fmt, va_list ap) {
+  std::string fmt2 = "DB - ";
+  fmt2 += fmt;
+  info_log->Logv("pdlfs.xx", 0, 0, 3, fmt2.c_str(), ap);
 }
 
 void Log(Logger* info_log, const char* fmt, ...) {
   if (info_log != NULL) {
     va_list ap;
     va_start(ap, fmt);
-    EmitLog(info_log, fmt, ap);
+    EmitDBLog(info_log, fmt, ap);
     va_end(ap);
   }
 }

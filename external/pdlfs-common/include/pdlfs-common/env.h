@@ -300,6 +300,7 @@ class FileLock {
 };
 
 // Log the specified data to *info_log if info_log is non-NULL.
+// Deprecated and should only get used by LevelDB code.
 extern void Log(Logger* info_log, const char* format, ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((__format__(__printf__, 2, 3)))
