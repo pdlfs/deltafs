@@ -13,6 +13,9 @@
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
 
+#include <map>
+#include <vector>
+
 namespace pdlfs {
 
 // REQUIRES: can only be called by the main thread.
@@ -161,13 +164,34 @@ static std::string GetLocalUri(int srv_id) {
   std::vector<std::string> ips;
   Status s = Env::Default()->FetchHostIPAddrs(&ips);
   if (s.ok() && !ips.empty()) {
+    std::map<std::string, int> unique_ips;
+    const std::string* ip = NULL;
+    int highest_score = 0;
+    for (std::vector<std::string>::iterator it = ips.begin(); it != ips.end();
+         ++it) {
+      if (unique_ips.count(*it) == 0) {
+        int score = 0;
+        if (!Slice(*it).starts_with("127.")) {
+          score = 1;
+        }
+        unique_ips.insert(std::make_pair(*it, score));
+        if (score >= highest_score) {
+          highest_score = score;
+          ip = &(*it);
+        }
+#if VERBOSE >= 1
+        Verbose(__LOG_ARGS__, 1, "host.ip -> %s (pri=%d)", it->c_str(), score);
+#endif
+      }
+    }
+    assert(ip != NULL);
     assert(srv_id >= 0);
     // Auto generate port number
     const int port = 10101 + srv_id;
     // Giving up if we run out of port numbers
     if (port < 60000) {
       char tmp[30];
-      snprintf(tmp, sizeof(tmp), "%s:%d", ips[0].c_str(), port);
+      snprintf(tmp, sizeof(tmp), "%s:%d", ip->c_str(), port);
       return tmp;
     }
   }
