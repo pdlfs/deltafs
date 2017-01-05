@@ -48,7 +48,7 @@ void PrintSysInfo() {
     int num_cpus = 0;
     std::string cpu_type;
     std::string cache_size;
-    std::string clflush_size;
+    std::string cl_size;
     while (fgets(line, sizeof(line), cpuinfo) != NULL) {
       const char* sep = strchr(line, ':');
       if (sep == NULL) {
@@ -57,17 +57,18 @@ void PrintSysInfo() {
       Slice key = TrimSpace(Slice(line, sep - 1 - line));
       Slice val = TrimSpace(Slice(sep + 1));
       if (key == "model name") {
-        ++num_cpus;
         cpu_type = val.ToString();
       } else if (key == "cache size") {
         cache_size = val.ToString();
       } else if (key == "clflush size") {
-        clflush_size = val.ToString();
+        cl_size = val.ToString();
+      } else if (key == "processor") {
+        num_cpus++;
       }
     }
-    Info(__LOG_ARGS__, "CPU:          %d * %s", num_cpus, cpu_type.c_str());
+    Info(__LOG_ARGS__, "CPU:          %d x %s", num_cpus, cpu_type.c_str());
     Info(__LOG_ARGS__, "CPUCache:     %s", cache_size.c_str());
-    Info(__LOG_ARGS__, "CPUCacheLine: %s Bytes", clflush_size.c_str());
+    Info(__LOG_ARGS__, "CPUCacheLine: %s Bytes", cl_size.c_str());
     fclose(cpuinfo);
   }
 #endif
