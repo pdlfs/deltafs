@@ -97,7 +97,7 @@ static int nprocs = 1;
 static int rank = 0;
 #endif
 
-static void Shutdown() {
+static inline void MaybeInterruptServer() {
   if (srv != NULL) {
     srv->Interrupt();
   }
@@ -105,8 +105,9 @@ static void Shutdown() {
 
 static void HandleSignal(int signal) {
   if (signal == SIGINT) {
+    fprintf(stderr, "\n>>> SIGINT <<<\n");  // Send feedback to terminal
     pdlfs::Info(__LOG_ARGS__, "SIGINT received");
-    Shutdown();
+    MaybeInterruptServer();
   }
 }
 
