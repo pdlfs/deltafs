@@ -393,8 +393,17 @@ void MetadataServer::Builder::WriteRunInfo() {
     WritableFile* f;
     Status s = env->NewWritableFile(fname, &f);
     if (s.ok()) {
-      s = f->Append(mdstopo_.srv_addrs[srv_id_]);
-      if (s.ok()) f->Flush();
+      const std::string& info = mdstopo_.srv_addrs[srv_id_];
+      assert(info.size() != 0);
+      s = f->Append(info);
+      if (s.ok()) {
+        s = f->Flush();
+        if (s.ok()) {
+#if VERBOSE >= 1
+          Verbose(__LOG_ARGS__, 1, "Server info > %s", fname.c_str());
+#endif
+        }
+      }
       f->Close();
       delete f;
     }
