@@ -70,7 +70,7 @@ Status MetadataServer::Dispose() {
   return s;
 }
 
-static void PrintStatus(const Status& rpc_status, const MDSMonitor* mon) {
+void MetadataServer::PrintStatus(const Status& status, const MDSMonitor* mon) {
   Info(__LOG_ARGS__,
        "Deltafs status: %s ["
        "FCRET: %llu"
@@ -81,11 +81,11 @@ static void PrintStatus(const Status& rpc_status, const MDSMonitor* mon) {
        " | "
        "LOKUP: %llu"
        "]",
-       rpc_status.ToString().c_str(),  //
-       mon->Get_Fcreat_count(),        //
-       mon->Get_Mkdir_count(),         //
-       mon->Get_Fstat_count(),         //
-       mon->Get_Lookup_count()         //
+       status.ToString().c_str(),  //
+       mon->Get_Fcreat_count(),    //
+       mon->Get_Mkdir_count(),     //
+       mon->Get_Fstat_count(),     //
+       mon->Get_Lookup_count()     //
        );
 }
 

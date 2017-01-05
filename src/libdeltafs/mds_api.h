@@ -14,6 +14,7 @@
 
 #include "deltafs/deltafs_api.h"
 #include "pdlfs-common/fstypes.h"
+#include "pdlfs-common/hash.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/mdb.h"
 #include "pdlfs-common/rpc.h"
@@ -238,11 +239,12 @@ class MDSWrapper : public MDS {
   MDS* base_;
 };
 
-// Monitor the total number of function calls
-class MDSMonitor : public MDSWrapper {
+// Monitor the total number of calls for each function.
+// Implementation is NOT thread-safe.
+class SimpleMDSMonitor : public MDSWrapper {
  public:
-  explicit MDSMonitor(MDS* base) : MDSWrapper(base) { Reset(); }
-  virtual ~MDSMonitor();
+  explicit SimpleMDSMonitor(MDS* base) : MDSWrapper(base) { Reset(); }
+  virtual ~SimpleMDSMonitor();
 
 #define DEF_OP(OP)                                                       \
  private:                                                                \
@@ -257,6 +259,59 @@ class MDSMonitor : public MDSWrapper {
       _##OP##_count_++;                                                  \
     }                                                                    \
     return s;                                                            \
+  }
+
+  DEF_OP(Fstat)
+  DEF_OP(Fcreat)
+  DEF_OP(Mkdir)
+  DEF_OP(Chmod)
+  DEF_OP(Chown)
+  DEF_OP(Uperm)
+  DEF_OP(Utime)
+  DEF_OP(Trunc)
+  DEF_OP(Unlink)
+  DEF_OP(Lookup)
+  DEF_OP(Listdir)
+  DEF_OP(Readidx)
+
+#undef DEF_OP
+
+  void Reset();
+};
+
+// Possibly more accurate counting by using thread-local like
+// counters for different threads.  Implementation is NOT strictly
+// thread-safe but should be good enough in practice.
+class PseudoConcurrentMDSMonitor : public MDSWrapper {
+  enum { N = 16 };
+
+ public:
+  explicit PseudoConcurrentMDSMonitor(MDS* base) : MDSWrapper(base) { Reset(); }
+  virtual ~PseudoConcurrentMDSMonitor();
+
+#define DEF_OP(OP)                                                           \
+ private:                                                                    \
+  uint64_t _##OP##_count_[N];                                                \
+                                                                             \
+ public:                                                                     \
+  void Reset_##OP##_count() {                                                \
+    memset(&_##OP##_count_[0], 0, sizeof(_##OP##_count_));                   \
+  }                                                                          \
+  unsigned long long Get_##OP##_count() const {                              \
+    uint64_t sum = 0;                                                        \
+    for (size_t i = 0; i < N; i++) {                                         \
+      sum += _##OP##_count_[i];                                              \
+    }                                                                        \
+    return sum;                                                              \
+  }                                                                          \
+  virtual Status OP(const OP##Options& options, OP##Ret* ret) {              \
+    Status s = this->MDSWrapper::OP(options, ret);                           \
+    if (s.ok()) {                                                            \
+      pthread_t tid = pthread_self();                                        \
+      uint32_t hash = Hash(reinterpret_cast<char*>(&tid), sizeof(tid), 301); \
+      _##OP##_count_[hash % N]++;                                            \
+    }                                                                        \
+    return s;                                                                \
   }
 
   DEF_OP(Fstat)

@@ -16,6 +16,7 @@
 namespace pdlfs {
 
 class MetadataServer {
+  typedef PseudoConcurrentMDSMonitor MDSMonitor;
   typedef MDS::RPC::SRV RPCWrapper;
 
  public:
@@ -28,11 +29,13 @@ class MetadataServer {
 
  private:
   class Builder;
+
   // No copying allowed
   void operator=(const MetadataServer&);
   MetadataServer(const MetadataServer&);
 
   MetadataServer() : interrupted_(NULL), cv_(&mutex_), running_(false) {}
+  static void PrintStatus(const Status&, const MDSMonitor*);
   MDSEnv* myenv_;
   port::AtomicPointer interrupted_;
   port::Mutex mutex_;
