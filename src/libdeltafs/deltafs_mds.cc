@@ -70,6 +70,25 @@ Status MetadataServer::Dispose() {
   return s;
 }
 
+static void PrintStatus(const Status& rpc_status, const MDSMonitor* mon) {
+  Info(__LOG_ARGS__,
+       "Deltafs status: %s ["
+       "FCRET: %llu"
+       " | "
+       "MKDIR: %llu"
+       " | "
+       "FSTAT: %llu"
+       " | "
+       "LOKUP: %llu"
+       "]",
+       rpc_status.ToString().c_str(),  //
+       mon->Get_Fcreat_count(),        //
+       mon->Get_Mkdir_count(),         //
+       mon->Get_Fstat_count(),         //
+       mon->Get_Lookup_count()         //
+       );
+}
+
 Status MetadataServer::RunTillInterruptionOrError() {
   Status s;
   MutexLock ml(&mutex_);
@@ -84,7 +103,7 @@ Status MetadataServer::RunTillInterruptionOrError() {
         if (rpc_ != NULL) {
           s = rpc_->status();
         }
-        Info(__LOG_ARGS__, "Deltafs status: %s", s.ToString().c_str());
+        PrintStatus(s, mdsmon_);
         if (!s.ok()) {
           break;
         }

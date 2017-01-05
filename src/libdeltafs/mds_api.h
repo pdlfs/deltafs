@@ -244,19 +244,19 @@ class MDSMonitor : public MDSWrapper {
   explicit MDSMonitor(MDS* base) : MDSWrapper(base) { Reset(); }
   virtual ~MDSMonitor();
 
-#define DEF_OP(OP)                                              \
- private:                                                       \
-  uint64_t _##OP##_count_;                                      \
-                                                                \
- public:                                                        \
-  void Reset_##OP##_count() { _##OP##_count_ = 0; }             \
-  uint64_t Get_##OP##_count() const { return _##OP##_count_; }  \
-  virtual Status OP(const OP##Options& options, OP##Ret* ret) { \
-    Status s = this->MDSWrapper::OP(options, ret);              \
-    if (s.ok()) {                                               \
-      _##OP##_count_++;                                         \
-    }                                                           \
-    return s;                                                   \
+#define DEF_OP(OP)                                                       \
+ private:                                                                \
+  uint64_t _##OP##_count_;                                               \
+                                                                         \
+ public:                                                                 \
+  void Reset_##OP##_count() { _##OP##_count_ = 0; }                      \
+  unsigned long long Get_##OP##_count() const { return _##OP##_count_; } \
+  virtual Status OP(const OP##Options& options, OP##Ret* ret) {          \
+    Status s = this->MDSWrapper::OP(options, ret);                       \
+    if (s.ok()) {                                                        \
+      _##OP##_count_++;                                                  \
+    }                                                                    \
+    return s;                                                            \
   }
 
   DEF_OP(Fstat)
