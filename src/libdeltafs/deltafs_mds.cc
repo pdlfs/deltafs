@@ -44,6 +44,10 @@ Status MetadataServer::Dispose() {
     delete mds_;
     mds_ = NULL;
   }
+  if (mdsmon_ != NULL) {
+    delete mdsmon_;
+    mdsmon_ = NULL;
+  }
   if (mdb_ != NULL) {
     delete mdb_;
     mdb_ = NULL;
@@ -111,7 +115,8 @@ class MetadataServer::Builder {
         rpc_(NULL),
         db_(NULL),
         mdb_(NULL),
-        mds_(NULL) {}
+        mds_(NULL),
+        mdsmon_(NULL) {}
   ~Builder() {}
 
   Status status() const { return status_; }
@@ -139,6 +144,7 @@ class MetadataServer::Builder {
   MDB* mdb_;
   MDSOptions mdsopts_;
   MDS* mds_;
+  MDSMonitor* mdsmon_;
   uint64_t snap_id_;  // snapshot id
   uint64_t reg_id_;   // registry id
   int srv_id_;
@@ -354,6 +360,7 @@ void MetadataServer::Builder::OpenMDS() {
 
   if (ok()) {
     mds_ = MDS::Open(mdsopts_);
+    mdsmon_ = new MDSMonitor(mds_);
   }
 }
 
@@ -372,7 +379,7 @@ void MetadataServer::Builder::OpenRPC() {
   }
 
   if (ok()) {
-    wrapper_ = new RPCWrapper(mds_);
+    wrapper_ = new RPCWrapper(mdsmon_);
     rpc_ = new RPCServer(wrapper_);
     rpc_->AddChannel(uri, 4);  // FIXME
   }
@@ -424,6 +431,7 @@ MetadataServer* MetadataServer::Builder::BuildServer() {
     srv->rpc_ = rpc_;
     srv->wrapper_ = wrapper_;
     srv->mds_ = mds_;
+    srv->mdsmon_ = mdsmon_;
     srv->myenv_ = myenv_;
     srv->mdb_ = mdb_;
     srv->db_ = db_;
@@ -431,6 +439,7 @@ MetadataServer* MetadataServer::Builder::BuildServer() {
   } else {
     delete rpc_;
     delete wrapper_;
+    delete mdsmon_;
     delete mds_;
     delete myenv_;
     delete mdb_;

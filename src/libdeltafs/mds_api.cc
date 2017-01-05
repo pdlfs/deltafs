@@ -17,6 +17,8 @@ MDS::RPC::CLI::~CLI() {}
 
 MDS::RPC::SRV::~SRV() {}
 
+MDSMonitor::~MDSMonitor() {}
+
 MDSWrapper::~MDSWrapper() {}
 
 MDSTracer::~MDSTracer() {}
@@ -1140,6 +1142,21 @@ void MDS::RPC::SRV::GOUPT(Msg& in, Msg& out) {
   } else {
     out.err = s.err_code();
   }
+}
+
+void MDSMonitor::Reset() {
+  Reset_Fstat_count();
+  Reset_Fcreat_count();
+  Reset_Mkdir_count();
+  Reset_Chmod_count();
+  Reset_Chown_count();
+  Reset_Uperm_count();
+  Reset_Utime_count();
+  Reset_Trunc_count();
+  Reset_Unlink_count();
+  Reset_Lookup_count();
+  Reset_Listdir_count();
+  Reset_Readidx_count();
 }
 
 }  // namespace pdlfs

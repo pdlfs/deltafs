@@ -43,6 +43,7 @@ class MetadataServer {
   RPCWrapper* wrapper_;
 
   MDS* mds_;
+  MDSMonitor* mdsmon_;
   MDB* mdb_;
   DB* db_;
 };

@@ -238,6 +238,45 @@ class MDSWrapper : public MDS {
   MDS* base_;
 };
 
+// Monitor the total number of function calls
+class MDSMonitor : public MDSWrapper {
+ public:
+  explicit MDSMonitor(MDS* base) : MDSWrapper(base) { Reset(); }
+  virtual ~MDSMonitor();
+
+#define DEF_OP(OP)                                              \
+ private:                                                       \
+  uint64_t _##OP##_count_;                                      \
+                                                                \
+ public:                                                        \
+  void Reset_##OP##_count() { _##OP##_count_ = 0; }             \
+  uint64_t Get_##OP##_count() const { return _##OP##_count_; }  \
+  virtual Status OP(const OP##Options& options, OP##Ret* ret) { \
+    Status s = this->MDSWrapper::OP(options, ret);              \
+    if (s.ok()) {                                               \
+      _##OP##_count_++;                                         \
+    }                                                           \
+    return s;                                                   \
+  }
+
+  DEF_OP(Fstat)
+  DEF_OP(Fcreat)
+  DEF_OP(Mkdir)
+  DEF_OP(Chmod)
+  DEF_OP(Chown)
+  DEF_OP(Uperm)
+  DEF_OP(Utime)
+  DEF_OP(Trunc)
+  DEF_OP(Unlink)
+  DEF_OP(Lookup)
+  DEF_OP(Listdir)
+  DEF_OP(Readidx)
+
+#undef DEF_OP
+
+  void Reset();
+};
+
 // Log every RPC message to assist debugging.
 class MDSTracer : public MDSWrapper {
   void Trace(const char* type, const char* op, const std::string& pid,
