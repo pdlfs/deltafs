@@ -8,6 +8,7 @@
  */
 
 #include "pdlfs-common/pdlfs_config.h"
+#include "pdlfs-common/pdlfs_platform.h"
 
 #include "pdlfs-common/logging.h"
 
@@ -67,20 +68,25 @@ void PrintSysInfo() {
   }
 #endif
 
+  Info(__LOG_ARGS__, "Target OS:  %s %s", PDLFS_TARGET_OS,
+       PDLFS_TARGET_OS_VERSION);
+  Info(__LOG_ARGS__, "OS:         %s %s", PDLFS_OS, PDLFS_OS_VERSION);
+
 #if defined(__INTEL_COMPILER)
-  Info(__LOG_ARGS__, "CC:         Intel (icpc) %d.%d.%d %d",
+  Info(__LOG_ARGS__, "CXX:        Intel (icpc) %d.%d.%d %d",
        __INTEL_COMPILER / 100, __INTEL_COMPILER % 100, __INTEL_COMPILER_UPDATE,
        __INTEL_COMPILER_BUILD_DATE);
 #elif defined(_CRAYC)
-  Info(__LOG_ARGS__, "CC:         CRAY (crayc++) %d.%d", _RELEASE,
+  Info(__LOG_ARGS__, "CXX:        CRAY (crayc++) %d.%d", _RELEASE,
        _RELEASE_MINOR);
 #elif defined(__GNUC__)
-  Info(__LOG_ARGS__, "CC:         GNU (g++) %d.%d.%d", __GNUC__, __GNUC_MINOR__,
+  Info(__LOG_ARGS__, "CXX:        GNU (g++) %d.%d.%d", __GNUC__, __GNUC_MINOR__,
        __GNUC_PATCHLEVEL__);
 #elif defined(__clang__)
-  Info(__LOG_ARGS__, "CC:         Clang (clang++) %d.%d.%d", __clang_major__,
+  Info(__LOG_ARGS__, "CXX:        Clang (clang++) %d.%d.%d", __clang_major__,
        __clang_minor__, __clang_patchlevel__);
 #endif
+
   Info(__LOG_ARGS__, "===============================================");
 }
 
