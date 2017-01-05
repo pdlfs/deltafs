@@ -31,6 +31,7 @@
 
 #include <signal.h>
 #include <stdlib.h>
+#include <string.h>
 
 static void CheckSnappyCompression() {
   std::string compressed;
@@ -43,9 +44,16 @@ static void CheckSnappyCompression() {
   }
 }
 
+static void CheckCrossCompile() {
+  if (strcmp(PDLFS_OS, PDLFS_TARGET_OS) != 0) {
+    pdlfs::Warn(__LOG_ARGS__, "Cross compile detected; code compiled for %s %s",
+                PDLFS_TARGET_OS, PDLFS_TARGET_OS_VERSION);
+  }
+}
+
 static void PrintWarnings() {
 // Check optimization if CC is gcc or clang
-// This also works for icc and craycc on linux
+// This also works for icc and craycc at least on linux
 #if (defined(__GNUC__) || defined(__clang__)) && !defined(__OPTIMIZE__)
   const char msg1[] = "Optimization is disabled; code unnecessarily slow";
   pdlfs::Warn(__LOG_ARGS__, msg1);
@@ -65,7 +73,7 @@ static void PrintWarnings() {
 
 // Check GLOG
 #ifndef PDLFS_GLOG
-  const char msg4[] = "Glog is not enabled; will log to stderr instead";
+  const char msg4[] = "Glog is not enabled; will use stderr instead";
   pdlfs::Warn(__LOG_ARGS__, msg4);
 #endif
 
@@ -112,6 +120,7 @@ int main(int argc, char* argv[]) {
 #endif
   PrintWarnings();
   CheckSnappyCompression();
+  CheckCrossCompile();
   pdlfs::PrintSysInfo();
 #if defined(DELTAFS_MPI)
   int ignored_return;
