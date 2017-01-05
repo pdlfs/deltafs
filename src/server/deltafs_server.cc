@@ -44,8 +44,8 @@ static void CheckSnappyCompression() {
 }
 
 static void PrintWarnings() {
-// Check optimization if GCC
-#if defined(__GNUC__) && !defined(__OPTIMIZE__)
+// Check optimization if CC is gcc (this includes icc and craycc) or clang
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(__OPTIMIZE__)
   const char msg1[] = "Optimization is disabled; code unnecessarily slow";
   pdlfs::Warn(__LOG_ARGS__, msg1);
 #endif
