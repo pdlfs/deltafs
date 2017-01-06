@@ -9,16 +9,26 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_conf.h"
+#include "deltafs_conf_raw.h"
 
 #include "pdlfs-common/strutil.h"
+
+#include <ctype.h>
 
 namespace pdlfs {
 namespace config {
 
+inline void ToLowerCase(std::string* str) {
+  std::string::iterator it;
+  for (it = str->begin(); it != str->end(); ++it) {
+    *it = tolower(*it);
+  }
+}
+
 #define CONF_LOADER_UI64(conf)                           \
   inline Status Load##conf(uint64_t* dst) {              \
     std::string str_##conf = config::conf();             \
+    ToLowerCase(&str_##conf);                            \
     if (!ParsePrettyNumber(str_##conf, dst)) {           \
       return Status::InvalidArgument(#conf, str_##conf); \
     } else {                                             \
@@ -29,6 +39,7 @@ namespace config {
 #define CONF_LOADER_BOOL(conf)                           \
   inline Status Load##conf(bool* dst) {                  \
     std::string str_##conf = config::conf();             \
+    ToLowerCase(&str_##conf);                            \
     if (!ParsePrettyBool(str_##conf, dst)) {             \
       return Status::InvalidArgument(#conf, str_##conf); \
     } else {                                             \

@@ -29,11 +29,8 @@ extern std::string RPCProto();
 // Indicate if deltafs should trace calls to metadata server.
 // e.g. true, yes
 extern std::string MDSTracing();
-// Return an ordered array of server addrs. Addrs associated with
-// different servers are separated by '&'; addrs associated with
-// a same server are separated by ','. We are assuming each metadata
-// server may potentially have multiple addrs.
-// e.g. 10.0.0.1:10000&10.0.0.1:20000
+// Return an ordered array of server addrs. Addrs are separated by ','.
+// e.g. 10.0.0.1:10000,10.0.0.1:20000
 extern std::string MetadataSrvAddrs();
 // Return the max number of files that could be opened per client process.
 // e.g. 1024

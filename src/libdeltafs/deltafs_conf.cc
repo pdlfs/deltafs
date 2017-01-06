@@ -30,13 +30,6 @@ static std::string LoadFromEnv(const char* key) {
   static std::string FLAGS_load_##n() { return LoadFromEnv("DELTAFS_" #n); } \
   static std::string FLAGS_D##n = v;
 #endif
-#include <ctype.h>
-static void ToLowerCase(std::string* str) {
-  std::string::iterator it;
-  for (it = str->begin(); it != str->end(); ++it) {
-    *it = tolower(*it);
-  }
-}
 #define DEFINE_FLAG(n, v)                  \
   DEFINE_FLAG_PORT(n, v)                   \
   std::string n() {                        \
@@ -47,7 +40,7 @@ static void ToLowerCase(std::string* str) {
     return result;                         \
   }
 
-#include "deltafs_conf.h"
+#include "deltafs_conf_raw.h"
 namespace pdlfs {
 namespace config {
 
@@ -62,8 +55,8 @@ DEFINE_FLAG(SizeOfSrvLeaseTable, "4k")
 DEFINE_FLAG(SizeOfSrvDirTable, "1k")
 DEFINE_FLAG(SizeOfCliLookupCache, "4k")
 DEFINE_FLAG(SizeOfCliIndexCache, "1k")
-DEFINE_FLAG(SizeOfMetadataWriteBuffer, "32m")
-DEFINE_FLAG(SizeOfMetadataTables, "32m")
+DEFINE_FLAG(SizeOfMetadataWriteBuffer, "32M")
+DEFINE_FLAG(SizeOfMetadataTables, "32M")
 DEFINE_FLAG(DisableMetadataCompaction, "true")
 DEFINE_FLAG(AtomicPathRes, "false")
 DEFINE_FLAG(ParanoidChecks, "false")
