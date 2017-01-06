@@ -293,18 +293,18 @@ Status Client::Fopen(const char* path, int flags, mode_t mode, FileInfo* info) {
 // be specified.
 // REQUIRES: mutex_ has been locked.
 Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
-                            FileAndEntry* at, FileInfo* info) {
+                            FileAndEntry* pivot, FileInfo* info) {
   Status s;
   mutex_.Unlock();
   Fentry fentry;
   mode_t my_file_mode = 0;
   bool is_new = false;  // True when file is newly created
-  if ((flags & O_CREAT) != O_CREAT) {
-    s = mdscli_->Fstat(path, &fentry, at != NULL ? at->ent : NULL);
-  } else {
+  const Fentry* at = pivot != NULL ? pivot->ent : NULL;
+  if ((flags & O_CREAT) == O_CREAT) {
     s = mdscli_->Fcreat(path, MaskMode(mode), &fentry,
-                        (flags & O_EXCL) == O_EXCL, &is_new,
-                        at != NULL ? at->ent : NULL);
+                        (flags & O_EXCL) == O_EXCL, &is_new, at);
+  } else {
+    s = mdscli_->Fstat(path, &fentry, at);
   }
 
   // Verify file modes
@@ -347,8 +347,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
   if (at == NULL) {
     at_str = DirId(0, 0, 0).DebugString();
   } else {
-    const DirId& dir = at->ent->pid;
-    at_str = dir.DebugString();
+    at_str = at->pid.DebugString();
   }
 
   if (s.ok()) {
@@ -399,10 +398,10 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
         d->writer = NULL;
 
         fh = d;
-      } else if (at != NULL) {
-        if (DELTAFS_DIR_IS_PLFS_STYLE(at->ent->file_mode())) {
-          assert(at->file->fh != NULL);
-          fh = at->file->fh;
+      } else if (pivot != NULL) {
+        if (DELTAFS_DIR_IS_PLFS_STYLE(pivot->ent->file_mode())) {
+          assert(pivot->file->fh != NULL);
+          fh = pivot->file->fh;
         }
       }
 
