@@ -45,6 +45,14 @@ class PosixFio : public Fio {
   };
 #endif
 
+  static Handle* NewHandle(int fd) {
+#ifndef NDEBUG
+    return new PosixFd(fd);
+#else
+    return (Handle*)fd;
+#endif
+  }
+
   static void Free(Handle* fh) {
 #ifndef NDEBUG
     delete dynamic_cast<PosixFd*>(fh);
@@ -78,11 +86,7 @@ class PosixFio : public Fio {
     const char* f = fname.c_str();
     int fd = open(f, O_RDWR | O_CREAT | O_TRUNC | o1, DEFFILEMODE);
     if (fd != -1) {
-#ifndef NDEBUG
-      *fh = new PosixFd(fd);
-#else
-      *fh = (Handle*)fd;
-#endif
+      *fh = NewHandle(fd);
     } else {
       s = IOError(fname, errno);
     }
@@ -109,11 +113,7 @@ class PosixFio : public Fio {
       if (r != 0) {
         s = IOError(fname, errno);
       } else {
-#ifndef NDEBUG
-        *fh = new PosixFd(fd);
-#else
-        *fh = (Handle*)fd;
-#endif
+        *fh = NewHandle(fd);
         *size = statbuf.st_size;
         *mtime = statbuf.st_mtime;
         *mtime *= 1000;

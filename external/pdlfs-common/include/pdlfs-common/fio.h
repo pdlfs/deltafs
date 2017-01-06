@@ -36,12 +36,14 @@ class Fio {
  public:
   static Fio* Open(const Slice& fio_name, const Slice& fio_conf);
 #ifndef NDEBUG
+  // Allows dynamic type checks
   class Handle {
    protected:
     virtual ~Handle();
   };
 #else
-  struct Handle {};  // Opaque file handle
+  // Opaque file handle
+  struct Handle {};
 #endif
   virtual ~Fio();
   Fio() {}

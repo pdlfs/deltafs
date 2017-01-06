@@ -92,7 +92,9 @@ static pdlfs::MetadataServer* srv = NULL;
 
 #if defined(DELTAFS_MPI)
 static char procname[MPI_MAX_PROCESSOR_NAME];
-static char mpiver[MPI_MAX_LIBRARY_VERSION_STRING];
+#if VERBOSE >= 1
+static char mpistr[MPI_MAX_LIBRARY_VERSION_STRING];
+#endif
 static int nprocs = 1;
 static int rank = 0;
 #endif
@@ -142,16 +144,16 @@ int main(int argc, char* argv[]) {
     snprintf(tmp, sizeof(tmp), "%d", nprocs);
     setenv("DELTAFS_NumOfMetadataSrvs", tmp, 0);
 #if VERBOSE >= 1
-    MPI_Get_library_version(mpiver, &ignored_return);
-    char* slashn = strchr(mpiver, '\n');
+    MPI_Get_library_version(mpistr, &ignored_return);
+    char* slashn = strchr(mpistr, '\n');
     if (slashn != NULL) {
       *slashn = 0;
     }
-    char* slashr = strchr(mpiver, '\r');
+    char* slashr = strchr(mpistr, '\r');
     if (slashr != NULL) {
       *slashr = 0;
     }
-    pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.ver -> %s", mpiver);
+    pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.ver -> %s", mpistr);
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.proc -> %s (hostname)", procname);
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.nprocs -> %d", nprocs);
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.rank -> %d", rank);
