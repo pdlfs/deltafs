@@ -2,7 +2,7 @@
 
 /*
  * Copyright (c) 2015 The SILT Authors.
- * Copyright (c) 2015-2016 Carnegie Mellon University.
+ * Copyright (c) 2015-2017 Carnegie Mellon University.
  *
  * All rights reserved.
  *
