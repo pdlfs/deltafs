@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <set>
 
 #include "deltafs_client.h"
 #include "deltafs_conf_loader.h"
@@ -342,16 +343,21 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
   }
 
 #if VERBOSE >= OP_VERY_VERBOSE_LEVEL
+  std::string at_str;
+  if (at == NULL) {
+    at_str = DirId(0, 0, 0).DebugString();
+  } else {
+    const DirId& dir = at->ent->pid;
+    at_str = dir.DebugString();
+  }
+
   if (s.ok()) {
     Verbose(__LOG_ARGS__, OP_VERY_VERBOSE_LEVEL, "%s (at pid=%s) %s -> %s",
-            __func__, at != NULL ? at->ent->DebugString().c_str()
-                                 : DirId(0, 0, 0).DebugString().c_str(),
-            path.c_str(), fentry.DebugString().c_str());
+            __func__, at_str.c_str(), path.c_str(),
+            fentry.DebugString().c_str());
   } else {
     Verbose(__LOG_ARGS__, OP_VERY_VERBOSE_LEVEL, "%s (at pid=%s) %s: %s",
-            __func__, at != NULL ? at->ent->DebugString().c_str()
-                                 : DirId(0, 0, 0).DebugString().c_str(),
-            path.c_str(), STATUS_STR(s));
+            __func__, at_str.c_str(), path.c_str(), STATUS_STR(s));
   }
 #endif
 
@@ -1156,15 +1162,30 @@ class Client::Builder {
   int gid_;
 };
 
+static void PrintIds(int uid, int gid, unsigned long long iid) {
+#if VERBOSE >= 2
+  Verbose(__LOG_ARGS__, 2, "me.instance_id -> %llu", iid);
+  Verbose(__LOG_ARGS__, 2, "me.uid -> %d", uid);
+  Verbose(__LOG_ARGS__, 2, "me.gid -> %d", gid);
+#endif
+}
+
 void Client::Builder::LoadIds() {
   uid_ = FetchUid();
   gid_ = FetchGid();
 
-  uint64_t cli_id;
-  status_ = config::LoadInstanceId(&cli_id);
+  uint64_t iid;
+  status_ = config::LoadInstanceId(&iid);
   if (ok()) {
-    cli_id_ = cli_id;
+    PrintIds(uid_, gid_, iid);
+    cli_id_ = iid;
   }
+}
+
+static void PrintSrvUri(const std::string& uri, const std::string& fname) {
+#if VERBOSE >= 2
+  Verbose(__LOG_ARGS__, 2, "%s << %s", uri.c_str(), fname.c_str());
+#endif
 }
 
 // Try to obtain the uri for a specified server.
@@ -1173,24 +1194,33 @@ static std::string TryObtainSrvUri(int srv_id) {
   std::string run_dir = config::RunDir();
   if (!run_dir.empty()) {
     Env* const env = Env::Default();
-
-    std::string result;
+    std::string uri;
     std::string fname = run_dir;
     char tmp[30];
     snprintf(tmp, sizeof(tmp), "/srv-%08d.uri", srv_id);
     fname += tmp;
-    Status s = ReadFileToString(env, fname, &result);
+    Status s = ReadFileToString(env, fname, &uri);
     if (s.ok()) {
-#if VERBOSE >= 10
-      Verbose(__LOG_ARGS__, 10, "TryObtainSrvUri #%d: %s", srv_id,
-              result.c_str());
-#endif
-
-      return result;
+      PrintSrvUri(uri, fname);
+      return uri;
     }
   }
 
   return "";
+}
+
+static void PrintTopology(const MDSTopology& topo) {
+#if VERBOSE >= 2
+  std::set<unsigned long long> unique_ranks;
+  unique_ranks.insert(topo.num_srvs - 1);
+  unique_ranks.insert(topo.num_srvs / 2);
+  unique_ranks.insert(0);
+  for (std::set<unsigned long long>::iterator it = unique_ranks.begin();
+       it != unique_ranks.end(); ++it) {
+    Verbose(__LOG_ARGS__, 2, "srv.%llu.ip -> %s", *it,
+            topo.srv_addrs[*it].c_str());
+  }
+#endif
 }
 
 void Client::Builder::LoadMDSTopology() {
@@ -1240,6 +1270,7 @@ void Client::Builder::LoadMDSTopology() {
   }
 
   if (ok()) {
+    PrintTopology(mdstopo_);
     MDSFactoryImpl* fty = new MDSFactoryImpl;
     status_ = fty->Init(mdstopo_);
     if (ok()) {
