@@ -19,6 +19,14 @@ static inline void Error(Logger* L, const char* F, int N, const Status& s) {
   Error(L, F, N, "RADOS: %s", s.ToString().c_str());
 }
 
+static inline RadosFobj* ToFobj(Fio::Handle* fh) {
+#ifndef NDEBUG
+  return dynamic_cast<RadosFobj*>(fh);
+#else
+  return (RadosFobj*)fh;
+#endif
+}
+
 static std::string ToOid(const Fentry& fentry) {
   char tmp[200];
   char* p = tmp;
@@ -89,12 +97,10 @@ Status RadosFio::Creat(const Fentry& fentry, bool append_only, Handle** fh) {
     rados_aio_create_completion(fobj, NULL, IO_safe, &comp);
     rados_aio_write_full(fctx, oid.c_str(), comp, "", 0);
     rados_aio_release(comp);
+
+    *fh = (Handle*)fobj;
   }
 
-  if (s.ok()) {
-    *fh = reinterpret_cast<Handle*>(fobj);
-    assert(*fh != NULL);
-  }
   return s;
 }
 
@@ -155,14 +161,11 @@ Status RadosFio::Open(const Fentry& fentry, bool create_if_missing,
       rados_aio_release(comp);
     }
 
+    *fh = (Handle*)fobj;
     *mtime = fobj->mtime;
     *size = fobj->size;
   }
 
-  if (s.ok()) {
-    *fh = reinterpret_cast<Handle*>(fobj);
-    assert(*fh != NULL);
-  }
   return s;
 }
 
@@ -207,7 +210,7 @@ Status RadosFio::Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
                        uint64_t* size, bool skip_cache) {
   Status s;
   assert(fh != NULL);
-  RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
+  RadosFobj* fobj = ToFobj(fh);
   MutexLock ml(mutex_);
   if (fobj->bg_err != 0) {
     s = RadosError("rados_bg_io", fobj->bg_err);
@@ -246,7 +249,7 @@ Status RadosFio::Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
 
 Status RadosFio::Close(const Fentry& fentry, Handle* fh) {
   assert(fh != NULL);
-  RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
+  RadosFobj* fobj = ToFobj(fh);
   mutex_->Lock();
   Unref(fobj);
   mutex_->Unlock();
@@ -256,7 +259,7 @@ Status RadosFio::Close(const Fentry& fentry, Handle* fh) {
 Status RadosFio::Flush(const Fentry& fentry, Handle* fh, bool force_sync) {
   Status s;
   assert(fh != NULL);
-  RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
+  RadosFobj* fobj = ToFobj(fh);
   mutex_->Lock();
   if (fobj->bg_err != 0) {
     s = RadosError("rados_bg_io", fobj->bg_err);
@@ -288,7 +291,7 @@ Status RadosFio::Flush(const Fentry& fentry, Handle* fh, bool force_sync) {
 Status RadosFio::Ftrunc(const Fentry& fentry, Handle* fh, uint64_t size) {
   Status s;
   assert(fh != NULL);
-  RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
+  RadosFobj* fobj = ToFobj(fh);
   MutexLock ml(mutex_);
   if (fobj->bg_err != 0) {
     s = RadosError("rados_bg_io", fobj->bg_err);
@@ -323,7 +326,7 @@ Status RadosFio::Ftrunc(const Fentry& fentry, Handle* fh, uint64_t size) {
 Status RadosFio::Write(const Fentry& fentry, Handle* fh, const Slice& buf) {
   Status s;
   assert(fh != NULL);
-  RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
+  RadosFobj* fobj = ToFobj(fh);
   MutexLock ml(mutex_);
   if (fobj->bg_err != 0) {
     s = RadosError("rados_bg_io", fobj->bg_err);
@@ -390,7 +393,7 @@ Status RadosFio::Pwrite(const Fentry& fentry, Handle* fh, const Slice& buf,
                         uint64_t off) {
   Status s;
   assert(fh != NULL);
-  RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
+  RadosFobj* fobj = ToFobj(fh);
   MutexLock ml(mutex_);
   if (fobj->bg_err != 0) {
     s = RadosError("rados_bg_io", fobj->bg_err);
@@ -454,7 +457,7 @@ Status RadosFio::Read(const Fentry& fentry, Handle* fh, Slice* result,
                       uint64_t size, char* scratch) {
   Status s;
   assert(fh != NULL);
-  RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
+  RadosFobj* fobj = ToFobj(fh);
   MutexLock ml(mutex_);
   if (fobj->bg_err != 0) {
     s = RadosError("rados_bg_io", fobj->bg_err);
@@ -494,7 +497,7 @@ Status RadosFio::Pread(const Fentry& fentry, Handle* fh, Slice* result,
                        uint64_t off, uint64_t size, char* scratch) {
   Status s;
   assert(fh != NULL);
-  RadosFobj* fobj = reinterpret_cast<RadosFobj*>(fh);
+  RadosFobj* fobj = ToFobj(fh);
   MutexLock ml(mutex_);
   if (fobj->bg_err != 0) {
     s = RadosError("rados_bg_io", fobj->bg_err);

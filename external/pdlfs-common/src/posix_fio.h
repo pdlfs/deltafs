@@ -35,6 +35,31 @@ class PosixFio : public Fio {
     return tmp;
   }
 
+#ifndef NDEBUG
+  class PosixFd : public Handle {
+   public:
+    explicit PosixFd(int fd) : fd(fd) {}
+    virtual ~PosixFd() {}
+
+    int fd;
+  };
+#endif
+
+  static void Free(Handle* fh) {
+#ifndef NDEBUG
+    delete dynamic_cast<PosixFd*>(fh);
+#endif
+  }
+
+  static int ToFd(Handle* fh) {
+#ifndef NDEBUG
+    assert(fh != NULL);
+    return dynamic_cast<PosixFd*>(fh)->fd;
+#else
+    return (intptr_t)fh;
+#endif
+  }
+
  public:
   explicit PosixFio(const Slice& root) {
     Env::Default()->CreateDir(root);
@@ -53,7 +78,11 @@ class PosixFio : public Fio {
     const char* f = fname.c_str();
     int fd = open(f, O_RDWR | O_CREAT | O_TRUNC | o1, DEFFILEMODE);
     if (fd != -1) {
-      *fh = reinterpret_cast<Handle*>(fd);
+#ifndef NDEBUG
+      *fh = new PosixFd(fd);
+#else
+      *fh = (Handle*)fd;
+#endif
     } else {
       s = IOError(fname, errno);
     }
@@ -80,7 +109,11 @@ class PosixFio : public Fio {
       if (r != 0) {
         s = IOError(fname, errno);
       } else {
-        *fh = reinterpret_cast<Handle*>(fd);
+#ifndef NDEBUG
+        *fh = new PosixFd(fd);
+#else
+        *fh = (Handle*)fd;
+#endif
         *size = statbuf.st_size;
         *mtime = statbuf.st_mtime;
         *mtime *= 1000;
@@ -94,7 +127,7 @@ class PosixFio : public Fio {
   virtual Status Fstat(const Fentry& fentry, Handle* fh, uint64_t* mtime,
                        uint64_t* size, bool skip_cache = false) {
     Status s;
-    int fd = reinterpret_cast<intptr_t>(fh);
+    int fd = ToFd(fh);
     struct stat statbuf;
     int r = fstat(fd, &statbuf);
     if (r == 0) {
@@ -111,7 +144,7 @@ class PosixFio : public Fio {
 
   virtual Status Write(const Fentry& fentry, Handle* fh, const Slice& buf) {
     Status s;
-    int fd = reinterpret_cast<intptr_t>(fh);
+    int fd = ToFd(fh);
     ssize_t n = write(fd, buf.data(), buf.size());
     if (n == -1) {
       std::string fname = root_ + "/";
@@ -125,7 +158,7 @@ class PosixFio : public Fio {
   virtual Status Pwrite(const Fentry& fentry, Handle* fh, const Slice& buf,
                         uint64_t off) {
     Status s;
-    int fd = reinterpret_cast<intptr_t>(fh);
+    int fd = ToFd(fh);
     ssize_t n = pwrite(fd, buf.data(), buf.size(), off);
     if (n == -1) {
       std::string fname = root_ + "/";
@@ -139,7 +172,7 @@ class PosixFio : public Fio {
   virtual Status Read(const Fentry& fentry, Handle* fh, Slice* result,
                       uint64_t size, char* scratch) {
     Status s;
-    int fd = reinterpret_cast<intptr_t>(fh);
+    int fd = ToFd(fh);
     ssize_t n = read(fd, scratch, size);
     if (n == -1) {
       std::string fname = root_ + "/";
@@ -156,7 +189,7 @@ class PosixFio : public Fio {
   virtual Status Pread(const Fentry& fentry, Handle* fh, Slice* result,
                        uint64_t off, uint64_t size, char* scratch) {
     Status s;
-    int fd = reinterpret_cast<intptr_t>(fh);
+    int fd = ToFd(fh);
     ssize_t n = pread(fd, scratch, size, off);
     if (n == -1) {
       std::string fname = root_ + "/";
@@ -172,7 +205,7 @@ class PosixFio : public Fio {
 
   virtual Status Ftrunc(const Fentry& fentry, Handle* fh, uint64_t size) {
     Status s;
-    int fd = reinterpret_cast<intptr_t>(fh);
+    int fd = ToFd(fh);
     int r = ftruncate(fd, size);
     if (r != 0) {
       std::string fname = root_ + "/";
@@ -187,7 +220,7 @@ class PosixFio : public Fio {
                        bool force_sync = false) {
     Status s;
     if (force_sync) {
-      int fd = reinterpret_cast<intptr_t>(fh);
+      int fd = ToFd(fh);
       int r = fdatasync(fd);
       if (r != 0) {
         std::string fname = root_ + "/";
@@ -200,7 +233,9 @@ class PosixFio : public Fio {
   }
 
   virtual Status Close(const Fentry& fentry, Handle* fh) {
-    close(reinterpret_cast<intptr_t>(fh));
+    int fd = ToFd(fh);
+    close(fd);
+    Free(fh);
     return Status::OK();
   }
 

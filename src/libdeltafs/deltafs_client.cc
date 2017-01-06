@@ -41,8 +41,13 @@ static inline Status BadDescriptor() {
   return Status::InvalidFileDescriptor(Slice());
 }
 
+#ifndef NDEBUG
 class WritablePlfsDir : public Fio::Handle {
+  virtual ~WritablePlfsDir() {
+#else
+class WritablePlfsDir {
   ~WritablePlfsDir() {
+#endif
     if (writer != NULL) {
       delete writer;
     }
@@ -55,7 +60,7 @@ class WritablePlfsDir : public Fio::Handle {
   int refs;
 
  public:
-  explicit WritablePlfsDir() : refs(0) {}
+  WritablePlfsDir() : refs(0) {}
   plfsio::Writer* writer;
   void Ref() { refs++; }
 
@@ -68,10 +73,14 @@ class WritablePlfsDir : public Fio::Handle {
   }
 };
 
+// REQUIRES: fh must not be NULL.
 static inline WritablePlfsDir* ToWritablePlfsDir(Fio::Handle* fh) {
-  WritablePlfsDir* dir = static_cast<WritablePlfsDir*>(fh);
-  assert(dir != NULL);
-  return dir;
+  assert(fh != NULL);
+#ifndef NDEBUG
+  return dynamic_cast<WritablePlfsDir*>(fh);
+#else
+  return (WritablePlfsDir*)fh;
+#endif
 }
 
 Client::Client(size_t max_open_files) {
@@ -397,7 +406,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
         WritablePlfsDir* d = new WritablePlfsDir;
         d->writer = NULL;
 
-        fh = d;
+        fh = (Fio::Handle*)d;
       } else if (pivot != NULL) {
         if (DELTAFS_DIR_IS_PLFS_STYLE(pivot->ent->file_mode())) {
           assert(pivot->file->fh != NULL);

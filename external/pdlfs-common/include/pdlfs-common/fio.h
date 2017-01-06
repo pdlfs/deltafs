@@ -34,11 +34,17 @@ struct Fentry {
 // Abstract service to access file data.
 class Fio {
  public:
-  Fio() {}
   static Fio* Open(const Slice& fio_name, const Slice& fio_conf);
-  // Opaque file handle
-  struct Handle {};
+#ifndef NDEBUG
+  class Handle {
+   protected:
+    virtual ~Handle();
+  };
+#else
+  struct Handle {};  // Opaque file handle
+#endif
   virtual ~Fio();
+  Fio() {}
 
   virtual Status Creat(const Fentry& fentry, bool append_only, Handle** fh) = 0;
   virtual Status Open(const Fentry& fentry, bool create_if_missing,
@@ -68,5 +74,9 @@ class Fio {
   void operator=(const Fio&);
   Fio(const Fio&);
 };
+
+#ifndef NDEBUG
+inline Fio::Handle::~Handle() {}
+#endif
 
 }  // namespace pdlfs

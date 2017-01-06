@@ -21,10 +21,18 @@ namespace rados {
 class RadosFio;
 
 // State of each opened file object
+#ifndef NDEBUG
+class RadosFobj : public Fio::Handle {
+ public:
+  virtual ~RadosFobj() {}
+#else
 class RadosFobj {
  public:
-  RadosFobj(RadosFio* fio) : fio(fio), fctx(NULL) {}
   ~RadosFobj() {}
+#endif
+
+ public:
+  explicit RadosFobj(RadosFio* fio) : fio(fio), fctx(NULL) {}
 
   RadosFio* fio;
   rados_ioctx_t fctx;
