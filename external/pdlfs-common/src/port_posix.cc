@@ -26,7 +26,13 @@ void PthreadCall(const char* label, int result) {
 }
 
 Mutex::Mutex() {
-#ifndef NDEBUG
+#if defined(PDLFS_RECURSIVE_MUTEX)
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+  PthreadCall("pthread_mutex_init", pthread_mutex_init(&mu_, &attr));
+  pthread_mutexattr_destroy(&attr);
+#elif !defined(NDEBUG)
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
@@ -40,23 +46,31 @@ Mutex::Mutex() {
 #ifndef NDEBUG
 void Mutex::AssertHeld() {
   int r = pthread_mutex_trylock(&mu_);
-  if (r == 0) {
-    r = EINVAL;  // Unexpectedly lock the mutex.
-  } else if (r == EAGAIN) {
-    // The mutex could not be acquired because the maximum number of recursive
-    // locks for mutex has been exceeded.
-    // This error should never get returned.
-  } else if (r == EBUSY) {
-    // The mutex could not be acquired because it was already locked.
-    return;  // OK
-  } else if (r == EPERM) {
-    // The current thread does not own the mutex.
-  } else if (r == EDEADLK) {
-    // The current thread already owns the mutex.
-    return;  // OK
+  switch (r) {
+    case EBUSY:
+      // The mutex could not be acquired because it was already locked.
+      return;  // OK
+    case EDEADLK:
+      // The current thread already owns the mutex.
+      return;  // OK
+    case EAGAIN:
+      // The mutex could not be acquired because the maximum number of recursive
+      // locks for mutex has been exceeded.
+      break;
+    case EPERM:
+      // The current thread does not own the mutex.
+      break;
+    case 0:
+      // Unexpectedly lock the mutex.
+      r = EINVAL;
+      break;
+    default:
+      // Other errors
+      break;
   }
 
-  PthreadCall("pthread_mutex_trylock", r);  // Abort
+  // Abort the call
+  PthreadCall("pthread_mutex_trylock", r);
 }
 #endif
 
@@ -94,7 +108,8 @@ bool CondVar::TimedWait(uint64_t micro) {
   int r = pthread_cond_timedwait(&cv_, &mu_->mu_, &ts);
   if (r != 0) {
     if (r != ETIMEDOUT) {
-      PthreadCall("pthread_cond_timedwait", r);  // Abort
+      // Abort the call
+      PthreadCall("pthread_cond_timedwait", r);
     } else {
       return true;  // Timeout!
     }
