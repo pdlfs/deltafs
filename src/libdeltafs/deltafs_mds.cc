@@ -185,6 +185,12 @@ void MetadataServer::Builder::LoadIds() {
   }
 }
 
+static void PrintLocalUriInfo(const char* ip, int score) {
+#if VERBOSE >= 1
+  Verbose(__LOG_ARGS__, 1, "host.ip -> %s (pri=%d)", ip, score);
+#endif
+}
+
 static std::string GetLocalUri(int srv_id) {
   std::vector<std::string> ips;
   Status s = Env::Default()->FetchHostIPAddrs(&ips);
@@ -199,14 +205,12 @@ static std::string GetLocalUri(int srv_id) {
         if (!Slice(*it).starts_with("127.")) {
           score = 1;
         }
+        PrintLocalUriInfo(it->c_str(), score);
         unique_ips.insert(std::make_pair(*it, score));
         if (score >= highest_score) {
           highest_score = score;
           ip = &(*it);
         }
-#if VERBOSE >= 1
-        Verbose(__LOG_ARGS__, 1, "host.ip -> %s (pri=%d)", it->c_str(), score);
-#endif
       }
     }
     assert(ip != NULL);
@@ -404,6 +408,12 @@ void MetadataServer::Builder::OpenRPC() {
   }
 }
 
+static void PrintRunInfo(const std::string& info, const std::string& fname) {
+#if VERBOSE >= 1
+  Verbose(__LOG_ARGS__, 1, "%s >> %s", info.c_str(), fname.c_str());
+#endif
+}
+
 // REQUIRES: server has been successfully built
 void MetadataServer::Builder::WriteRunInfo() {
   std::string run_dir = config::RunDir();
@@ -411,7 +421,6 @@ void MetadataServer::Builder::WriteRunInfo() {
     Env* const env = myenv_->env;
     // Ignore error because it may already exist
     env->CreateDir(run_dir);
-
     std::string fname = run_dir;
     char tmp[30];
     snprintf(tmp, sizeof(tmp), "/srv-%08d.uri", srv_id_);
@@ -425,9 +434,7 @@ void MetadataServer::Builder::WriteRunInfo() {
       if (s.ok()) {
         s = f->Flush();
         if (s.ok()) {
-#if VERBOSE >= 1
-          Verbose(__LOG_ARGS__, 1, "Server info > %s", fname.c_str());
-#endif
+          PrintRunInfo(info, fname);
         }
       }
       f->Close();
