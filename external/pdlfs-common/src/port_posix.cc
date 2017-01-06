@@ -26,16 +26,11 @@ void PthreadCall(const char* label, int result) {
 }
 
 Mutex::Mutex() {
-#if defined(PDLFS_RECURSIVE_MUTEX)
-  pthread_mutexattr_t attr;
-  pthread_mutexattr_init(&attr);
-  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-  PthreadCall("pthread_mutex_init", pthread_mutex_init(&mu_, &attr));
-  pthread_mutexattr_destroy(&attr);
-#elif !defined(NDEBUG)
+#ifndef NDEBUG
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+  pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);
   PthreadCall("pthread_mutex_init", pthread_mutex_init(&mu_, &attr));
   pthread_mutexattr_destroy(&attr);
 #else
