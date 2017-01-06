@@ -30,7 +30,9 @@ Mutex::Mutex() {
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+#if (_XOPEN_SOURCE - 0) >= 700
   pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);
+#endif
   PthreadCall("pthread_mutex_init", pthread_mutex_init(&mu_, &attr));
   pthread_mutexattr_destroy(&attr);
 #else
