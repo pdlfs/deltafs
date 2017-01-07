@@ -90,12 +90,19 @@ namespace port {
 static const bool kLittleEndian = PLATFORM_IS_LITTLE_ENDIAN;
 #undef PLATFORM_IS_LITTLE_ENDIAN
 
+#if (_XOPEN_SOURCE - 0) >= 500 && !defined(NDEBUG)
+#define PDLFS_MUTEX_DEBUG
+#if (_XOPEN_SOURCE - 0) >= 700
+#define PDLFS_MUTEX_DEBUG_ROBUST
+#endif
+#endif
+
 class CondVar;
 
 class Mutex {
  public:
   Mutex();
-#ifndef NDEBUG
+#if defined(PDLFS_MUTEX_DEBUG)
   void AssertHeld();
 #else
   void AssertHeld() {}

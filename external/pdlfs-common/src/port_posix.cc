@@ -26,11 +26,11 @@ void PthreadCall(const char* label, int result) {
 }
 
 Mutex::Mutex() {
-#ifndef NDEBUG
+#if defined(PDLFS_MUTEX_DEBUG)
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-#if (_XOPEN_SOURCE - 0) >= 700
+#if defined(PDLFS_MUTEX_DEBUG_ROBUST)
   pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);
 #endif
   PthreadCall("pthread_mutex_init", pthread_mutex_init(&mu_, &attr));
@@ -40,7 +40,7 @@ Mutex::Mutex() {
 #endif
 }
 
-#ifndef NDEBUG
+#if defined(PDLFS_MUTEX_DEBUG)
 void Mutex::AssertHeld() {
   int r = pthread_mutex_trylock(&mu_);
   switch (r) {
