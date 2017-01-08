@@ -49,7 +49,8 @@ class PosixFio : public Fio {
 #ifndef NDEBUG
     return new PosixFd(fd);
 #else
-    return (Handle*)fd;
+    intptr_t tmp = static_cast<intptr_t>(fd);
+    return (Handle*)tmp;
 #endif
   }
 

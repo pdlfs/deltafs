@@ -52,11 +52,11 @@ EnvWrapper::~EnvWrapper() {}
 
 Env* Env::Open(const Slice& env_name, const Slice& env_conf) {
   assert(env_name.size() != 0);
+#if VERBOSE >= 1
   const char* env_conf_str = env_conf.c_str();
   if (env_conf.empty()) {
     env_conf_str = "~";
   }
-#if VERBOSE >= 1
   Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name.c_str());
   Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf_str);
 #endif
