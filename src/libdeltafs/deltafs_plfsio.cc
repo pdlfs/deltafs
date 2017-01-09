@@ -108,8 +108,8 @@ WriterImpl::~WriterImpl() {
 }
 
 void WriterImpl::MaybeSlowdownCaller() {
-  Env* env = options_.env;
-  uint64_t micros = options_.slowdown_micros;
+  Env* const env = options_.env;
+  const uint64_t micros = options_.slowdown_micros;
   if (micros != 0) {
     env->SleepForMicroseconds(micros);
   }
@@ -121,7 +121,7 @@ Status WriterImpl::Finish() {
     MutexLock l(&mutex_);
 
     bool dry_run = true;
-    // XXX: Check partition status in a single pass
+    // Check partition status in a single pass
     while (true) {
       for (size_t i = 0; i < num_parts_; i++) {
         status = io_[i]->Finish(dry_run);
@@ -130,14 +130,14 @@ Status WriterImpl::Finish() {
         }
       }
       if (status.IsBufferFull() && !options_.non_blocking) {
-        // XXX: Wait for buffer space
+        // Wait for buffer space
         cond_var_.Wait();
       } else {
         break;
       }
     }
 
-    // XXX: Do it
+    // Do it
     if (status.ok()) {
       dry_run = false;
       for (size_t i = 0; i < num_parts_; i++) {
@@ -161,7 +161,7 @@ Status WriterImpl::MakeEpoch() {
     MutexLock l(&mutex_);
 
     bool dry_run = true;
-    // XXX: Check partition status in a single pass
+    // Check partition status in a single pass
     while (true) {
       for (size_t i = 0; i < num_parts_; i++) {
         status = io_[i]->MakeEpoch(dry_run);
@@ -170,14 +170,14 @@ Status WriterImpl::MakeEpoch() {
         }
       }
       if (status.IsBufferFull() && !options_.non_blocking) {
-        // XXX: Wait for buffer space
+        // Wait for buffer space
         cond_var_.Wait();
       } else {
         break;
       }
     }
 
-    // XXX: Do it
+    // Do it
     if (status.ok()) {
       dry_run = false;
       for (size_t i = 0; i < num_parts_; i++) {

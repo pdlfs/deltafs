@@ -190,13 +190,20 @@ void TableLogger::EndTable() {
 
   assert(!pending_epoch_entry_);
   Slice contents = index_block_.Finish();
-  uint64_t index_offset = index_log_->Ltell();
+  const uint64_t offset = index_log_->Ltell();
   status_ = index_log_->Lwrite(contents);
+
+#if VERBOSE >= 6
+  Verbose(__LOG_ARGS__, 6, "Index block written: (offset=%llu, size=%llu) %s",
+          static_cast<unsigned long long>(offset),
+          static_cast<unsigned long long>(contents.size()),
+          status_.ToString().c_str());
+#endif
 
   if (ok()) {
     index_block_.Reset();
     pending_epoch_handle_.set_size(contents.size());
-    pending_epoch_handle_.set_offset(index_offset);
+    pending_epoch_handle_.set_offset(offset);
     pending_epoch_entry_ = true;
   }
 
@@ -226,12 +233,20 @@ void TableLogger::EndBlock() {
   if (!ok()) return;                // Abort
   assert(!pending_index_entry_);
   Slice contents = data_block_.Finish();
-  uint64_t data_offset = data_log_->Ltell();
+  const uint64_t offset = data_log_->Ltell();
   status_ = data_log_->Lwrite(contents);
+
+#if VERBOSE >= 6
+  Verbose(__LOG_ARGS__, 6, "Data block written: (offset=%llu, size=%llu) %s",
+          static_cast<unsigned long long>(offset),
+          static_cast<unsigned long long>(contents.size()),
+          status_.ToString().c_str());
+#endif
+
   if (ok()) {
     data_block_.Reset();
     pending_index_handle_.set_size(contents.size());
-    pending_index_handle_.set_offset(data_offset);
+    pending_index_handle_.set_offset(offset);
     pending_index_entry_ = true;
   }
 }
@@ -240,16 +255,16 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   assert(!finished_);       // Finish() has not been called
   assert(key.size() != 0);  // Key cannot be empty
   if (!ok()) return;        // Abort
-  largest_key_ = key.ToString();
+
+  if (!last_key_.empty()) {
+    // Keys within a single table are expected to be added in a sorted order.
+    // Duplicated keys are allowed
+    assert(key.compare(last_key_) >= 0);
+  }
   if (!smallest_key_.empty()) {
     smallest_key_ = key.ToString();
   }
-
-  if (!last_key_.empty()) {
-    // Keys within a single table are expected to be added in a sorted order
-    // and we don't allow duplicated keys
-    assert(key.compare(last_key_) > 0);
-  }
+  largest_key_ = key.ToString();
 
   // Add an index entry if there is one pending insertion
   if (pending_index_entry_) {
