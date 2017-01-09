@@ -60,9 +60,9 @@ Env* Env::Open(const Slice& env_name, const Slice& env_conf) {
   Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name.c_str());
   Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf_str);
 #endif
-#ifdef PDLFS_RADOS
+#if defined(PDLFS_RADOS)
   if (env_name == "rados") {
-    return reinterpret_cast<Env*>(PDLFS_Load_rados_env(env_conf.c_str()));
+    return (Env*)PDLFS_Load_rados_env(env_conf.c_str());
   }
 #endif
   if (env_name == "posix") {
@@ -76,10 +76,11 @@ Env* Env::Open(const Slice& env_name, const Slice& env_conf) {
   }
 }
 
-static void EmitDBLog(Logger* info_log, const char* fmt, va_list ap) {
+static void EmitDBLog(Logger* log, const char* fmt, va_list ap) {
+  static const int lv = 3;
   std::string fmt2 = "DB - ";
   fmt2 += fmt;
-  info_log->Logv("pdlfs.xx", 0, 0, 3, fmt2.c_str(), ap);
+  log->Logv("pdlfs.xx", 0, 0, lv, fmt2.c_str(), ap);
 }
 
 void Log(Logger* info_log, const char* fmt, ...) {
