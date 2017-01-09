@@ -156,20 +156,36 @@ TableLogger::TableLogger(const Options& options, LogSink* data, LogSink* index)
   assert(index_log_ != NULL && data_log_ != NULL);
   index_log_->Ref();
   data_log_->Ref();
+
+#if VERBOSE >= 4
+  Verbose(__LOG_ARGS__, 4, "Epoch #%d: started", int(num_epoches_));
+#endif
 }
 
 TableLogger::~TableLogger() {
   index_log_->Unref();
   data_log_->Unref();
+  if (num_tables_ == 0) {
+#if VERBOSE >= 4
+    Verbose(__LOG_ARGS__, 4, "Epoch #%d: discarded", int(num_epoches_));
+#endif
+  }
 }
 
 void TableLogger::EndEpoch() {
   assert(!finished_);  // Finish() has not been called
   EndTable();
   if (ok() && num_tables_ != 0) {
+#if VERBOSE >= 4
+    Verbose(__LOG_ARGS__, 4, "Epoch #%d: (#%d tables) closed",
+            int(num_epoches_), int(num_tables_));
+#endif
     num_tables_ = 0;
     assert(num_epoches_ < kMaxEpoches);
     num_epoches_++;
+#if VERBOSE >= 4
+    Verbose(__LOG_ARGS__, 4, "Epoch #%d: started", int(num_epoches_));
+#endif
   }
 }
 
@@ -288,24 +304,40 @@ Status TableLogger::Finish() {
   EndEpoch();
   finished_ = true;
   if (!ok()) return status_;
-  Slice contents;
   BlockHandle epoch_index_handle;
   std::string tail;
   Footer footer;
 
   assert(!pending_epoch_entry_);
-  contents = epoch_block_.Finish();
-  epoch_index_handle.set_size(contents.size());
-  epoch_index_handle.set_offset(index_log_->Ltell());
-
-  footer.set_epoch_index_handle(epoch_index_handle);
-  footer.set_num_epoches(num_epoches_);
-  footer.EncodeTo(&tail);
-
+  Slice contents = epoch_block_.Finish();
+  const uint64_t offset = index_log_->Ltell();
   status_ = index_log_->Lwrite(contents);
-  if (status_.ok()) {
+
+#if VERBOSE >= 6
+  Verbose(__LOG_ARGS__, 6, "Epoch index written: (offset=%llu, size=%llu) %s",
+          static_cast<unsigned long long>(offset),
+          static_cast<unsigned long long>(contents.size()),
+          status_.ToString().c_str());
+#endif
+
+  if (ok()) {
+    epoch_index_handle.set_size(contents.size());
+    epoch_index_handle.set_offset(offset);
+
+    footer.set_epoch_index_handle(epoch_index_handle);
+    footer.set_num_epoches(num_epoches_);
+    footer.EncodeTo(&tail);
+  }
+
+  if (ok()) {
     status_ = index_log_->Lwrite(tail);
   }
+
+#if VERBOSE >= 6
+  Verbose(__LOG_ARGS__, 6, "Tail written: (size=%llu) %s",
+          static_cast<unsigned long long>(tail.size()),
+          status_.ToString().c_str());
+#endif
 
   return status_;
 }
@@ -334,8 +366,9 @@ IOLogger::~IOLogger() {
   }
 }
 
-// If dry_run is set, we will only check error status and buffer
-// space and will not actually schedule any compactions.
+// If dry_run is set, we will only perform status checks (which includes write
+// errors, buffer space, and compaction queue depth) such that no
+// compaction jobs will be scheduled.
 Status IOLogger::Finish(bool dry_run) {
   mutex_->AssertHeld();
   while (pending_finish_ ||
@@ -369,8 +402,9 @@ Status IOLogger::Finish(bool dry_run) {
   return status;
 }
 
-// If dry_run is set, we will only check error status and buffer
-// space and will not actually schedule any compactions.
+// If dry_run is set, we will only perform status checks (which includes write
+// errors, buffer space, and compaction queue depth) such that no
+// compaction jobs will be scheduled.
 Status IOLogger::MakeEpoch(bool dry_run) {
   mutex_->AssertHeld();
   while (pending_epoch_flush_ ||  // The previous job is still in-progress
