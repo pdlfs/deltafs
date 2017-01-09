@@ -108,7 +108,7 @@ class IOLogger {
 
   static void BGWork(void*);
   void MaybeSchedualCompaction();
-  Status Prepare(bool force_epoch, bool do_finish);
+  Status Prepare(bool do_epoch_flush, bool do_finish);
   void CompactWriteBuffer();
   void DoCompaction();
 
@@ -119,11 +119,11 @@ class IOLogger {
   bool has_bg_compaction_;
   bool pending_epoch_flush_;
   bool pending_finish_;
-  bool bg_do_epoch_flush_;
-  bool bg_do_finish_;
   TableLogger table_logger_;
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;
+  bool imm_buf_is_epoch_flush_;
+  bool imm_buf_is_finish_;
   WriteBuffer buf0_;
   WriteBuffer buf1_;
 };

@@ -301,11 +301,11 @@ IOLogger::IOLogger(const Options& options, port::Mutex* mu, port::CondVar* cv,
       has_bg_compaction_(false),
       pending_epoch_flush_(false),
       pending_finish_(false),
-      bg_do_epoch_flush_(false),
-      bg_do_finish_(false),
       table_logger_(options, data, index),
       mem_buf_(NULL),
-      imm_buf_(NULL) {
+      imm_buf_(NULL),
+      imm_buf_is_epoch_flush_(false),
+      imm_buf_is_finish_(false) {
   assert(mu != NULL && cv != NULL);
   mem_buf_ = &buf0_;
 }
@@ -394,7 +394,7 @@ Status IOLogger::Add(const Slice& key, const Slice& value) {
   return status;
 }
 
-Status IOLogger::Prepare(bool force, bool finish) {
+Status IOLogger::Prepare(bool flush, bool finish) {
   mutex_->AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
@@ -402,7 +402,7 @@ Status IOLogger::Prepare(bool force, bool finish) {
     if (!table_logger_.ok()) {
       status = table_logger_.status();
       break;
-    } else if (!force && mem_buf_->CurrentBufferSize() < options_.table_size) {
+    } else if (!flush && mem_buf_->CurrentBufferSize() < options_.table_size) {
       // There is room in current write buffer
       break;
     } else if (imm_buf_ != NULL) {
@@ -415,13 +415,19 @@ Status IOLogger::Prepare(bool force, bool finish) {
     } else {
       // Attempt to switch to a new write buffer
       mem_buf_->Finish();
+      assert(imm_buf_ == NULL);
       imm_buf_ = mem_buf_;
-      if (force) bg_do_epoch_flush_ = true;
-      if (finish) bg_do_finish_ = true;
-      WriteBuffer* mem_buf = mem_buf_;
+      if (flush) {
+        imm_buf_is_epoch_flush_ = true;
+        flush = false;
+      }
+      if (finish) {
+        imm_buf_is_finish_ = true;
+        finish = false;
+      }
+      WriteBuffer* const current_buf = mem_buf_;
       MaybeSchedualCompaction();
-      finish = force = false;
-      if (mem_buf == &buf0_) {
+      if (current_buf == &buf0_) {
         mem_buf_ = &buf1_;
       } else {
         mem_buf_ = &buf0_;
@@ -434,13 +440,15 @@ Status IOLogger::Prepare(bool force, bool finish) {
 
 void IOLogger::MaybeSchedualCompaction() {
   mutex_->AssertHeld();
-  if (imm_buf_ != NULL && !has_bg_compaction_) {  // XXX: One job at a time
-    has_bg_compaction_ = true;
-    if (options_.compaction_pool != NULL) {
-      options_.compaction_pool->Schedule(IOLogger::BGWork, this);
-    } else {
-      // XXX: Directly run in current thread context
-      DoCompaction();
+  if (!has_bg_compaction_) {
+    if (imm_buf_ != NULL) {
+      has_bg_compaction_ = true;
+      if (options_.compaction_pool != NULL) {
+        options_.compaction_pool->Schedule(IOLogger::BGWork, this);
+      } else {
+        // XXX: Directly run in current thread context
+        DoCompaction();
+      }
     }
   }
 }
@@ -455,7 +463,13 @@ void IOLogger::BGWork(void* arg) {
 void IOLogger::DoCompaction() {
   mutex_->AssertHeld();
   assert(has_bg_compaction_);
-  if (imm_buf_ != NULL) CompactWriteBuffer();
+  if (imm_buf_ != NULL) {
+    CompactWriteBuffer();
+    imm_buf_->Reset();
+    imm_buf_is_epoch_flush_ = false;
+    imm_buf_is_finish_ = false;
+    imm_buf_ = NULL;
+  }
   has_bg_compaction_ = false;
   MaybeSchedualCompaction();
   bg_cv_->SignalAll();
@@ -465,14 +479,13 @@ void IOLogger::CompactWriteBuffer() {
   mutex_->AssertHeld();
   const WriteBuffer* const buffer = imm_buf_;
   assert(buffer != NULL);
-  const bool do_finish = bg_do_finish_;
   const bool pending_finish = pending_finish_;
-  const bool do_epoch_flush = bg_do_epoch_flush_;  // XXX: Epoch flush scheduled
-  const bool pending_epoch_flush =
-      pending_epoch_flush_;  // XXX: Epoch flush requested
+  const bool pending_epoch_flush = pending_epoch_flush_;
+  const bool is_finish = imm_buf_is_finish_;
+  const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   TableLogger* const dest = &table_logger_;
   mutex_->Unlock();
-  Iterator* iter = buffer->NewIterator();
+  Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {
     dest->Add(iter->key(), iter->value());
@@ -485,26 +498,26 @@ void IOLogger::CompactWriteBuffer() {
     // XXX: Empty tables are implicitly discarded
     dest->EndTable();
   }
-  if (do_epoch_flush) {
+  if (is_epoch_flush) {
     // XXX: Empty epoches are implicitly discarded
     dest->EndEpoch();
   }
-  if (do_finish) {
+  if (is_finish) {
     dest->Finish();
   }
 
   delete iter;
   mutex_->Lock();
-  if (do_epoch_flush) {
-    if (pending_epoch_flush) pending_epoch_flush_ = false;
-    bg_do_epoch_flush_ = false;
+  if (is_epoch_flush) {
+    if (pending_epoch_flush) {
+      pending_epoch_flush_ = false;
+    }
   }
-  if (do_finish) {
-    if (pending_finish) pending_finish_ = false;
-    bg_do_finish_ = false;
+  if (is_finish) {
+    if (pending_finish) {
+      pending_finish_ = false;
+    }
   }
-  imm_buf_->Reset();
-  imm_buf_ = NULL;
 }
 
 }  // namespace plfsio

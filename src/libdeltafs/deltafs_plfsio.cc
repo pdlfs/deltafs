@@ -11,6 +11,7 @@
 #include "deltafs_plfsio_internal.h"
 
 #include "pdlfs-common/hash.h"
+#include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
 
 #include <stdio.h>
@@ -30,8 +31,6 @@ Options::Options()
       rank(0),
       env(NULL) {}
 
-static const bool kSyncLogBeforeClosing = true;
-
 static const int kMaxNumProcesses = 100000000;  // 100 million
 
 void LogSink::Unref() {
@@ -43,12 +42,16 @@ void LogSink::Unref() {
 }
 
 LogSink::~LogSink() {
-  // XXX: Ignore potential error status
-  if (kSyncLogBeforeClosing) {
-    file_->Sync();
+  if (file_ != NULL) {
+    if (kSyncBeforeClosing) {
+      Status s = file_->Sync();
+      if (!s.ok()) {
+        Error(__LOG_ARGS__, "%s", s.ToString().c_str());
+      }
+    }
+    file_->Close();
+    delete file_;
   }
-  file_->Close();
-  delete file_;
 }
 
 static std::string PartitionIndexFileName(const std::string& parent, int rank,
@@ -77,7 +80,7 @@ class WriterImpl : public Writer {
   virtual Status Finish();
 
  private:
-  void MaybeSlowdown();
+  void MaybeSlowdownCaller();
   friend class Writer;
 
   const Options options_;
@@ -103,7 +106,7 @@ WriterImpl::~WriterImpl() {
   delete[] io_;
 }
 
-void WriterImpl::MaybeSlowdown() {
+void WriterImpl::MaybeSlowdownCaller() {
   Env* env = options_.env;
   uint64_t micros = options_.slowdown_micros;
   if (micros != 0) {
@@ -146,7 +149,7 @@ Status WriterImpl::Finish() {
   }
 
   if (status.IsBufferFull()) {
-    MaybeSlowdown();
+    MaybeSlowdownCaller();
   }
   return status;
 }
@@ -186,7 +189,7 @@ Status WriterImpl::MakeEpoch() {
   }
 
   if (status.IsBufferFull()) {
-    MaybeSlowdown();
+    MaybeSlowdownCaller();
   }
   return status;
 }
@@ -200,7 +203,7 @@ Status WriterImpl::Append(const Slice& fname, const Slice& data) {
     status = io_[part]->Add(fname, data);
   }
   if (status.IsBufferFull()) {
-    MaybeSlowdown();
+    MaybeSlowdownCaller();
   }
   return status;
 }
@@ -220,14 +223,22 @@ static Options SanitizeWriteOptions(const Options& options) {
   return result;
 }
 
-static Status NewLogStream(const std::string& name, Env* env, LogSink** sink) {
+static void PrintLogStream(const std::string& name) {
+#if VERBOSE >= 2
+  Verbose(__LOG_ARGS__, 2, "Open plfsdir log: %s", name.c_str());
+#endif
+}
+
+static Status NewLogStream(const std::string& name, Env* env, LogSink** lsptr) {
   WritableFile* file;
   Status status = env->NewWritableFile(name, &file);
   if (status.ok()) {
-    *sink = new LogSink(file);
-    (*sink)->Ref();
+    PrintLogStream(name);
+    LogSink* sink = new LogSink(file);
+    sink->Ref();
+    *lsptr = sink;
   } else {
-    *sink = NULL;
+    *lsptr = NULL;
   }
 
   return status;
@@ -240,6 +251,16 @@ Status Writer::Open(const Options& opts, const std::string& name,
   size_t num_parts = 1u << options.lg_parts;
   int rank = options.rank;
   Env* env = options.env;
+#if VERBOSE >= 2
+  Verbose(__LOG_ARGS__, 2, "plfsdir.name -> %s", name.c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.block_size -> %llu",
+          static_cast<unsigned long long>(options.block_size));
+  Verbose(__LOG_ARGS__, 2, "plfsdir.table_size -> %llu",
+          static_cast<unsigned long long>(options.table_size));
+  Verbose(__LOG_ARGS__, 2, "plfsdir.num_subpartions_per_process -> %u",
+          static_cast<unsigned>(num_parts));
+  Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", rank);
+#endif
   Status status;
   // XXX: Ignore error since it may already exist
   env->CreateDir(name);
