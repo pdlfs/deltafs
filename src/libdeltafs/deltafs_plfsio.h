@@ -64,12 +64,12 @@ struct Options {
   Env* env;
 };
 
-// Abstraction for a non-thread-safe possibly-buffered
+// Abstraction for a thread-unsafe and possibly-buffered
 // append-only log stream.
 class LogSink {
  public:
   LogSink(WritableFile* f, uint64_t s) : file_(f), offset_(s), refs_(0) {}
-  LogSink(WritableFile* f) : file_(f), offset_(0), refs_(0) {}
+  explicit LogSink(WritableFile* f) : file_(f), offset_(0), refs_(0) {}
 
   uint64_t Ltell() const { return offset_; }
 
@@ -100,6 +100,46 @@ class LogSink {
   uint32_t refs_;
 };
 
+// Abstraction for a thread-unsafe and possibly-buffered
+// random access log file.
+class LogSource {
+ public:
+  explicit LogSource(RandomAccessFile* f) : file_(f) {}
+
+  // Read the entire file into a string
+  Status Load(std::string* dst) {
+    Status s;
+    char* space = new char[kBufferSize];
+    uint64_t offset = 0;
+    while (true) {
+      Slice fragment;
+      s = file_->Read(offset, kBufferSize, &fragment, space);
+      if (!s.ok()) {
+        break;
+      }
+      if (!fragment.empty()) {
+        AppendSliceTo(dst, fragment);
+        offset += fragment.size();
+      } else {
+        break;
+      }
+    }
+    delete[] space;
+    return s;
+  }
+
+ private:
+  // Larger I/O gives less operations
+  enum { kBufferSize = 1024 * 1024 };
+
+  ~LogSource();
+  // No copying allowed
+  void operator=(const LogSource&);
+  LogSource(const LogSource&);
+
+  RandomAccessFile* file_;
+};
+
 // Destroy the contents of the specified directory.
 // Be very careful using this method.
 extern Status DestroyDir(const std::string& dirname, const Options& options);
@@ -110,22 +150,56 @@ class Writer {
   Writer() {}
   virtual ~Writer();
 
-  // Create an I/O writer instance for a specified directory.
+  // Open an I/O writer against a specified plfs-style directory.
   // Return OK on success, or a non-OK status on errors.
   static Status Open(const Options& options, const std::string& dirname,
                      Writer** result);
 
-  // Append a chuck of data to a specified file under this directory.
+  // Append a piece of data to a specified file under a given plfs directory.
+  // REQUIRES: Finish() has not been called.
   virtual Status Append(const Slice& fname, const Slice& data) = 0;
 
+  // Sync data to storage.  Not supported so far.
+  // REQUIRES: Finish() has not been called.
   virtual Status Sync() = 0;
+
+  // Flush data to make an epoch that benefits future read operations.
+  // REQUIRES: Finish() has not been called.
   virtual Status MakeEpoch() = 0;
+
+  // Flush data and finalize all indexing.
   virtual Status Finish() = 0;
 
  private:
   // No copying allowed
   void operator=(const Writer&);
   Writer(const Writer&);
+};
+
+// Deltafs plfs-style N-1 I/O reader api.
+class Reader {
+ public:
+  Reader() {}
+  virtual ~Reader();
+
+  // Open an I/O reader against a specific plfs-style directory.
+  // Return OK on success, or a non-OK status on errors.
+  static Status Open(const Options& options, const std::string& dirname,
+                     Reader* result);
+
+  // List files under a given plfs directory.  Not supported so far.
+  virtual void List(std::vector<std::string>* names) = 0;
+
+  // Fetch the entire data from a specific file under a given plfs directory.
+  virtual Status Retrieve(const Slice& fname, std::string* dst) = 0;
+
+  // Return true iff a specific file exists under a given plfs directory.
+  virtual bool Touch(const Slice& fname) = 0;
+
+ private:
+  // No copying allowed
+  void operator=(const Reader&);
+  Reader(const Reader&);
 };
 
 }  // namespace plfsio

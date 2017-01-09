@@ -55,6 +55,12 @@ LogSink::~LogSink() {
   }
 }
 
+LogSource::~LogSource() {
+  if (file_ != NULL) {
+    delete file_;
+  }
+}
+
 static std::string PartitionIndexFileName(const std::string& parent, int rank,
                                           int partition) {
   char tmp[20];
