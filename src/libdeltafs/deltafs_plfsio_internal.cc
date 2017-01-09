@@ -9,6 +9,8 @@
 
 #include "deltafs_plfsio_internal.h"
 
+#include "pdlfs-common/logging.h"
+
 #include <assert.h>
 #include <algorithm>
 
@@ -322,8 +324,8 @@ IOLogger::~IOLogger() {
 Status IOLogger::Finish(bool dry_run) {
   mutex_->AssertHeld();
   while (pending_finish_ ||
-         pending_epoch_flush_ ||  // XXX: The last one is still in-progress
-         imm_buf_ != NULL) {      // XXX: Has an on-going compaction job
+         pending_epoch_flush_ ||  // The previous job is still in-progress
+         imm_buf_ != NULL) {      // There's an on-going compaction job
     if (dry_run || options_.non_blocking) {
       return Status::BufferFull(Slice());
     } else {
@@ -333,14 +335,14 @@ Status IOLogger::Finish(bool dry_run) {
 
   Status status;
   if (dry_run) {
-    // XXX: Only do a status check
+    // Status check only
     status = table_logger_.status();
   } else {
     pending_finish_ = true;
     pending_epoch_flush_ = true;
     status = Prepare(true, true);
     if (!status.ok()) {
-      pending_epoch_flush_ = false;  // XXX: Avoid blocking future attempts
+      pending_epoch_flush_ = false;  // Avoid blocking future attempts
       pending_finish_ = false;
     } else if (status.ok() && !options_.non_blocking) {
       while (pending_epoch_flush_ || pending_finish_) {
@@ -356,8 +358,8 @@ Status IOLogger::Finish(bool dry_run) {
 // space and will not actually schedule any compactions.
 Status IOLogger::MakeEpoch(bool dry_run) {
   mutex_->AssertHeld();
-  while (pending_epoch_flush_ ||  // XXX: The last one is still in-progress
-         imm_buf_ != NULL) {      // XXX: Has an on-going compaction job
+  while (pending_epoch_flush_ ||  // The previous job is still in-progress
+         imm_buf_ != NULL) {      // There's an on-going compaction job
     if (dry_run || options_.non_blocking) {
       return Status::BufferFull(Slice());
     } else {
@@ -367,13 +369,13 @@ Status IOLogger::MakeEpoch(bool dry_run) {
 
   Status status;
   if (dry_run) {
-    // XXX: Only do a status check
+    // Status check only
     status = table_logger_.status();
   } else {
     pending_epoch_flush_ = true;
     status = Prepare(true, false);
     if (!status.ok()) {
-      pending_epoch_flush_ = false;  // XXX: Avoid blocking future attempts
+      pending_epoch_flush_ = false;  // Avoid blocking future attempts
     } else if (status.ok() && !options_.non_blocking) {
       while (pending_epoch_flush_) {
         bg_cv_->Wait();
@@ -446,7 +448,7 @@ void IOLogger::MaybeSchedualCompaction() {
       if (options_.compaction_pool != NULL) {
         options_.compaction_pool->Schedule(IOLogger::BGWork, this);
       } else {
-        // XXX: Directly run in current thread context
+        // Run in current thread context
         DoCompaction();
       }
     }
@@ -485,9 +487,22 @@ void IOLogger::CompactWriteBuffer() {
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   TableLogger* const dest = &table_logger_;
   mutex_->Unlock();
+#if VERBOSE >= 2
+  static unsigned long long seq = 0;
+  Verbose(__LOG_ARGS__, 2, "Compacting #%llu (epoch_flush=%d, finish=%d) ...",
+          ++seq, int(is_epoch_flush), int(is_finish));
+  unsigned long long size = 0;
+  unsigned num_keys = 0;
+#endif
+
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {
+#if VERBOSE >= 2
+    size += iter->value().size();
+    size += iter->key().size();
+    num_keys++;
+#endif
     dest->Add(iter->key(), iter->value());
     if (!dest->ok()) {
       break;
@@ -495,16 +510,20 @@ void IOLogger::CompactWriteBuffer() {
   }
 
   if (dest->ok()) {
-    // XXX: Empty tables are implicitly discarded
+    // Empty tables will be implicitly discarded
     dest->EndTable();
   }
-  if (is_epoch_flush) {
-    // XXX: Empty epoches are implicitly discarded
+  if (dest->ok() && is_epoch_flush) {
+    // Empty epoches will be implicitly discarded
     dest->EndEpoch();
   }
-  if (is_finish) {
+  if (dest->ok() && is_finish) {
     dest->Finish();
   }
+#if VERBOSE >= 2
+  Verbose(__LOG_ARGS__, 2, "Compacted #llu: %llu bytes (%u records) %s", size,
+          num_keys, dest->status().ToString().c_str());
+#endif
 
   delete iter;
   mutex_->Lock();
