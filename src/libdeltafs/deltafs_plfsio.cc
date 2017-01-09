@@ -13,6 +13,7 @@
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
+#include "pdlfs-common/strutil.h"
 
 #include <stdio.h>
 #include <string>
@@ -58,14 +59,14 @@ static std::string PartitionIndexFileName(const std::string& parent, int rank,
                                           int partition) {
   char tmp[20];
   assert(rank < kMaxNumProcesses);
-  snprintf(tmp, sizeof(tmp), "/%08d-%03d.idx", rank, partition);
+  snprintf(tmp, sizeof(tmp), "/r%08d-p%03d.idx", rank, partition);
   return parent + tmp;
 }
 
 static std::string DataFileName(const std::string& parent, int rank) {
   char tmp[20];
   assert(rank < kMaxNumProcesses);
-  snprintf(tmp, sizeof(tmp), "/%08d.dat", rank);
+  snprintf(tmp, sizeof(tmp), "/r%08d.dat", rank);
   return parent + tmp;
 }
 
@@ -253,11 +254,11 @@ Status Writer::Open(const Options& opts, const std::string& name,
   Env* env = options.env;
 #if VERBOSE >= 2
   Verbose(__LOG_ARGS__, 2, "plfsdir.name -> %s", name.c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.block_size -> %llu",
-          static_cast<unsigned long long>(options.block_size));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.table_size -> %llu",
-          static_cast<unsigned long long>(options.table_size));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.num_subpartions_per_process -> %u",
+  Verbose(__LOG_ARGS__, 2, "plfsdir.block_size -> %s",
+          PrettyNum(options.block_size).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.table_size -> %s",
+          PrettyNum(options.table_size).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.num_parts_per_rank -> %u",
           static_cast<unsigned>(num_parts));
   Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", rank);
 #endif

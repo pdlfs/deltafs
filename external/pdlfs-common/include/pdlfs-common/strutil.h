@@ -54,4 +54,7 @@ extern bool ParsePrettyNumber(const Slice& value, uint64_t* val);
 // Return true if successfully parsed and false otherwise.
 extern bool ParsePrettyBool(const Slice& value, bool* val);
 
+// Convert a potentially large integer to a human-readable text.
+extern std::string PrettyNum(uint64_t num);
+
 }  // namespace pdlfs
