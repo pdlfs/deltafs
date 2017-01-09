@@ -520,9 +520,10 @@ void IOLogger::CompactWriteBuffer() {
   if (dest->ok() && is_finish) {
     dest->Finish();
   }
+
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "Compacted #llu: %llu bytes (%u records) %s", size,
-          num_keys, dest->status().ToString().c_str());
+  Verbose(__LOG_ARGS__, 2, "Compacted #%llu: %llu bytes (%u records) %s", seq,
+          size, num_keys, dest->status().ToString().c_str());
 #endif
 
   delete iter;
