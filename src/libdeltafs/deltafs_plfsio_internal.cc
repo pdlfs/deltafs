@@ -277,7 +277,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
     // Duplicated keys are allowed
     assert(key.compare(last_key_) >= 0);
   }
-  if (!smallest_key_.empty()) {
+  if (smallest_key_.empty()) {
     smallest_key_ = key.ToString();
   }
   largest_key_ = key.ToString();

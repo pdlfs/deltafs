@@ -249,9 +249,9 @@ Status Writer::Open(const Options& opts, const std::string& name,
                     Writer** ptr) {
   *ptr = NULL;
   Options options = SanitizeWriteOptions(opts);
-  size_t num_parts = 1u << options.lg_parts;
-  int rank = options.rank;
-  Env* env = options.env;
+  const size_t num_parts = 1u << options.lg_parts;
+  const int my_rank = options.rank;
+  Env* const env = options.env;
 #if VERBOSE >= 2
   Verbose(__LOG_ARGS__, 2, "plfsdir.name -> %s", name.c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.block_size -> %s",
@@ -260,7 +260,7 @@ Status Writer::Open(const Options& opts, const std::string& name,
           PrettyNum(options.table_size).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.num_parts_per_rank -> %u",
           static_cast<unsigned>(num_parts));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", rank);
+  Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", my_rank);
 #endif
   Status status;
   // XXX: Ignore error since it may already exist
@@ -269,10 +269,10 @@ Status Writer::Open(const Options& opts, const std::string& name,
   WriterImpl* impl = new WriterImpl(options);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);
-  status = NewLogStream(DataFileName(name, rank), env, &data[0]);
+  status = NewLogStream(DataFileName(name, my_rank), env, &data[0]);
   for (size_t part = 0; part < num_parts; part++) {
     if (status.ok()) {
-      status = NewLogStream(PartitionIndexFileName(name, rank, part), env,
+      status = NewLogStream(PartitionIndexFileName(name, my_rank, part), env,
                             &index[part]);
     } else {
       break;

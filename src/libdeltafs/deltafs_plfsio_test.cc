@@ -89,13 +89,15 @@ TEST(WriterBufTest, VariableSizedValue) {
   delete iter;
 }
 
+template <int LP = 0 /* Lg(parts) */>
 class WriterTest {
  public:
-  explicit WriterTest() {
+  WriterTest() {
     dirname_ = test::TmpDir() + "/plfsio_test";
     DestroyDir(dirname_, Options());
     options_.compaction_pool = ThreadPool::NewFixed(1);
     options_.env = Env::Default();
+    options_.lg_parts = LP;
     Status status = Writer::Open(options_, dirname_, &writer_);
     ASSERT_OK(status);
   }
@@ -110,7 +112,34 @@ class WriterTest {
   Writer* writer_;
 };
 
-TEST(WriterTest, Empty) {
+TEST(WriterTest<0>, Empty0) {
+  ASSERT_OK(writer_->MakeEpoch());
+  ASSERT_OK(writer_->Finish());
+}
+
+TEST(WriterTest<0>, SingleEpoch0) {
+  ASSERT_OK(writer_->Append("k1", "v1"));
+  ASSERT_OK(writer_->Append("k2", "v2"));
+  ASSERT_OK(writer_->Append("k3", "v3"));
+  ASSERT_OK(writer_->Append("k4", "v4"));
+  ASSERT_OK(writer_->Append("k5", "v5"));
+  ASSERT_OK(writer_->Append("k6", "v6"));
+  ASSERT_OK(writer_->MakeEpoch());
+  ASSERT_OK(writer_->Finish());
+}
+
+TEST(WriterTest<1>, Empty1) {
+  ASSERT_OK(writer_->MakeEpoch());
+  ASSERT_OK(writer_->Finish());
+}
+
+TEST(WriterTest<1>, SingleEpoch1) {
+  ASSERT_OK(writer_->Append("k1", "v1"));
+  ASSERT_OK(writer_->Append("k2", "v2"));
+  ASSERT_OK(writer_->Append("k3", "v3"));
+  ASSERT_OK(writer_->Append("k4", "v4"));
+  ASSERT_OK(writer_->Append("k5", "v5"));
+  ASSERT_OK(writer_->Append("k6", "v6"));
   ASSERT_OK(writer_->MakeEpoch());
   ASSERT_OK(writer_->Finish());
 }
