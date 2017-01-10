@@ -55,6 +55,14 @@ LogSink::~LogSink() {
   }
 }
 
+void LogSource::Unref() {
+  assert(refs_ > 0);
+  refs_--;
+  if (refs_ == 0) {
+    delete this;
+  }
+}
+
 LogSource::~LogSource() {
   if (file_ != NULL) {
     delete file_;

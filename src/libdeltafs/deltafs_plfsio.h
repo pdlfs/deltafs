@@ -104,40 +104,26 @@ class LogSink {
 // random access log file.
 class LogSource {
  public:
-  explicit LogSource(RandomAccessFile* f) : file_(f) {}
+  LogSource(RandomAccessFile* f, uint64_t s) : file_(f), size_(s), refs_(0) {}
 
-  // Read the entire file into a string
-  Status Load(std::string* dst) {
-    Status s;
-    char* space = new char[kBufferSize];
-    uint64_t offset = 0;
-    while (true) {
-      Slice fragment;
-      s = file_->Read(offset, kBufferSize, &fragment, space);
-      if (!s.ok()) {
-        break;
-      }
-      if (!fragment.empty()) {
-        AppendSliceTo(dst, fragment);
-        offset += fragment.size();
-      } else {
-        break;
-      }
-    }
-    delete[] space;
-    return s;
+  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) {
+    return file_->Read(offset, n, result, scratch);
   }
 
- private:
-  // Larger I/O gives less operations
-  enum { kBufferSize = 1024 * 1024 };
+  uint64_t Size() const { return size_; }
 
+  void Ref() { refs_++; }
+  void Unref();
+
+ private:
   ~LogSource();
   // No copying allowed
   void operator=(const LogSource&);
   LogSource(const LogSource&);
 
   RandomAccessFile* file_;
+  uint64_t size_;
+  uint32_t refs_;
 };
 
 // Destroy the contents of the specified directory.

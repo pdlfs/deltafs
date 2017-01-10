@@ -589,5 +589,213 @@ void IOLogger::CompactWriteBuffer() {
   }
 }
 
+template <typename T>
+static Status ReadBlock(LogSource* file, const Options& options,
+                        const T& handle, BlockContents* result) {
+  result->data = Slice();
+  result->heap_allocated = false;
+  result->cachable = false;
+
+  assert(file != NULL);
+  size_t n = static_cast<size_t>(handle.size());
+  char* buf = new char[n];
+  Slice contents;
+  Status s = file->Read(handle.offset(), n, &contents, buf);
+  if (s.ok()) {
+    if (contents.size() != n) {
+      s = Status::Corruption("truncated block read");
+    }
+  }
+  if (!s.ok()) {
+    delete[] buf;
+    return s;
+  }
+
+  // Pointer to where read put the data
+  const char* data = contents.data();
+  if (data != buf) {
+    // File implementation gave us pointer to some other data.
+    // Use it directly under the assumption that it will be live
+    // while the file is open.
+    delete[] buf;
+    result->data = Slice(data, n);
+    result->heap_allocated = false;
+    result->cachable = false;  // Avoid double cache
+  } else {
+    result->data = Slice(buf, n);
+    result->heap_allocated = true;
+    result->cachable = true;
+  }
+
+  return s;
+}
+
+Status TableReader::Get(const Slice& key, const BlockHandle& handle,
+                        Saver saver, void* arg) {
+  Status s;
+  BlockContents contents;
+  s = ReadBlock(data_src_, options_, handle, &contents);
+  if (!s.ok()) {
+    return s;
+  }
+
+  Block* block = new Block(contents);
+  Iterator* iter = block->NewIterator(BytewiseComparator());
+  iter->Seek(key);
+  if (iter->Valid()) {
+    if (iter->key() == key) {
+      saver(arg, key, iter->value());
+    }
+  }
+
+  delete iter;
+  delete block;
+  return s;
+}
+
+Status TableReader::Get(const Slice& key, const TableHandle& handle,
+                        Saver saver, void* arg) {
+  Status s;
+  BlockContents contents;
+  s = ReadBlock(index_src_, options_, handle, &contents);
+  if (!s.ok()) {
+    return s;
+  }
+
+  Block* block = new Block(contents);
+  Iterator* iter = block->NewIterator(BytewiseComparator());
+  iter->Seek(key);
+  if (iter->Valid()) {
+    BlockHandle handle;
+    Slice handle_encoding = iter->value();
+    s = handle.DecodeFrom(&handle_encoding);
+    if (s.ok()) {
+      s = Get(key, handle, saver, arg);
+    }
+  }
+
+  delete iter;
+  delete block;
+  return s;
+}
+
+namespace {
+struct SaverState {
+  std::string* dst;
+  bool found;
+};
+
+static void SaveValue(void* arg, const Slice& key, const Slice& value) {
+  SaverState* state = reinterpret_cast<SaverState*>(arg);
+  state->dst->append(value.data(), value.size());
+  state->found = true;
+}
+}  // namespace
+
+Status TableReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
+  Status s;
+  if (epoch_iter_ == NULL) {
+    epoch_iter_ = epoch_index_->NewIterator(BytewiseComparator());
+  }
+  std::string epoch_key;
+  uint32_t table = 0;
+  while (s.ok()) {
+    SaverState state;
+    state.found = false;
+    state.dst = dst;
+    TableHandle handle;
+    epoch_key = EpochKey(epoch, table);
+    epoch_iter_->Seek(epoch_key);
+    if (!epoch_iter_->Valid()) break;
+    if (epoch_iter_->key() != epoch_key) break;
+    Slice handle_encoding = epoch_iter_->value();
+    s = handle.DecodeFrom(&handle_encoding);
+    if (s.ok()) {
+      s = Get(key, handle, SaveValue, &state);
+      if (s.ok()) {
+        if (state.found) {
+          break;
+        }
+      }
+    }
+
+    table++;
+  }
+
+  return s;
+}
+
+Status TableReader::Gets(const Slice& key, std::string* dst) {
+  Status s;
+  if (epoch_iter_ == NULL) {
+    epoch_iter_ = epoch_index_->NewIterator(BytewiseComparator());
+  }
+  uint32_t epoch = 0;
+  while (s.ok()) {
+    s = Get(key, epoch, dst);
+    if (epoch < num_epoches_ - 1) {
+      epoch++;
+    } else {
+      break;
+    }
+  }
+
+  return s;
+}
+
+TableReader::TableReader(const Options& options)
+    : options_(options),
+      num_epoches_(0),
+      epoch_iter_(NULL),
+      epoch_index_(NULL),
+      index_src_(NULL),
+      data_src_(NULL) {}
+
+TableReader::~TableReader() {
+  delete epoch_iter_;
+  delete epoch_index_;
+}
+
+Status TableReader::Open(const Options& options, LogSource* data,
+                         LogSource* index, TableReader** result) {
+  *result = NULL;
+  Status s;
+  char space[Footer::kEncodeLength];
+  Slice input;
+  if (index->Size() >= sizeof(space)) {
+    s = index->Read(index->Size() - sizeof(space), sizeof(space), &input,
+                    space);
+  } else {
+    s = Status::Corruption("index too short to be valid");
+  }
+
+  if (!s.ok()) {
+    return s;
+  }
+
+  Footer footer;
+  s = footer.DecodeFrom(&input);
+  if (!s.ok()) {
+    return s;
+  }
+
+  BlockContents contents;
+  s = ReadBlock(index, options, footer.epoch_index_handle(), &contents);
+  if (!s.ok()) {
+    return s;
+  }
+
+  TableReader* reader = new TableReader(options);
+  reader->num_epoches_ = footer.num_epoches();
+
+  Block* block = new Block(contents);
+  reader->epoch_index_ = block;
+  reader->index_src_ = index;
+  reader->data_src_ = data;
+
+  *result = reader;
+  return s;
+}
+
 }  // namespace plfsio
 }  // namespace pdlfs
