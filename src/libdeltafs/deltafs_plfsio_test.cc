@@ -182,6 +182,28 @@ TEST(ReaderTest<0>, SingleEpochRead0) {
   ASSERT_EQ(tmp, "v6");
 }
 
+TEST(WriterTest<0>, MultiEpoch0) {
+  ASSERT_OK(writer_->Append("k1", "v1"));
+  ASSERT_OK(writer_->Append("k2", "v2"));
+  ASSERT_OK(writer_->MakeEpoch());
+  ASSERT_OK(writer_->Append("k1", "v3"));
+  ASSERT_OK(writer_->Append("k2", "v4"));
+  ASSERT_OK(writer_->MakeEpoch());
+  ASSERT_OK(writer_->Append("k1", "v5"));
+  ASSERT_OK(writer_->Append("k2", "v6"));
+  ASSERT_OK(writer_->MakeEpoch());
+  ASSERT_OK(writer_->Finish());
+}
+
+TEST(ReaderTest<0>, MultiEpochRead0) {
+  std::string tmp;
+  ASSERT_OK(reader_->ReadAll("k1", &tmp));
+  ASSERT_EQ(tmp, "v1v3v5");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k2", &tmp));
+  ASSERT_EQ(tmp, "v2v4v6");
+}
+
 TEST(WriterTest<1>, Empty1) {
   ASSERT_OK(writer_->MakeEpoch());
   ASSERT_OK(writer_->Finish());
@@ -223,6 +245,28 @@ TEST(ReaderTest<1>, SingleEpochRead1) {
   tmp = "";
   ASSERT_OK(reader_->ReadAll("k6", &tmp));
   ASSERT_EQ(tmp, "v6");
+}
+
+TEST(WriterTest<1>, MultiEpoch1) {
+  ASSERT_OK(writer_->Append("k1", "v1"));
+  ASSERT_OK(writer_->Append("k2", "v2"));
+  ASSERT_OK(writer_->MakeEpoch());
+  ASSERT_OK(writer_->Append("k1", "v3"));
+  ASSERT_OK(writer_->Append("k2", "v4"));
+  ASSERT_OK(writer_->MakeEpoch());
+  ASSERT_OK(writer_->Append("k1", "v5"));
+  ASSERT_OK(writer_->Append("k2", "v6"));
+  ASSERT_OK(writer_->MakeEpoch());
+  ASSERT_OK(writer_->Finish());
+}
+
+TEST(ReaderTest<1>, MultiEpochRead1) {
+  std::string tmp;
+  ASSERT_OK(reader_->ReadAll("k1", &tmp));
+  ASSERT_EQ(tmp, "v1v3v5");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k2", &tmp));
+  ASSERT_EQ(tmp, "v2v4v6");
 }
 
 }  // namespace plfsio
