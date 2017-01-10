@@ -743,17 +743,23 @@ Status TableReader::Gets(const Slice& key, std::string* dst) {
   return s;
 }
 
-TableReader::TableReader(const Options& options)
-    : options_(options),
+TableReader::TableReader(const Options& o, LogSource* d, LogSource* i)
+    : options_(o),
       num_epoches_(0),
       epoch_iter_(NULL),
       epoch_index_(NULL),
-      index_src_(NULL),
-      data_src_(NULL) {}
+      index_src_(i),
+      data_src_(d) {
+  assert(index_src_ != NULL && data_src_ != NULL);
+  index_src_->Ref();
+  data_src_->Ref();
+}
 
 TableReader::~TableReader() {
   delete epoch_iter_;
   delete epoch_index_;
+  index_src_->Unref();
+  data_src_->Unref();
 }
 
 Status TableReader::Open(const Options& options, LogSource* data,
@@ -785,13 +791,10 @@ Status TableReader::Open(const Options& options, LogSource* data,
     return s;
   }
 
-  TableReader* reader = new TableReader(options);
+  TableReader* reader = new TableReader(options, data, index);
   reader->num_epoches_ = footer.num_epoches();
-
   Block* block = new Block(contents);
   reader->epoch_index_ = block;
-  reader->index_src_ = index;
-  reader->data_src_ = data;
 
   *result = reader;
   return s;

@@ -171,16 +171,17 @@ class Reader {
   // Open an I/O reader against a specific plfs-style directory.
   // Return OK on success, or a non-OK status on errors.
   static Status Open(const Options& options, const std::string& dirname,
-                     Reader* result);
+                     Reader** result);
 
   // List files under a given plfs directory.  Not supported so far.
   virtual void List(std::vector<std::string>* names) = 0;
 
   // Fetch the entire data from a specific file under a given plfs directory.
-  virtual Status Retrieve(const Slice& fname, std::string* dst) = 0;
+  virtual Status ReadAll(const Slice& fname, std::string* dst) = 0;
 
   // Return true iff a specific file exists under a given plfs directory.
-  virtual bool Touch(const Slice& fname) = 0;
+  // Not supported so far.
+  virtual bool Exists(const Slice& fname) = 0;
 
  private:
   // No copying allowed

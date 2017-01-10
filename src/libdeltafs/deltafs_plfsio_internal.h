@@ -131,6 +131,7 @@ class IOLogger {
 // Retrieve table contents from a set of log files.
 class TableReader {
  public:
+  TableReader(const Options&, LogSource* data, LogSource* index);
   // Open a reader on top of a given set of log files.
   // Return OK on success, or a non-OK status on errors.
   static Status Open(const Options& options, LogSource* data, LogSource* index,
@@ -164,11 +165,10 @@ class TableReader {
   // Return OK on success, and a non-OK status on errors.
   Status Get(const Slice& key, uint32_t epoch, std::string* dst);
 
-  TableReader(const Options& options);
-
   // No copying allowed
   void operator=(const TableReader&);
   TableReader(const TableReader&);
+  // Constant after construction
   const Options& options_;
   uint32_t num_epoches_;
 

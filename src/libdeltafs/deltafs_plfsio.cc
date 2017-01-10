@@ -132,7 +132,7 @@ void WriterImpl::MaybeSlowdownCaller() {
 Status WriterImpl::Finish() {
   Status status;
   {
-    MutexLock l(&mutex_);
+    MutexLock ml(&mutex_);
 
     bool dry_run = true;
     // Check partition status in a single pass
@@ -172,7 +172,7 @@ Status WriterImpl::Finish() {
 Status WriterImpl::MakeEpoch() {
   Status status;
   {
-    MutexLock l(&mutex_);
+    MutexLock ml(&mutex_);
 
     bool dry_run = true;
     // Check partition status in a single pass
@@ -214,7 +214,7 @@ Status WriterImpl::Append(const Slice& fname, const Slice& data) {
   uint32_t hash = Hash(fname.data(), fname.size(), 0);
   uint32_t part = hash & part_mask_;
   if (part < num_parts_) {
-    MutexLock l(&mutex_);
+    MutexLock ml(&mutex_);
     status = io_[part]->Add(fname, data);
   }
   if (status.IsBufferFull()) {
@@ -244,16 +244,16 @@ static void PrintLogStream(const std::string& name) {
 #endif
 }
 
-static Status NewLogStream(const std::string& name, Env* env, LogSink** lsptr) {
+static Status NewLogSink(const std::string& name, Env* env, LogSink** ptr) {
   WritableFile* file;
   Status status = env->NewWritableFile(name, &file);
   if (status.ok()) {
     PrintLogStream(name);
     LogSink* sink = new LogSink(file);
     sink->Ref();
-    *lsptr = sink;
+    *ptr = sink;
   } else {
-    *lsptr = NULL;
+    *ptr = NULL;
   }
 
   return status;
@@ -277,17 +277,17 @@ Status Writer::Open(const Options& opts, const std::string& name,
   Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", my_rank);
 #endif
   Status status;
-  // XXX: Ignore error since it may already exist
+  // Ignore error since it may already exist
   env->CreateDir(name);
 
   WriterImpl* impl = new WriterImpl(options);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);
-  status = NewLogStream(DataFileName(name, my_rank), env, &data[0]);
+  status = NewLogSink(DataFileName(name, my_rank), env, &data[0]);
   for (size_t part = 0; part < num_parts; part++) {
     if (status.ok()) {
-      status = NewLogStream(PartitionIndexFileName(name, my_rank, part), env,
-                            &index[part]);
+      status = NewLogSink(PartitionIndexFileName(name, my_rank, part), env,
+                          &index[part]);
     } else {
       break;
     }
@@ -321,6 +321,123 @@ Status Writer::Open(const Options& opts, const std::string& name,
   return status;
 }
 
+class ReaderImpl : public Reader {
+ public:
+  ReaderImpl(const Options& options, const std::string& dirname,
+             LogSource* data);
+  virtual ~ReaderImpl();
+
+  virtual void List(std::vector<std::string>* names);
+  virtual Status ReadAll(const Slice& fname, std::string* dst);
+  virtual bool Exists(const Slice& fname);
+
+ private:
+  friend class Reader;
+
+  const Options options_;
+  const std::string dirname_;
+  port::Mutex mutex_;
+  size_t num_parts_;
+  uint32_t part_mask_;
+  LogSource* data_;
+};
+
+ReaderImpl::ReaderImpl(const Options& options, const std::string& dirname,
+                       LogSource* data)
+    : options_(options),
+      dirname_(dirname),
+      num_parts_(0),
+      part_mask_(~static_cast<uint32_t>(0)),
+      data_(data) {
+  assert(data_ != NULL);
+  data_->Ref();
+}
+
+ReaderImpl::~ReaderImpl() { data_->Unref(); }
+
+void ReaderImpl::List(std::vector<std::string>* names) {
+  // TODO
+}
+
+bool ReaderImpl::Exists(const Slice& fname) {
+  // TODO
+  return true;
+}
+
+static Status NewLogSrc(const std::string& fname, Env* env, LogSource** ptr) {
+  RandomAccessFile* file;
+  uint64_t size;
+  Status status = env->NewRandomAccessFile(fname, &file);
+  if (status.ok()) {
+    status = env->GetFileSize(fname, &size);
+  }
+  if (status.ok()) {
+    PrintLogStream(fname);
+    LogSource* src = new LogSource(file, size);
+    src->Ref();
+    *ptr = src;
+  } else {
+    *ptr = NULL;
+  }
+
+  return status;
+}
+
+Status ReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
+  Status status;
+  TableReader* reader = NULL;
+  LogSource* index = NULL;
+  uint32_t hash = Hash(fname.data(), fname.size(), 0);
+  uint32_t part = hash & part_mask_;
+  if (part < num_parts_) {
+    status = NewLogSrc(PartitionIndexFileName(dirname_, options_.rank, part),
+                       options_.env, &index);
+    MutexLock ml(&mutex_);
+    if (status.ok()) {
+      status = TableReader::Open(options_, data_, index, &reader);
+      if (status.ok()) {
+        status = reader->Gets(fname, dst);
+      }
+    }
+  }
+
+  if (reader != NULL) {
+    delete reader;
+  }
+  if (index != NULL) {
+    index->Unref();
+  }
+
+  return status;
+}
+
+Reader::~Reader() {}
+
+Status Reader::Open(const Options& opts, const std::string& dirname,
+                    Reader** ptr) {
+  *ptr = NULL;
+  Options options = SanitizeWriteOptions(opts);  // FIXME
+  const size_t num_parts = 1u << options.lg_parts;
+  const int my_rank = options.rank;
+  Env* const env = options.env;
+
+  Status status;
+  LogSource* data = NULL;
+  status = NewLogSrc(DataFileName(dirname, my_rank), env, &data);
+  if (status.ok()) {
+    ReaderImpl* impl = new ReaderImpl(options, dirname, data);
+    impl->part_mask_ = num_parts - 1;
+    impl->num_parts_ = num_parts;
+    *ptr = impl;
+  }
+
+  if (data != NULL) {
+    data->Unref();
+  }
+
+  return status;
+}
+
 Status DestroyDir(const std::string& dirname, const Options& options) {
   Status status;
   Env* env = options.env;
@@ -335,7 +452,7 @@ Status DestroyDir(const std::string& dirname, const Options& options) {
       }
     }
 
-    // XXX: Ignore error status
+    // Ignore error status
     env->DeleteDir(dirname);
   }
 
