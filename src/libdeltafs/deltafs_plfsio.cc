@@ -446,9 +446,11 @@ Status DestroyDir(const std::string& dirname, const Options& options) {
   status = env->GetChildren(dirname, &names);
   if (status.ok()) {
     for (size_t i = 0; i < names.size(); i++) {
-      status = env->DeleteFile(dirname + "/" + names[i]);
-      if (!status.ok()) {
-        break;
+      if (!Slice(names[i]).starts_with(".")) {
+        status = env->DeleteFile(dirname + "/" + names[i]);
+        if (!status.ok()) {
+          break;
+        }
       }
     }
 

@@ -89,22 +89,27 @@ TEST(WriterBufTest, VariableSizedValue) {
   delete iter;
 }
 
-template <int LP = 0 /* Lg(parts) */>
+static inline Env* TestEnv() {
+  Env* env = port::posix::GetUnBufferedIOEnv();
+  return env;
+}
+
+template <int lg_parts = 0>
 class WriterTest {
  public:
   WriterTest() {
     dirname_ = test::TmpDir() + "/plfsio_test";
     DestroyDir(dirname_, Options());
-    options_.compaction_pool = ThreadPool::NewFixed(1);
-    options_.env = Env::Default();
-    options_.lg_parts = LP;
-    Status status = Writer::Open(options_, dirname_, &writer_);
-    ASSERT_OK(status);
+    options_.env = TestEnv();
+    options_.lg_parts = lg_parts;
+    Status s = Writer::Open(options_, dirname_, &writer_);
+    ASSERT_OK(s);
   }
 
   ~WriterTest() {
-    delete writer_;
-    delete options_.compaction_pool;
+    if (writer_ != NULL) {
+      delete writer_;
+    }
   }
 
   Options options_;
@@ -112,9 +117,37 @@ class WriterTest {
   Writer* writer_;
 };
 
+template <int lg_parts = 0>
+class ReaderTest {
+ public:
+  ReaderTest() {
+    dirname_ = test::TmpDir() + "/plfsio_test";
+    options_.env = TestEnv();
+    options_.lg_parts = lg_parts;
+    Status s = Reader::Open(options_, dirname_, &reader_);
+    ASSERT_OK(s);
+  }
+
+  ~ReaderTest() {
+    if (reader_ != NULL) {
+      delete reader_;
+    }
+  }
+
+  Options options_;
+  std::string dirname_;
+  Reader* reader_;
+};
+
 TEST(WriterTest<0>, Empty0) {
   ASSERT_OK(writer_->MakeEpoch());
   ASSERT_OK(writer_->Finish());
+}
+
+TEST(ReaderTest<0>, EmptyRead0) {
+  std::string tmp;
+  ASSERT_OK(reader_->ReadAll("non-exists", &tmp));
+  ASSERT_TRUE(tmp.empty());
 }
 
 TEST(WriterTest<0>, SingleEpoch0) {
@@ -128,9 +161,36 @@ TEST(WriterTest<0>, SingleEpoch0) {
   ASSERT_OK(writer_->Finish());
 }
 
+TEST(ReaderTest<0>, SingleEpochRead0) {
+  std::string tmp;
+  ASSERT_OK(reader_->ReadAll("k1", &tmp));
+  ASSERT_EQ(tmp, "v1");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k2", &tmp));
+  ASSERT_EQ(tmp, "v2");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k3", &tmp));
+  ASSERT_EQ(tmp, "v3");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k4", &tmp));
+  ASSERT_EQ(tmp, "v4");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k5", &tmp));
+  ASSERT_EQ(tmp, "v5");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k6", &tmp));
+  ASSERT_EQ(tmp, "v6");
+}
+
 TEST(WriterTest<1>, Empty1) {
   ASSERT_OK(writer_->MakeEpoch());
   ASSERT_OK(writer_->Finish());
+}
+
+TEST(ReaderTest<1>, EmptyRead1) {
+  std::string tmp;
+  ASSERT_OK(reader_->ReadAll("non-exists", &tmp));
+  ASSERT_TRUE(tmp.empty());
 }
 
 TEST(WriterTest<1>, SingleEpoch1) {
@@ -142,6 +202,27 @@ TEST(WriterTest<1>, SingleEpoch1) {
   ASSERT_OK(writer_->Append("k6", "v6"));
   ASSERT_OK(writer_->MakeEpoch());
   ASSERT_OK(writer_->Finish());
+}
+
+TEST(ReaderTest<1>, SingleEpochRead1) {
+  std::string tmp;
+  ASSERT_OK(reader_->ReadAll("k1", &tmp));
+  ASSERT_EQ(tmp, "v1");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k2", &tmp));
+  ASSERT_EQ(tmp, "v2");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k3", &tmp));
+  ASSERT_EQ(tmp, "v3");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k4", &tmp));
+  ASSERT_EQ(tmp, "v4");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k5", &tmp));
+  ASSERT_EQ(tmp, "v5");
+  tmp = "";
+  ASSERT_OK(reader_->ReadAll("k6", &tmp));
+  ASSERT_EQ(tmp, "v6");
 }
 
 }  // namespace plfsio

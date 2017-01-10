@@ -690,12 +690,16 @@ static void SaveValue(void* arg, const Slice& key, const Slice& value) {
   state->dst->append(value.data(), value.size());
   state->found = true;
 }
+
+static inline Iterator* NewEpochIterator(Block* epoch_index) {
+  return epoch_index->NewIterator(BytewiseComparator());
+}
 }  // namespace
 
 Status TableReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
   Status s;
   if (epoch_iter_ == NULL) {
-    epoch_iter_ = epoch_index_->NewIterator(BytewiseComparator());
+    epoch_iter_ = NewEpochIterator(epoch_index_);
   }
   std::string epoch_key;
   uint32_t table = 0;
@@ -727,16 +731,18 @@ Status TableReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
 
 Status TableReader::Gets(const Slice& key, std::string* dst) {
   Status s;
-  if (epoch_iter_ == NULL) {
-    epoch_iter_ = epoch_index_->NewIterator(BytewiseComparator());
-  }
-  uint32_t epoch = 0;
-  while (s.ok()) {
-    s = Get(key, epoch, dst);
-    if (epoch < num_epoches_ - 1) {
-      epoch++;
-    } else {
-      break;
+  if (num_epoches_ != 0) {
+    if (epoch_iter_ == NULL) {
+      epoch_iter_ = NewEpochIterator(epoch_index_);
+    }
+    uint32_t epoch = 0;
+    while (s.ok()) {
+      s = Get(key, epoch, dst);
+      if (epoch < num_epoches_ - 1) {
+        epoch++;
+      } else {
+        break;
+      }
     }
   }
 
