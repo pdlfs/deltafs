@@ -48,6 +48,9 @@ class ReadablePlfsDir : public Fio::Handle {  // Enables dynamic type checks
 class ReadablePlfsDir {
   ~ReadablePlfsDir() {
 #endif
+    if (reader != NULL) {
+      delete reader;
+    }
   }
 
   // No copying allowed
@@ -449,12 +452,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
       } else if (pivot != NULL) {
         if (DELTAFS_DIR_IS_PLFS_STYLE(pivot->ent->file_mode())) {
           if ((pivot->file->flags & O_ACCMODE) == O_WRONLY) {
-            assert(pivot->file->fh != NULL);
-#ifndef NDEBUG
             fh = ToWritablePlfsDir(pivot->file->fh);
-#else
-            fh = pivot->file->fh;
-#endif
           }
         }
       }
@@ -471,12 +469,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
       } else if (pivot != NULL) {
         if (DELTAFS_DIR_IS_PLFS_STYLE(pivot->ent->file_mode())) {
           if ((pivot->file->flags & O_ACCMODE) == O_RDONLY) {
-            assert(pivot->file->fh != NULL);
-#ifndef NDEBUG
             fh = ToReadablePlfsDir(pivot->file->fh);
-#else
-            fh = pivot->file->fh;
-#endif
           }
         }
       }
