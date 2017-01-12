@@ -326,6 +326,44 @@ Status Client::Fopen(const char* path, int flags, mode_t mode, FileInfo* info) {
   return s;
 }
 
+static std::string ToPlfsDirName(const Fentry& fentry) {
+  std::string key_prefix;
+  key_prefix = fentry.UntypedKeyPrefix();
+  char tmp[200];
+  sprintf(tmp, "PlfsDir_");
+  char* p = tmp + 2;
+  for (size_t i = 0; i < key_prefix.size(); i++) {
+    sprintf(p, "%02X", static_cast<unsigned char>(key_prefix[i]));
+    p += 2;
+  }
+
+  return tmp;
+}
+
+static Status OpenPlfsIoWriter(const Fentry& fentry, Env* env,
+                               plfsio::Writer** result) {
+  Status s;
+  plfsio::Options options;
+  options.rank = 0;                // FIXME
+  options.compaction_pool = NULL;  // FIXME
+  options.env = env;
+
+  std::string dirname = "/tmp/deltafs_plfsio";  // FIXME
+  dirname += "/";
+  dirname += ToPlfsDirName(fentry);
+
+  s = plfsio::Writer::Open(options, dirname, result);
+
+#if VERBOSE >= 2
+  std::string id = DirId(fentry.stat).DebugString();
+  Verbose(__LOG_ARGS__, 2, "plfsdir.%s.open_mode -> O_WRONLY", id.c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.%s.status -> %s", id.c_str(),
+          STATUS_STR(s));
+#endif
+
+  return s;
+}
+
 // Open a file for I/O operations. Return OK on success.
 // If O_CREAT is specified and the file does not exist, it will be created. If
 // both O_CREAT and O_EXCL are specified and the file exists, error is returned.
@@ -446,10 +484,15 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
       }
     } else if ((flags & O_ACCMODE) == O_WRONLY) {
       if (S_ISDIR(my_file_mode)) {
-        WritablePlfsDir* d = new WritablePlfsDir;
-        d->writer = NULL;  // FIXME
-
-        fh = (Fio::Handle*)d;
+        plfsio::Writer* writer;
+        s = OpenPlfsIoWriter(fentry, env_, &writer);
+        if (s.ok()) {
+          WritablePlfsDir* d = new WritablePlfsDir;
+          d->writer = writer;
+          fh = (Fio::Handle*)d;
+        } else {
+          fh = NULL;
+        }
       } else if (pivot != NULL) {
         if (DELTAFS_DIR_IS_PLFS_STYLE(pivot->ent->file_mode())) {
           if ((pivot->file->flags & O_ACCMODE) == O_WRONLY) {
@@ -603,7 +646,6 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
     file->refs++;  // Ref
     mutex_.Unlock();
     if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
-      // All writes are considered an append operation
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       s = writer->Append(fentry.nhash, data);
@@ -634,7 +676,6 @@ Status Client::Write(int fd, const Slice& data) {
     file->refs++;  // Ref
     mutex_.Unlock();
     if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
-      // All writes are considered an append operation
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       s = writer->Append(fentry.nhash, data);
@@ -855,11 +896,12 @@ Status Client::Close(int fd) {
     return BadDescriptor();
   } else {
     if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
-      // Ignore write and flush sequences
-      plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
-      assert(writer != NULL);
       if (S_ISDIR(fentry.file_mode())) {
-        writer->Finish();  // Ignore errors
+        plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
+        assert(writer != NULL);
+        writer->Finish();
+      } else {
+        // Do nothing
       }
     } else {
       if (S_ISREG(fentry.file_mode())) {
@@ -868,6 +910,8 @@ Status Client::Close(int fd) {
           Flush(fd);  // Ignore errors
           mutex_.Lock();
         }
+      } else {
+        // Do nothing
       }
     }
 
