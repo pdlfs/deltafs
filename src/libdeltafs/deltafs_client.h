@@ -120,6 +120,7 @@ class Client {
   MDSFactoryImpl* mdsfty_;
   MDSClient* mdscli_;
   Fio* fio_;
+  Env* env_;
 };
 
 }  // namespace pdlfs

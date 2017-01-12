@@ -142,6 +142,7 @@ Client::~Client() {
   delete mdscli_;
   delete mdsfty_;
   delete fio_;
+  delete env_;
 }
 
 // Consume a descriptor slot to point to the specified file entry.
@@ -1514,6 +1515,7 @@ Client* Client::Builder::BuildClient() {
     cli->mdscli_ = mdscli_;
     cli->mdsfty_ = mdsfty_;
     cli->fio_ = fio_;
+    cli->env_ = env_;
     return cli;
   } else {
     delete mdscli_;
