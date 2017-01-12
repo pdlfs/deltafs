@@ -561,7 +561,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
             WritablePlfsFile* file = new WritablePlfsFile;
             file->parent = ToWritablePlfsDir(pivot->file->fh);
             file->parent->Ref();
-            fh = (Fio::Handle)file;
+            fh = (Fio::Handle*)file;
           }
         }
       } else if (S_ISDIR(my_file_mode)) {
@@ -587,7 +587,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
             ReadablePlfsFile* file = new ReadablePlfsFile;
             file->parent = ToReadablePlfsDir(pivot->file->fh);
             file->parent->Ref();
-            fh = (Fio::Handle)file;
+            fh = (Fio::Handle*)file;
           }
         }
       } else if (S_ISDIR(my_file_mode)) {
