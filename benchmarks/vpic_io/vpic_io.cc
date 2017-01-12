@@ -237,10 +237,10 @@ static void Print(const char* msg) {
 static void Help(const char* prog, FILE* out) {
   fprintf(out,
           "%s [options] <io_type> <io_conf>\n\n"
-          "IO types: deltafs, posix\n\n"
+          "Supported IO types: deltafs, posix\n\n"
           "Deltafs IO confs:\n\n"
           "  \"DELTAFS_Verbose?10|DELTAFS_LogToStderr?true|"
-          "DELTAFS_PLFSDir?write|DELTAFS_XXX?YYY\"\n\n"
+          "DELTAFS_PLFSDir?write\"\n\n"
           "Posix IO confs:\n\n"
           "  \"mount_point=/tmp/ioclient\"\n\n"
           "Options:\n\n"

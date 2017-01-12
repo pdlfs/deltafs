@@ -51,12 +51,14 @@ static void InitClient() {
   if (client == NULL) {
     pdlfs::Status s = pdlfs::Client::Open(&client);
     if (!s.ok()) {
-      Error(__LOG_ARGS__, "cannot open deltafs client: %s",
+      Error(__LOG_ARGS__, "Fail to open deltafs client: %s",
             s.ToString().c_str());
       bg_status = s;
       client = NULL;
     } else {
-      Verbose(__LOG_ARGS__, 1, "deltafs ready");
+#if VERBOSE >= 2
+      Verbose(__LOG_ARGS__, 2, "Deltafs ready");
+#endif
     }
   }
 }

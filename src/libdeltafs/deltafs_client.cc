@@ -576,7 +576,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
         // Not supported
       }
 
-      if (fh == NULL) {
+      if (s.ok() && fh == NULL) {
         s = Status::InvalidArgument(Slice());
       }
     } else if ((flags & O_ACCMODE) == O_RDONLY) {
@@ -599,7 +599,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
         // Not supported
       }
 
-      if (fh == NULL) {
+      if (s.ok() && fh == NULL) {
         s = Status::InvalidArgument(Slice());
       }
     } else {
@@ -1397,9 +1397,9 @@ class Client::Builder {
 
 static void PrintIds(int uid, int gid, unsigned long long iid) {
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "me.instance_id -> %llu", iid);
-  Verbose(__LOG_ARGS__, 2, "me.uid -> %d", uid);
-  Verbose(__LOG_ARGS__, 2, "me.gid -> %d", gid);
+  Verbose(__LOG_ARGS__, 2, "instance_id -> %llu", iid);
+  Verbose(__LOG_ARGS__, 2, "my_uid -> %d", uid);
+  Verbose(__LOG_ARGS__, 2, "my_gid -> %d", gid);
 #endif
 }
 
