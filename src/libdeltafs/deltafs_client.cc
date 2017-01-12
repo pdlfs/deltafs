@@ -823,7 +823,9 @@ Status Client::Fdatasync(int fd) {
     if (S_ISDIR(fentry.file_mode())) {
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
+      mutex_.Unlock();
       s = writer->Sync();
+      mutex_.Lock();
     }
     return s;
   } else if (!S_ISREG(fentry.file_mode())) {
@@ -940,7 +942,9 @@ Status Client::Flush(int fd) {
     if (S_ISDIR(fentry.file_mode())) {
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
+      mutex_.Unlock();
       s = writer->MakeEpoch();
+      mutex_.Lock();
     }
     return s;
   } else if (!S_ISREG(fentry.file_mode())) {
@@ -990,7 +994,9 @@ Status Client::Close(int fd) {
       if (S_ISDIR(fentry.file_mode())) {
         plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
         assert(writer != NULL);
+        mutex_.Unlock();
         writer->Finish();
+        mutex_.Lock();
       } else {
         // Do nothing
       }
