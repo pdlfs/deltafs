@@ -60,7 +60,7 @@ class ReadablePlfsDir {
   int refs;
 
  public:
-  ReadablePlfsDir() : refs(0) {}
+  ReadablePlfsDir() : refs(0), reader(NULL) {}
   plfsio::Reader* reader;
   void Ref() { refs++; }
 
@@ -84,6 +84,35 @@ static inline ReadablePlfsDir* ToReadablePlfsDir(Fio::Handle* fh) {
 }
 
 #ifndef NDEBUG
+class ReadablePlfsFile : public Fio::Handle {
+ public:
+  virtual ~ReadablePlfsFile() {
+#else
+class ReadablePlfsFile {
+ public:
+  ~ReadablePlfsFile() {
+#endif
+    if (parent != NULL) {
+      parent->Unref();
+    }
+  }
+
+  ReadablePlfsFile() : parent(NULL) {}
+
+  ReadablePlfsDir* parent;
+};
+
+// REQUIRES: fh must not be NULL.
+static inline ReadablePlfsFile* ToReadablePlfsFile(Fio::Handle* fh) {
+  assert(fh != NULL);
+#ifndef NDEBUG
+  return dynamic_cast<ReadablePlfsFile*>(fh);
+#else
+  return (ReadablePlfsFile*)fh;
+#endif
+}
+
+#ifndef NDEBUG
 class WritablePlfsDir : public Fio::Handle {  // Enables dynamic type checks
   virtual ~WritablePlfsDir() {
 #else
@@ -102,7 +131,7 @@ class WritablePlfsDir {
   int refs;
 
  public:
-  WritablePlfsDir() : refs(0) {}
+  WritablePlfsDir() : refs(0), writer(NULL) {}
   plfsio::Writer* writer;
   void Ref() { refs++; }
 
@@ -122,6 +151,35 @@ static inline WritablePlfsDir* ToWritablePlfsDir(Fio::Handle* fh) {
   return dynamic_cast<WritablePlfsDir*>(fh);
 #else
   return (WritablePlfsDir*)fh;
+#endif
+}
+
+#ifndef NDEBUG
+class WritablePlfsFile : public Fio::Handle {
+ public:
+  virtual ~WritablePlfsFile() {
+#else
+class WritablePlfsFile {
+ public:
+  ~WritablePlfsFile() {
+#endif
+    if (parent != NULL) {
+      parent->Unref();
+    }
+  }
+
+  WritablePlfsFile() : parent(NULL) {}
+
+  WritablePlfsDir* parent;
+};
+
+// REQUIRES: fh must not be NULL.
+static inline WritablePlfsFile* ToWritablePlfsFile(Fio::Handle* fh) {
+  assert(fh != NULL);
+#ifndef NDEBUG
+  return dynamic_cast<WritablePlfsFile*>(fh);
+#else
+  return (WritablePlfsFile*)fh;
 #endif
 }
 
@@ -205,15 +263,24 @@ void Client::Unref(File* f, const Fentry& fentry) {
       } else {
         assert(f->fh == NULL);
       }
-    } else if (IsWriteOk(f)) {
-      ToWritablePlfsDir(f->fh)->Unref();
+    } else if (S_ISDIR(fentry.file_mode())) {
+      if ((f->flags & O_ACCMODE) == O_WRONLY) {
+        ToWritablePlfsDir(f->fh)->Unref();
+      } else if ((f->flags & O_ACCMODE) == O_RDONLY) {
+        ToReadablePlfsDir(f->fh)->Unref();
+      } else {
+        assert(false);
+      }
     } else {
-      assert(false);
-      // TODO
+      if ((f->flags & O_ACCMODE) == O_WRONLY) {
+        delete ToWritablePlfsFile(f->fh);
+      } else if ((f->flags & O_ACCMODE) == O_RDONLY) {
+        delete ToReadablePlfsFile(f->fh);
+      } else {
+        assert(false);
+      }
     }
     free(f);
-  } else {
-    // Do nothing
   }
 }
 
@@ -400,17 +467,21 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
   // Verify file modes
   if (s.ok()) {
     my_file_mode = fentry.file_mode();
-    if (S_ISDIR(my_file_mode)) {
-      if (!DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode) &&
-          (flags & O_ACCMODE) != O_RDONLY) {
-        s = Status::FileExpected(Slice());
-      } else if (DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode) &&
-                 (flags & O_ACCMODE) == O_RDWR) {
-        s = Status::InvalidArgument(Slice());
+    if (!DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode)) {
+      if (S_ISDIR(my_file_mode)) {
+        if ((flags & O_ACCMODE) != O_RDONLY) {
+          s = Status::FileExpected(Slice());
+        }
+      } else {
+        if ((flags & O_DIRECTORY) == O_DIRECTORY) {
+          s = Status::DirExpected(Slice());
+        }
       }
     } else {
-      if ((flags & O_DIRECTORY) == O_DIRECTORY) {
-        s = Status::DirExpected(Slice());
+      if (S_ISREG(my_file_mode) && (flags & O_APPEND) != O_APPEND) {
+        s = Status::NotSupported(Slice());
+      } else if ((flags & O_ACCMODE) == O_RDWR) {
+        s = Status::NotSupported(Slice());
       }
     }
   }
@@ -483,39 +554,49 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
         // Do nothing
       }
     } else if ((flags & O_ACCMODE) == O_WRONLY) {
-      if (S_ISDIR(my_file_mode)) {
+      if (S_ISREG(my_file_mode)) {
+        if (pivot != NULL) {
+          if (DELTAFS_DIR_IS_PLFS_STYLE(pivot->ent->file_mode()) &&
+              (pivot->file->flags & O_ACCMODE) == O_WRONLY) {
+            WritablePlfsFile* file = new WritablePlfsFile;
+            file->parent = ToWritablePlfsDir(pivot->file->fh);
+            file->parent->Ref();
+            fh = (Fio::Handle)file;
+          }
+        }
+      } else if (S_ISDIR(my_file_mode)) {
         plfsio::Writer* writer;
         s = OpenPlfsIoWriter(fentry, env_, &writer);
         if (s.ok()) {
           WritablePlfsDir* d = new WritablePlfsDir;
           d->writer = writer;
           fh = (Fio::Handle*)d;
-        } else {
-          fh = NULL;
         }
-      } else if (pivot != NULL) {
-        if (DELTAFS_DIR_IS_PLFS_STYLE(pivot->ent->file_mode())) {
-          if ((pivot->file->flags & O_ACCMODE) == O_WRONLY) {
-            fh = ToWritablePlfsDir(pivot->file->fh);
-          }
-        }
+      } else {
+        // Not supported
       }
 
       if (fh == NULL) {
         s = Status::InvalidArgument(Slice());
       }
     } else if ((flags & O_ACCMODE) == O_RDONLY) {
-      if (S_ISDIR(my_file_mode)) {
+      if (S_ISREG(my_file_mode)) {
+        if (pivot != NULL) {
+          if (DELTAFS_DIR_IS_PLFS_STYLE(pivot->ent->file_mode()) &&
+              (pivot->file->flags & O_ACCMODE) == O_RDONLY) {
+            ReadablePlfsFile* file = new ReadablePlfsFile;
+            file->parent = ToReadablePlfsDir(pivot->file->fh);
+            file->parent->Ref();
+            fh = (Fio::Handle)file;
+          }
+        }
+      } else if (S_ISDIR(my_file_mode)) {
         ReadablePlfsDir* d = new ReadablePlfsDir;
         d->reader = NULL;  // FIXME
 
         fh = (Fio::Handle*)d;
-      } else if (pivot != NULL) {
-        if (DELTAFS_DIR_IS_PLFS_STYLE(pivot->ent->file_mode())) {
-          if ((pivot->file->flags & O_ACCMODE) == O_RDONLY) {
-            fh = ToReadablePlfsDir(pivot->file->fh);
-          }
-        }
+      } else {
+        // Not supported
       }
 
       if (fh == NULL) {
@@ -530,7 +611,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
   mutex_.Lock();
 
   if (s.ok()) {
-    if (DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode)) {
+    if (S_ISDIR(my_file_mode) && DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode)) {
       if ((flags & O_ACCMODE) == O_WRONLY) {
         ToWritablePlfsDir(fh)->Ref();
       } else if ((flags & O_ACCMODE) == O_RDONLY) {
@@ -547,12 +628,22 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
       if (fh != NULL) {
         if (!DELTAFS_DIR_IS_PLFS_STYLE(my_file_mode)) {
           fio_->Close(fentry, fh);
-        } else if ((flags & O_ACCMODE) == O_WRONLY) {
-          ToWritablePlfsDir(fh)->Unref();
-        } else if ((flags & O_ACCMODE) == O_RDONLY) {
-          ToReadablePlfsDir(fh)->Unref();
+        } else if (S_ISDIR(my_file_mode)) {
+          if ((flags & O_ACCMODE) == O_WRONLY) {
+            ToWritablePlfsDir(fh)->Unref();
+          } else if ((flags & O_ACCMODE) == O_RDONLY) {
+            ToReadablePlfsDir(fh)->Unref();
+          } else {
+            assert(false);
+          }
         } else {
-          assert(false);
+          if ((flags & O_ACCMODE) == O_WRONLY) {
+            delete ToWritablePlfsFile(fh);
+          } else if ((flags & O_ACCMODE) == O_RDONLY) {
+            delete ToReadablePlfsFile(fh);
+          } else {
+            assert(false);
+          }
         }
       }
     } else {
@@ -646,7 +737,7 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
     file->refs++;  // Ref
     mutex_.Unlock();
     if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
-      plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
+      plfsio::Writer* writer = ToWritablePlfsFile(file->fh)->parent->writer;
       assert(writer != NULL);
       s = writer->Append(fentry.nhash, data);
     } else {
@@ -676,7 +767,7 @@ Status Client::Write(int fd, const Slice& data) {
     file->refs++;  // Ref
     mutex_.Unlock();
     if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
-      plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
+      plfsio::Writer* writer = ToWritablePlfsFile(file->fh)->parent->writer;
       assert(writer != NULL);
       s = writer->Append(fentry.nhash, data);
     } else {
@@ -814,7 +905,7 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
     if (!DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
       s = fio_->Read(fentry, file->fh, result, size, scratch);
     } else {
-      plfsio::Reader* reader = ToReadablePlfsDir(file->fh)->reader;
+      plfsio::Reader* reader = ToReadablePlfsFile(file->fh)->parent->reader;
       assert(reader != NULL);
       std::string buf;
       s = reader->ReadAll(fentry.nhash, &buf);
