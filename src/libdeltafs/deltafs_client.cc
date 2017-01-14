@@ -17,7 +17,7 @@
 #include "deltafs_conf_loader.h"
 #include "deltafs_plfsio.h"
 #include "pdlfs-common/blkdb.h"
-#include "pdlfs-common/lazy_env.h"
+#include "pdlfs-common/lazyinit_env.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/rpc.h"
 #include "pdlfs-common/strutil.h"
@@ -397,8 +397,8 @@ static std::string ToPlfsDirName(const Fentry& fentry) {
   std::string key_prefix;
   key_prefix = fentry.UntypedKeyPrefix();
   char tmp[200];
-  sprintf(tmp, "PlfsDir_");
-  char* p = tmp + 2;
+  int n = sprintf(tmp, "PlfsDir_");
+  char* p = tmp + n;
   for (size_t i = 0; i < key_prefix.size(); i++) {
     sprintf(p, "%02X", static_cast<unsigned char>(key_prefix[i]));
     p += 2;
@@ -415,7 +415,7 @@ static Status OpenPlfsIoWriter(const Fentry& fentry, Env* env,
   options.compaction_pool = NULL;  // FIXME
   options.env = env;
 
-  std::string dirname = "/tmp/deltafs_plfsio";  // FIXME
+  std::string dirname = "/tmp/deltafs_data";  // FIXME
   dirname += "/";
   dirname += ToPlfsDirName(fentry);
 
@@ -1529,7 +1529,7 @@ void Client::Builder::OpenSession() {
     status_ = mds->Opensession(options, &ret);
     if (ok()) {
       session_id_ = ret.session_id;
-      env_ = new LazyEnv(ret.env_name, ret.env_conf);
+      env_ = new LazyInitEnv(ret.env_name, ret.env_conf);
       fio_ = Fio::Open(ret.fio_name, ret.fio_conf);
       if (fio_ == NULL) {
         status_ = Status::IOError("cannot open fio");

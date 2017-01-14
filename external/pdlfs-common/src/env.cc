@@ -13,7 +13,7 @@
 #include "pdlfs-common/env.h"
 
 #include "pdlfs-common/buffered_file.h"
-#include "pdlfs-common/lazy_env.h"
+#include "pdlfs-common/lazyinit_env.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"

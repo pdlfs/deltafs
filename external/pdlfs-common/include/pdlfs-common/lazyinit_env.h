@@ -14,13 +14,14 @@
 
 namespace pdlfs {
 
-// Delay initialization until the first time the Env is used.
-class LazyEnv : public Env {
+// Delay initialization until the first time an Env function
+// is called.  Implementation is thread safe.
+class LazyInitEnv : public Env {
  public:
-  LazyEnv(const std::string& env_name, const std::string& env_conf)
-      : env_name_(env_name), env_conf_(env_conf), env_(NULL) {}
+  LazyInitEnv(const std::string& env_name, const std::string& env_conf)
+      : env_name_(env_name), env_conf_(env_conf), env_ok_(true), env_(NULL) {}
 
-  virtual ~LazyEnv() {
+  virtual ~LazyInitEnv() {
     if (env_ != Env::Default()) {
       delete env_;
     }
@@ -213,32 +214,38 @@ class LazyEnv : public Env {
 
  private:
   // No copying allowed
-  void operator=(const LazyEnv&);
-  LazyEnv(const LazyEnv&);
+  void operator=(const LazyInitEnv&);
+  LazyInitEnv(const LazyInitEnv&);
 
   Status OpenEnv() {
     Status s;
-    if (ok_ && env_ == NULL) {
+    if (env_ok_ && env_ == NULL) {
       MutexLock ml(&mu_);
-      if (ok_ && env_ == NULL) {
+      if (env_ok_ && env_ == NULL) {
         env_ = Env::Open(env_name_, env_conf_);
         if (env_ == NULL) {
-          ok_ = false;
+          env_ok_ = false;
         }
       }
     }
-    if (!ok_) {
-      return Status::IOError("cannot open env");
+    if (!env_ok_) {
+      char tmp[30];
+      snprintf(tmp, sizeof(tmp), "Fail to load env %s", env_name_.c_str());
+      return Status::IOError(tmp);
     } else {
       return s;
     }
   }
 
+  // Constant after construction
   std::string env_name_;
   std::string env_conf_;
+  // State below is protected by mu_
   port::Mutex mu_;
+  // False if lazy initialization failed
+  bool env_ok_;
+  // Lazy initialized
   Env* env_;
-  bool ok_;
 };
 
 }  // namespace pdlfs
