@@ -41,11 +41,12 @@ class Env {
   virtual ~Env();
 
   // Load a specific environment implementation as is requested by the caller.
-  // If the implementation is not available,
-  // NULL is returned.
-  //
-  // The result should be deleted when it is no longer needed.
-  static Env* Open(const Slice& env_name, const Slice& env_conf);
+  // If the implementation is not available, NULL is returned.
+  // Set *is_system to true iff the return Env belongs to system and
+  // should not be deleted.  Otherwise, The result should be
+  // deleted when it is no longer needed.
+  static Env* Open(const Slice& env_name, const Slice& env_conf,
+                   bool* is_system);
 
   // Return a default environment suitable for the current operating
   // system.  Sophisticated users may wish to provide their own Env

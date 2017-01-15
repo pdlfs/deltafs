@@ -50,7 +50,8 @@ ThreadPool::~ThreadPool() {}
 
 EnvWrapper::~EnvWrapper() {}
 
-Env* Env::Open(const Slice& env_name, const Slice& env_conf) {
+Env* Env::Open(const Slice& env_name, const Slice& env_conf, bool* is_system) {
+  *is_system = false;
   assert(env_name.size() != 0);
 #if VERBOSE >= 1
   const char* env_conf_str = env_conf.c_str();
@@ -60,20 +61,29 @@ Env* Env::Open(const Slice& env_name, const Slice& env_conf) {
   Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name.c_str());
   Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf_str);
 #endif
+// RADOS
 #if defined(PDLFS_RADOS)
   if (env_name == "rados") {
     return (Env*)PDLFS_Load_rados_env(env_conf.c_str());
   }
 #endif
-  if (env_name == "posix") {
+// POSIX
 #if defined(PDLFS_PLATFORM_POSIX)
-    return Env::Default();
-#else
-    return NULL;
-#endif
-  } else {
-    return NULL;
+  if (env_name == "posix" || env_name == "posix.default") {
+    *is_system = true;
+    return port::posix::GetDefaultEnv();
+  } else if (env_name == "posix.unbufferedio") {
+    *is_system = true;
+    return port::posix::GetUnBufferedIOEnv();
+  } else if (env_name == "posix.directio") {
+    *is_system = true;
+    return port::posix::GetDirectIOEnv();
   }
+#endif
+
+  *is_system = true;
+  Env* env = Env::Default();
+  return env;
 }
 
 static void EmitDBLog(Logger* log, const char* fmt, va_list ap) {

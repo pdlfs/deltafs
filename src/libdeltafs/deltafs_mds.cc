@@ -288,7 +288,8 @@ void MetadataServer::Builder::LoadMDSEnv() {
     myenv_->fio_conf = config::FioConf();
     myenv_->env_name = config::EnvName();
     myenv_->env_conf = config::EnvConf();
-    myenv_->env = Env::Open(myenv_->env_name, myenv_->env_conf);
+    bool is_system;  // FIXME
+    myenv_->env = Env::Open(myenv_->env_name, myenv_->env_conf, &is_system);
     if (myenv_->env == NULL) {
       status_ = Status::IOError("cannot load MDS env");
     }

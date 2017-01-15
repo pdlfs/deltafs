@@ -22,8 +22,10 @@ class LazyInitEnv : public Env {
       : env_name_(env_name), env_conf_(env_conf), env_ok_(true), env_(NULL) {}
 
   virtual ~LazyInitEnv() {
-    if (env_ != Env::Default()) {
-      delete env_;
+    if (env_ok_) {
+      if (!env_is_sys_) {
+        delete env_;
+      }
     }
   }
 
@@ -222,7 +224,7 @@ class LazyInitEnv : public Env {
     if (env_ok_ && env_ == NULL) {
       MutexLock ml(&mu_);
       if (env_ok_ && env_ == NULL) {
-        env_ = Env::Open(env_name_, env_conf_);
+        env_ = Env::Open(env_name_, env_conf_, &env_is_sys_);
         if (env_ == NULL) {
           env_ok_ = false;
         }
@@ -244,6 +246,8 @@ class LazyInitEnv : public Env {
   port::Mutex mu_;
   // False if lazy initialization failed
   bool env_ok_;
+  // If env_ belongs to us
+  bool env_is_sys_;
   // Lazy initialized
   Env* env_;
 };

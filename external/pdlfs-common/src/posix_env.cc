@@ -190,7 +190,7 @@ class PosixFixedThreadPool : public ThreadPool {
 class PosixEnv : public Env {
  public:
   explicit PosixEnv() : pool_(1) {}
-  virtual ~PosixEnv() { assert(false); }
+  virtual ~PosixEnv() { abort(); }
 
   virtual Status NewSequentialFile(const Slice& fname,
                                    SequentialFile** result) {
@@ -469,7 +469,7 @@ class PosixDirectIOWrapper : public EnvWrapper {
  public:
   PosixDirectIOWrapper(Env* base) : EnvWrapper(base) {}
 
-  virtual ~PosixDirectIOWrapper() {}
+  virtual ~PosixDirectIOWrapper() { abort(); }
 
   virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
     int fd = open(fname.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_DIRECT,
@@ -513,7 +513,7 @@ class PosixUnBufferedIOWrapper : public EnvWrapper {
  public:
   PosixUnBufferedIOWrapper(Env* base) : EnvWrapper(base) {}
 
-  virtual ~PosixUnBufferedIOWrapper() {}
+  virtual ~PosixUnBufferedIOWrapper() { abort(); }
 
   virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
     int fd = open(fname.c_str(), O_WRONLY | O_CREAT | O_TRUNC, DEFFILEMODE);
@@ -551,17 +551,16 @@ class PosixUnBufferedIOWrapper : public EnvWrapper {
   }
 };
 
-static pthread_t PthreadCreate(void* (*start_routine)(void*), void* arg) {
+static pthread_t PthreadCreate(void* (*func)(void*), void* arg) {
   pthread_t new_th;
-  port::PthreadCall("pthread_create",
-                    pthread_create(&new_th, NULL, start_routine, arg));
+  port::PthreadCall("pthread_create", pthread_create(&new_th, NULL, func, arg));
   port::PthreadCall("pthread_detach", pthread_detach(new_th));
   return new_th;
 }
 
 std::string PosixFixedThreadPool::ToDebugString() {
   char tmp[100];
-  snprintf(tmp, sizeof(tmp), "POSIX fixed thread pool: max_thread=%d",
+  snprintf(tmp, sizeof(tmp), "POSIX fixed thread pool: num_threads=%d",
            max_threads_);
   return tmp;
 }
@@ -681,7 +680,7 @@ Env* GetDirectIOEnv() {
 
 Env* Env::Default() {
 #if !defined(PDLFS_PLATFORM_POSIX)
-#error "This code should not compile"
+#error "!!! This code should not compile !!!"
 #else
   Env* result = port::posix::GetDefaultEnv();
   assert(result != NULL);
