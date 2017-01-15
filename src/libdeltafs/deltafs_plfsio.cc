@@ -106,7 +106,7 @@ class WriterImpl : public Writer {
   port::CondVar cond_var_;
   size_t num_parts_;
   uint32_t part_mask_;
-  IOLogger** io_;
+  PlfsIoLogger** io_;
 };
 
 WriterImpl::WriterImpl(const Options& options)
@@ -303,10 +303,11 @@ Status Writer::Open(const Options& opts, const std::string& name,
   }
 
   if (status.ok()) {
-    IOLogger** io = new IOLogger*[num_parts];
+    port::Mutex* const mu = &impl->mutex_;
+    port::CondVar* const cv = &impl->cond_var_;
+    PlfsIoLogger** io = new PlfsIoLogger*[num_parts];
     for (size_t part = 0; part < num_parts; part++) {
-      io[part] = new IOLogger(impl->options_, &impl->mutex_, &impl->cond_var_,
-                              data[0], index[part]);
+      io[part] = new PlfsIoLogger(impl->options_, mu, cv, data[0], index[part]);
     }
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
@@ -394,7 +395,7 @@ static Status NewLogSrc(const std::string& fname, Env* env, LogSource** ptr) {
 
 Status ReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
   Status status;
-  TableReader* reader = NULL;
+  PlfsIoReader* reader = NULL;
   LogSource* index = NULL;
   uint32_t hash = Hash(fname.data(), fname.size(), 0);
   uint32_t part = hash & part_mask_;
@@ -403,7 +404,7 @@ Status ReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
                        options_.env, &index);
     MutexLock ml(&mutex_);
     if (status.ok()) {
-      status = TableReader::Open(options_, data_, index, &reader);
+      status = PlfsIoReader::Open(options_, data_, index, &reader);
       if (status.ok()) {
         status = reader->Gets(fname, dst);
       }

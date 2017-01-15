@@ -344,8 +344,8 @@ Status TableLogger::Finish() {
   return status_;
 }
 
-IOLogger::IOLogger(const Options& options, port::Mutex* mu, port::CondVar* cv,
-                   LogSink* data, LogSink* index)
+PlfsIoLogger::PlfsIoLogger(const Options& options, port::Mutex* mu,
+                           port::CondVar* cv, LogSink* data, LogSink* index)
     : options_(options),
       mutex_(mu),
       bg_cv_(cv),
@@ -392,7 +392,7 @@ IOLogger::IOLogger(const Options& options, port::Mutex* mu, port::CondVar* cv,
   mem_buf_ = &buf0_;
 }
 
-IOLogger::~IOLogger() {
+PlfsIoLogger::~PlfsIoLogger() {
   mutex_->AssertHeld();
   while (has_bg_compaction_) {
     bg_cv_->Wait();
@@ -402,7 +402,7 @@ IOLogger::~IOLogger() {
 // If dry_run is set, we will only perform status checks (which includes write
 // errors, buffer space, and compaction queue depth) such that no
 // compaction jobs will be scheduled.
-Status IOLogger::Finish(bool dry_run) {
+Status PlfsIoLogger::Finish(bool dry_run) {
   mutex_->AssertHeld();
   while (pending_finish_ ||
          pending_epoch_flush_ ||  // The previous job is still in-progress
@@ -438,7 +438,7 @@ Status IOLogger::Finish(bool dry_run) {
 // If dry_run is set, we will only perform status checks (which includes write
 // errors, buffer space, and compaction queue depth) such that no
 // compaction jobs will be scheduled.
-Status IOLogger::MakeEpoch(bool dry_run) {
+Status PlfsIoLogger::MakeEpoch(bool dry_run) {
   mutex_->AssertHeld();
   while (pending_epoch_flush_ ||  // The previous job is still in-progress
          imm_buf_ != NULL) {      // There's an on-going compaction job
@@ -468,7 +468,7 @@ Status IOLogger::MakeEpoch(bool dry_run) {
   return status;
 }
 
-Status IOLogger::Add(const Slice& key, const Slice& value) {
+Status PlfsIoLogger::Add(const Slice& key, const Slice& value) {
   mutex_->AssertHeld();
   Status status = Prepare(false, false);
   if (status.ok()) {
@@ -478,7 +478,7 @@ Status IOLogger::Add(const Slice& key, const Slice& value) {
   return status;
 }
 
-Status IOLogger::Prepare(bool flush, bool finish) {
+Status PlfsIoLogger::Prepare(bool flush, bool finish) {
   mutex_->AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
@@ -522,13 +522,13 @@ Status IOLogger::Prepare(bool flush, bool finish) {
   return status;
 }
 
-void IOLogger::MaybeSchedualCompaction() {
+void PlfsIoLogger::MaybeSchedualCompaction() {
   mutex_->AssertHeld();
   if (!has_bg_compaction_) {
     if (imm_buf_ != NULL) {
       has_bg_compaction_ = true;
       if (options_.compaction_pool != NULL) {
-        options_.compaction_pool->Schedule(IOLogger::BGWork, this);
+        options_.compaction_pool->Schedule(PlfsIoLogger::BGWork, this);
       } else {
         // Run in current thread context
         DoCompaction();
@@ -537,14 +537,14 @@ void IOLogger::MaybeSchedualCompaction() {
   }
 }
 
-void IOLogger::BGWork(void* arg) {
-  IOLogger* io = reinterpret_cast<IOLogger*>(arg);
+void PlfsIoLogger::BGWork(void* arg) {
+  PlfsIoLogger* io = reinterpret_cast<PlfsIoLogger*>(arg);
   io->mutex_->Lock();
   io->DoCompaction();
   io->mutex_->Unlock();
 }
 
-void IOLogger::DoCompaction() {
+void PlfsIoLogger::DoCompaction() {
   mutex_->AssertHeld();
   assert(has_bg_compaction_);
   if (imm_buf_ != NULL) {
@@ -559,7 +559,7 @@ void IOLogger::DoCompaction() {
   bg_cv_->SignalAll();
 }
 
-void IOLogger::CompactWriteBuffer() {
+void PlfsIoLogger::CompactWriteBuffer() {
   mutex_->AssertHeld();
   const WriteBuffer* const buffer = imm_buf_;
   assert(buffer != NULL);
@@ -663,8 +663,8 @@ static Status ReadBlock(LogSource* file, const Options& options,
   return s;
 }
 
-Status TableReader::Get(const Slice& key, const BlockHandle& handle,
-                        Saver saver, void* arg) {
+Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
+                         Saver saver, void* arg) {
   Status s;
   BlockContents contents;
   s = ReadBlock(data_src_, options_, handle, &contents);
@@ -686,8 +686,8 @@ Status TableReader::Get(const Slice& key, const BlockHandle& handle,
   return s;
 }
 
-Status TableReader::Get(const Slice& key, const TableHandle& handle,
-                        Saver saver, void* arg) {
+Status PlfsIoReader::Get(const Slice& key, const TableHandle& handle,
+                         Saver saver, void* arg) {
   Status s;
   BlockContents contents;
   s = ReadBlock(index_src_, options_, handle, &contents);
@@ -729,7 +729,7 @@ static inline Iterator* NewEpochIterator(Block* epoch_index) {
 }
 }  // namespace
 
-Status TableReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
+Status PlfsIoReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
   Status s;
   if (epoch_iter_ == NULL) {
     epoch_iter_ = NewEpochIterator(epoch_index_);
@@ -762,7 +762,7 @@ Status TableReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
   return s;
 }
 
-Status TableReader::Gets(const Slice& key, std::string* dst) {
+Status PlfsIoReader::Gets(const Slice& key, std::string* dst) {
   Status s;
   if (num_epoches_ != 0) {
     if (epoch_iter_ == NULL) {
@@ -782,7 +782,7 @@ Status TableReader::Gets(const Slice& key, std::string* dst) {
   return s;
 }
 
-TableReader::TableReader(const Options& o, LogSource* d, LogSource* i)
+PlfsIoReader::PlfsIoReader(const Options& o, LogSource* d, LogSource* i)
     : options_(o),
       num_epoches_(0),
       epoch_iter_(NULL),
@@ -794,15 +794,15 @@ TableReader::TableReader(const Options& o, LogSource* d, LogSource* i)
   data_src_->Ref();
 }
 
-TableReader::~TableReader() {
+PlfsIoReader::~PlfsIoReader() {
   delete epoch_iter_;
   delete epoch_index_;
   index_src_->Unref();
   data_src_->Unref();
 }
 
-Status TableReader::Open(const Options& options, LogSource* data,
-                         LogSource* index, TableReader** result) {
+Status PlfsIoReader::Open(const Options& options, LogSource* data,
+                          LogSource* index, PlfsIoReader** result) {
   *result = NULL;
   Status s;
   char space[Footer::kEncodeLength];
@@ -830,7 +830,7 @@ Status TableReader::Open(const Options& options, LogSource* data,
     return s;
   }
 
-  TableReader* reader = new TableReader(options, data, index);
+  PlfsIoReader* reader = new PlfsIoReader(options, data, index);
   reader->num_epoches_ = footer.num_epoches();
   Block* block = new Block(contents);
   reader->epoch_index_ = block;

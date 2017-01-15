@@ -89,12 +89,13 @@ class TableLogger {
   bool finished_;
 };
 
-// Log data as multiple sorted runs of tables. Implementation is thread-safe.
-class IOLogger {
+// Sequentially log data as multiple sorted runs of indexed tables.
+// Implementation is thread-safe and uses background threads.
+class PlfsIoLogger {
  public:
-  IOLogger(const Options& options, port::Mutex* mu, port::CondVar* cv,
-           LogSink* data, LogSink* index);
-  ~IOLogger();
+  PlfsIoLogger(const Options& options, port::Mutex* mu, port::CondVar* cv,
+               LogSink* data, LogSink* index);
+  ~PlfsIoLogger();
 
   // REQUIRES: mutex_ has been locked
   Status Add(const Slice& key, const Slice& value);
@@ -103,8 +104,8 @@ class IOLogger {
 
  private:
   // No copying allowed
-  void operator=(const IOLogger&);
-  IOLogger(const IOLogger&);
+  void operator=(const PlfsIoLogger&);
+  PlfsIoLogger(const PlfsIoLogger&);
 
   static void BGWork(void*);
   void MaybeSchedualCompaction();
@@ -134,21 +135,21 @@ class IOLogger {
   WriteBuffer buf1_;
 };
 
-// Retrieve table contents from a set of log files.
-class TableReader {
+// Retrieve table contents from a set of indexed log files.
+class PlfsIoReader {
  public:
-  TableReader(const Options&, LogSource* data, LogSource* index);
+  PlfsIoReader(const Options&, LogSource* data, LogSource* index);
   // Open a reader on top of a given set of log files.
   // Return OK on success, or a non-OK status on errors.
   static Status Open(const Options& options, LogSource* data, LogSource* index,
-                     TableReader** result);
+                     PlfsIoReader** result);
 
   // Obtain the value to a key from all epoches.
   // All value found will be appended to "dst"
   // Return OK on success, or a non-OK status on errors.
   Status Gets(const Slice& key, std::string* dst);
 
-  ~TableReader();
+  ~PlfsIoReader();
 
  private:
   typedef void (*Saver)(void* arg, const Slice& key, const Slice& value);
@@ -172,8 +173,8 @@ class TableReader {
   Status Get(const Slice& key, uint32_t epoch, std::string* dst);
 
   // No copying allowed
-  void operator=(const TableReader&);
-  TableReader(const TableReader&);
+  void operator=(const PlfsIoReader&);
+  PlfsIoReader(const PlfsIoReader&);
   // Constant after construction
   const Options& options_;
   uint32_t num_epoches_;
