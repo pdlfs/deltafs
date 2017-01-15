@@ -128,8 +128,8 @@ void WriteBuffer::Reset() {
   buffer_.clear();
 }
 
-void WriteBuffer::Reserve(uint32_t num_entries, size_t size_per_entry) {
-  buffer_.reserve(num_entries * (size_per_entry + 2));
+void WriteBuffer::Reserve(uint32_t num_entries, size_t buffer_size) {
+  buffer_.reserve(buffer_size);
   offsets_.reserve(num_entries);
 }
 
@@ -366,12 +366,13 @@ PlfsIoLogger::PlfsIoLogger(const Options& options, port::Mutex* mu,
   bytes_per_entry += options.key_size + options.value_size;
   size_t total_bits_per_entry = 8 * bytes_per_entry + options.bfbits_per_key;
   // Estimated amount of entries per table
-  entries_per_table_ = static_cast<uint32_t>(
+  entries_per_buf_ = static_cast<uint32_t>(
       ceil(8 * options_.memtable_size / total_bits_per_entry));
+  entries_per_buf_ /= 2;  // Due to double buffering
 
-  table_size_ = entries_per_table_ * bytes_per_entry;
+  buffer_size_ = entries_per_buf_ * bytes_per_entry;
   // Compute bloom filter size (in both bits and bytes)
-  bf_bits_ = entries_per_table_ * options.bfbits_per_key;
+  bf_bits_ = entries_per_buf_ * options.bfbits_per_key;
   // For small n, we can see a very high false positive rate.  Fix it
   // by enforcing a minimum bloom filter length.
   if (bf_bits_ > 0 && bf_bits_ < 64) {
@@ -381,13 +382,17 @@ PlfsIoLogger::PlfsIoLogger(const Options& options, port::Mutex* mu,
   bf_bits_ = bf_bytes_ * 8;
 
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.entries_per_table -> %d",
-          int(entries_per_table_));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.table_size -> %s",
-          PrettySize(table_size_).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.entries_per_buf -> %d",
+          int(entries_per_buf_));
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.buffer_size -> %s",
+          PrettySize(buffer_size_).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.bf_size -> %s",
           PrettySize(bf_bytes_).c_str());
 #endif
+
+  // Allocate memory
+  buf0_.Reserve(entries_per_buf_, buffer_size_);
+  buf1_.Reserve(entries_per_buf_, buffer_size_);
 
   mem_buf_ = &buf0_;
 }
@@ -486,7 +491,7 @@ Status PlfsIoLogger::Prepare(bool flush, bool finish) {
     if (!table_logger_.ok()) {
       status = table_logger_.status();
       break;
-    } else if (!flush && mem_buf_->CurrentBufferSize() < table_size_) {
+    } else if (!flush && mem_buf_->CurrentBufferSize() < buffer_size_) {
       // There is room in current write buffer
       break;
     } else if (imm_buf_ != NULL) {

@@ -24,7 +24,7 @@ class WriteBuffer {
   explicit WriteBuffer() : num_entries_(0), finished_(false) {}
   ~WriteBuffer() {}
 
-  void Reserve(uint32_t num_entries, size_t size_per_entry);
+  void Reserve(uint32_t num_entries, size_t buffer_size);
   size_t CurrentBufferSize() const { return buffer_.size(); }
   uint32_t NumEntries() const { return num_entries_; }
   void Add(const Slice& key, const Slice& value);
@@ -117,8 +117,8 @@ class PlfsIoLogger {
   const Options& options_;
   port::Mutex* const mutex_;
   port::CondVar* const bg_cv_;
-  uint32_t entries_per_table_;
-  size_t table_size_;
+  uint32_t entries_per_buf_;
+  size_t buffer_size_;
   size_t bf_bytes_;
   size_t bf_bits_;
 
