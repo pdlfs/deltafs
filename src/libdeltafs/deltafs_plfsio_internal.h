@@ -112,9 +112,15 @@ class IOLogger {
   void CompactWriteBuffer();
   void DoCompaction();
 
+  // Constant after construction
   const Options& options_;
   port::Mutex* const mutex_;
   port::CondVar* const bg_cv_;
+  uint32_t entries_per_table_;
+  size_t table_size_;
+  size_t bf_bytes_;
+  size_t bf_bits_;
+
   // State below is protected by mutex_
   bool has_bg_compaction_;
   bool pending_epoch_flush_;

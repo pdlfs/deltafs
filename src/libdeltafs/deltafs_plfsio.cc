@@ -23,8 +23,11 @@ namespace pdlfs {
 namespace plfsio {
 
 Options::Options()
-    : block_size(64 << 10),
-      table_size(32 << 20),
+    : memtable_size(32 << 20),
+      key_size(8),
+      value_size(32),
+      bfbits_per_key(8),
+      block_size(64 << 10),
       compaction_pool(NULL),
       non_blocking(false),
       slowdown_micros(0),
@@ -268,10 +271,16 @@ Status Writer::Open(const Options& opts, const std::string& name,
   Env* const env = options.env;
 #if VERBOSE >= 2
   Verbose(__LOG_ARGS__, 2, "plfsdir.name -> %s", name.c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable_size -> %s",
+          PrettySize(options.memtable_size).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.key_size -> %s",
+          PrettySize(options.key_size).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.value_size -> %s",
+          PrettySize(options.value_size).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.bfbits_per_key -> %d",
+          int(options.bfbits_per_key));
   Verbose(__LOG_ARGS__, 2, "plfsdir.block_size -> %s",
-          PrettyNum(options.block_size).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.table_size -> %s",
-          PrettyNum(options.table_size).c_str());
+          PrettySize(options.block_size).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.num_parts_per_rank -> %u",
           static_cast<unsigned>(num_parts));
   Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", my_rank);

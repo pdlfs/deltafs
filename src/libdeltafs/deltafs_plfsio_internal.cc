@@ -10,8 +10,10 @@
 #include "deltafs_plfsio_internal.h"
 
 #include "pdlfs-common/logging.h"
+#include "pdlfs-common/strutil.h"
 
 #include <assert.h>
+#include <math.h>
 #include <algorithm>
 
 namespace pdlfs {
@@ -355,7 +357,38 @@ IOLogger::IOLogger(const Options& options, port::Mutex* mu, port::CondVar* cv,
       imm_buf_(NULL),
       imm_buf_is_epoch_flush_(false),
       imm_buf_is_finish_(false) {
+  // Sanity checks
   assert(mu != NULL && cv != NULL);
+
+  // Determine the right table size and bloom filter size
+  size_t bytes_per_entry =
+      VarintLength(options_.key_size) + VarintLength(options_.value_size);
+  bytes_per_entry += options.key_size + options.value_size;
+  size_t total_bits_per_entry = 8 * bytes_per_entry + options.bfbits_per_key;
+  // Estimated amount of entries per table
+  entries_per_table_ = static_cast<uint32_t>(
+      ceil(8 * options_.memtable_size / total_bits_per_entry));
+
+  table_size_ = entries_per_table_ * bytes_per_entry;
+  // Compute bloom filter size (in both bits and bytes)
+  bf_bits_ = entries_per_table_ * options.bfbits_per_key;
+  // For small n, we can see a very high false positive rate.  Fix it
+  // by enforcing a minimum bloom filter length.
+  if (bf_bits_ > 0 && bf_bits_ < 64) {
+    bf_bits_ = 64;
+  }
+  bf_bytes_ = (bf_bits_ + 7) / 8;
+  bf_bits_ = bf_bytes_ * 8;
+
+#if VERBOSE >= 2
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.entries_per_table -> %d",
+          int(entries_per_table_));
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.table_size -> %s",
+          PrettySize(table_size_).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.bf_size -> %s",
+          PrettySize(bf_bytes_).c_str());
+#endif
+
   mem_buf_ = &buf0_;
 }
 
@@ -453,7 +486,7 @@ Status IOLogger::Prepare(bool flush, bool finish) {
     if (!table_logger_.ok()) {
       status = table_logger_.status();
       break;
-    } else if (!flush && mem_buf_->CurrentBufferSize() < options_.table_size) {
+    } else if (!flush && mem_buf_->CurrentBufferSize() < table_size_) {
       // There is room in current write buffer
       break;
     } else if (imm_buf_ != NULL) {

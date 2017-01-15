@@ -19,17 +19,29 @@ namespace plfsio {
 struct Options {
   Options();
 
-  // Approximate size of user data packed per block.
-  // This usually corresponds to the size of each I/O request
-  // sent to the underlying storage.
-  // Default: 64K
-  size_t block_size;
+  // Total memory budget for the memory table.
+  // Size includes both the raw table and the bloom filter
+  // associated with the table.
+  // Recommend to allocate 3% of RAM per core for the table.
+  // Default: 32MB
+  size_t memtable_size;
 
-  // Approximate size of user data packed per table.
-  // This corresponds to the size of the in-memory write buffer
-  // we must allocate for each log stream.
-  // Default: 32M
-  size_t table_size;
+  // Average size of keys.
+  // Default: 8 bytes
+  size_t key_size;
+
+  // Average size of values.
+  // Default: 32 bytes
+  size_t value_size;
+
+  // Bloom filter bits per key.
+  // Set to zero to disable the creation of bloom filters.
+  // Default: 8 bits
+  size_t bfbits_per_key;
+
+  // Approximate size of user data packed per block.
+  // Default: 128K
+  size_t block_size;
 
   // Thread pool used to run background compaction jobs.
   // Set to NULL to disable background jobs so all compactions will
