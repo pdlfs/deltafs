@@ -42,8 +42,8 @@ class Env {
 
   // Load a specific environment implementation as is requested by the caller.
   // If the implementation is not available, NULL is returned.
-  // Set *is_system to true iff the return Env belongs to system and
-  // should not be deleted.  Otherwise, The result should be
+  // Set *is_system to true iff the returned Env belongs to system and
+  // must not be deleted.  Otherwise, the result should be
   // deleted when it is no longer needed.
   static Env* Open(const Slice& env_name, const Slice& env_conf,
                    bool* is_system);
@@ -52,7 +52,7 @@ class Env {
   // system.  Sophisticated users may wish to provide their own Env
   // implementation instead of relying on this default environment.
   //
-  // The result of Default() is a global instance and cannot be deleted.
+  // The result of Default() belongs to system and cannot be deleted.
   static Env* Default();
 
   // Create a brand new sequentially-readable file with the specified name.
