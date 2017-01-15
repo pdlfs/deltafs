@@ -28,7 +28,7 @@ static uint32_t BloomHash(const Slice& key) {
 
 static bool BloomKeyMayMatch(const Slice& key, const Slice& input) {
   const size_t len = input.size();
-  if (len < 2) return true; // Consider it a match
+  if (len < 2) return true;  // Consider it a match
 
   const char* array = input.data();
   const size_t bits = (len - 1) * 8;
@@ -57,15 +57,16 @@ static bool BloomKeyMayMatch(const Slice& key, const Slice& input) {
 
 class BloomFilterBuilder {
  public:
-  BloomFilterBuilder(size_t bits_per_key, size_t buffer_size) {
-    space_.reserve(buffer_size + 1);
-    space_.resize(buffer_size, 0);
+  BloomFilterBuilder(size_t bits_per_key, size_t size /* bytes */) {
+    space_.reserve(size + 1);
+    space_.resize(size, 0);
     // Round down to reduce probing cost a little bit
     k_ = static_cast<size_t>(bits_per_key * 0.69);  // 0.69 =~ ln(2)
     if (k_ < 1) k_ = 1;
     if (k_ > 30) k_ = 30;
     // Remember # of probes in filter
     space_.push_back(static_cast<char>(k_));
+    bits_ = 8 * size;
   }
 
   ~BloomFilterBuilder() {}
@@ -73,12 +74,11 @@ class BloomFilterBuilder {
   Slice contents() const { return space_; }
 
   void AddKey(const Slice& key) {
-    const size_t bits = 8 * space_.size();
     // Use double-hashing to generate a sequence of hash values.
     uint32_t h = BloomHash(key);
     const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
     for (size_t j = 0; j < k_; j++) {
-      const uint32_t bitpos = h % bits;
+      const uint32_t bitpos = h % bits_;
       space_[bitpos / 8] |= (1 << (bitpos % 8));
       h += delta;
     }
@@ -90,6 +90,7 @@ class BloomFilterBuilder {
   BloomFilterBuilder(const BloomFilterBuilder&);
 
   std::string space_;
+  size_t bits_;
   size_t k_;
 };
 
