@@ -80,10 +80,13 @@ Env* Env::Open(const Slice& env_name, const Slice& env_conf, bool* is_system) {
     return port::posix::GetDirectIOEnv();
   }
 #endif
-
-  *is_system = true;
-  Env* env = Env::Default();
-  return env;
+  if (env_name == "default") {
+    *is_system = true;
+    Env* env = Env::Default();
+    return env;
+  } else {
+    return NULL;
+  }
 }
 
 static void EmitDBLog(Logger* log, const char* fmt, va_list ap) {
