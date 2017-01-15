@@ -40,6 +40,7 @@ struct Options {
   size_t bfbits_per_key;
 
   // Approximate size of user data packed per block.
+  // The size of index and filter blocks are not affected by this option.
   // Default: 128K
   size_t block_size;
 
