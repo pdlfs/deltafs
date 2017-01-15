@@ -9,6 +9,7 @@
 
 #include "deltafs_plfsio_internal.h"
 
+#include "pdlfs-common/hash.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/strutil.h"
 
@@ -20,6 +21,39 @@ namespace pdlfs {
 extern const char* GetLengthPrefixedSlice(const char* p, const char* limit,
                                           Slice* result);
 namespace plfsio {
+
+class BloomFilterBuilder {
+ public:
+  BloomFilterBuilder(size_t bits_per_key, size_t buffer_size) {
+    space_.resize(buffer_size, 0);
+    // Round down to reduce probing cost a little bit
+    k_ = static_cast<size_t>(bits_per_key * 0.69);  // 0.69 =~ ln(2)
+    if (k_ < 1) k_ = 1;
+    if (k_ > 30) k_ = 30;
+  }
+
+  ~BloomFilterBuilder() {}
+
+  void AddKey(const Slice& key) {
+    const size_t bits = 8 * space_.size();
+    // Use double-hashing to generate a sequence of hash values.
+    uint32_t h = Hash(key.data(), key.size(), 0xbc9f1d34);
+    const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+    for (size_t j = 0; j < k_; j++) {
+      const uint32_t bitpos = h % bits;
+      space_[bitpos / 8] |= (1 << (bitpos % 8));
+      h += delta;
+    }
+  }
+
+ private:
+  // No copying allowed
+  void operator=(const BloomFilterBuilder&);
+  BloomFilterBuilder(const BloomFilterBuilder&);
+
+  std::string space_;
+  size_t k_;
+};
 
 class WriteBuffer::Iter : public Iterator {
  public:
@@ -573,6 +607,8 @@ void PlfsIoLogger::CompactWriteBuffer() {
   const bool is_finish = imm_buf_is_finish_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   TableLogger* const dest = &table_logger_;
+  const size_t bf_bits_per_key = options_.bfbits_per_key;
+  const size_t bf_bytes = bf_bytes_;
   mutex_->Unlock();
 #if VERBOSE >= 2
   static unsigned long long seq = 0;
@@ -582,6 +618,10 @@ void PlfsIoLogger::CompactWriteBuffer() {
   unsigned num_keys = 0;
 #endif
 
+  BloomFilterBuilder* bf = NULL;
+  if (bf_bits_per_key != 0 && bf_bytes != 0) {
+    bf = new BloomFilterBuilder(bf_bits_per_key, bf_bytes);
+  }
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {
@@ -590,6 +630,9 @@ void PlfsIoLogger::CompactWriteBuffer() {
     size += iter->key().size();
     num_keys++;
 #endif
+    if (bf != NULL) {
+      bf->AddKey(iter->key());
+    }
     dest->Add(iter->key(), iter->value());
     if (!dest->ok()) {
       break;
@@ -614,6 +657,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
 #endif
 
   delete iter;
+  delete bf;
   mutex_->Lock();
   if (is_epoch_flush) {
     if (pending_epoch_flush) {
