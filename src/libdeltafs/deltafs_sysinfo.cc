@@ -46,9 +46,9 @@ void PrintSysInfo() {
   if (cpuinfo != NULL) {
     char line[1000];
     int num_cpus = 0;
-    std::string cpu_type;
-    std::string cache_size;
-    std::string cl_size;
+    std::string cpu_type = "???";
+    std::string cache_size = "???";
+    std::string cl_size = "???";
     while (fgets(line, sizeof(line), cpuinfo) != NULL) {
       const char* sep = strchr(line, ':');
       if (sep == NULL) {
@@ -70,6 +70,25 @@ void PrintSysInfo() {
     Info(__LOG_ARGS__, "CPUCache:     %s", cache_size.c_str());
     Info(__LOG_ARGS__, "CPUCacheLine: %s Bytes", cl_size.c_str());
     fclose(cpuinfo);
+  }
+  FILE* meminfo = fopen("/proc/meminfo", "r");
+  if (meminfo != NULL) {
+    char line[1000];
+    std::string total_mem = "???";
+    while (fgets(line, sizeof(line), meminfo) != NULL) {
+      const char* sep = strchr(line, ':');
+      if (sep == NULL) {
+        continue;
+      }
+      Slice key = TrimSpace(Slice(line, sep - line));
+      Slice val = TrimSpace(Slice(sep + 1));
+      if (key == "MemTotal") {
+        total_mem = val.ToString();
+        break;
+      }
+    }
+    Info(__LOG_ARGS__, "MemTotal:     %s", total_mem.c_str());
+    fclose(meminfo);
   }
 #endif
 
