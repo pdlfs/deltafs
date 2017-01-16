@@ -20,6 +20,7 @@ namespace pdlfs {
 // May lose data for clients that rely on flushes to ensure data durability.
 // To avoid losing data, clients may call sync at a certain time interval,
 // such as 5 seconds. Clients may also call FFlush to force data flush.
+// Implementation is not thread safe.
 class UnsafeBufferedWritableFile : public WritableFile {
  public:
   UnsafeBufferedWritableFile(WritableFile* base, size_t buf_size)
@@ -90,6 +91,74 @@ class UnsafeBufferedWritableFile : public WritableFile {
  private:
   WritableFile* base_;
   const size_t max_buf_size_;
+  std::string buf_;
+};
+
+// Convert a sequential file to a random access file by pre-loading all
+// its contents into memory and use that to serve all future read requests
+// to the file. At most "max_buf_size_" worth of data will be loaded and
+// buffered in memory. When reading from the buffered file, the returned
+// Slices will remain valid until the file is deleted. Callers must
+// explicitly call Load() to load the file contents.
+// Implementation is not thread safe.
+class WholeFileBufferedRandomAccessFile : public RandomAccessFile {
+ public:
+  WholeFileBufferedRandomAccessFile(SequentialFile* base, size_t buf_size,
+                                    size_t io_size = 4096)
+      : base_(base), max_buf_size_(buf_size), io_size_(io_size) {
+    buf_.reserve(max_buf_size_);
+  }
+
+  virtual ~WholeFileBufferedRandomAccessFile() {
+    if (base_ != NULL) {
+      delete base_;
+    }
+  }
+
+  virtual Status Read(uint64_t offset, size_t n, Slice* result,
+                      char* scratch) const {
+    if (offset < buf_.size()) {
+      if (n > buf_.size() - offset) {
+        n = buf_.size() - offset;
+      }
+      *result = Slice(buf_.data() + offset, n);
+    } else {
+      *result = Slice();
+    }
+
+    return Status::OK();
+  }
+
+  Status Load() {
+    Status s;
+    buf_.clear();
+    char* tmp = new char[io_size_];
+    while (buf_.size() < max_buf_size_) {
+      Slice fragment;
+      s = base_->Read(io_size_, &fragment, tmp);
+      if (!s.ok()) {
+        break;
+      } else if (fragment.empty()) {
+        break;
+      }
+      if (buf_.size() + fragment.size() <= max_buf_size_) {
+        buf_.append(fragment.data(), fragment.size());
+      } else {
+        size_t left = max_buf_size_ - buf_.size();
+        buf_.append(fragment.data(), left);
+      }
+    }
+
+    delete[] tmp;
+    delete base_;
+    base_ = NULL;
+    return s;
+  }
+
+ private:
+  SequentialFile* base_;
+  const size_t max_buf_size_;
+  const size_t io_size_;
   std::string buf_;
 };
 
