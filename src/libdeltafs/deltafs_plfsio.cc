@@ -27,7 +27,8 @@ Options::Options()
       key_size(8),
       value_size(32),
       bf_bits_per_key(8),
-      block_size(64 << 10),
+      block_size(128 << 10),
+      block_util(0.999),
       compaction_pool(NULL),
       non_blocking(false),
       slowdown_micros(0),
@@ -278,10 +279,12 @@ Status Writer::Open(const Options& opts, const std::string& name,
           PrettySize(options.key_size).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.value_size -> %s",
           PrettySize(options.value_size).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.bfbits_per_key -> %d",
+  Verbose(__LOG_ARGS__, 2, "plfsdir.bf_bits_per_key -> %d",
           int(options.bf_bits_per_key));
   Verbose(__LOG_ARGS__, 2, "plfsdir.block_size -> %s",
           PrettySize(options.block_size).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.block_util -> %.2f%%",
+          100 * options.block_util);
   Verbose(__LOG_ARGS__, 2, "plfsdir.num_parts_per_rank -> %u",
           static_cast<unsigned>(num_parts));
   Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", my_rank);

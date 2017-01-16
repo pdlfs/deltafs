@@ -338,7 +338,7 @@ void TableLogger::EndBlock() {
   if (data_block_.empty()) return;  // No more work
   if (!ok()) return;                // Abort
   assert(!pending_index_entry_);
-  Slice contents = data_block_.Finish();
+  Slice contents = data_block_.Finish(options_.block_size);
   const uint64_t offset = data_log_->Ltell();
   status_ = data_log_->Lwrite(contents);
 
@@ -387,7 +387,8 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 
   last_key_ = key.ToString();
   data_block_.Add(key, value);
-  if (data_block_.CurrentSizeEstimate() >= options_.block_size) {
+  if (data_block_.CurrentSizeEstimate() >=
+      static_cast<uint64_t>(options_.block_size * options_.block_util)) {
     EndBlock();
   }
 }
@@ -427,7 +428,7 @@ Status TableLogger::Finish() {
   }
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "Tail written: (size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "TAIL written: (size=%llu) %s",
           static_cast<unsigned long long>(tail.size()),
           status_.ToString().c_str());
 #endif

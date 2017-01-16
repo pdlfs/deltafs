@@ -46,6 +46,11 @@ struct Options {
   // Default: 128K
   size_t block_size;
 
+  // Start padding if estimated block size reaches the specified
+  // utilization target.
+  // Default: 0.999 (99.9%)
+  double block_util;
+
   // Thread pool used to run background compaction jobs.
   // If set to NULL, Env::Default() will be used to schedule jobs.
   // Default: NULL
