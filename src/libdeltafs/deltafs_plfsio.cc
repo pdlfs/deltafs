@@ -26,7 +26,7 @@ Options::Options()
     : memtable_size(32 << 20),
       key_size(8),
       value_size(32),
-      bfbits_per_key(8),
+      bf_bits_per_key(8),
       block_size(64 << 10),
       compaction_pool(NULL),
       non_blocking(false),
@@ -278,7 +278,7 @@ Status Writer::Open(const Options& opts, const std::string& name,
   Verbose(__LOG_ARGS__, 2, "plfsdir.value_size -> %s",
           PrettySize(options.value_size).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.bfbits_per_key -> %d",
-          int(options.bfbits_per_key));
+          int(options.bf_bits_per_key));
   Verbose(__LOG_ARGS__, 2, "plfsdir.block_size -> %s",
           PrettySize(options.block_size).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.num_parts_per_rank -> %u",

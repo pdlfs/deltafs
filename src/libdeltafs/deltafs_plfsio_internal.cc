@@ -452,7 +452,7 @@ PlfsIoLogger::PlfsIoLogger(const Options& options, port::Mutex* mu,
   size_t bytes_per_entry =
       VarintLength(options_.key_size) + VarintLength(options_.value_size);
   bytes_per_entry += options.key_size + options.value_size;
-  size_t total_bits_per_entry = 8 * bytes_per_entry + options.bfbits_per_key;
+  size_t total_bits_per_entry = 8 * bytes_per_entry + options.bf_bits_per_key;
   // Estimated amount of entries per table
   entries_per_buf_ = static_cast<uint32_t>(
       ceil(8 * options_.memtable_size / total_bits_per_entry));
@@ -460,7 +460,7 @@ PlfsIoLogger::PlfsIoLogger(const Options& options, port::Mutex* mu,
 
   buffer_size_ = entries_per_buf_ * bytes_per_entry;
   // Compute bloom filter size (in both bits and bytes)
-  bf_bits_ = entries_per_buf_ * options.bfbits_per_key;
+  bf_bits_ = entries_per_buf_ * options.bf_bits_per_key;
   // For small n, we can see a very high false positive rate.  Fix it
   // by enforcing a minimum bloom filter length.
   if (bf_bits_ > 0 && bf_bits_ < 64) {
@@ -623,8 +623,7 @@ void PlfsIoLogger::MaybeSchedualCompaction() {
       if (options_.compaction_pool != NULL) {
         options_.compaction_pool->Schedule(PlfsIoLogger::BGWork, this);
       } else {
-        // Run in current thread context
-        DoCompaction();
+        Env::Default()->Schedule(PlfsIoLogger::BGWork, this);
       }
     }
   }
@@ -661,7 +660,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
   const bool is_finish = imm_buf_is_finish_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   TableLogger* const dest = &table_logger_;
-  const size_t bf_bits_per_key = options_.bfbits_per_key;
+  const size_t bf_bits_per_key = options_.bf_bits_per_key;
   const size_t bf_bytes = bf_bytes_;
   mutex_->Unlock();
 #if VERBOSE >= 2

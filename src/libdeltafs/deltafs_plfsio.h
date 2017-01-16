@@ -35,18 +35,19 @@ struct Options {
   size_t value_size;
 
   // Bloom filter bits per key.
-  // Set to zero to disable the creation of bloom filters.
+  // Set to zero to disable the use of bloom filters.
   // Default: 8 bits
-  size_t bfbits_per_key;
+  size_t bf_bits_per_key;
 
   // Approximate size of user data packed per block.
-  // The size of index and filter blocks are not affected by this option.
+  // Block is used as the packaging format and the basic I/O unit for both
+  // reading and writing data logs. The size of index and filter
+  // blocks are not affected by this option.
   // Default: 128K
   size_t block_size;
 
   // Thread pool used to run background compaction jobs.
-  // Set to NULL to disable background jobs so all compactions will
-  // run as foreground jobs.
+  // If set to NULL, Env::Default() will be used to schedule jobs.
   // Default: NULL
   ThreadPool* compaction_pool;
 
