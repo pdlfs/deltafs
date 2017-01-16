@@ -74,12 +74,16 @@ size_t BlockBuilder::CurrentSizeEstimate() const {
   }
 }
 
-Slice BlockBuilder::Finish() {
+Slice BlockBuilder::Finish(uint64_t padding_target) {
   // Append restart array
   for (size_t i = 0; i < restarts_.size(); i++) {
     PutFixed32(&buffer_, restarts_[i]);
   }
   PutFixed32(&buffer_, restarts_.size());
+  // Add padding if necessary
+  if (buffer_.size() < padding_target) {
+    buffer_.resize(padding_target, 0);
+  }
   finished_ = true;
   return Slice(buffer_);
 }
