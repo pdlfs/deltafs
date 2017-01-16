@@ -80,12 +80,13 @@ Slice BlockBuilder::Finish(uint64_t padding_target) {
     PutFixed32(&buffer_, restarts_[i]);
   }
   PutFixed32(&buffer_, restarts_.size());
+  Slice result = buffer_;  // Real block contents without padding
   // Add padding if necessary
   if (buffer_.size() < padding_target) {
     buffer_.resize(padding_target, 0);
   }
   finished_ = true;
-  return Slice(buffer_);
+  return result;
 }
 
 void BlockBuilder::Add(const Slice& key, const Slice& value) {
