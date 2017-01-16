@@ -285,7 +285,7 @@ void TableLogger::EndTable(const Slice& filter) {
   status_ = index_log_->Lwrite(contents);
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "Index block written: (offset=%llu, size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "IBLK written: (offset=%llu, size=%llu) %s",
           static_cast<unsigned long long>(offset),
           static_cast<unsigned long long>(contents.size()),
           status_.ToString().c_str());
@@ -298,7 +298,7 @@ void TableLogger::EndTable(const Slice& filter) {
   }
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "Filter block written: (offset=%llu, size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "FBLK written: (offset=%llu, size=%llu) %s",
           static_cast<unsigned long long>(offset + contents.size()),
           static_cast<unsigned long long>(filter.size()),
           status_.ToString().c_str());
@@ -343,7 +343,7 @@ void TableLogger::EndBlock() {
   status_ = data_log_->Lwrite(contents);
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "Data block written: (offset=%llu, size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "DBLK written: (offset=%llu, size=%llu) %s",
           static_cast<unsigned long long>(offset),
           static_cast<unsigned long long>(contents.size()),
           status_.ToString().c_str());
