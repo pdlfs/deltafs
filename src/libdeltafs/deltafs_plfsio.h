@@ -62,6 +62,10 @@ struct Options {
   // Default: 0
   uint64_t slowdown_micros;
 
+  // True if keys are unique within each epoch.
+  // Default: true
+  bool unique_keys;
+
   // Number of partitions to divide the data. Specified in logarithmic
   // number so each x will give 2**x partitions.
   // REQUIRES: 0 <= lg_parts <= 8

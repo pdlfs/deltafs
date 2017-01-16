@@ -31,6 +31,7 @@ Options::Options()
       compaction_pool(NULL),
       non_blocking(false),
       slowdown_micros(0),
+      unique_keys(true),
       lg_parts(0),
       rank(0),
       env(NULL) {}

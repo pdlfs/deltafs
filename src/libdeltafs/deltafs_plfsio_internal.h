@@ -164,12 +164,14 @@ class PlfsIoReader {
   typedef void (*Saver)(void* arg, const Slice& key, const Slice& value);
 
   // Obtain the value to a key from a specific block.
-  // If key is found, "saver" will be called.
+  // If key is found, "saver" will be called. Set *eok to true if keys
+  // larger than the given one have been seen.
   // NOTE: "saver" may be called multiple times.
   // Return OK on success, or a non-OK status on errors.
-  Status Get(const Slice& key, const BlockHandle& handle, Saver saver, void*);
+  Status Get(const Slice& key, const BlockHandle& handle, Saver saver, void*,
+             bool* eok /* end-of-key */);
 
-  // Return true if a key match a given filter block.
+  // Return true if the given key matches a specific filter block.
   bool KeyMayMatch(const Slice& key, const BlockHandle& handle);
 
   // Obtain the value to a key from a specific table.

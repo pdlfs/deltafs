@@ -364,8 +364,11 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 
   if (!last_key_.empty()) {
     // Keys within a single table are expected to be added in a sorted order.
-    // Duplicated keys are allowed
     assert(key.compare(last_key_) >= 0);
+    if (options_.unique_keys) {
+      // Duplicated keys are not allowed
+      assert(key.compare(last_key_) != 0);
+    }
   }
   if (smallest_key_.empty()) {
     smallest_key_ = key.ToString();
@@ -765,9 +768,11 @@ static Status ReadBlock(LogSource* file, const Options& options,
 
 // Retrieve value from a given block and
 // call "saver" using the value found.
+// In addition, set *eok to true if a larger key has been observed.
 // Return OK on success and a non-OK status on errors.
 Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
-                         Saver saver, void* arg) {
+                         Saver saver, void* arg, bool* eok) {
+  *eok = false;
   Status s;
   BlockContents contents;
   s = ReadBlock(data_src_, options_, handle, &contents);
@@ -776,12 +781,19 @@ Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
   }
 
   Block* block = new Block(contents);
-  Iterator* iter = block->NewIterator(BytewiseComparator());
+  Iterator* const iter = block->NewIterator(BytewiseComparator());
   iter->Seek(key);
-  if (iter->Valid()) {
+  while (!(*eok) && iter->Valid()) {
     if (iter->key() == key) {
       saver(arg, key, iter->value());
+      if (options_.unique_keys) {
+        *eok = true;
+      }
+    } else {
+      *eok = true;
     }
+
+    iter->Next();
   }
 
   delete iter;
@@ -810,9 +822,9 @@ bool PlfsIoReader::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
 Status PlfsIoReader::Get(const Slice& key, const TableHandle& handle,
                          Saver saver, void* arg) {
   Status s;
-  // Check key type and filter
-  if (BytewiseComparator()->Compare(key, handle.smallest_key()) < 0 ||
-      BytewiseComparator()->Compare(key, handle.largest_key()) > 0) {
+  // Check key range and filter
+  if (key.compare(handle.smallest_key()) < 0 ||
+      key.compare(handle.largest_key()) > 0) {
     return s;
   } else {
     BlockHandle filter;
@@ -829,16 +841,19 @@ Status PlfsIoReader::Get(const Slice& key, const TableHandle& handle,
     return s;
   }
 
+  bool eok = false;
   Block* block = new Block(contents);
-  Iterator* iter = block->NewIterator(BytewiseComparator());
+  Iterator* const iter = block->NewIterator(BytewiseComparator());
   iter->Seek(key);
-  if (iter->Valid()) {
-    BlockHandle block_handle;
-    Slice handle_encoding = iter->value();
-    s = block_handle.DecodeFrom(&handle_encoding);
+  while (s.ok() && !eok && iter->Valid()) {
+    BlockHandle h;
+    Slice input = iter->value();
+    s = h.DecodeFrom(&input);
     if (s.ok()) {
-      s = Get(key, block_handle, saver, arg);
+      s = Get(key, h, saver, arg, &eok);
     }
+
+    iter->Next();
   }
 
   delete iter;
@@ -876,20 +891,26 @@ Status PlfsIoReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
     state.dst = dst;
     TableHandle handle;
     epoch_key = EpochKey(epoch, table);
-    epoch_iter_->Seek(epoch_key);
-    if (!epoch_iter_->Valid()) break;
-    if (epoch_iter_->key() != epoch_key) break;
+    if (!epoch_iter_->Valid() || epoch_iter_->key() != epoch_key) {
+      epoch_iter_->Seek(epoch_key);
+      if (!epoch_iter_->Valid()) {
+        break;
+      } else if (epoch_iter_->key() != epoch_key) {
+        break;
+      }
+    }
     Slice handle_encoding = epoch_iter_->value();
     s = handle.DecodeFrom(&handle_encoding);
     if (s.ok()) {
       s = Get(key, handle, SaveValue, &state);
-      if (s.ok()) {
-        if (state.found) {
+      if (s.ok() && state.found) {
+        if (options_.unique_keys) {
           break;
         }
       }
     }
 
+    epoch_iter_->Next();
     table++;
   }
 
