@@ -249,7 +249,7 @@ static Options SanitizeWriteOptions(const Options& options) {
 static void PrintLogStream(const std::string& name, size_t buf_size) {
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Open plfs io log: %s (buffer=%s)", name.c_str(),
-          PrettySize(buf_size));
+          PrettySize(buf_size).c_str());
 #endif
 }
 
@@ -391,14 +391,47 @@ bool ReaderImpl::Exists(const Slice& fname) {
 }
 
 static Status NewLogSrc(const std::string& fname, Env* env, LogSource** ptr) {
+  *ptr = NULL;
+  SequentialFile* file;
+  uint64_t size;
+  Status status = env->NewSequentialFile(fname, &file);
+  if (status.ok()) {
+    status = env->GetFileSize(fname, &size);
+    if (!status.ok()) {
+      delete file;
+    }
+  }
+  if (status.ok()) {
+    const size_t io_size = 1 << 20;  // Less physical I/O ops
+    WholeFileBufferedRandomAccessFile* buffered_file =
+        new WholeFileBufferedRandomAccessFile(file, size, io_size);
+    status = buffered_file->Load();
+    if (!status.ok()) {
+      delete buffered_file;
+    } else {
+      PrintLogStream(fname, size);
+      LogSource* src = new LogSource(buffered_file, size);
+      src->Ref();
+      *ptr = src;
+    }
+  }
+
+  return status;
+}
+
+static Status NewUnbufferedLogSrc(const std::string& fname, Env* env,
+                                  LogSource** ptr) {
   RandomAccessFile* file;
   uint64_t size;
   Status status = env->NewRandomAccessFile(fname, &file);
   if (status.ok()) {
     status = env->GetFileSize(fname, &size);
+    if (!status.ok()) {
+      delete file;
+    }
   }
   if (status.ok()) {
-    PrintLogStream(fname);
+    PrintLogStream(fname, 0);
     LogSource* src = new LogSource(file, size);
     src->Ref();
     *ptr = src;
@@ -449,7 +482,7 @@ Status Reader::Open(const Options& opts, const std::string& dirname,
 
   Status status;
   LogSource* data = NULL;
-  status = NewLogSrc(DataFileName(dirname, my_rank), env, &data);
+  status = NewUnbufferedLogSrc(DataFileName(dirname, my_rank), env, &data);
   if (status.ok()) {
     ReaderImpl* impl = new ReaderImpl(options, dirname, data);
     impl->part_mask_ = num_parts - 1;
