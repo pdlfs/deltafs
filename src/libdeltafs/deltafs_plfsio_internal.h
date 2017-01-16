@@ -169,6 +169,9 @@ class PlfsIoReader {
   // Return OK on success, or a non-OK status on errors.
   Status Get(const Slice& key, const BlockHandle& handle, Saver saver, void*);
 
+  // Return true if a key match a given filter block.
+  bool KeyMayMatch(const Slice& key, const BlockHandle& handle);
+
   // Obtain the value to a key from a specific table.
   // If key is found, "saver" will be called.
   // NOTE: "saver" may be called multiple times.

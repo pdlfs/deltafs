@@ -764,6 +764,9 @@ static Status ReadBlock(LogSource* file, const Options& options,
   return s;
 }
 
+// Retrieve value from a given block and
+// call "saver" using the value found.
+// Return OK on success and a non-OK status on errors.
 Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
                          Saver saver, void* arg) {
   Status s;
@@ -787,9 +790,40 @@ Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
   return s;
 }
 
+bool PlfsIoReader::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
+  Status s;
+  BlockContents contents;
+  s = ReadBlock(index_src_, options_, handle, &contents);
+  if (s.ok()) {
+    bool r = BloomKeyMayMatch(key, contents.data);
+    if (contents.heap_allocated) {
+      delete[] contents.data.data();
+    }
+    return r;
+  } else {
+    return true;
+  }
+}
+
+// Retrieve value from a given table and
+// call "saver" using the value found.
+// Return OK on success and a non-OK status on errors.
 Status PlfsIoReader::Get(const Slice& key, const TableHandle& handle,
                          Saver saver, void* arg) {
   Status s;
+  // Check key type and filter
+  if (BytewiseComparator()->Compare(key, handle.smallest_key()) < 0 ||
+      BytewiseComparator()->Compare(key, handle.largest_key()) > 0) {
+    return s;
+  } else {
+    BlockHandle filter;
+    filter.set_offset(handle.filter_offset());
+    filter.set_size(handle.filter_size());
+    if (filter.size() != 0 && !KeyMayMatch(key, filter)) {
+      return s;
+    }
+  }
+
   BlockContents contents;
   s = ReadBlock(index_src_, options_, handle, &contents);
   if (!s.ok()) {
@@ -800,11 +834,11 @@ Status PlfsIoReader::Get(const Slice& key, const TableHandle& handle,
   Iterator* iter = block->NewIterator(BytewiseComparator());
   iter->Seek(key);
   if (iter->Valid()) {
-    BlockHandle handle;
+    BlockHandle block_handle;
     Slice handle_encoding = iter->value();
-    s = handle.DecodeFrom(&handle_encoding);
+    s = block_handle.DecodeFrom(&handle_encoding);
     if (s.ok()) {
-      s = Get(key, handle, saver, arg);
+      s = Get(key, block_handle, saver, arg);
     }
   }
 
