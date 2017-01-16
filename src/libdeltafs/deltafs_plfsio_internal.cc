@@ -218,9 +218,9 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
 
 TableLogger::TableLogger(const Options& options, LogSink* data, LogSink* index)
     : options_(options),
-      data_block_(kDataBlkRestartInt),
-      index_block_(kNonDataBlkRestartInt),
-      epoch_block_(kNonDataBlkRestartInt),
+      data_block_(kDatBlkInt),
+      index_block_(kDefInt),
+      epoch_block_(kDefInt),
       pending_index_entry_(false),
       pending_epoch_entry_(false),
       num_tables_(0),
@@ -249,7 +249,7 @@ TableLogger::~TableLogger() {
 
 void TableLogger::EndEpoch() {
   assert(!finished_);  // Finish() has not been called
-  EndTable();
+  EndTable(Slice());
   if (ok() && num_tables_ != 0) {
 #if VERBOSE >= 4
     Verbose(__LOG_ARGS__, 4, "Epoch #%d: (#%d tables) closed",
@@ -264,7 +264,7 @@ void TableLogger::EndEpoch() {
   }
 }
 
-void TableLogger::EndTable() {
+void TableLogger::EndTable(const Slice& filter) {
   assert(!finished_);  // Finish() has not been called
   EndBlock();
   if (!ok()) return;  // Abort
@@ -292,9 +292,24 @@ void TableLogger::EndTable() {
 #endif
 
   if (ok()) {
+    if (!filter.empty()) {
+      status_ = index_log_->Lwrite(filter);
+    }
+  }
+
+#if VERBOSE >= 6
+  Verbose(__LOG_ARGS__, 6, "Filter block written: (offset=%llu, size=%llu) %s",
+          static_cast<unsigned long long>(offset + contents.size()),
+          static_cast<unsigned long long>(filter.size()),
+          status_.ToString().c_str());
+#endif
+
+  if (ok()) {
     index_block_.Reset();
-    pending_epoch_handle_.set_size(contents.size());
+    pending_epoch_handle_.set_filter_offset(offset + contents.size());
+    pending_epoch_handle_.set_filter_size(filter.size());
     pending_epoch_handle_.set_offset(offset);
+    pending_epoch_handle_.set_size(contents.size());
     pending_epoch_entry_ = true;
   }
 
@@ -679,14 +694,12 @@ void PlfsIoLogger::CompactWriteBuffer() {
   }
 
   if (dest->ok()) {
-    // Empty tables will be implicitly discarded
-    dest->EndTable();
+    dest->EndTable(bf->contents());
   }
-  if (dest->ok() && is_epoch_flush) {
-    // Empty epoches will be implicitly discarded
+  if (is_epoch_flush) {
     dest->EndEpoch();
   }
-  if (dest->ok() && is_finish) {
+  if (is_finish) {
     dest->Finish();
   }
 

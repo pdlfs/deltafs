@@ -37,6 +37,8 @@ std::string EpochKey(uint32_t epoch, uint32_t table) {
 }
 
 void TableHandle::EncodeTo(std::string* dst) const {
+  assert(filter_offset_ != ~static_cast<uint64_t>(0));
+  assert(filter_size_ != ~static_cast<uint64_t>(0));
   assert(offset_ != ~static_cast<uint64_t>(0));
   assert(size_ != ~static_cast<uint64_t>(0));
   assert(!smallest_key_.empty());
@@ -44,6 +46,8 @@ void TableHandle::EncodeTo(std::string* dst) const {
 
   PutLengthPrefixedSlice(dst, smallest_key_);
   PutLengthPrefixedSlice(dst, largest_key_);
+  PutVarint64(dst, filter_offset_);
+  PutVarint64(dst, filter_size_);
   PutVarint64(dst, offset_);
   PutVarint64(dst, size_);
 }
@@ -53,7 +57,9 @@ Status TableHandle::DecodeFrom(Slice* input) {
   Slice largest_key;
   if (!GetLengthPrefixedSlice(input, &smallest_key) ||
       !GetLengthPrefixedSlice(input, &largest_key) ||
-      !GetVarint64(input, &offset_) || !GetVarint64(input, &size_)) {
+      !GetVarint64(input, &filter_offset_) ||
+      !GetVarint64(input, &filter_size_) || !GetVarint64(input, &offset_) ||
+      !GetVarint64(input, &size_)) {
     return Status::Corruption("bad table handle");
   } else {
     smallest_key_ = smallest_key.ToString();

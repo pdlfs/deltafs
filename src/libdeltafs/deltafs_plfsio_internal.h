@@ -56,14 +56,23 @@ class TableLogger {
   Status status() const { return status_; }
 
   void Add(const Slice& key, const Slice& value);
-  void EndBlock();  // Force the start of a new data block
-  void EndTable();  // Force the start of a new table
-  void EndEpoch();  // Force the start of a new epoch
-
   Status Finish();
 
+  // Force the start of a new data block.
+  // REQUIRES: Finish() has not been called.
+  void EndBlock();
+
+  // Force the start of a new table.
+  // Caller may optionally specify filter data.
+  // REQUIRES: Finish() has not been called.
+  void EndTable(const Slice& filter);
+
+  // Force the start of a new epoch.
+  // REQUIRES: Finish() has not been called.
+  void EndEpoch();
+
  private:
-  enum { kDataBlkRestartInt = 16, kNonDataBlkRestartInt = 1 };
+  enum RestartInterval { kDatBlkInt = 16, kDefInt = 1 };
 
   // No copying allowed
   void operator=(const TableLogger&);
