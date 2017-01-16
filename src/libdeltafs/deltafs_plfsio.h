@@ -51,6 +51,14 @@ struct Options {
   // Default: 0.999 (99.9%)
   double block_util;
 
+  // Write buffer size for each physical data log.
+  // Default: 2MB
+  size_t data_buffer;
+
+  // Write buffer size for each physical index log.
+  // Default: 2MB
+  size_t index_buffer;
+
   // Thread pool used to run background compaction jobs.
   // If set to NULL, Env::Default() will be used to schedule jobs.
   // Default: NULL

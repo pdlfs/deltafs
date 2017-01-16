@@ -10,6 +10,7 @@
 #include "deltafs_plfsio.h"
 #include "deltafs_plfsio_internal.h"
 
+#include "pdlfs-common/buffered_file.h"
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
@@ -29,6 +30,8 @@ Options::Options()
       bf_bits_per_key(8),
       block_size(128 << 10),
       block_util(0.999),
+      data_buffer(2 << 20),
+      index_buffer(2 << 20),
       compaction_pool(NULL),
       non_blocking(false),
       slowdown_micros(0),
@@ -243,18 +246,22 @@ static Options SanitizeWriteOptions(const Options& options) {
   return result;
 }
 
-static void PrintLogStream(const std::string& name) {
-#if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "Open plfsdir log: %s", name.c_str());
+static void PrintLogStream(const std::string& name, size_t buf_size) {
+#if VERBOSE >= 3
+  Verbose(__LOG_ARGS__, 3, "Open plfs io log: %s (buffer=%s)", name.c_str(),
+          PrettySize(buf_size));
 #endif
 }
 
-static Status NewLogSink(const std::string& name, Env* env, LogSink** ptr) {
+static Status NewLogSink(const std::string& name, Env* env, size_t buf_size,
+                         LogSink** ptr) {
   WritableFile* file;
   Status status = env->NewWritableFile(name, &file);
   if (status.ok()) {
-    PrintLogStream(name);
-    LogSink* sink = new LogSink(file);
+    UnsafeBufferedWritableFile* bufferd_file =
+        new UnsafeBufferedWritableFile(file, buf_size);
+    PrintLogStream(name, buf_size);
+    LogSink* sink = new LogSink(bufferd_file);
     sink->Ref();
     *ptr = sink;
   } else {
@@ -285,6 +292,10 @@ Status Writer::Open(const Options& opts, const std::string& name,
           PrettySize(options.block_size).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.block_util -> %.2f%%",
           100 * options.block_util);
+  Verbose(__LOG_ARGS__, 2, "plfsdir.data_buffer -> %s",
+          PrettySize(options.data_buffer).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.index_buffer -> %s",
+          PrettySize(options.index_buffer).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.num_parts_per_rank -> %u",
           static_cast<unsigned>(num_parts));
   Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", my_rank);
@@ -296,11 +307,12 @@ Status Writer::Open(const Options& opts, const std::string& name,
   WriterImpl* impl = new WriterImpl(options);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);
-  status = NewLogSink(DataFileName(name, my_rank), env, &data[0]);
+  status = NewLogSink(DataFileName(name, my_rank), env, options.data_buffer,
+                      &data[0]);
   for (size_t part = 0; part < num_parts; part++) {
     if (status.ok()) {
       status = NewLogSink(PartitionIndexFileName(name, my_rank, part), env,
-                          &index[part]);
+                          options.index_buffer, &index[part]);
     } else {
       break;
     }

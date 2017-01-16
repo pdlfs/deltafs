@@ -460,6 +460,8 @@ PlfsIoLogger::PlfsIoLogger(const Options& options, port::Mutex* mu,
   // Estimated amount of entries per table
   entries_per_buf_ = static_cast<uint32_t>(
       ceil(8 * options_.memtable_size / total_bits_per_entry));
+  entries_per_buf_ /= (1 << options_.lg_parts);  // Due to data partitioning
+
   entries_per_buf_ /= 2;  // Due to double buffering
 
   buffer_size_ = entries_per_buf_ * bytes_per_entry;
