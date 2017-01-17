@@ -283,15 +283,15 @@ void TableLogger::EndTable(const Slice& filter) {
 
   assert(!pending_epoch_entry_);
   Slice contents = index_block_.Finish();
-  Slice index = index_block_.Finalize();  // No padding for index blocks
+  Slice raw_contents = index_block_.Finalize();  // No padding for index blocks
   const uint64_t offset = index_log_->Ltell();
-  status_ = index_log_->Lwrite(index);
+  status_ = index_log_->Lwrite(raw_contents);
 
 #if VERBOSE >= 6
   Verbose(__LOG_ARGS__, 6, "IBLK written: (offset=%llu, size=%llu/%llu) %s",
           static_cast<unsigned long long>(offset),
           static_cast<unsigned long long>(contents.size()),
-          static_cast<unsigned long long>(index.size()),
+          static_cast<unsigned long long>(raw_contents.size()),
           status_.ToString().c_str());
 #endif
 
@@ -303,14 +303,14 @@ void TableLogger::EndTable(const Slice& filter) {
 
 #if VERBOSE >= 6
   Verbose(__LOG_ARGS__, 6, "FBLK written: (offset=%llu, size=%llu) %s",
-          static_cast<unsigned long long>(offset + index.size()),
+          static_cast<unsigned long long>(offset + raw_contents.size()),
           static_cast<unsigned long long>(filter.size()),
           status_.ToString().c_str());
 #endif
 
   if (ok()) {
     index_block_.Reset();
-    pending_epoch_handle_.set_filter_offset(offset + index.size());
+    pending_epoch_handle_.set_filter_offset(offset + raw_contents.size());
     pending_epoch_handle_.set_filter_size(filter.size());
     pending_epoch_handle_.set_offset(offset);
     pending_epoch_handle_.set_size(contents.size());
@@ -343,15 +343,15 @@ void TableLogger::EndBlock() {
   if (!ok()) return;                // Abort
   assert(!pending_index_entry_);
   Slice contents = data_block_.Finish();
-  Slice data = data_block_.Finalize(options_.block_size);
+  Slice raw_contents = data_block_.Finalize(options_.block_size);
   const uint64_t offset = data_log_->Ltell();
-  status_ = data_log_->Lwrite(data);
+  status_ = data_log_->Lwrite(raw_contents);
 
 #if VERBOSE >= 6
   Verbose(__LOG_ARGS__, 6, "DBLK written: (offset=%llu, size=%llu/%llu) %s",
           static_cast<unsigned long long>(offset),
           static_cast<unsigned long long>(contents.size()),
-          static_cast<unsigned long long>(data.size()),
+          static_cast<unsigned long long>(raw_contents.size()),
           status_.ToString().c_str());
 #endif
 
@@ -410,16 +410,17 @@ Status TableLogger::Finish() {
 
   assert(!pending_epoch_entry_);
   Slice contents = epoch_block_.Finish();
-  Slice meta = epoch_block_.Finalize();  // No padding for the epoch block
+  Slice raw_contents = epoch_block_.Finalize();  // No padding for meta blocks
   const uint64_t offset = index_log_->Ltell();
-  status_ = index_log_->Lwrite(meta);
+  status_ = index_log_->Lwrite(raw_contents);
 
 #if VERBOSE >= 6
-  Verbose(
-      __LOG_ARGS__, 6, "Epoch index written: (offset=%llu, size=%llu/%llu) %s",
-      static_cast<unsigned long long>(offset),
-      static_cast<unsigned long long>(contents.size()),
-      static_cast<unsigned long long>(meta.size()), status_.ToString().c_str());
+  Verbose(__LOG_ARGS__, 6,
+          "Epoch index written: (offset=%llu, size=%llu/%llu) %s",
+          static_cast<unsigned long long>(offset),
+          static_cast<unsigned long long>(contents.size()),
+          static_cast<unsigned long long>(raw_contents.size()),
+          status_.ToString().c_str());
 #endif
 
   if (ok()) {
