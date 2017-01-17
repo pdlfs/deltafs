@@ -802,6 +802,8 @@ Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
     iter->Next();
   }
 
+  s = iter->status();
+
   delete iter;
   delete block;
   return s;
@@ -860,6 +862,10 @@ Status PlfsIoReader::Get(const Slice& key, const TableHandle& handle,
     }
 
     iter->Next();
+  }
+
+  if (s.ok()) {
+    s = iter->status();
   }
 
   delete iter;
