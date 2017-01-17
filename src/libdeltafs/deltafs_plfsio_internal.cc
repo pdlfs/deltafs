@@ -242,7 +242,8 @@ TableLogger::~TableLogger() {
   data_log_->Unref();
   if (num_tables_ == 0) {
 #if VERBOSE >= 4
-    Verbose(__LOG_ARGS__, 4, "Epoch #%d: discarded", int(num_epoches_));
+    Verbose(__LOG_ARGS__, 4, "Epoch #%d: auto discarded since it is empty",
+            int(num_epoches_));
 #endif
   }
 }
@@ -252,8 +253,8 @@ void TableLogger::EndEpoch() {
   EndTable(Slice());
   if (ok() && num_tables_ != 0) {
 #if VERBOSE >= 4
-    Verbose(__LOG_ARGS__, 4, "Epoch #%d: (#%d tables) closed",
-            int(num_epoches_), int(num_tables_));
+    Verbose(__LOG_ARGS__, 4, "Epoch #%d: closed (%d tables) %s",
+            int(num_epoches_), int(num_tables_), status_.ToString().c_str());
 #endif
     num_tables_ = 0;
     assert(num_epoches_ < kMaxEpoches);

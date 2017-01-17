@@ -258,10 +258,10 @@ static Status NewLogSink(const std::string& name, Env* env, size_t buf_size,
   WritableFile* file;
   Status status = env->NewWritableFile(name, &file);
   if (status.ok()) {
-    UnsafeBufferedWritableFile* bufferd_file =
+    UnsafeBufferedWritableFile* buffered_file =
         new UnsafeBufferedWritableFile(file, buf_size);
     PrintLogStream(name, buf_size);
-    LogSink* sink = new LogSink(bufferd_file);
+    LogSink* sink = new LogSink(buffered_file);
     sink->Ref();
     *ptr = sink;
   } else {
@@ -306,7 +306,7 @@ Status Writer::Open(const Options& opts, const std::string& name,
 
   WriterImpl* impl = new WriterImpl(options);
   std::vector<LogSink*> index(num_parts, NULL);
-  std::vector<LogSink*> data(1, NULL);
+  std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
   status = NewLogSink(DataFileName(name, my_rank), env, options.data_buffer,
                       &data[0]);
   for (size_t part = 0; part < num_parts; part++) {
@@ -472,10 +472,18 @@ Status ReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
 
 Reader::~Reader() {}
 
+static Options SanitizeReadOptions(const Options& options) {
+  Options result = options;
+  if (result.env == NULL) {
+    result.env = Env::Default();
+  }
+  return result;
+}
+
 Status Reader::Open(const Options& opts, const std::string& dirname,
                     Reader** ptr) {
   *ptr = NULL;
-  Options options = SanitizeWriteOptions(opts);  // FIXME
+  Options options = SanitizeReadOptions(opts);
   const size_t num_parts = 1u << options.lg_parts;
   const int my_rank = options.rank;
   Env* const env = options.env;
