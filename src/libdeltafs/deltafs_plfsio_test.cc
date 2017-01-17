@@ -94,180 +94,136 @@ static inline Env* TestEnv() {
   return env;
 }
 
-template <int lg_parts = 0>
-class WriterTest {
+class PlfsIoTest {
  public:
-  WriterTest() {
+  PlfsIoTest() {
     dirname_ = test::TmpDir() + "/plfsio_test";
     DestroyDir(dirname_, Options());
+    options_.verify_checksums = true;
     options_.env = TestEnv();
-    options_.lg_parts = lg_parts;
-    Status s = Writer::Open(options_, dirname_, &writer_);
-    ASSERT_OK(s);
+    writer_ = NULL;
+    reader_ = NULL;
   }
 
-  ~WriterTest() {
+  ~PlfsIoTest() {
     if (writer_ != NULL) {
       delete writer_;
     }
-  }
-
-  Options options_;
-  std::string dirname_;
-  Writer* writer_;
-};
-
-template <int lg_parts = 0>
-class ReaderTest {
- public:
-  ReaderTest() {
-    dirname_ = test::TmpDir() + "/plfsio_test";
-    options_.verify_checksums = true;
-    options_.env = TestEnv();
-    options_.lg_parts = lg_parts;
-    Status s = Reader::Open(options_, dirname_, &reader_);
-    ASSERT_OK(s);
-  }
-
-  ~ReaderTest() {
     if (reader_ != NULL) {
       delete reader_;
     }
   }
 
+  void OpenWriter() {
+    Status s = Writer::Open(options_, dirname_, &writer_);
+    ASSERT_OK(s);
+  }
+
+  void Finish() {
+    ASSERT_OK(writer_->Finish());
+    delete writer_;
+    writer_ = NULL;
+  }
+
+  void OpenReader() {
+    Status s = Reader::Open(options_, dirname_, &reader_);
+    ASSERT_OK(s);
+  }
+
+  void MakeEpoch() {
+    if (writer_ == NULL) OpenWriter();
+    ASSERT_OK(writer_->MakeEpoch());
+  }
+
+  void Write(const Slice& key, const Slice& value) {
+    if (writer_ == NULL) OpenWriter();
+    ASSERT_OK(writer_->Append(key, value));
+  }
+
+  std::string Read(const Slice& key) {
+    std::string tmp;
+    if (writer_ != NULL) Finish();
+    if (reader_ == NULL) OpenReader();
+    ASSERT_OK(reader_->ReadAll(key, &tmp));
+    return tmp;
+  }
+
   Options options_;
   std::string dirname_;
+  Writer* writer_;
   Reader* reader_;
 };
 
-TEST(WriterTest<0>, Empty0) {
-  ASSERT_OK(writer_->MakeEpoch());
-  ASSERT_OK(writer_->Finish());
+TEST(PlfsIoTest, Empty0) {
+  MakeEpoch();
+  std::string val = Read("non-exists");
+  ASSERT_TRUE(val.empty());
 }
 
-TEST(ReaderTest<0>, EmptyRead0) {
-  std::string tmp;
-  ASSERT_OK(reader_->ReadAll("non-exists", &tmp));
-  ASSERT_TRUE(tmp.empty());
+TEST(PlfsIoTest, SingleEpoch0) {
+  Write("k1", "v1");
+  Write("k2", "v2");
+  Write("k3", "v3");
+  Write("k4", "v4");
+  Write("k5", "v5");
+  Write("k6", "v6");
+  MakeEpoch();
+  ASSERT_EQ(Read("k1"), "v1");
+  ASSERT_EQ(Read("k2"), "v2");
+  ASSERT_EQ(Read("k3"), "v3");
+  ASSERT_EQ(Read("k4"), "v4");
+  ASSERT_EQ(Read("k5"), "v5");
+  ASSERT_EQ(Read("k6"), "v6");
 }
 
-TEST(WriterTest<0>, SingleEpoch0) {
-  ASSERT_OK(writer_->Append("k1", "v1"));
-  ASSERT_OK(writer_->Append("k2", "v2"));
-  ASSERT_OK(writer_->Append("k3", "v3"));
-  ASSERT_OK(writer_->Append("k4", "v4"));
-  ASSERT_OK(writer_->Append("k5", "v5"));
-  ASSERT_OK(writer_->Append("k6", "v6"));
-  ASSERT_OK(writer_->MakeEpoch());
-  ASSERT_OK(writer_->Finish());
+TEST(PlfsIoTest, MultiEpoch0) {
+  Write("k1", "v1");
+  Write("k2", "v2");
+  MakeEpoch();
+  Write("k1", "v3");
+  Write("k2", "v4");
+  MakeEpoch();
+  Write("k1", "v5");
+  Write("k2", "v6");
+  MakeEpoch();
+  ASSERT_EQ(Read("k1"), "v1v3v5");
+  ASSERT_EQ(Read("k2"), "v2v4v6");
 }
 
-TEST(ReaderTest<0>, SingleEpochRead0) {
-  std::string tmp;
-  ASSERT_OK(reader_->ReadAll("k1", &tmp));
-  ASSERT_EQ(tmp, "v1");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k2", &tmp));
-  ASSERT_EQ(tmp, "v2");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k3", &tmp));
-  ASSERT_EQ(tmp, "v3");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k4", &tmp));
-  ASSERT_EQ(tmp, "v4");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k5", &tmp));
-  ASSERT_EQ(tmp, "v5");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k6", &tmp));
-  ASSERT_EQ(tmp, "v6");
+TEST(PlfsIoTest, NoFilter0) {
+  options_.bf_bits_per_key = 0;
+  Write("k1", "v1");
+  Write("k2", "v2");
+  MakeEpoch();
+  Write("k3", "v3");
+  Write("k4", "v4");
+  MakeEpoch();
+  Write("k5", "v5");
+  Write("k6", "v6");
+  MakeEpoch();
+  ASSERT_EQ(Read("k1"), "v1");
+  ASSERT_EQ(Read("k2"), "v2");
+  ASSERT_EQ(Read("k3"), "v3");
+  ASSERT_EQ(Read("k4"), "v4");
+  ASSERT_EQ(Read("k5"), "v5");
+  ASSERT_EQ(Read("k6"), "v6");
 }
 
-TEST(WriterTest<0>, MultiEpoch0) {
-  ASSERT_OK(writer_->Append("k1", "v1"));
-  ASSERT_OK(writer_->Append("k2", "v2"));
-  ASSERT_OK(writer_->MakeEpoch());
-  ASSERT_OK(writer_->Append("k1", "v3"));
-  ASSERT_OK(writer_->Append("k2", "v4"));
-  ASSERT_OK(writer_->MakeEpoch());
-  ASSERT_OK(writer_->Append("k1", "v5"));
-  ASSERT_OK(writer_->Append("k2", "v6"));
-  ASSERT_OK(writer_->MakeEpoch());
-  ASSERT_OK(writer_->Finish());
-}
-
-TEST(ReaderTest<0>, MultiEpochRead0) {
-  std::string tmp;
-  ASSERT_OK(reader_->ReadAll("k1", &tmp));
-  ASSERT_EQ(tmp, "v1v3v5");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k2", &tmp));
-  ASSERT_EQ(tmp, "v2v4v6");
-}
-
-TEST(WriterTest<1>, Empty1) {
-  ASSERT_OK(writer_->MakeEpoch());
-  ASSERT_OK(writer_->Finish());
-}
-
-TEST(ReaderTest<1>, EmptyRead1) {
-  std::string tmp;
-  ASSERT_OK(reader_->ReadAll("non-exists", &tmp));
-  ASSERT_TRUE(tmp.empty());
-}
-
-TEST(WriterTest<1>, SingleEpoch1) {
-  ASSERT_OK(writer_->Append("k1", "v1"));
-  ASSERT_OK(writer_->Append("k2", "v2"));
-  ASSERT_OK(writer_->Append("k3", "v3"));
-  ASSERT_OK(writer_->Append("k4", "v4"));
-  ASSERT_OK(writer_->Append("k5", "v5"));
-  ASSERT_OK(writer_->Append("k6", "v6"));
-  ASSERT_OK(writer_->MakeEpoch());
-  ASSERT_OK(writer_->Finish());
-}
-
-TEST(ReaderTest<1>, SingleEpochRead1) {
-  std::string tmp;
-  ASSERT_OK(reader_->ReadAll("k1", &tmp));
-  ASSERT_EQ(tmp, "v1");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k2", &tmp));
-  ASSERT_EQ(tmp, "v2");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k3", &tmp));
-  ASSERT_EQ(tmp, "v3");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k4", &tmp));
-  ASSERT_EQ(tmp, "v4");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k5", &tmp));
-  ASSERT_EQ(tmp, "v5");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k6", &tmp));
-  ASSERT_EQ(tmp, "v6");
-}
-
-TEST(WriterTest<1>, MultiEpoch1) {
-  ASSERT_OK(writer_->Append("k1", "v1"));
-  ASSERT_OK(writer_->Append("k2", "v2"));
-  ASSERT_OK(writer_->MakeEpoch());
-  ASSERT_OK(writer_->Append("k1", "v3"));
-  ASSERT_OK(writer_->Append("k2", "v4"));
-  ASSERT_OK(writer_->MakeEpoch());
-  ASSERT_OK(writer_->Append("k1", "v5"));
-  ASSERT_OK(writer_->Append("k2", "v6"));
-  ASSERT_OK(writer_->MakeEpoch());
-  ASSERT_OK(writer_->Finish());
-}
-
-TEST(ReaderTest<1>, MultiEpochRead1) {
-  std::string tmp;
-  ASSERT_OK(reader_->ReadAll("k1", &tmp));
-  ASSERT_EQ(tmp, "v1v3v5");
-  tmp = "";
-  ASSERT_OK(reader_->ReadAll("k2", &tmp));
-  ASSERT_EQ(tmp, "v2v4v6");
+TEST(PlfsIoTest, NoUniKeys0) {
+  options_.unique_keys = false;
+  Write("k1", "v1");
+  Write("k1", "v2");
+  MakeEpoch();
+  Write("k0", "v3");
+  Write("k1", "v4");
+  Write("k1", "v5");
+  MakeEpoch();
+  Write("k1", "v6");
+  Write("k1", "v7");
+  Write("k5", "v8");
+  MakeEpoch();
+  Write("k1", "v9");
+  ASSERT_EQ(Read("k1"), "v1v2v4v5v6v7v9");
 }
 
 }  // namespace plfsio

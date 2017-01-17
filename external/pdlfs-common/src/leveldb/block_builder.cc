@@ -105,7 +105,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   Slice last_key_piece(last_key_);
   assert(!finished_);
   assert(counter_ <= restart_interval_);
-  assert(buffer_.empty() || cmp_->Compare(key, last_key_piece) > 0);
+  assert(buffer_.empty() || cmp_->Compare(key, last_key_piece) >= 0);
   size_t shared = 0;
   if (counter_ < restart_interval_) {
     // See how much sharing to do with previous string

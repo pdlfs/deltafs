@@ -835,7 +835,14 @@ Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
 
   Block* block = new Block(contents);
   Iterator* const iter = block->NewIterator(BytewiseComparator());
-  iter->Seek(key);
+  if (options_.unique_keys) {
+    iter->Seek(key);
+  } else {
+    iter->SeekToFirst();
+    while (iter->Valid() && key.compare(iter->key()) > 0) {
+      iter->Next();
+    }
+  }
   while (!(*eok) && iter->Valid()) {
     if (iter->key() == key) {
       saver(arg, key, iter->value());
@@ -899,7 +906,14 @@ Status PlfsIoReader::Get(const Slice& key, const TableHandle& handle,
   bool eok = false;
   Block* block = new Block(contents);
   Iterator* const iter = block->NewIterator(BytewiseComparator());
-  iter->Seek(key);
+  if (options_.unique_keys) {
+    iter->Seek(key);
+  } else {
+    iter->SeekToFirst();
+    while (iter->Valid() && key.compare(iter->key()) > 0) {
+      iter->Next();
+    }
+  }
   while (s.ok() && !eok && iter->Valid()) {
     BlockHandle h;
     Slice input = iter->value();
