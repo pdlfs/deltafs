@@ -79,6 +79,11 @@ struct Options {
   // Default: true
   bool unique_keys;
 
+  // True if all data read from underlying storage will be
+  // verified against corresponding checksums.
+  // Default: false
+  bool verify_checksums;
+
   // Number of partitions to divide the data. Specified in logarithmic
   // number so each x will give 2**x partitions.
   // REQUIRES: 0 <= lg_parts <= 8

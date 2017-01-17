@@ -9,6 +9,7 @@
 
 #include "deltafs_plfsio_internal.h"
 
+#include "pdlfs-common/crc32c.h"
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/strutil.h"
@@ -740,11 +741,11 @@ static Status ReadBlock(LogSource* file, const Options& options,
 
   assert(file != NULL);
   size_t n = static_cast<size_t>(handle.size());
-  char* buf = new char[n];
+  char* buf = new char[n + kBlockTrailerSize];
   Slice contents;
-  Status s = file->Read(handle.offset(), n, &contents, buf);
+  Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
   if (s.ok()) {
-    if (contents.size() != n) {
+    if (contents.size() != n + kBlockTrailerSize) {
       s = Status::Corruption("truncated block read");
     }
   }
@@ -753,8 +754,18 @@ static Status ReadBlock(LogSource* file, const Options& options,
     return s;
   }
 
-  // Pointer to where read put the data
-  const char* data = contents.data();
+  // CRC checks
+  const char* data = contents.data();  // Pointer to where read put the data
+  if (options.verify_checksums) {
+    const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
+    const uint32_t actual = crc32c::Value(data, n + 1);
+    if (actual != crc) {
+      delete[] buf;
+      s = Status::Corruption("block checksum mismatch");
+      return s;
+    }
+  }
+
   if (data != buf) {
     // File implementation gave us pointer to some other data.
     // Use it directly under the assumption that it will be live
@@ -924,6 +935,10 @@ Status PlfsIoReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
 
     epoch_iter_->Next();
     table++;
+  }
+
+  if (s.ok()) {
+    s = epoch_iter_->status();
   }
 
   return s;

@@ -36,6 +36,7 @@ Options::Options()
       non_blocking(false),
       slowdown_micros(0),
       unique_keys(true),
+      verify_checksums(false),
       lg_parts(0),
       rank(0),
       env(NULL) {}
