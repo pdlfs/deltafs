@@ -122,6 +122,7 @@ class ReaderTest {
  public:
   ReaderTest() {
     dirname_ = test::TmpDir() + "/plfsio_test";
+    options_.verify_checksums = true;
     options_.env = TestEnv();
     options_.lg_parts = lg_parts;
     Status s = Reader::Open(options_, dirname_, &reader_);

@@ -283,13 +283,15 @@ void TableLogger::EndTable(const Slice& filter) {
 
   assert(!pending_epoch_entry_);
   Slice contents = index_block_.Finish();
+  Slice index = index_block_.Finalize();  // No padding for index blocks
   const uint64_t offset = index_log_->Ltell();
-  status_ = index_log_->Lwrite(contents);
+  status_ = index_log_->Lwrite(index);
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "IBLK written: (offset=%llu, size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "IBLK written: (offset=%llu, size=%llu/%llu) %s",
           static_cast<unsigned long long>(offset),
           static_cast<unsigned long long>(contents.size()),
+          static_cast<unsigned long long>(index.size()),
           status_.ToString().c_str());
 #endif
 
@@ -301,14 +303,14 @@ void TableLogger::EndTable(const Slice& filter) {
 
 #if VERBOSE >= 6
   Verbose(__LOG_ARGS__, 6, "FBLK written: (offset=%llu, size=%llu) %s",
-          static_cast<unsigned long long>(offset + contents.size()),
+          static_cast<unsigned long long>(offset + index.size()),
           static_cast<unsigned long long>(filter.size()),
           status_.ToString().c_str());
 #endif
 
   if (ok()) {
     index_block_.Reset();
-    pending_epoch_handle_.set_filter_offset(offset + contents.size());
+    pending_epoch_handle_.set_filter_offset(offset + index.size());
     pending_epoch_handle_.set_filter_size(filter.size());
     pending_epoch_handle_.set_offset(offset);
     pending_epoch_handle_.set_size(contents.size());
@@ -408,14 +410,16 @@ Status TableLogger::Finish() {
 
   assert(!pending_epoch_entry_);
   Slice contents = epoch_block_.Finish();
+  Slice meta = epoch_block_.Finalize();  // No padding for the epoch block
   const uint64_t offset = index_log_->Ltell();
-  status_ = index_log_->Lwrite(contents);
+  status_ = index_log_->Lwrite(meta);
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "Epoch index written: (offset=%llu, size=%llu) %s",
-          static_cast<unsigned long long>(offset),
-          static_cast<unsigned long long>(contents.size()),
-          status_.ToString().c_str());
+  Verbose(
+      __LOG_ARGS__, 6, "Epoch index written: (offset=%llu, size=%llu/%llu) %s",
+      static_cast<unsigned long long>(offset),
+      static_cast<unsigned long long>(contents.size()),
+      static_cast<unsigned long long>(meta.size()), status_.ToString().c_str());
 #endif
 
   if (ok()) {
@@ -734,18 +738,23 @@ void PlfsIoLogger::CompactWriteBuffer() {
 
 template <typename T>
 static Status ReadBlock(LogSource* file, const Options& options,
-                        const T& handle, BlockContents* result) {
+                        const T& handle, BlockContents* result,
+                        bool has_checksums = true) {
   result->data = Slice();
   result->heap_allocated = false;
   result->cachable = false;
 
   assert(file != NULL);
   size_t n = static_cast<size_t>(handle.size());
-  char* buf = new char[n + kBlockTrailerSize];
+  size_t m = n;
+  if (has_checksums) {
+    m += kBlockTrailerSize;
+  }
+  char* buf = new char[m];
   Slice contents;
-  Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
+  Status s = file->Read(handle.offset(), m, &contents, buf);
   if (s.ok()) {
-    if (contents.size() != n + kBlockTrailerSize) {
+    if (contents.size() != m) {
       s = Status::Corruption("truncated block read");
     }
   }
@@ -756,7 +765,7 @@ static Status ReadBlock(LogSource* file, const Options& options,
 
   // CRC checks
   const char* data = contents.data();  // Pointer to where read put the data
-  if (options.verify_checksums) {
+  if (has_checksums && options.verify_checksums) {
     const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
     const uint32_t actual = crc32c::Value(data, n + 1);
     if (actual != crc) {
@@ -823,7 +832,7 @@ Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
 bool PlfsIoReader::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
   Status s;
   BlockContents contents;
-  s = ReadBlock(index_src_, options_, handle, &contents);
+  s = ReadBlock(index_src_, options_, handle, &contents, false);
   if (s.ok()) {
     bool r = BloomKeyMayMatch(key, contents.data);
     if (contents.heap_allocated) {

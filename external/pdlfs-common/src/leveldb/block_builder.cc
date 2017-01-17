@@ -95,7 +95,7 @@ Slice BlockBuilder::Finalize(uint64_t padding_target) {
   crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
   EncodeFixed32(trailer + 1, crc32c::Mask(crc));
   buffer_.append(trailer, sizeof(trailer));
-  if (buffer_.size() < padding_target) {
+  if (padding_target != 0 && buffer_.size() < padding_target) {
     buffer_.resize(padding_target, 0);
   }
   return buffer_;
