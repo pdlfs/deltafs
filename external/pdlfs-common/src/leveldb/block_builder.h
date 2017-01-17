@@ -36,9 +36,16 @@ class BlockBuilder {
   // Finish building the block and return a slice that refers to the
   // block contents.  The returned slice will remain valid for the
   // lifetime of this builder or until Reset() is called.
-  // If "padding_target" is not 0, add zero to the tail of the block
+  Slice Finish();
+
+  // Put trailer to the buffer end which contains the block type and checksum.
+  // If "padding_target" is not 0, append zeros to the buffer
   // until data length reaches the target.
-  Slice Finish(uint64_t padding_target = 0);
+  // Return a slice that refers to the raw block contents that includes
+  // the tail.  The returned slice will remain valid for the lifetime of
+  // this builder or until Reset() is called.
+  // REQUIRES: Finish() has been called since the last call to Reset().
+  Slice Finalize(uint64_t padding_target = 0);
 
   // Returns an estimate of the current (uncompressed) size of the block
   // we are building.

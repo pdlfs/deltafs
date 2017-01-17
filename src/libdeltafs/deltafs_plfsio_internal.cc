@@ -339,14 +339,16 @@ void TableLogger::EndBlock() {
   if (data_block_.empty()) return;  // No more work
   if (!ok()) return;                // Abort
   assert(!pending_index_entry_);
-  Slice contents = data_block_.Finish(options_.block_size);
+  Slice contents = data_block_.Finish();
+  Slice data = data_block_.Finalize(options_.block_size);
   const uint64_t offset = data_log_->Ltell();
-  status_ = data_log_->Lwrite(contents);
+  status_ = data_log_->Lwrite(data);
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "DBLK written: (offset=%llu, size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "DBLK written: (offset=%llu, size=%llu/%llu) %s",
           static_cast<unsigned long long>(offset),
           static_cast<unsigned long long>(contents.size()),
+          static_cast<unsigned long long>(data.size()),
           status_.ToString().c_str());
 #endif
 
@@ -388,7 +390,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 
   last_key_ = key.ToString();
   data_block_.Add(key, value);
-  if (data_block_.CurrentSizeEstimate() >=
+  if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize >=
       static_cast<uint64_t>(options_.block_size * options_.block_util)) {
     EndBlock();
   }

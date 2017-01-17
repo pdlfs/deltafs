@@ -15,6 +15,7 @@
 #include <algorithm>
 
 #include "pdlfs-common/coding.h"
+#include "pdlfs-common/crc32c.h"
 
 // BlockBuilder generates blocks where keys are prefix-compressed:
 //
@@ -74,19 +75,30 @@ size_t BlockBuilder::CurrentSizeEstimate() const {
   }
 }
 
-Slice BlockBuilder::Finish(uint64_t padding_target) {
+Slice BlockBuilder::Finish() {
+  assert(!finished_);
   // Append restart array
   for (size_t i = 0; i < restarts_.size(); i++) {
     PutFixed32(&buffer_, restarts_[i]);
   }
-  PutFixed32(&buffer_, restarts_.size());
-  Slice result = buffer_;  // Real block contents without padding
-  // Add padding if necessary
+  PutFixed32(&buffer_, restarts_.size());  // Remember the array size
+  finished_ = true;
+  return buffer_;
+}
+
+Slice BlockBuilder::Finalize(uint64_t padding_target) {
+  assert(finished_);
+  Slice contents = buffer_;  // Contents without the trailer and padding
+  char trailer[kBlockTrailerSize];
+  trailer[0] = kNoCompression;
+  uint32_t crc = crc32c::Value(contents.data(), contents.size());
+  crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
+  EncodeFixed32(trailer + 1, crc32c::Mask(crc));
+  buffer_.append(trailer, sizeof(trailer));
   if (buffer_.size() < padding_target) {
     buffer_.resize(padding_target, 0);
   }
-  finished_ = true;
-  return result;
+  return buffer_;
 }
 
 void BlockBuilder::Add(const Slice& key, const Slice& value) {
