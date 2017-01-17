@@ -56,9 +56,10 @@ static bool BloomKeyMayMatch(const Slice& key, const Slice& input) {
   return true;
 }
 
-class BloomFilterBuilder {
+class BloomBlock {
  public:
-  BloomFilterBuilder(size_t bits_per_key, size_t size /* bytes */) {
+  BloomBlock(size_t bits_per_key, size_t size /* bytes */) {
+    finished_ = false;
     space_.reserve(size + 1);
     space_.resize(size, 0);
     // Round down to reduce probing cost a little bit
@@ -70,11 +71,10 @@ class BloomFilterBuilder {
     bits_ = 8 * size;
   }
 
-  ~BloomFilterBuilder() {}
-
-  Slice contents() const { return space_; }
+  ~BloomBlock() {}
 
   void AddKey(const Slice& key) {
+    assert(!finished_);  // Finish() has not been called
     // Use double-hashing to generate a sequence of hash values.
     uint32_t h = BloomHash(key);
     const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
@@ -85,11 +85,30 @@ class BloomFilterBuilder {
     }
   }
 
+  Slice Finish() {
+    assert(!finished_);
+    finished_ = true;
+    return space_;
+  }
+
+  Slice Finalize() {
+    assert(finished_);
+    Slice contents = space_;  // Contents without the trailer
+    char trailer[kBlockTrailerSize];
+    trailer[0] = kNoCompression;
+    uint32_t crc = crc32c::Value(contents.data(), contents.size());
+    crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
+    EncodeFixed32(trailer + 1, crc32c::Mask(crc));
+    space_.append(trailer, sizeof(trailer));
+    return space_;
+  }
+
  private:
   // No copying allowed
-  void operator=(const BloomFilterBuilder&);
-  BloomFilterBuilder(const BloomFilterBuilder&);
+  void operator=(const BloomBlock&);
+  BloomBlock(const BloomBlock&);
 
+  bool finished_;
   std::string space_;
   size_t bits_;
   size_t k_;
@@ -251,7 +270,7 @@ TableLogger::~TableLogger() {
 
 void TableLogger::EndEpoch() {
   assert(!finished_);  // Finish() has not been called
-  EndTable(Slice());
+  EndTable(static_cast<BloomBlock*>(NULL));
   if (ok() && num_tables_ != 0) {
 #if VERBOSE >= 4
     Verbose(__LOG_ARGS__, 4, "Epoch #%d: closed (%d tables) %s",
@@ -266,7 +285,8 @@ void TableLogger::EndEpoch() {
   }
 }
 
-void TableLogger::EndTable(const Slice& filter) {
+template <typename T>
+void TableLogger::EndTable(T* filter_block) {
   assert(!finished_);  // Finish() has not been called
   EndBlock();
   if (!ok()) return;  // Abort
@@ -283,7 +303,7 @@ void TableLogger::EndTable(const Slice& filter) {
 
   assert(!pending_epoch_entry_);
   Slice contents = index_block_.Finish();
-  Slice raw_contents = index_block_.Finalize();  // No padding for index blocks
+  Slice raw_contents = index_block_.Finalize(0);  // No padding for index blocks
   const uint64_t offset = index_log_->Ltell();
   status_ = index_log_->Lwrite(raw_contents);
 
@@ -295,23 +315,29 @@ void TableLogger::EndTable(const Slice& filter) {
           status_.ToString().c_str());
 #endif
 
+  Slice filter_contents;
+  Slice raw_filter_contents;
+
   if (ok()) {
-    if (!filter.empty()) {
-      status_ = index_log_->Lwrite(filter);
+    if (filter_block != NULL) {
+      filter_contents = filter_block->Finish();
+      raw_filter_contents = filter_block->Finalize();
+      status_ = index_log_->Lwrite(raw_filter_contents);
     }
   }
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "FBLK written: (offset=%llu, size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "FBLK written: (offset=%llu, size=%llu/%llu) %s",
           static_cast<unsigned long long>(offset + raw_contents.size()),
-          static_cast<unsigned long long>(filter.size()),
+          static_cast<unsigned long long>(filter_contents.size()),
+          static_cast<unsigned long long>(raw_filter_contents.size()),
           status_.ToString().c_str());
 #endif
 
   if (ok()) {
     index_block_.Reset();
     pending_epoch_handle_.set_filter_offset(offset + raw_contents.size());
-    pending_epoch_handle_.set_filter_size(filter.size());
+    pending_epoch_handle_.set_filter_size(filter_contents.size());
     pending_epoch_handle_.set_offset(offset);
     pending_epoch_handle_.set_size(contents.size());
     pending_epoch_entry_ = true;
@@ -410,7 +436,7 @@ Status TableLogger::Finish() {
 
   assert(!pending_epoch_entry_);
   Slice contents = epoch_block_.Finish();
-  Slice raw_contents = epoch_block_.Finalize();  // No padding for meta blocks
+  Slice raw_contents = epoch_block_.Finalize(0);  // No padding for meta blocks
   const uint64_t offset = index_log_->Ltell();
   status_ = index_log_->Lwrite(raw_contents);
 
@@ -686,9 +712,9 @@ void PlfsIoLogger::CompactWriteBuffer() {
   unsigned num_keys = 0;
 #endif
 
-  BloomFilterBuilder* bf = NULL;
+  BloomBlock* bloom_filter = NULL;
   if (bf_bits_per_key != 0 && bf_bytes != 0) {
-    bf = new BloomFilterBuilder(bf_bits_per_key, bf_bytes);
+    bloom_filter = new BloomBlock(bf_bits_per_key, bf_bytes);
   }
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
@@ -698,8 +724,8 @@ void PlfsIoLogger::CompactWriteBuffer() {
     size += iter->key().size();
     num_keys++;
 #endif
-    if (bf != NULL) {
-      bf->AddKey(iter->key());
+    if (bloom_filter != NULL) {
+      bloom_filter->AddKey(iter->key());
     }
     dest->Add(iter->key(), iter->value());
     if (!dest->ok()) {
@@ -708,7 +734,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
   }
 
   if (dest->ok()) {
-    dest->EndTable(bf->contents());
+    dest->EndTable(bloom_filter);
   }
   if (is_epoch_flush) {
     dest->EndEpoch();
@@ -723,7 +749,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
 #endif
 
   delete iter;
-  delete bf;
+  delete bloom_filter;
   mutex_->Lock();
   if (is_epoch_flush) {
     if (pending_epoch_flush) {
@@ -833,7 +859,7 @@ Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
 bool PlfsIoReader::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
   Status s;
   BlockContents contents;
-  s = ReadBlock(index_src_, options_, handle, &contents, false);
+  s = ReadBlock(index_src_, options_, handle, &contents);
   if (s.ok()) {
     bool r = BloomKeyMayMatch(key, contents.data);
     if (contents.heap_allocated) {

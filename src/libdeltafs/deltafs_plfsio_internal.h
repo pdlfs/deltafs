@@ -63,9 +63,10 @@ class TableLogger {
   void EndBlock();
 
   // Force the start of a new table.
-  // Caller may optionally specify filter data.
+  // Caller may optionally specify a corresponding filter block.
   // REQUIRES: Finish() has not been called.
-  void EndTable(const Slice& filter);
+  template <typename T>
+  void EndTable(T* filter);
 
   // Force the start of a new epoch.
   // REQUIRES: Finish() has not been called.
