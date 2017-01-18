@@ -324,6 +324,7 @@ void TableLogger::EndTable(T* filter_block) {
 #endif
 
   size_t filter_size = 0;
+  const uint64_t filter_offset = offset + raw_contents.size();
   Slice raw_filter_contents;
 
   if (ok()) {
@@ -336,7 +337,7 @@ void TableLogger::EndTable(T* filter_block) {
 
 #if VERBOSE >= 6
   Verbose(__LOG_ARGS__, 6, "FBLK written: (offset=%llu, size=%llu/%llu) %s",
-          static_cast<unsigned long long>(offset + raw_contents.size()),
+          static_cast<unsigned long long>(filter_offset),
           static_cast<unsigned long long>(filter_size),
           static_cast<unsigned long long>(raw_filter_contents.size()),
           status_.ToString().c_str());
@@ -344,7 +345,7 @@ void TableLogger::EndTable(T* filter_block) {
 
   if (ok()) {
     index_block_.Reset();
-    pending_epoch_handle_.set_filter_offset(offset + raw_contents.size());
+    pending_epoch_handle_.set_filter_offset(filter_offset);
     pending_epoch_handle_.set_filter_size(filter_size);
     pending_epoch_handle_.set_offset(offset);
     pending_epoch_handle_.set_size(size);
@@ -720,6 +721,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
   unsigned num_keys = 0;
 #endif
 
+  const uint64_t start = Env::Default()->NowMicros();
   BloomBlock* bloom_filter = NULL;
   if (bf_bits_per_key != 0 && bf_bytes != 0) {
     bloom_filter = new BloomBlock(bf_bits_per_key, bf_bytes);
@@ -751,9 +753,12 @@ void PlfsIoLogger::CompactWriteBuffer() {
     dest->Finish();
   }
 
+  uint64_t end = Env::Default()->NowMicros();
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "Compacted #%llu: %llu bytes (%u records) %s", seq,
-          size, num_keys, dest->status().ToString().c_str());
+  Verbose(__LOG_ARGS__, 2,
+          "Compacted #%llu: %llu bytes (%u records, %llu microsecs) %s", seq,
+          size, num_keys, static_cast<unsigned long long>(end - start),
+          dest->status().ToString().c_str());
 #endif
 
   delete iter;
@@ -834,11 +839,18 @@ static Status ReadBlock(LogSource* file, const Options& options,
 Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
                          Saver saver, void* arg, bool* eok) {
   *eok = false;
-  Status s;
+  Status status;
   BlockContents contents;
-  s = ReadBlock(data_src_, options_, handle, &contents);
-  if (!s.ok()) {
-    return s;
+  status = ReadBlock(data_src_, options_, handle, &contents);
+#if VERBOSE >= 6
+  Verbose(__LOG_ARGS__, 6, "DBLK read: (offset=%llu, size=%llu) %s",
+          static_cast<unsigned long long>(handle.offset()),
+          static_cast<unsigned long long>(handle.size()),
+          status.ToString().c_str());
+#endif
+
+  if (!status.ok()) {
+    return status;
   }
 
   Block* block = new Block(contents);
@@ -864,18 +876,25 @@ Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
     iter->Next();
   }
 
-  s = iter->status();
+  status = iter->status();
 
   delete iter;
   delete block;
-  return s;
+  return status;
 }
 
 bool PlfsIoReader::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
-  Status s;
+  Status status;
   BlockContents contents;
-  s = ReadBlock(index_src_, options_, handle, &contents);
-  if (s.ok()) {
+  status = ReadBlock(index_src_, options_, handle, &contents);
+#if VERBOSE >= 6
+  Verbose(__LOG_ARGS__, 6, "FBLK read: (offset=%llu, size=%llu) %s",
+          static_cast<unsigned long long>(handle.offset()),
+          static_cast<unsigned long long>(handle.size()),
+          status.ToString().c_str());
+#endif
+
+  if (status.ok()) {
     bool r = BloomKeyMayMatch(key, contents.data);
     if (contents.heap_allocated) {
       delete[] contents.data.data();
@@ -891,24 +910,30 @@ bool PlfsIoReader::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
 // Return OK on success and a non-OK status on errors.
 Status PlfsIoReader::Get(const Slice& key, const TableHandle& handle,
                          Saver saver, void* arg) {
-  Status s;
+  Status status;
   // Check key range and filter
   if (key.compare(handle.smallest_key()) < 0 ||
       key.compare(handle.largest_key()) > 0) {
-    return s;
+    return status;
   } else {
     BlockHandle filter;
     filter.set_offset(handle.filter_offset());
     filter.set_size(handle.filter_size());
     if (filter.size() != 0 && !KeyMayMatch(key, filter)) {
-      return s;
+      return status;
     }
   }
 
   BlockContents contents;
-  s = ReadBlock(index_src_, options_, handle, &contents);
-  if (!s.ok()) {
-    return s;
+  status = ReadBlock(index_src_, options_, handle, &contents);
+#if VERBOSE >= 6
+  Verbose(__LOG_ARGS__, 6, "IBLK read: (offset=%llu, size=%llu) %s",
+          static_cast<unsigned long long>(handle.offset()),
+          static_cast<unsigned long long>(handle.size()),
+          status.ToString().c_str());
+#endif
+  if (!status.ok()) {
+    return status;
   }
 
   bool eok = false;
@@ -922,24 +947,24 @@ Status PlfsIoReader::Get(const Slice& key, const TableHandle& handle,
       iter->Next();
     }
   }
-  while (s.ok() && !eok && iter->Valid()) {
+  while (status.ok() && !eok && iter->Valid()) {
     BlockHandle h;
     Slice input = iter->value();
-    s = h.DecodeFrom(&input);
-    if (s.ok()) {
-      s = Get(key, h, saver, arg, &eok);
+    status = h.DecodeFrom(&input);
+    if (status.ok()) {
+      status = Get(key, h, saver, arg, &eok);
     }
 
     iter->Next();
   }
 
-  if (s.ok()) {
-    s = iter->status();
+  if (status.ok()) {
+    status = iter->status();
   }
 
   delete iter;
   delete block;
-  return s;
+  return status;
 }
 
 namespace {
@@ -960,13 +985,13 @@ static inline Iterator* NewEpochIterator(Block* epoch_index) {
 }  // namespace
 
 Status PlfsIoReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
-  Status s;
+  Status status;
   if (epoch_iter_ == NULL) {
     epoch_iter_ = NewEpochIterator(epoch_index_);
   }
   std::string epoch_key;
   uint32_t table = 0;
-  while (s.ok()) {
+  while (status.ok()) {
     SaverState state;
     state.found = false;
     state.dst = dst;
@@ -981,10 +1006,10 @@ Status PlfsIoReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
       }
     }
     Slice handle_encoding = epoch_iter_->value();
-    s = handle.DecodeFrom(&handle_encoding);
-    if (s.ok()) {
-      s = Get(key, handle, SaveValue, &state);
-      if (s.ok() && state.found) {
+    status = handle.DecodeFrom(&handle_encoding);
+    if (status.ok()) {
+      status = Get(key, handle, SaveValue, &state);
+      if (status.ok() && state.found) {
         if (options_.unique_keys) {
           break;
         }
@@ -995,22 +1020,22 @@ Status PlfsIoReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
     table++;
   }
 
-  if (s.ok()) {
-    s = epoch_iter_->status();
+  if (status.ok()) {
+    status = epoch_iter_->status();
   }
 
-  return s;
+  return status;
 }
 
 Status PlfsIoReader::Gets(const Slice& key, std::string* dst) {
-  Status s;
+  Status status;
   if (num_epoches_ != 0) {
     if (epoch_iter_ == NULL) {
       epoch_iter_ = NewEpochIterator(epoch_index_);
     }
     uint32_t epoch = 0;
-    while (s.ok()) {
-      s = Get(key, epoch, dst);
+    while (status.ok()) {
+      status = Get(key, epoch, dst);
       if (epoch < num_epoches_ - 1) {
         epoch++;
       } else {
@@ -1019,7 +1044,7 @@ Status PlfsIoReader::Gets(const Slice& key, std::string* dst) {
     }
   }
 
-  return s;
+  return status;
 }
 
 PlfsIoReader::PlfsIoReader(const Options& o, LogSource* d, LogSource* i)
@@ -1044,30 +1069,38 @@ PlfsIoReader::~PlfsIoReader() {
 Status PlfsIoReader::Open(const Options& options, LogSource* data,
                           LogSource* index, PlfsIoReader** result) {
   *result = NULL;
-  Status s;
+  Status status;
   char space[Footer::kEncodeLength];
   Slice input;
   if (index->Size() >= sizeof(space)) {
-    s = index->Read(index->Size() - sizeof(space), sizeof(space), &input,
-                    space);
+    status = index->Read(index->Size() - sizeof(space), sizeof(space), &input,
+                         space);
   } else {
-    s = Status::Corruption("index too short to be valid");
+    status = Status::Corruption("index too short to be valid");
   }
 
-  if (!s.ok()) {
-    return s;
+  if (!status.ok()) {
+    return status;
   }
 
   Footer footer;
-  s = footer.DecodeFrom(&input);
-  if (!s.ok()) {
-    return s;
+  status = footer.DecodeFrom(&input);
+  if (!status.ok()) {
+    return status;
   }
 
   BlockContents contents;
-  s = ReadBlock(index, options, footer.epoch_index_handle(), &contents);
-  if (!s.ok()) {
-    return s;
+  const BlockHandle& handle = footer.epoch_index_handle();
+  status = ReadBlock(index, options, handle, &contents);
+#if VERBOSE >= 6
+  Verbose(__LOG_ARGS__, 6, "Epoch index read: (offset=%llu, size=%llu) %s",
+          static_cast<unsigned long long>(handle.offset()),
+          static_cast<unsigned long long>(handle.size()),
+          status.ToString().c_str());
+#endif
+
+  if (!status.ok()) {
+    return status;
   }
 
   PlfsIoReader* reader = new PlfsIoReader(options, data, index);
@@ -1076,7 +1109,7 @@ Status PlfsIoReader::Open(const Options& options, LogSource* data,
   reader->epoch_index_ = block;
 
   *result = reader;
-  return s;
+  return status;
 }
 
 }  // namespace plfsio
