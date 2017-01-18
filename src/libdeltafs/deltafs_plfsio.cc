@@ -297,6 +297,8 @@ Status Writer::Open(const Options& opts, const std::string& name,
           PrettySize(options.data_buffer).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.index_buffer -> %s",
           PrettySize(options.index_buffer).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.unique_keys -> %d",
+          int(options.unique_keys));
   Verbose(__LOG_ARGS__, 2, "plfsdir.num_parts_per_rank -> %u",
           static_cast<unsigned>(num_parts));
   Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", my_rank);
@@ -488,7 +490,16 @@ Status Reader::Open(const Options& opts, const std::string& dirname,
   const size_t num_parts = 1u << options.lg_parts;
   const int my_rank = options.rank;
   Env* const env = options.env;
-
+#if VERBOSE >= 2
+  Verbose(__LOG_ARGS__, 2, "plfsdir.name -> %s", dirname.c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.verify_checksums -> %d",
+          int(options.verify_checksums));
+  Verbose(__LOG_ARGS__, 2, "plfsdir.unique_keys -> %d",
+          int(options.unique_keys));
+  Verbose(__LOG_ARGS__, 2, "plfsdir.num_parts_per_rank -> %u",
+          static_cast<unsigned>(num_parts));
+  Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", my_rank);
+#endif
   Status status;
   LogSource* data = NULL;
   status = NewUnbufferedLogSrc(DataFileName(dirname, my_rank), env, &data);

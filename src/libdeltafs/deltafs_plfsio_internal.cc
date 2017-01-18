@@ -316,7 +316,7 @@ void TableLogger::EndTable(T* filter_block) {
   status_ = index_log_->Lwrite(raw_contents);
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "IBLK written: (offset=%llu, size=%llu/%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "[IBLK] written: (offset=%llu, size=%llu/%llu) %s",
           static_cast<unsigned long long>(offset),
           static_cast<unsigned long long>(size),
           static_cast<unsigned long long>(raw_contents.size()),
@@ -336,7 +336,7 @@ void TableLogger::EndTable(T* filter_block) {
   }
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "FBLK written: (offset=%llu, size=%llu/%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "[FBLK] written: (offset=%llu, size=%llu/%llu) %s",
           static_cast<unsigned long long>(filter_offset),
           static_cast<unsigned long long>(filter_size),
           static_cast<unsigned long long>(raw_filter_contents.size()),
@@ -383,7 +383,7 @@ void TableLogger::EndBlock() {
   status_ = data_log_->Lwrite(raw_contents);
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "DBLK written: (offset=%llu, size=%llu/%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "[DBLK] written: (offset=%llu, size=%llu/%llu) %s",
           static_cast<unsigned long long>(offset),
           static_cast<unsigned long long>(size),
           static_cast<unsigned long long>(raw_contents.size()),
@@ -450,8 +450,7 @@ Status TableLogger::Finish() {
   status_ = index_log_->Lwrite(raw_contents);
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6,
-          "Epoch index written: (offset=%llu, size=%llu/%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "[EIDX] written: (offset=%llu, size=%llu/%llu) %s",
           static_cast<unsigned long long>(offset),
           static_cast<unsigned long long>(size),
           static_cast<unsigned long long>(raw_contents.size()),
@@ -472,7 +471,7 @@ Status TableLogger::Finish() {
   }
 
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "TAIL written: (size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "[TAIL] written: (size=%llu) %s",
           static_cast<unsigned long long>(tail.size()),
           status_.ToString().c_str());
 #endif
@@ -713,9 +712,9 @@ void PlfsIoLogger::CompactWriteBuffer() {
   const size_t bf_bits_per_key = options_.bf_bits_per_key;
   const size_t bf_bytes = bf_bytes_;
   mutex_->Unlock();
-#if VERBOSE >= 2
+#if VERBOSE >= 3
   static unsigned long long seq = 0;
-  Verbose(__LOG_ARGS__, 2, "Compacting #%llu (epoch_flush=%d, finish=%d) ...",
+  Verbose(__LOG_ARGS__, 3, "Compacting #%llu (epoch_flush=%d, finish=%d) ...",
           ++seq, int(is_epoch_flush), int(is_finish));
   unsigned long long size = 0;
   unsigned num_keys = 0;
@@ -754,8 +753,8 @@ void PlfsIoLogger::CompactWriteBuffer() {
   }
 
   uint64_t end = Env::Default()->NowMicros();
-#if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2,
+#if VERBOSE >= 3
+  Verbose(__LOG_ARGS__, 3,
           "Compacted #%llu: %llu bytes (%u records, %llu microsecs) %s", seq,
           size, num_keys, static_cast<unsigned long long>(end - start),
           dest->status().ToString().c_str());
@@ -843,7 +842,7 @@ Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
   BlockContents contents;
   status = ReadBlock(data_src_, options_, handle, &contents);
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "DBLK read: (offset=%llu, size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "[DBLK] read: (offset=%llu, size=%llu) %s",
           static_cast<unsigned long long>(handle.offset()),
           static_cast<unsigned long long>(handle.size()),
           status.ToString().c_str());
@@ -888,7 +887,7 @@ bool PlfsIoReader::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
   BlockContents contents;
   status = ReadBlock(index_src_, options_, handle, &contents);
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "FBLK read: (offset=%llu, size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "[FBLK] read: (offset=%llu, size=%llu) %s",
           static_cast<unsigned long long>(handle.offset()),
           static_cast<unsigned long long>(handle.size()),
           status.ToString().c_str());
@@ -927,7 +926,7 @@ Status PlfsIoReader::Get(const Slice& key, const TableHandle& handle,
   BlockContents contents;
   status = ReadBlock(index_src_, options_, handle, &contents);
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "IBLK read: (offset=%llu, size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "[IBLK] read: (offset=%llu, size=%llu) %s",
           static_cast<unsigned long long>(handle.offset()),
           static_cast<unsigned long long>(handle.size()),
           status.ToString().c_str());
@@ -1079,6 +1078,12 @@ Status PlfsIoReader::Open(const Options& options, LogSource* data,
     status = Status::Corruption("index too short to be valid");
   }
 
+#if VERBOSE >= 6
+  Verbose(__LOG_ARGS__, 6, "[TAIL] read: (size=%llu) %s",
+          static_cast<unsigned long long>(sizeof(space)),
+          status.ToString().c_str());
+#endif
+
   if (!status.ok()) {
     return status;
   }
@@ -1093,7 +1098,7 @@ Status PlfsIoReader::Open(const Options& options, LogSource* data,
   const BlockHandle& handle = footer.epoch_index_handle();
   status = ReadBlock(index, options, handle, &contents);
 #if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "Epoch index read: (offset=%llu, size=%llu) %s",
+  Verbose(__LOG_ARGS__, 6, "[EIDX] read: (offset=%llu, size=%llu) %s",
           static_cast<unsigned long long>(handle.offset()),
           static_cast<unsigned long long>(handle.size()),
           status.ToString().c_str());
