@@ -26,6 +26,9 @@ class BlockBuilder {
   // Reset the contents as if the BlockBuilder was just constructed.
   void Reset();
 
+  // Reserve a certain amount of buffer space.
+  void Reserve(size_t size) { buffer_.reserve(size); }
+
   // REQUIRES: Finish() has not been called since the last call to Reset().
   // REQUIRES: key is larger than any previously added key
   void Add(const Slice& key, const Slice& value);
@@ -35,14 +38,15 @@ class BlockBuilder {
 
   // Finish building the block and return a slice that refers to the
   // block contents.  The returned slice will remain valid for the
-  // lifetime of this builder or until Reset() is called.
+  // lifetime of this builder or until either Reset() or
+  // Finalize() is called
   Slice Finish();
 
   // Put trailer to the buffer end which contains the block type and checksum.
   // If "padding_target" is not 0, append zeros to the buffer
   // until data length reaches the target.
-  // Return a slice that refers to the raw block contents that includes
-  // the tail.  The returned slice will remain valid for the lifetime of
+  // Return a slice that refers to the new raw block contents that includes
+  // the trailer.  The returned slice will remain valid for the lifetime of
   // this builder or until Reset() is called.
   // REQUIRES: Finish() has been called since the last call to Reset().
   Slice Finalize(uint64_t padding_target = 0);
