@@ -98,7 +98,6 @@ class PlfsIoTest {
  public:
   PlfsIoTest() {
     dirname_ = test::TmpDir() + "/plfsio_test";
-    DestroyDir(dirname_, Options());
     options_.verify_checksums = true;
     options_.env = TestEnv();
     writer_ = NULL;
@@ -115,6 +114,7 @@ class PlfsIoTest {
   }
 
   void OpenWriter() {
+    DestroyDir(dirname_, options_);
     Status s = Writer::Open(options_, dirname_, &writer_);
     ASSERT_OK(s);
   }
@@ -169,10 +169,15 @@ TEST(PlfsIoTest, SingleEpoch0) {
   Write("k6", "v6");
   MakeEpoch();
   ASSERT_EQ(Read("k1"), "v1");
+  ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2");
+  ASSERT_TRUE(Read("k2.1").empty());
   ASSERT_EQ(Read("k3"), "v3");
+  ASSERT_TRUE(Read("k3.1").empty());
   ASSERT_EQ(Read("k4"), "v4");
+  ASSERT_TRUE(Read("k4.1").empty());
   ASSERT_EQ(Read("k5"), "v5");
+  ASSERT_TRUE(Read("k5.1").empty());
   ASSERT_EQ(Read("k6"), "v6");
 }
 
@@ -187,6 +192,7 @@ TEST(PlfsIoTest, MultiEpoch0) {
   Write("k2", "v6");
   MakeEpoch();
   ASSERT_EQ(Read("k1"), "v1v3v5");
+  ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2v4v6");
 }
 
@@ -202,10 +208,15 @@ TEST(PlfsIoTest, NoFilter0) {
   Write("k6", "v6");
   MakeEpoch();
   ASSERT_EQ(Read("k1"), "v1");
+  ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2");
+  ASSERT_TRUE(Read("k2.1").empty());
   ASSERT_EQ(Read("k3"), "v3");
+  ASSERT_TRUE(Read("k3.1").empty());
   ASSERT_EQ(Read("k4"), "v4");
+  ASSERT_TRUE(Read("k4.1").empty());
   ASSERT_EQ(Read("k5"), "v5");
+  ASSERT_TRUE(Read("k5.1").empty());
   ASSERT_EQ(Read("k6"), "v6");
 }
 

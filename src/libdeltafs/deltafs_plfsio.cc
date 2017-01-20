@@ -517,26 +517,49 @@ Status Reader::Open(const Options& opts, const std::string& dirname,
   return status;
 }
 
-Status DestroyDir(const std::string& dirname, const Options& options) {
+static Status DeleteLogStream(const std::string& fname, Env* env) {
+#if VERBOSE >= 3
+  Verbose(__LOG_ARGS__, 3, "Delete plfs io log: %s", fname.c_str());
+#endif
+  return env->DeleteFile(fname);
+}
+
+Status DestroyDir(const std::string& dirname, const Options& opts) {
   Status status;
-  Env* env = options.env;
-  if (env == NULL) env = Env::Default();
+  Options options = SanitizeReadOptions(opts);
+  Env* const env = options.env;
+#if 0
   std::vector<std::string> names;
   status = env->GetChildren(dirname, &names);
   if (status.ok()) {
     for (size_t i = 0; i < names.size(); i++) {
       if (!Slice(names[i]).starts_with(".")) {
-        status = env->DeleteFile(dirname + "/" + names[i]);
+        status = DeleteLogStream(dirname + "/" + names[i], env);
         if (!status.ok()) {
           break;
         }
       }
     }
 
-    // Ignore error status
     env->DeleteDir(dirname);
   }
-
+#else
+  const size_t num_parts = 1u << options.lg_parts;
+  const int my_rank = options.rank;
+  std::vector<std::string> names;
+  names.push_back(DataFileName(dirname, my_rank));
+  for (size_t part = 0; part < num_parts; part++) {
+    names.push_back(PartitionIndexFileName(dirname, my_rank, part));
+  }
+  if (status.ok()) {
+    for (size_t i = 0; i < names.size(); i++) {
+      status = DeleteLogStream(names[i], env);
+      if (!status.ok()) {
+        break;
+      }
+    }
+  }
+#endif
   return status;
 }
 
