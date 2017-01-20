@@ -164,7 +164,7 @@ elseif (${PDLFS_OS_EDITED} MATCHES "^CYGWIN_")
   set (PDLFS_OS_LINUX 1)          # yuck, inherited it from leveldb
 elseif (${PDLFS_OS_EDITED} MATCHES "^CRAYLINUX")
   set (PDLFS_TARGET_OS_VERSION "${PDLFS_TARGET_OS_VERSION} \
-(cpu=$ENV{CRAY_CPU_TARGET} network=$ENV{CRAYPE_NETWORK_TARGET})")
+(cpu=$ENV{CRAY_CPU_TARGET}, network=$ENV{CRAYPE_NETWORK_TARGET})")
   set (PDLFS_OS_EDITED "CRAYLINUX")
   set (PDLFS_OS_LINUX 1)
 endif ()

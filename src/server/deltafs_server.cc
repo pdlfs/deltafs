@@ -45,7 +45,7 @@ static void CheckSnappyCompression() {
 }
 
 static void CheckCrossCompile() {
-  if (strcmp(PDLFS_OS, PDLFS_TARGET_OS) != 0) {
+  if (strcmp(PDLFS_HOST_OS, PDLFS_TARGET_OS) != 0) {
     pdlfs::Warn(__LOG_ARGS__, "Cross compile detected; code compiled for %s %s",
                 PDLFS_TARGET_OS, PDLFS_TARGET_OS_VERSION);
   }
