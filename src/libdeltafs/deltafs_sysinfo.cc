@@ -18,7 +18,7 @@
 
 namespace pdlfs {
 
-#if defined(__linux)
+#if defined(PDLFS_OS_LINUX)
 static Slice TrimSpace(Slice s) {
   size_t start = 0;
   while (start < s.size() && isspace(s[start])) {
@@ -39,7 +39,7 @@ void PrintSysInfo() {
        PDLFS_COMMON_VERSION_MAJOR, PDLFS_COMMON_VERSION_MINOR,
        PDLFS_COMMON_VERSION_PATCH);
 
-#if defined(__linux)
+#if defined(PDLFS_OS_LINUX)
   time_t now = time(NULL);
   Info(__LOG_ARGS__, "Date:         %s", ctime(&now));
   FILE* cpuinfo = fopen("/proc/cpuinfo", "r");

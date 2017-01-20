@@ -162,6 +162,8 @@ elseif (${PDLFS_OS_EDITED} STREQUAL "HP-UX")
 elseif (${PDLFS_OS_EDITED} MATCHES "^CYGWIN_")
   set (PDLFS_OS_EDITED "CYGWIN")
   set (PDLFS_OS_LINUX 1)          # yuck, inherited it from leveldb
+elseif (${PDLFS_OS_EDITED} MATCHES "^CRAYLINUX")
+  set (PDLFS_OS_EDITED "LINUX")
 endif ()
 
 #
