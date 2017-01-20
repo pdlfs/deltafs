@@ -18,6 +18,10 @@
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
 
+namespace pdlfs {
+extern void PrintSysInfo();
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -603,6 +607,10 @@ int deltafs_nonop() {
   }
 
   return 0;
+}
+
+void deltafs_print_sysinfo() {
+  pdlfs::PrintSysInfo();  // Print to system logger
 }
 
 #ifdef __cplusplus

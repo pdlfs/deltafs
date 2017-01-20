@@ -25,6 +25,7 @@
 extern "C" {
 #endif
 
+void deltafs_print_sysinfo();
 int deltafs_nonop();  // XXX: simply trigger client initialization
 mode_t deltafs_umask(mode_t __mode);
 int deltafs_chroot(const char* __path);

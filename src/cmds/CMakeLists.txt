@@ -3,6 +3,9 @@
 # 02-Sep-2016  chuck@ece.cmu.edu
 #
 
+add_executable (deltafs-sysinfo deltafs_sysinfo.cc)
+target_link_libraries (deltafs-sysinfo deltafs)
+
 add_executable (deltafs-shell deltafs_shell.cc)
 target_link_libraries (deltafs-shell deltafs)
 
@@ -36,7 +39,7 @@ target_link_libraries (deltafs-access deltafs)
 #
 # "make install" rules
 #
-install (TARGETS deltafs-shell deltafs-mkdir deltafs-mkdirplus
+install (TARGETS deltafs-sysinfo deltafs-shell deltafs-mkdir deltafs-mkdirplus
                  deltafs-ls deltafs-touch deltafs-unlink deltafs-stat
                  deltafs-accessdir deltafs-access
                  deltafs-chown

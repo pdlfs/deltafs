@@ -14,9 +14,23 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
 namespace pdlfs {
+
+static std::string LoadEnv(const char* key) {
+  assert(key != NULL);
+  const char* env = getenv(key);
+  if (env == NULL) {
+    env = "";
+  }
+  std::string result = env;
+  if (result.empty()) {
+    result = "???";
+  }
+  return result;
+}
 
 #if defined(PDLFS_OS_LINUX)
 static Slice TrimSpace(Slice s) {
@@ -92,8 +106,16 @@ void PrintSysInfo() {
   }
 #endif
 
-  Info(__LOG_ARGS__, "Target OS:    %s %s", PDLFS_TARGET_OS,
-       PDLFS_TARGET_OS_VERSION);
+  if (strcmp(PDLFS_TARGET_OS, "CrayLinuxEnvironment") == 0) {
+    std::string cpu = LoadEnv("CRAY_CPU_TARGET");
+    std::string network = LoadEnv("CRAYPE_NETWORK_TARGET");
+    std::string os = LoadEnv("CRAYOS_VERSION");
+    Info(__LOG_ARGS__, "Target OS:    %s (os=%s, cpu=%s, network=%s)",
+         PDLFS_TARGET_OS, os.c_str(), cpu.c_str(), network.c_str());
+  } else {
+    Info(__LOG_ARGS__, "Target OS:    %s %s", PDLFS_TARGET_OS,
+         PDLFS_TARGET_OS_VERSION);
+  }
   Info(__LOG_ARGS__, "OS:           %s %s", PDLFS_OS, PDLFS_OS_VERSION);
 
 #if defined(__INTEL_COMPILER)
