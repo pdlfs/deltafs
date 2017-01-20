@@ -95,7 +95,8 @@ void PrintSysInfo() {
 
   Info(__LOG_ARGS__, "Target OS:    %s %s", PDLFS_TARGET_OS,
        PDLFS_TARGET_OS_VERSION);
-  Info(__LOG_ARGS__, "OS:           %s %s", PDLFS_OS, PDLFS_OS_VERSION);
+  Info(__LOG_ARGS__, "OS:           %s %s", PDLFS_HOST_OS,
+       PDLFS_HOST_OS_VERSION);
 
 #if defined(__INTEL_COMPILER)
   Info(__LOG_ARGS__, "CXX:          Intel (icpc) %d.%d.%d %d",
