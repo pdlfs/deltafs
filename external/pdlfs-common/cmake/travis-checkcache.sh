@@ -77,8 +77,8 @@ else
     # build cmake from binary distributions should it be requested
     if [ x$CACHE_CMAKE_USE_BINARIES != x ]; then
         set +e  # temporarily allow us to fail in the middle
-        cmakever=${CACHE_CMAKE_USE_BINARIES_VERSION:"3.7"}
-        cmakeupdate=${CACHE_CMAKE_USE_BINARIES_VERSION_UPDATE:"2"}
+        cmakever=${CACHE_CMAKE_USE_BINARIES_VERSION:-"3.7"}
+        cmakeupdate=${CACHE_CMAKE_USE_BINARIES_VERSION_UPDATE:-"2"}
         cmakeplatform="`uname -s`-x86_64"
         cmakedir="cmake-${cmakever}.${cmakeupdate}-${cmakeplatform}"
         cmakepkg="${cmakedir}.tar.gz"
@@ -101,7 +101,7 @@ else
         set -e
     fi
     # build cmake from source
-    if [ x$CMAKE_OK == x ]; then
+    if [ x$CMAKE_OK = x ]; then
         rm -rf cmake
         git clone https://cmake.org/cmake.git
         cd cmake
