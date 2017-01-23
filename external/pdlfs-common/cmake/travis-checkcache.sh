@@ -73,13 +73,35 @@ if [ x$oldcmake = x$cmake ]; then
 else
     echo "cmake out of date ($oldcmake != $cmake)... rebuilding"
     cd /tmp
-    rm -rf cmake
-    git clone https://cmake.org/cmake.git
-    cd cmake
-    git checkout --track -b release origin/release
-    ./configure --prefix=${HOME}/cache
-    make
-    make install
+    # use the harder way when we are prebuilding the cache
+    if [ x$CACHE_PREBUILD != x ]; then # The harder way: build from source
+        rm -rf cmake
+        git clone https://cmake.org/cmake.git
+        cd cmake
+        git checkout --track -b release origin/release
+        ./configure --prefix=${HOME}/cache
+        make
+        make install
+    else # The cheaper way: install from binaries
+        cmakever=3.7
+        cmakeupdate=2
+        cmakeplatform="`uname -s`-x86_64"
+        cmakedir="cmake-${cmakever}.${cmakeupdate}-${cmakeplatform}"
+        cmakepkg="${cmakedir}.tar.gz"
+        rm -rf ${cmakepkg} ${cmakedir}
+        wget --no-check-certificate \
+            https://cmake.org/files/v${cmakever}/${cmakepkg}
+        tar xzf ${cmakepkg} -C .
+        for d in bin share 
+        do
+            mkdir -p ${HOME}/cache/$d
+            if [ x"`uname -s`" != x"Linux" ]; then
+                cp -rf ${cmakedir}/CMake.app/Contents/$d/* ${HOME}/cache/$d
+            else
+                cp -rf ${cmakedir}/$d/* ${HOME}/cache/$d
+            fi
+        done
+    fi
     echo $cmake > $verdir/cmake
     echo "cmake updated to $cmake"
 fi
