@@ -44,7 +44,8 @@ else
             && tar xzf /tmp/$target \
             && echo INITSRC cache load done \
           || \
-        echo !!!INITSRC cache load failed!!!
+        echo !!!INITSRC cache load failed!!! \
+            && exit 1
     fi
 
     mkdir -p $verdir
@@ -73,8 +74,34 @@ if [ x$oldcmake = x$cmake ]; then
 else
     echo "cmake out of date ($oldcmake != $cmake)... rebuilding"
     cd /tmp
-    # use the harder way when we are prebuilding the cache
-    if [ x$CACHE_PREBUILD != x ]; then # The harder way: build from source
+    # build cmake from binary distributions should it be requested
+    if [ x$CACHE_CMAKE_USE_BINARIES != x ]; then
+        set +e  # temporarily allow us to fail in the middle
+        cmakever=${CACHE_CMAKE_USE_BINARIES_VERSION:"3.7"}
+        cmakeupdate=${CACHE_CMAKE_USE_BINARIES_VERSION_UPDATE:"2"}
+        cmakeplatform="`uname -s`-x86_64"
+        cmakedir="cmake-${cmakever}.${cmakeupdate}-${cmakeplatform}"
+        cmakepkg="${cmakedir}.tar.gz"
+        rm -rf ${cmakepkg} ${cmakedir}
+        wget --no-check-certificate \
+            https://cmake.org/files/v${cmakever}/${cmakepkg}
+        if [ $? -eq 0 ]; then
+            tar xzf ${cmakepkg} -C .
+            for d in bin share
+            do
+                mkdir -p ${HOME}/cache/$d
+                if [ x"`uname -s`" != x"Linux" ]; then
+                    cp -rf ${cmakedir}/CMake.app/Contents/$d/* ${HOME}/cache/$d
+                else
+                    cp -rf ${cmakedir}/$d/* ${HOME}/cache/$d
+                fi
+            done
+            CMAKE_OK=1
+        fi
+        set -e
+    fi
+    # build cmake from source
+    if [ x$CMAKE_OK == x ]; then
         rm -rf cmake
         git clone https://cmake.org/cmake.git
         cd cmake
@@ -82,25 +109,6 @@ else
         ./configure --prefix=${HOME}/cache
         make -j2
         make install
-    else # The cheaper way: install from binaries
-        cmakever=3.7
-        cmakeupdate=2
-        cmakeplatform="`uname -s`-x86_64"
-        cmakedir="cmake-${cmakever}.${cmakeupdate}-${cmakeplatform}"
-        cmakepkg="${cmakedir}.tar.gz"
-        rm -rf ${cmakepkg} ${cmakedir}
-        wget --no-check-certificate \
-            https://cmake.org/files/v${cmakever}/${cmakepkg}
-        tar xzf ${cmakepkg} -C .
-        for d in bin share 
-        do
-            mkdir -p ${HOME}/cache/$d
-            if [ x"`uname -s`" != x"Linux" ]; then
-                cp -rf ${cmakedir}/CMake.app/Contents/$d/* ${HOME}/cache/$d
-            else
-                cp -rf ${cmakedir}/$d/* ${HOME}/cache/$d
-            fi
-        done
     fi
     echo $cmake > $verdir/cmake
     echo "cmake updated to $cmake"
