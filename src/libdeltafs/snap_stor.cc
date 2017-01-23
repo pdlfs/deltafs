@@ -15,7 +15,7 @@
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/strutil.h"
 
-#include "deltafs_stor.h"
+#include "snap_stor.h"
 
 #include <map>
 
