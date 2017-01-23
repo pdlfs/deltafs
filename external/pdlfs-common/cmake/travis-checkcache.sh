@@ -38,11 +38,13 @@ else
     if [ x$CACHE_INITSRC != x ]; then
         target=cache-${TRAVIS_OS_NAME}-${CC}.tgz
         echo "cache-initsrc: ${CACHE_INITSRC}/${target}"
-        curl -u ftp:ftp -o /tmp/$target "${CACHE_INITSRC}/${target}"
-        echo got tar file
-        cd $HOME
-        tar xzf /tmp/$target
-        echo INITSRC cache load done
+        curl -u ftp:ftp -o /tmp/$target "${CACHE_INITSRC}/${target}" \
+            && echo got tar file \
+            && cd $HOME \
+            && tar xzf /tmp/$target \
+            && echo INITSRC cache load done \
+          || \
+        echo !!!INITSRC cache load failed!!!
     fi
 
     mkdir -p $verdir
