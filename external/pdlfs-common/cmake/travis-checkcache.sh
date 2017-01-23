@@ -4,6 +4,8 @@
 # 05-Oct-2016  chuck@ece.cmu.edu
 #
 
+cd $HOME
+
 # set wanted versions tokens here
 masterversion=2       # changing this will reset everything
 cmake=1               # for bootstrapping
@@ -31,6 +33,18 @@ else
     rm -rf ${HOME}/cache/bin ${HOME}/cache/lib ${HOME}/cache/lib64
     rm -rf ${HOME}/cache/include ${HOME}/cache/share $verdir
     rm -rf ${HOME}/cache/gcc
+
+    # preload initial cache if requested
+    if [ x$CACHE_INITSRC != x ]; then
+        target=cache-${TRAVIS_OS_NAME}-${CC}.tgz
+        echo "cache-initsrc: ${CACHE_INITSRC}/${target}"
+        curl -u ftp:ftp -o /tmp/$target "${CACHE_INITSRC}/${target}"
+        echo got tar file
+        cd $HOME
+        tar xzf /tmp/$target
+        echo INITSRC cache load done
+    fi
+
     mkdir -p $verdir
     echo $masterversion > $verdir/masterversion
     echo "set master version to $masterversion"
@@ -117,6 +131,12 @@ if [ x${CC} = xgcc -a x${TRAVIS_OS_NAME} = xlinux ]; then
         echo "gcc updated to $gcc"
         echo ${CC} --version
         ${CC} --version
+
+        if [ x$CACHE_PREBUILD != x ]; then
+            echo Had to PREBUILD gcc, exiting early... try again.
+            touch /tmp/cache_prebuild_retry
+            exit 0
+        fi
     fi
 else
     echo "skipping gcc on this platform (CC=$CC, OS=$TRAVIS_OS_NAME)"
@@ -131,15 +151,6 @@ else
     echo "autopkg updated to $autopkg"
 fi
 
-if [ x$oldmisc = x$misc ]; then
-    echo "misc packages are ok ($misc)"
-else
-    echo "misc packages are out of date ($oldmisc != $misc)... rebuilding"
-    make snappy gflags glog
-    echo $misc > $verdir/misc
-    echo "misc updated to $misc"
-fi
-
 if [ x$oldmpich = x$mpich ]; then
     echo "mpich packages are ok ($mpich)"
 else
@@ -149,13 +160,25 @@ else
     echo "mpich updated to $mpich"
 fi
 
-if [ x$oldssio = x$ssio ]; then
-    echo "ssio packages are ok ($ssio)"
-else
-    echo "ssio packages are out of date ($oldssio != $ssio)... rebuilding"
-    make margo
-    echo $ssio > $verdir/ssio
-    echo "ssio updated to $ssio"
+#  only build misc and ssio if we are not prebuilding
+if [ x$CACHE_PREBUILD = x ]; then
+    if [ x$oldmisc = x$misc ]; then
+        echo "misc packages are ok ($misc)"
+    else
+        echo "misc packages are out of date ($oldmisc != $misc)... rebuilding"
+        make snappy gflags glog
+        echo $misc > $verdir/misc
+        echo "misc updated to $misc"
+    fi
+
+    if [ x$oldssio = x$ssio ]; then
+        echo "ssio packages are ok ($ssio)"
+    else
+        echo "ssio packages are out of date ($oldssio != $ssio)... rebuilding"
+        make margo
+        echo $ssio > $verdir/ssio
+        echo "ssio updated to $ssio"
+    fi
 fi
 
 exit 0
