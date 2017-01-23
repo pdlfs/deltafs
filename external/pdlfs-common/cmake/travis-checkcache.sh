@@ -80,7 +80,7 @@ else
         cd cmake
         git checkout --track -b release origin/release
         ./configure --prefix=${HOME}/cache
-        make
+        make -j2
         make install
     else # The cheaper way: install from binaries
         cmakever=3.7
@@ -150,7 +150,7 @@ if [ x${CC} = xgcc -a x${TRAVIS_OS_NAME} = xlinux ]; then
     else
         echo "gcc is out of date ($oldgcc != $gcc)... rebuilding"
         ${CC} --version
-        make gcc
+        make -j2 gcc
         echo $gcc > $verdir/gcc
         echo "gcc updated to $gcc"
         echo ${CC} --version
@@ -179,7 +179,7 @@ if [ x$oldmpich = x$mpich ]; then
     echo "mpich packages are ok ($mpich)"
 else
     echo "mpich packages are out of date ($oldmpich != $mpich)... rebuilding"
-    make mpich
+    make -j2 mpich
     echo $mpich > $verdir/mpich
     echo "mpich updated to $mpich"
 fi
