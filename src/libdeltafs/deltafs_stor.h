@@ -17,7 +17,8 @@ namespace pdlfs {
 class Env;
 class Fio;
 
-// Adaptor that allows access to an underlying storage system.
+// Adaptor that allows access to a file system snapshot that is
+// stored in a particular underlying storage system.
 class Stor {
  public:
   Stor() {}
@@ -25,7 +26,14 @@ class Stor {
 
   // Open an adaptor instance using the specified setting.
   // Return OK on success, or a non-OK status on errors.
-  static Status Open(const Slice& name, const Slice& conf, Stor** ptr);
+  static Status Open(const std::string& conf, Stor** ptr);
+
+  // True if only read access is allowed.
+  virtual bool IsReadOnly() const = 0;
+
+  // The ideal size of data packed within each read/write request.
+  // Return 0 if such size is not known to us.
+  virtual uint64_t IdealReqSize() const = 0;
 
   // Return the path to raw file system metadata.
   virtual std::string MetadataHome() const = 0;
