@@ -86,6 +86,7 @@ before_install:
     fi
   - echo "Environment"
   - printenv
+  - export CACHE_INITSRC=ftp://ftp:ftp@ftp.pdl.cmu.edu/pub/pdlfs
   - ./external/pdlfs-common/cmake/travis-checkcache.sh
   - echo contents of cache
   - ls ${HOME}/cache
