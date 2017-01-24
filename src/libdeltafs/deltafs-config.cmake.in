@@ -39,8 +39,8 @@ if (DELTAFS_MPI)
                   INTERFACE_LINK_LIBRARIES ${MPI_CXX_LIBRARIES})
 
     # mpich on ub14 gives a leading space that we need to trim off
-    string (REPLACE " " ";" MPI_CXX_COMPILE_FLAGSLIST ${MPI_CXX_COMPILE_FLAGS})
-    foreach (lcv ${MPI_CXX_COMPILE_FLAGSLIST})
+    string (REPLACE " " ";" mpiccx_flags "${MPI_CXX_COMPILE_FLAGS}")
+    foreach (lcv ${mpiccx_flags})
         if (NOT ${lcv} STREQUAL "") 
             set_property (TARGET deltafs APPEND PROPERTY  
                           INTERFACE_COMPILE_OPTIONS ${lcv})

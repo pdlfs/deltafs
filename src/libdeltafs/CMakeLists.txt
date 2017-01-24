@@ -74,7 +74,7 @@ target_link_libraries (deltafs pdlfs-common)
 #
 if (DELTAFS_MPI)
     # mpich on ub14 gives a leading space that we need to trim off
-    string (REPLACE " " ";" mpicxx_flags ${MPI_CXX_COMPILE_FLAGS})
+    string (REPLACE " " ";" mpicxx_flags "${MPI_CXX_COMPILE_FLAGS}")
     foreach (lcv ${mpicxx_flags})
         if (NOT ${lcv} STREQUAL "")
             target_compile_options (deltafs PUBLIC $<BUILD_INTERFACE:${lcv}>)

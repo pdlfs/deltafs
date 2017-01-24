@@ -12,14 +12,12 @@ add_library (io_client STATIC io_client.cc io_deltafs.cc io_posix.cc)
 target_link_libraries (io_client deltafs)
 
 # plug in MPI
-foreach (lcvs ${MPI_CXX_COMPILE_FLAGS})
-    # mpich on ub14 gives a leading space that we need to trim off
-    string (REPLACE " " ";" lcvl ${lcvs})
-    foreach (lcv ${lcvl})
-        if (NOT ${lcv} STREQUAL "")
-            target_compile_options (io_client PUBLIC $<BUILD_INTERFACE:${lcv}>)
-        endif ()
-    endforeach ()
+# mpich on ub14 gives a leading space that we need to trim off
+string (REPLACE " " ";" mpicxx_flags "${MPI_CXX_COMPILE_FLAGS}")
+foreach (lcv ${mpicxx_flags})
+    if (NOT ${lcv} STREQUAL "")
+        target_compile_options (io_client PUBLIC $<BUILD_INTERFACE:${lcv}>)
+    endif ()
 endforeach ()
 
 # XXX: have to do this one dir at a time otherwise
