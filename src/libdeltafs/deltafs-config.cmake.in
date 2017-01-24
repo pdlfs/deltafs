@@ -37,8 +37,16 @@ if (DELTAFS_MPI)
                   INTERFACE_INCLUDE_DIRECTORIES ${MPI_CXX_INCLUDE_PATH})
     set_property (TARGET deltafs APPEND PROPERTY
                   INTERFACE_LINK_LIBRARIES ${MPI_CXX_LIBRARIES})
-    set_property (TARGET deltafs APPEND PROPERTY
-                  INTERFACE_COMPILE_OPTIONS ${MPI_CXX_COMPILE_FLAGS})
+
+    # mpich on ub14 gives a leading space that we need to trim off
+    string (REPLACE " " ";" MPI_CXX_COMPILE_FLAGSLIST ${MPI_CXX_COMPILE_FLAGS})
+    foreach (lcv ${MPI_CXX_COMPILE_FLAGSLIST})
+        if (NOT ${lcv} STREQUAL "") 
+            set_property (TARGET deltafs APPEND PROPERTY  
+                          INTERFACE_COMPILE_OPTIONS ${lcv})
+        endif ()
+    endforeach ()
+
     # XXX: this doesn't propagate to lib users, is that a problem?
     # XXX: prob ok for now
     set_property (TARGET deltafs APPEND PROPERTY LINK_FLAGS
