@@ -59,9 +59,15 @@ class StorImpl : public Stor {
     return fio_;
   }
 
+  virtual uint64_t IdealReqSize() const { return io_size_; }
+
+  virtual bool IsReadOnly() const { return readonly_; }
+
  private:
   StorImpl();
   friend class Stor;
+  uint64_t io_size_;
+  bool readonly_;
   std::string metadata_home_;
   bool metadata_env_is_system_;
   Env* metadata_env_;
@@ -74,6 +80,8 @@ class StorImpl : public Stor {
 Stor::~Stor() {}
 
 StorImpl::StorImpl() {
+  io_size_ = 0;
+  readonly_ = false;
   metadata_env_is_system_ = false;
   metadata_env_ = NULL;
   data_env_is_system_ = false;
@@ -81,10 +89,22 @@ StorImpl::StorImpl() {
   fio_ = NULL;
 }
 
+static void LogMetadataPath(const std::string& path) {
+#if VERBOSE >= 1
+  Verbose(__LOG_ARGS__, 1, "snap_stor.metadata_path -> %s", path.c_str());
+#endif
+}
+
+static void LogDataPath(const std::string& path) {
+#if VERBOSE >= 1
+  Verbose(__LOG_ARGS__, 1, "snap_stor.data_path -> %s", path.c_str());
+#endif
+}
+
 static void ParseOptions(std::map<std::string, std::string>* map,
                          const Slice& input) {
   std::vector<std::string> confs;
-  size_t n = SplitString(&confs, input, '&');
+  size_t n = SplitString(&confs, input, ',');
   for (size_t i = 0; i < n; i++) {
     std::vector<std::string> pair;
     SplitString(&pair, confs[i], '=');
@@ -94,47 +114,82 @@ static void ParseOptions(std::map<std::string, std::string>* map,
   }
 }
 
-static void LogMetadataPath(const std::string& path) {
-#if VERBOSE >= 1
-  Verbose(__LOG_ARGS__, 1, "storage.metadata_path -> %s", path.c_str());
-#endif
+static Status ParseNumber(const std::map<std::string, std::string>& options,
+                          const std::string& key, uint64_t* result) {
+  if (!ParsePrettyNumber(options.at(key), result)) {
+    return Status::InvalidArgument(key, options.at(key));
+  } else {
+    return Status::OK();
+  }
 }
 
-static void LogDataPath(const std::string& path) {
-#if VERBOSE >= 1
-  Verbose(__LOG_ARGS__, 1, "storage.data_path -> %s", path.c_str());
-#endif
+static Status ParseBool(const std::map<std::string, std::string>& options,
+                        const std::string& key, bool* result) {
+  if (!ParsePrettyBool(options.at(key), result)) {
+    return Status::InvalidArgument(key, options.at(key));
+  } else {
+    return Status::OK();
+  }
 }
 
-//   name                         conf
+//   type                         conf
 // ---------|-----------------------------------------------
-//    fs    |         mode=unbufferedio|directio
+//  common  |           type=posixfs|rados|hdfs
+//          |             readonly=true|false
+// ---------|-----------------------------------------------
+//  posixfs |         mode=unbufferedio|directio
 //          |             root=/path/to/root
 //          |           metadata_folder=dirname
 //          |             data_folder=dirname
 // ---------|-----------------------------------------------
 //   rados  |                     TODO
 // ---------|-----------------------------------------------
-Status Stor::Open(const Slice& name, const Slice& conf, Stor** ptr) {
+Status Stor::Open(const std::string& conf, Stor** ptr) {
   *ptr = NULL;
-  assert(name.size() != 0);
   std::map<std::string, std::string> options;
   ParseOptions(&options, conf);
+#if VERBOSE >= 1
+  std::map<std::string, std::string>::iterator it;
+  for (it = options.begin(); it != options.end(); ++it) {
+    Verbose(__LOG_ARGS__, 1, "snap_stor.%s -> %s", it->first.c_str(),
+            it->second.c_str());
+  }
+#endif
   Status s;
+  std::string type = "posixfs";
+  bool readonly = false;
+  uint64_t io_size = 128 << 10;
+  if (options.count("type") != 0) {
+    type = options["type"];
+  }
+  if (options.count("readonly") != 0) {
+    s = ParseBool(options, "readonly", &readonly);
+    if (!s.ok()) {
+      return s;
+    }
+  }
+  if (options.count("io_size") != 0) {
+    s = ParseNumber(options, "io_size", &io_size);
+    if (!s.ok()) {
+      return s;
+    }
+  }
+
 // RADOS
 #if defined(PDLFS_RADOS)
-  if (name == "rados") {
+  if (type == "rados") {
     s = Status::NotSupported(Slice());
   }
 #endif
 // POSIX
 #if defined(PDLFS_PLATFORM_POSIX)
-  if (name == "fs" || name == "posix") {
+  if (type == "posixfs" || type == "posix") {
     StorImpl* impl = new StorImpl;
-    std::string env_name = "posix";
+    std::string env_type = "posix";
     std::string root = "/tmp";
     std::string metadata = "deltafs_metadata";
     std::string data = "deltafs_data";
+    std::string fio_type = "posix";
     std::string fio_conf = "root=";
     if (options.count("root") != 0) {
       root = options["root"];
@@ -173,27 +228,27 @@ Status Stor::Open(const Slice& name, const Slice& conf, Stor** ptr) {
     }
 
     if (options.count("mode") != 0) {
-      env_name += ".";
-      env_name += options["mode"];
+      env_type += ".";
+      env_type += options["mode"];
     }
 
-    impl->fio_ = Fio::Open("posix", fio_conf);
+    impl->io_size_ = io_size;
+    impl->readonly_ = readonly;
 
-    if (impl->fio_ != NULL) {
-      impl->metadata_env_ =
-          Env::Open(env_name, Slice(), &impl->metadata_env_is_system_);
-      impl->data_env_ =
-          Env::Open(env_name, Slice(), &impl->data_env_is_system_);
-      impl->metadata_home_ = metadata;
-      impl->data_home_ = data;
-    }
+    impl->fio_ = Fio::Open(fio_type, fio_conf);
+    impl->metadata_env_ =
+        Env::Open(env_type, Slice(), &impl->metadata_env_is_system_);
+    impl->data_env_ = Env::Open(env_type, Slice(), &impl->data_env_is_system_);
+
+    impl->metadata_home_ = metadata;
+    impl->data_home_ = data;
 
     if (impl->fio_ == NULL) {
-      s = Status::NotSupported("no such fio", conf);
+      s = Status::NotSupported("no such fio type", fio_type);
     } else if (impl->metadata_env_ == NULL) {
-      s = Status::NotSupported("no sucn env", conf);
+      s = Status::NotSupported("no sucn env type", env_type);
     } else if (impl->data_env_ == NULL) {
-      s = Status::NotSupported("no such env", conf);
+      s = Status::NotSupported("no such env type", env_type);
     }
 
     if (!s.ok()) {

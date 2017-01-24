@@ -38,11 +38,14 @@ else
     if [ x$CACHE_INITSRC != x ]; then
         target=cache-${TRAVIS_OS_NAME}-${CC}.tgz
         echo "cache-initsrc: ${CACHE_INITSRC}/${target}"
-        curl -u ftp:ftp -o /tmp/$target "${CACHE_INITSRC}/${target}"
-        echo got tar file
-        cd $HOME
-        tar xzf /tmp/$target
-        echo INITSRC cache load done
+        curl -u ftp:ftp -o /tmp/$target "${CACHE_INITSRC}/${target}" \
+            && echo got tar file \
+            && cd $HOME \
+            && tar xzf /tmp/$target \
+            && echo INITSRC cache load done \
+          || \
+        echo !!!INITSRC cache load failed!!! \
+            && exit 1
     fi
 
     mkdir -p $verdir
@@ -71,13 +74,42 @@ if [ x$oldcmake = x$cmake ]; then
 else
     echo "cmake out of date ($oldcmake != $cmake)... rebuilding"
     cd /tmp
-    rm -rf cmake
-    git clone https://cmake.org/cmake.git
-    cd cmake
-    git checkout --track -b release origin/release
-    ./configure --prefix=${HOME}/cache
-    make
-    make install
+    # build cmake from binary distributions should it be requested
+    if [ x$CACHE_CMAKE_USE_BINARIES != x ]; then
+        set +e  # temporarily allow us to fail in the middle
+        cmakever=${CACHE_CMAKE_USE_BINARIES_VERSION:-"3.7"}
+        cmakeupdate=${CACHE_CMAKE_USE_BINARIES_VERSION_UPDATE:-"2"}
+        cmakeplatform="`uname -s`-x86_64"
+        cmakedir="cmake-${cmakever}.${cmakeupdate}-${cmakeplatform}"
+        cmakepkg="${cmakedir}.tar.gz"
+        rm -rf ${cmakepkg} ${cmakedir}
+        wget --no-check-certificate \
+            https://cmake.org/files/v${cmakever}/${cmakepkg}
+        if [ $? -eq 0 ]; then
+            tar xzf ${cmakepkg} -C .
+            for d in bin share
+            do
+                mkdir -p ${HOME}/cache/$d
+                if [ x"`uname -s`" != x"Linux" ]; then
+                    cp -rf ${cmakedir}/CMake.app/Contents/$d/* ${HOME}/cache/$d
+                else
+                    cp -rf ${cmakedir}/$d/* ${HOME}/cache/$d
+                fi
+            done
+            CMAKE_OK=1
+        fi
+        set -e
+    fi
+    # build cmake from source
+    if [ x$CMAKE_OK = x ]; then
+        rm -rf cmake
+        git clone https://cmake.org/cmake.git
+        cd cmake
+        git checkout --track -b release origin/release
+        ./configure --prefix=${HOME}/cache
+        make -j2
+        make install
+    fi
     echo $cmake > $verdir/cmake
     echo "cmake updated to $cmake"
 fi
@@ -126,7 +158,7 @@ if [ x${CC} = xgcc -a x${TRAVIS_OS_NAME} = xlinux ]; then
     else
         echo "gcc is out of date ($oldgcc != $gcc)... rebuilding"
         ${CC} --version
-        make gcc
+        make -j2 gcc
         echo $gcc > $verdir/gcc
         echo "gcc updated to $gcc"
         echo ${CC} --version
@@ -155,7 +187,7 @@ if [ x$oldmpich = x$mpich ]; then
     echo "mpich packages are ok ($mpich)"
 else
     echo "mpich packages are out of date ($oldmpich != $mpich)... rebuilding"
-    make mpich
+    make -j2 mpich
     echo $mpich > $verdir/mpich
     echo "mpich updated to $mpich"
 fi
