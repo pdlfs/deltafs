@@ -47,16 +47,22 @@ XXH32        6.8 GB/s            6.0 GB/s
 namespace pdlfs {
 
 /*
- * Can be used to generate a quick 32-bit or 64-bit integer id
- * from a variable-length string identifier.
+ * Can be used to fast map variable-length string identifiers to
+ * 32-bit or 64-bit integer numbers.
+ *
+ * Code is highly portable, and hashes are identical
+ * on all platforms (little or big endian).
+ *
+ * May also be used to do checksums.
  */
 
 // 32-bit version
-// NOTE: xxhash32(NULL, 0, 0) != 0;
+// NOTE: xxhash32(NULL, 0, 0) != 0
 extern uint32_t xxhash32(const void* data, size_t n, uint32_t seed);
 
 // 64-bit version
-// NOTE: xxhash64(NULL, 0, 0) != 0;
+// WARNING: runs slowly on 32-bit platforms
+// NOTE: xxhash64(NULL, 0, 0) != 0
 extern uint64_t xxhash64(const void* data, size_t n, uint64_t seed);
 
 }  // namespace pdlfs
