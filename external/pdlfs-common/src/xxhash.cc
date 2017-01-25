@@ -14,11 +14,11 @@
 namespace pdlfs {
 
 uint32_t xxhash32(const void* data, size_t n, uint32_t seed) {
-  return XXH32(data, n, seed);
+  return __pdlfs_XXH32(data, n, seed);
 }
 
 uint64_t xxhash64(const void* data, size_t n, uint64_t seed) {
-  return XXH64(data, n, seed);
+  return __pdlfs_XXH64(data, n, seed);
 }
 
 }  // namespace pdlfs

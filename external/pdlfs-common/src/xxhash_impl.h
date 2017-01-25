@@ -67,6 +67,8 @@ XXH32        6.8 GB/s            6.0 GB/s
 
 #pragma once
 
+#define XXH_NAMESPACE __pdlfs_
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
