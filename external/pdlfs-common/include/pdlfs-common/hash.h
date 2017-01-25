@@ -15,6 +15,13 @@
 
 namespace pdlfs {
 
+/*
+ * Simple hash function used by many of our internal data structures
+ * such as LRU caches and bloom filters.
+ *
+ * Current implementation uses a schema similar to
+ * the murmur hash.
+ */
 extern uint32_t Hash(const char* data, size_t n, uint32_t seed);
 
 }  // namespace pdlfs

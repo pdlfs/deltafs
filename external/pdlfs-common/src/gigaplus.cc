@@ -14,7 +14,7 @@
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/gigaplus.h"
-#include "xxhash.h"
+#include "pdlfs-common/xxhash.h"
 
 namespace pdlfs {
 
@@ -99,7 +99,7 @@ static inline int ToParentIndex(int index) {
 // Current implementation employs XXHash.
 // Alternatively, we could also use MurmurHash or CityHash.
 static inline void GIGAHash(const Slice& b, char* result) {
-  uint64_t h = XXH64(b.data(), b.size(), 0) - 17241709254077376921ULL;
+  uint64_t h = xxhash64(b.data(), b.size(), 0) - 17241709254077376921ULL;
   memcpy(result, &h, 8);
 }
 
@@ -608,12 +608,12 @@ DirIndex::~DirIndex() { delete rep_; }
 
 // Return a random server for a specified directory.
 int DirIndex::RandomServer(const Slice& dir, int seed) {
-  return XXH32(dir.data(), dir.size(), seed);
+  return xxhash32(dir.data(), dir.size(), seed);
 }
 
 // Return a pair of random servers for a specified directory.
 std::pair<int, int> DirIndex::RandomServers(const Slice& dir, int seed) {
-  uint64_t h = XXH64(dir.data(), dir.size(), seed);
+  uint64_t h = xxhash64(dir.data(), dir.size(), seed);
   char* tmp = reinterpret_cast<char*>(&h);
   int s1;
   int s2;

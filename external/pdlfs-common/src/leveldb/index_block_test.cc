@@ -16,8 +16,8 @@
 #include "pdlfs-common/leveldb/table_builder.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
+#include "pdlfs-common/xxhash.h"
 
-#include "../xxhash.h"
 #include "db/memtable.h"
 #include "format.h"
 #include "index_block.h"
@@ -297,7 +297,7 @@ static size_t GenerateRandomTable(MemTable* mem, Random* rnd,
   while (true) {
     uint64_t prefix = prefix_seed++;
     if (hash) {
-      prefix = XXH64(&prefix_seed, sizeof(uint64_t), 0);
+      prefix = xxhash64(&prefix_seed, sizeof(uint64_t), 0);
     }
     if (prefix_set.count(prefix) != 0) {
       continue;
@@ -312,7 +312,7 @@ static size_t GenerateRandomTable(MemTable* mem, Random* rnd,
     while (suffix_set.size() < num_suffixes) {
       uint64_t suffix = suffix_seed++;
       if (hash) {
-        suffix = XXH64(&suffix_seed, sizeof(uint64_t), 0);
+        suffix = xxhash64(&suffix_seed, sizeof(uint64_t), 0);
       }
       if (suffix_set.count(suffix) != 0) {
         continue;
