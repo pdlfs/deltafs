@@ -62,13 +62,17 @@ set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
      "${CMAKE_CURRENT_SOURCE_DIR}/external/pdlfs-common/cmake")
 
 #
-# we compile everything with -DDELTAFS.  we also set the common library's
-# name to deltafs-common (since we may add deltafs-specific code to it).
-# we request (but don't require) C++ 11 standard for possible performance
-# improvements due it its move semantics.
+# we compile everything with -DDELTAFS by attaching it as a property of
+# the common lib.  we also set the common library's name to deltafs-common
+# (since we may add deltafs-specific code to it)  we request (but don't
+# require) C++ 11 standard for possible performance improvements due it
+# its move semantics.
 #
-add_definitions (-DDELTAFS)
-set (PDLFS_COMMON_LIBNAME "deltafs-common")
+set (PDLFS_COMMON_LIBNAME "deltafs-common" CACHE
+     STRING "Custom name to install pdlfs-common with")
+set (PDLFS_COMMON_DEFINES "DELTAFS" CACHE
+     STRING "Additional defines for this version of pdlfs-common")
+mark_as_advanced (PDLFS_COMMON_LIBNAME PDLFS_COMMON_DEFINES)
 set (CMAKE_CXX_STANDARD 11)
 
 # pull in pdlfs handling of generic cmake config

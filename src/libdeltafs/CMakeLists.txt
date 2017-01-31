@@ -68,7 +68,7 @@ target_include_directories (deltafs PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../../include>
     $<INSTALL_INTERFACE:include>)
-target_link_libraries (deltafs pdlfs-common)
+target_link_libraries (deltafs deltafs-common)
 # special handling for MPI, where the config comes in via MPI_<lang>_ vars.
 # we only add to the build interface so that we don't put hardcoded paths
 # in the config files.
