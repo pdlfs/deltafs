@@ -13,11 +13,12 @@
 #
 # pdlfs-common config flags:
 #   -DPDLFS_PLATFORM=POSIX                 -- platform (currently only posix)
-#   -DPDLFS_TARGET_OS=Linux                -- name for the target os (when cross compile)
-#   -DPDLFS_TARGET_OS_VERSION=4.4.0        -- version for the target os (when cross compile)
+#   -DPDLFS_TARGET_OS=Linux                -- target os name (when cross compile)
+#   -DPDLFS_TARGET_OS_VERSION=4.4.0        -- target os vers. (when cross compile)
 #   -DPDLFS_HOST_OS=Linux                  -- the result of "uname -s" on host os
 #   -DPDLFS_HOST_OS_VERSION=4.4.0          -- the result of "uname -r" on host os
 #   -DPDLFS_COMMON_LIBNAME=pdlfs-common    -- name for binary lib files
+#   -DPDLFS_COMMON_DEFINES='D1;D2'         -- add -DD1/-DD2 to compile options
 #
 # pdlfs-common config compile time options flags:
 #   -DPDLFS_GFLAGS=ON                      -- use gflags for arg parsing
@@ -60,6 +61,11 @@ set (PDLFS_HOST_OS "${CMAKE_HOST_SYSTEM_NAME}" CACHE
      STRING "Select host os (uname -s)")
 set (PDLFS_HOST_OS_VERSION "${CMAKE_HOST_SYSTEM_VERSION}" CACHE
      STRING "Select host os version (uname -r)")
+set (PDLFS_COMMON_LIBNAME "pdlfs-common" CACHE
+     STRING "Custom name to install pdlfs-common with")
+set (PDLFS_COMMON_DEFINES "" CACHE
+     STRING "Additional defines for this version of pdlfs-common")
+
 set (PDLFS_GFLAGS "OFF" CACHE
      BOOL "Use GFLAGS (libgflags-dev) for arg parsing")
 set (PDLFS_GLOG "OFF" CACHE

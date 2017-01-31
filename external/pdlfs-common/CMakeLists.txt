@@ -30,6 +30,7 @@
 #   -DPDLFS_PLATFORM=POSIX                 -- platform (currently only posix)
 #   -DPDLFS_OS=Linux                       -- "uname -s" for target
 #   -DPDLFS_COMMON_LIBNAME=pdlfs-common    -- name for binary lib files
+#   -DPDLFS_COMMON_DEFINES='D1;D2'         -- add -DD1/-DD2 to compile options
 #
 # pdlfs-common config compile time options flags:
 #   -DPDLFS_GFLAGS=ON                      -- use gflags for arg parsing

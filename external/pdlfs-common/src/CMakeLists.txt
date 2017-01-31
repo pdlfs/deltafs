@@ -221,22 +221,24 @@ endforeach ()
 # get the correct -Is for our include directories.  (for building
 # we need a -I pointing to the build dir for the expanded *.h.in files)
 #
-add_library (pdlfs-common ${pdlfs-all-srcs})
-set_target_properties (pdlfs-common PROPERTIES OUTPUT_NAME "${PDLFS_NAME}")
-target_compile_definitions (pdlfs-common PUBLIC -DPDLFS_CONFIG=${PDLFS_NAME})
-target_include_directories (pdlfs-common PUBLIC
+add_library (${PDLFS_NAME} ${pdlfs-all-srcs})
+target_compile_definitions (${PDLFS_NAME} PUBLIC -DPDLFS_CONFIG=${PDLFS_NAME})
+foreach (lcv ${PDLFS_COMMON_DEFINES})
+    target_compile_definitions (${PDLFS_NAME} PUBLIC "-D${lcv}")
+endforeach ()
+target_include_directories (${PDLFS_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>
     $<INSTALL_INTERFACE:include>)
 if (CMAKE_THREAD_LIBS_INIT)
-  target_link_libraries (pdlfs-common "${CMAKE_THREAD_LIBS_INIT}")
+  target_link_libraries (${PDLFS_NAME} "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
 
-target_link_libraries (pdlfs-common ${pdlfs-xtra-libs})
+target_link_libraries (${PDLFS_NAME} ${pdlfs-xtra-libs})
 # XXX: for mercury
-target_include_directories (pdlfs-common PRIVATE ${pdlfs-xtra-incs})
+target_include_directories (${PDLFS_NAME} PRIVATE ${pdlfs-xtra-incs})
 
-set_target_properties(pdlfs-common
+set_target_properties(${PDLFS_NAME}
                       PROPERTIES VERSION ${PDLFS_COMMON_VERSION}
                       SOVERSION ${PDLFS_COMMON_VERSION_MAJOR})
 
@@ -249,7 +251,7 @@ set_target_properties(pdlfs-common
 # XXX: with newer compilers
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
     if (${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 4.4.4)
-        target_compile_options (pdlfs-common PRIVATE -fno-builtin-memcmp)
+        target_compile_options (${PDLFS_NAME} PRIVATE -fno-builtin-memcmp)
         message (STATUS "**** NOTE: adding -fno-builtin-memcmp for old gcc")
     endif ()
 endif ()
@@ -258,7 +260,7 @@ endif ()
 # "-pthread" should take care of all thread related options.
 # but if we don't have it, fall back to -D_REENTRANT
 if (NOT flag-pthread)
-    target_compile_definitions (pdlfs-common PUBLIC -D_REENTRANT)
+    target_compile_definitions (${PDLFS_NAME} PUBLIC -D_REENTRANT)
 endif ()
 
 # XXX: untested solaris, does it need "-mt"?
@@ -266,7 +268,7 @@ endif ()
 if (${PDLFS_OS_EDITED} STREQUAL "SOLARIS")
     CHECK_CXX_COMPILER_FLAG (-mt flag-mt)
     if (${flag-mt})
-        target_compile_options (pdlfs-common PUBLIC -mt)
+        target_compile_options (${PDLFS_NAME} PUBLIC -mt)
     endif ()
 endif ()
 
@@ -288,7 +290,7 @@ configure_file (pdlfs-common-config.cmake.in ${PDLFS_NAME}-config.cmake @ONLY)
 #
 # "make install" rules
 #
-install (TARGETS pdlfs-common EXPORT pdlfs-targets
+install (TARGETS ${PDLFS_NAME} EXPORT pdlfs-targets
          ARCHIVE DESTINATION lib
          LIBRARY DESTINATION lib)
 install (EXPORT pdlfs-targets
@@ -328,7 +330,7 @@ foreach (lcv ${pdlfs-all-tests})
     get_filename_component (id ${lcv} NAME_WE)
 
     add_executable (${id} EXCLUDE_FROM_ALL ${lcv})
-    target_link_libraries (${id} pdlfs-common)
+    target_link_libraries (${id} ${PDLFS_NAME})
     add_test (${id} ${id})
     add_dependencies (pdl-build-tests ${id})
 
