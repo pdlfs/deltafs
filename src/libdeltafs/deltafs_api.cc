@@ -9,23 +9,28 @@
 
 #include "deltafs/deltafs_api.h"
 
-#include <errno.h>
-#include <fcntl.h>
-
 #include "deltafs_client.h"
+#include "deltafs_plfsio.h"
+
+#include "pdlfs-common/coding.h"
 #include "pdlfs-common/dbfiles.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
+#include "pdlfs-common/xxhash.h"
+
+#include <errno.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <string>
 
 namespace pdlfs {
 extern void PrintSysInfo();
 }
 
-#ifdef __cplusplus
 extern "C" {
-#endif
-
 #ifndef EHOSTUNREACH
 #define EHOSTUNREACH ENODEV
 #endif
@@ -65,6 +70,10 @@ static void InitClient() {
 #endif
     }
   }
+}
+
+static pdlfs::Status BadArgs() {
+  return pdlfs::Status::InvalidArgument(pdlfs::Slice());
 }
 
 static void SetErrno(const pdlfs::Status& s) {
@@ -610,9 +619,106 @@ int deltafs_nonop() {
 }
 
 void deltafs_print_sysinfo() {
-  pdlfs::PrintSysInfo();  // Print to system logger
+  // Print to system logger, usually stderr or glog
+  pdlfs::PrintSysInfo();
 }
 
-#ifdef __cplusplus
+// -------------------------
+// deltafs plfsdir api
+// -------------------------
+namespace {
+
+typedef DELTAFS_PLFSDIR Dir;
+// Dir options
+typedef pdlfs::plfsio::Options Options;
+// Dir writer
+typedef pdlfs::plfsio::Writer Writer;
+
+static Options ParseOptions(const char* conf) {
+  Options options;
+  pdlfs::Slice input = conf;  // XXX: FIXME
+  if (input.starts_with("rank=")) {
+    input.remove_prefix(strlen("rank="));
+    options.rank = atoi(input.c_str());
+  }
+
+  options.key_size = 8;
+  return options;
 }
-#endif
+
+Dir* deltafs_plfsdir_create(const char* __name, const char* __conf) {
+  pdlfs::Status s;
+  Writer* writer = NULL;
+  s = Writer::Open(ParseOptions(__conf), __name, &writer);
+
+  if (s.ok()) {
+    assert(writer != NULL);
+    return reinterpret_cast<Dir*>(writer);
+  } else {
+    SetErrno(s);
+    return NULL;
+  }
+}
+
+int deltafs_plfsdir_append(Dir* __dir, const char* __fname, const void* __buf,
+                           size_t __sz) {
+  pdlfs::Status s;
+
+  if (__dir != NULL && __fname != NULL) {
+    char tmp[8];
+    uint64_t h = pdlfs::xxhash64(__fname, strlen(__fname), 0);
+    pdlfs::EncodeFixed64(tmp, h);
+    pdlfs::Slice k(tmp, sizeof(tmp));
+    s = reinterpret_cast<Writer*>(__dir)->Append(
+        k, pdlfs::Slice(reinterpret_cast<const char*>(__buf), __sz));
+  } else {
+    s = BadArgs();
+  }
+
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
+int deltafs_plfsdir_epoch_flush(Dir* __dir, void* __arg) {
+  pdlfs::Status s;
+
+  if (__dir != NULL) {
+    s = reinterpret_cast<Writer*>(__dir)->MakeEpoch();
+  } else {
+    s = BadArgs();
+  }
+
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
+int deltafs_plfsdir_close(Dir* __dir) {
+  pdlfs::Status s;
+
+  if (__dir != NULL) {
+    Writer* writer = reinterpret_cast<Writer*>(__dir);
+    s = writer->Finish();
+    delete writer;
+  } else {
+    s = BadArgs();
+  }
+
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
+}  // anonymous namespace
+
+}  // extern C
