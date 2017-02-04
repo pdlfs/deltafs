@@ -92,9 +92,11 @@ static pdlfs::MetadataServer* srv = NULL;
 
 #if defined(DELTAFS_MPI)
 static char procname[MPI_MAX_PROCESSOR_NAME];
-#if VERBOSE >= 1
+#if VERBOSE >= 1 && MPI_VERSION >= 3
 static char mpistr[MPI_MAX_LIBRARY_VERSION_STRING];
 #endif
+static int mpiver = 0;
+static int mpisubver = 0;
 static int nprocs = 1;
 static int rank = 0;
 #endif
@@ -144,6 +146,8 @@ int main(int argc, char* argv[]) {
     snprintf(tmp, sizeof(tmp), "%d", nprocs);
     setenv("DELTAFS_NumOfMetadataSrvs", tmp, 0);
 #if VERBOSE >= 1
+    MPI_Get_version(&mpiver, &mpisubver);
+#if MPI_VERSION >= 3
     MPI_Get_library_version(mpistr, &ignored_return);
     char* slashn = strchr(mpistr, '\n');
     if (slashn != NULL) {
@@ -153,18 +157,21 @@ int main(int argc, char* argv[]) {
     if (slashr != NULL) {
       *slashr = 0;
     }
-    pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.ver -> %s", mpistr);
+    pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.ver -> MPI %d.%d / %s", mpiver,
+                   mpisubver, mpistr);
+#else
+    pdlfs::Version(__LOG_ARGS__, 1, "mpi.ver -> MPI %d.%d", mpiver, mpisubver);
+#endif // MPI_VERSION
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.proc -> %s (hostname)", procname);
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.nprocs -> %d", nprocs);
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.rank -> %d", rank);
-#endif
-    // MPI no longer needed
-    MPI_Finalize();
+#endif // VERBOSE
+    MPI_Finalize();  // MPI no longer needed
   } else {
     pdlfs::Error(__LOG_ARGS__, "MPI init failed");
     abort();
   }
-#endif
+#endif // DELTAFS_MPI
   pdlfs::Info(__LOG_ARGS__, "Deltafs is initializing ...");
   pdlfs::Status s = pdlfs::MetadataServer::Open(&srv);
   if (s.ok()) {
