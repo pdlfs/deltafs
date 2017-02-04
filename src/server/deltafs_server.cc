@@ -160,7 +160,7 @@ int main(int argc, char* argv[]) {
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.ver -> MPI %d.%d / %s", mpiver,
                    mpisubver, mpistr);
 #else
-    pdlfs::Version(__LOG_ARGS__, 1, "mpi.ver -> MPI %d.%d", mpiver, mpisubver);
+    pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.ver -> MPI %d.%d", mpiver, mpisubver);
 #endif // MPI_VERSION
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.proc -> %s (hostname)", procname);
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.nprocs -> %d", nprocs);
