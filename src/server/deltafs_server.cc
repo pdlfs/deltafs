@@ -161,17 +161,17 @@ int main(int argc, char* argv[]) {
                    mpisubver, mpistr);
 #else
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.ver -> MPI %d.%d", mpiver, mpisubver);
-#endif // MPI_VERSION
+#endif  // MPI_VERSION
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.proc -> %s (hostname)", procname);
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.nprocs -> %d", nprocs);
     pdlfs::Verbose(__LOG_ARGS__, 1, "mpi.rank -> %d", rank);
-#endif // VERBOSE
+#endif               // VERBOSE
     MPI_Finalize();  // MPI no longer needed
   } else {
     pdlfs::Error(__LOG_ARGS__, "MPI init failed");
     abort();
   }
-#endif // DELTAFS_MPI
+#endif  // DELTAFS_MPI
   pdlfs::Info(__LOG_ARGS__, "Deltafs is initializing ...");
   pdlfs::Status s = pdlfs::MetadataServer::Open(&srv);
   if (s.ok()) {

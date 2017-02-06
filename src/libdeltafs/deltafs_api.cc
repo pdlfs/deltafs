@@ -636,6 +636,8 @@ typedef pdlfs::plfsio::Writer Writer;
 
 static Options ParseOptions(const char* conf) {
   Options options;
+  // Avoid double-buffering
+  pdlfs::Env* env = pdlfs::port::posix::GetUnBufferedIOEnv();
   pdlfs::Slice input = conf;  // XXX: FIXME
   if (input.starts_with("rank=")) {
     input.remove_prefix(strlen("rank="));
@@ -643,6 +645,11 @@ static Options ParseOptions(const char* conf) {
   }
 
   options.key_size = 8;
+  options.value_size = 40;
+  options.data_buffer = 8 << 20;
+  options.unique_keys = false;
+  options.env = env;
+
   return options;
 }
 
