@@ -19,10 +19,10 @@ foreach (lcv ${DELTAFS_REQUIRED_PACKAGES})
 endforeach ()
 
 # check for user requested components (which we map to linked in packages)
-foreach (comp ${DELTAFS_FIND_COMPONENTS})
+foreach (comp ${deltafs_FIND_COMPONENTS})
     if (NOT ";${DELTAFS_ALL_COMPONENTS};" MATCHES ";${comp};")
-        set(DELTAFS_FOUND False)
-        set(DELTAFS_NOT_FOUND_MESSAGE
+        set(deltafs_FOUND False)
+        set(deltafs_NOT_FOUND_MESSAGE
             "Specified unsupported component: ${comp}")
     endif()
 endforeach()
