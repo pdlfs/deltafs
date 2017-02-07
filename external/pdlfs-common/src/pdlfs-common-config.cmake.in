@@ -14,8 +14,13 @@ set (PDLFS_EXTRA_COMPONENTS "@PDLFS_EXTRA_COMPONENTS@")
 
 set (PDLFS_ALL_COMPONENTS ${PDLFS_REQUIRED_PACKAGES}
                           ${PDLFS_REQUIRED_XPKGIMPORTS}
-                          ${PDLFS_REQUIRED_XDUALIMPORTS}
                           ${PDLFS_EXTRA_COMPONENTS})
+
+# for xdual, we just want the target name so strip off the rest..
+foreach (lcv ${PDLFS_REQUIRED_XDUALIMPORTS})
+    string (REGEX REPLACE ",.*" "" dualtarget "${lcv}")
+    list (APPEND PDLFS_ALL_COMPONENTS "${dualtarget}")
+endforeach ()
 
 # adjust module path to make it easy to pick up files from the config directory
 set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_LIST_DIR}")
