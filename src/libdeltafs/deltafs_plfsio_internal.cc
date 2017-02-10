@@ -236,7 +236,8 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
   num_entries_++;
 }
 
-TableLogger::TableLogger(const Options& options, LogSink* data, LogSink* index)
+TableLogger::TableLogger(const DirOptions& options, LogSink* data,
+                         LogSink* index)
     : options_(options),
       data_block_(kDatBlkInt),
       index_block_(kDefInt),
@@ -479,7 +480,7 @@ Status TableLogger::Finish() {
   return status_;
 }
 
-PlfsIoLogger::PlfsIoLogger(const Options& options, port::Mutex* mu,
+PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
                            port::CondVar* cv, LogSink* data, LogSink* index)
     : options_(options),
       mutex_(mu),
@@ -776,7 +777,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
 }
 
 template <typename T>
-static Status ReadBlock(LogSource* file, const Options& options,
+static Status ReadBlock(LogSource* file, const DirOptions& options,
                         const T& handle, BlockContents* result,
                         bool has_checksums = true) {
   result->data = Slice();
@@ -1046,7 +1047,7 @@ Status PlfsIoReader::Gets(const Slice& key, std::string* dst) {
   return status;
 }
 
-PlfsIoReader::PlfsIoReader(const Options& o, LogSource* d, LogSource* i)
+PlfsIoReader::PlfsIoReader(const DirOptions& o, LogSource* d, LogSource* i)
     : options_(o),
       num_epoches_(0),
       epoch_iter_(NULL),
@@ -1065,7 +1066,7 @@ PlfsIoReader::~PlfsIoReader() {
   data_src_->Unref();
 }
 
-Status PlfsIoReader::Open(const Options& options, LogSource* data,
+Status PlfsIoReader::Open(const DirOptions& options, LogSource* data,
                           LogSource* index, PlfsIoReader** result) {
   *result = NULL;
   Status status;

@@ -16,8 +16,8 @@
 namespace pdlfs {
 namespace plfsio {
 
-struct Options {
-  Options();
+struct DirOptions {
+  DirOptions();
 
   // Total memory budget for the memory table.
   // Size includes both the raw table and the bloom filter
@@ -100,6 +100,9 @@ struct Options {
   Env* env;
 };
 
+// Parse a given configuration string to structured options.
+extern DirOptions ParseDirOptions(const char* cond);
+
 // Abstraction for a thread-unsafe and possibly-buffered
 // append-only log stream.
 class LogSink {
@@ -164,7 +167,7 @@ class LogSource {
 
 // Destroy the contents of the specified directory.
 // Be very careful using this method.
-extern Status DestroyDir(const std::string& dirname, const Options& options);
+extern Status DestroyDir(const std::string& dirname, const DirOptions& options);
 
 // Deltafs plfs-style N-1 I/O writer api.
 class Writer {
@@ -174,7 +177,7 @@ class Writer {
 
   // Open an I/O writer against a specified plfs-style directory.
   // Return OK on success, or a non-OK status on errors.
-  static Status Open(const Options& options, const std::string& dirname,
+  static Status Open(const DirOptions& options, const std::string& dirname,
                      Writer** result);
 
   // Append a piece of data to a specified file under a given plfs directory.
@@ -206,7 +209,7 @@ class Reader {
 
   // Open an I/O reader against a specific plfs-style directory.
   // Return OK on success, or a non-OK status on errors.
-  static Status Open(const Options& options, const std::string& dirname,
+  static Status Open(const DirOptions& options, const std::string& dirname,
                      Reader** result);
 
   // List files under a given plfs directory.  Not supported so far.

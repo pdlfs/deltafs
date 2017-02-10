@@ -410,7 +410,7 @@ static std::string ToPlfsDirName(const Fentry& fentry) {
 static Status OpenPlfsIoWriter(const Fentry& fentry, Env* env,
                                plfsio::Writer** result) {
   Status s;
-  plfsio::Options options;
+  plfsio::DirOptions options;
   options.rank = 0;                // FIXME
   options.compaction_pool = NULL;  // FIXME
   options.env = env;

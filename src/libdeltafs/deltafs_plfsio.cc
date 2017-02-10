@@ -23,7 +23,7 @@
 namespace pdlfs {
 namespace plfsio {
 
-Options::Options()
+DirOptions::DirOptions()
     : memtable_size(32 << 20),
       key_size(8),
       value_size(32),
@@ -95,7 +95,7 @@ static std::string DataFileName(const std::string& parent, int rank) {
 
 class WriterImpl : public Writer {
  public:
-  WriterImpl(const Options& options);
+  WriterImpl(const DirOptions& options);
   virtual ~WriterImpl();
 
   virtual Status Append(const Slice& fname, const Slice& data);
@@ -107,7 +107,7 @@ class WriterImpl : public Writer {
   void MaybeSlowdownCaller();
   friend class Writer;
 
-  const Options options_;
+  const DirOptions options_;
   port::Mutex mutex_;
   port::CondVar cond_var_;
   size_t num_parts_;
@@ -115,7 +115,7 @@ class WriterImpl : public Writer {
   PlfsIoLogger** io_;
 };
 
-WriterImpl::WriterImpl(const Options& options)
+WriterImpl::WriterImpl(const DirOptions& options)
     : options_(options),
       cond_var_(&mutex_),
       num_parts_(0),
@@ -239,8 +239,8 @@ Status WriterImpl::Sync() {
 
 Writer::~Writer() {}
 
-static Options SanitizeWriteOptions(const Options& options) {
-  Options result = options;
+static DirOptions SanitizeWriteOptions(const DirOptions& options) {
+  DirOptions result = options;
   if (result.env == NULL) result.env = Env::Default();
   if (result.lg_parts < 0) result.lg_parts = 0;
   if (result.lg_parts > 8) result.lg_parts = 8;
@@ -272,10 +272,10 @@ static Status NewLogSink(const std::string& name, Env* env, size_t buf_size,
   return status;
 }
 
-Status Writer::Open(const Options& opts, const std::string& name,
+Status Writer::Open(const DirOptions& opts, const std::string& name,
                     Writer** ptr) {
   *ptr = NULL;
-  Options options = SanitizeWriteOptions(opts);
+  DirOptions options = SanitizeWriteOptions(opts);
   const size_t num_parts = 1u << options.lg_parts;
   const int my_rank = options.rank;
   Env* const env = options.env;
@@ -352,7 +352,7 @@ Status Writer::Open(const Options& opts, const std::string& name,
 
 class ReaderImpl : public Reader {
  public:
-  ReaderImpl(const Options& options, const std::string& dirname,
+  ReaderImpl(const DirOptions& options, const std::string& dirname,
              LogSource* data);
   virtual ~ReaderImpl();
 
@@ -363,7 +363,7 @@ class ReaderImpl : public Reader {
  private:
   friend class Reader;
 
-  const Options options_;
+  const DirOptions options_;
   const std::string dirname_;
   port::Mutex mutex_;
   size_t num_parts_;
@@ -371,7 +371,7 @@ class ReaderImpl : public Reader {
   LogSource* data_;
 };
 
-ReaderImpl::ReaderImpl(const Options& options, const std::string& dirname,
+ReaderImpl::ReaderImpl(const DirOptions& options, const std::string& dirname,
                        LogSource* data)
     : options_(options),
       dirname_(dirname),
@@ -475,18 +475,18 @@ Status ReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
 
 Reader::~Reader() {}
 
-static Options SanitizeReadOptions(const Options& options) {
-  Options result = options;
+static DirOptions SanitizeReadOptions(const DirOptions& options) {
+  DirOptions result = options;
   if (result.env == NULL) {
     result.env = Env::Default();
   }
   return result;
 }
 
-Status Reader::Open(const Options& opts, const std::string& dirname,
+Status Reader::Open(const DirOptions& opts, const std::string& dirname,
                     Reader** ptr) {
   *ptr = NULL;
-  Options options = SanitizeReadOptions(opts);
+  DirOptions options = SanitizeReadOptions(opts);
   const size_t num_parts = 1u << options.lg_parts;
   const int my_rank = options.rank;
   Env* const env = options.env;
@@ -524,9 +524,9 @@ static Status DeleteLogStream(const std::string& fname, Env* env) {
   return env->DeleteFile(fname);
 }
 
-Status DestroyDir(const std::string& dirname, const Options& opts) {
+Status DestroyDir(const std::string& dirname, const DirOptions& opts) {
   Status status;
-  Options options = SanitizeReadOptions(opts);
+  DirOptions options = SanitizeReadOptions(opts);
   Env* const env = options.env;
 #if 0
   std::vector<std::string> names;

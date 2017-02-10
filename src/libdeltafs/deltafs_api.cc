@@ -630,7 +630,7 @@ namespace {
 
 typedef DELTAFS_PLFSDIR Dir;
 // Dir options
-typedef pdlfs::plfsio::Options Options;
+typedef pdlfs::plfsio::DirOptions Options;
 // Dir writer
 typedef pdlfs::plfsio::Writer Writer;
 

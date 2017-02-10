@@ -148,7 +148,7 @@ class PlfsIoTest {
     return tmp;
   }
 
-  Options options_;
+  DirOptions options_;
   std::string dirname_;
   Writer* writer_;
   Reader* reader_;

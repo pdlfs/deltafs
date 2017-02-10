@@ -49,7 +49,7 @@ class WriteBuffer {
 // Write table contents into a set of log files.
 class TableLogger {
  public:
-  TableLogger(const Options& options, LogSink* data, LogSink* index);
+  TableLogger(const DirOptions& options, LogSink* data, LogSink* index);
   ~TableLogger();
 
   bool ok() const { return status_.ok(); }
@@ -79,7 +79,7 @@ class TableLogger {
   void operator=(const TableLogger&);
   TableLogger(const TableLogger&);
 
-  const Options& options_;
+  const DirOptions& options_;
 
   Status status_;
   std::string smallest_key_;
@@ -103,7 +103,7 @@ class TableLogger {
 // Implementation is thread-safe and uses background threads.
 class PlfsIoLogger {
  public:
-  PlfsIoLogger(const Options& options, port::Mutex* mu, port::CondVar* cv,
+  PlfsIoLogger(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
                LogSink* data, LogSink* index);
   ~PlfsIoLogger();
 
@@ -124,7 +124,7 @@ class PlfsIoLogger {
   void DoCompaction();
 
   // Constant after construction
-  const Options& options_;
+  const DirOptions& options_;
   port::Mutex* const mutex_;
   port::CondVar* const bg_cv_;
   uint32_t entries_per_buf_;
@@ -148,11 +148,11 @@ class PlfsIoLogger {
 // Retrieve table contents from a set of indexed log files.
 class PlfsIoReader {
  public:
-  PlfsIoReader(const Options&, LogSource* data, LogSource* index);
+  PlfsIoReader(const DirOptions&, LogSource* data, LogSource* index);
   // Open a reader on top of a given set of log files.
   // Return OK on success, or a non-OK status on errors.
-  static Status Open(const Options& options, LogSource* data, LogSource* index,
-                     PlfsIoReader** result);
+  static Status Open(const DirOptions& options, LogSource* data,
+                     LogSource* index, PlfsIoReader** result);
 
   // Obtain the value to a key from all epoches.
   // All value found will be appended to "dst"
@@ -191,7 +191,7 @@ class PlfsIoReader {
   void operator=(const PlfsIoReader&);
   PlfsIoReader(const PlfsIoReader&);
   // Constant after construction
-  const Options& options_;
+  const DirOptions& options_;
   uint32_t num_epoches_;
 
   Iterator* epoch_iter_;
