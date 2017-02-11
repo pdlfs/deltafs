@@ -628,8 +628,6 @@ void deltafs_print_sysinfo() {
 // -------------------------
 namespace {
 
-typedef DELTAFS_PLFSDIR Dir;
-
 // Dir options
 typedef pdlfs::plfsio::DirOptions DirOptions;
 // Dir writer
@@ -647,22 +645,25 @@ static DirOptions ParseOptions(const char* conf) {
   return options;
 }
 
-Dir* deltafs_plfsdir_create(const char* __name, const char* __conf) {
+}  // namespace
+
+DELTAFS_PLFSDIR* deltafs_plfsdir_create(const char* __name,
+                                        const char* __conf) {
   pdlfs::Status s;
   Writer* writer = NULL;
   s = Writer::Open(ParseOptions(__conf), __name, &writer);
 
   if (s.ok()) {
     assert(writer != NULL);
-    return reinterpret_cast<Dir*>(writer);
+    return reinterpret_cast<DELTAFS_PLFSDIR*>(writer);
   } else {
     SetErrno(s);
     return NULL;
   }
 }
 
-int deltafs_plfsdir_append(Dir* __dir, const char* __fname, const void* __buf,
-                           size_t __sz) {
+int deltafs_plfsdir_append(DELTAFS_PLFSDIR* __dir, const char* __fname,
+                           const void* __buf, size_t __sz) {
   pdlfs::Status s;
 
   if (__dir != NULL && __fname != NULL) {
@@ -684,7 +685,7 @@ int deltafs_plfsdir_append(Dir* __dir, const char* __fname, const void* __buf,
   }
 }
 
-int deltafs_plfsdir_epoch_flush(Dir* __dir, void* __arg) {
+int deltafs_plfsdir_epoch_flush(DELTAFS_PLFSDIR* __dir, void* __arg) {
   pdlfs::Status s;
 
   if (__dir != NULL) {
@@ -701,7 +702,7 @@ int deltafs_plfsdir_epoch_flush(Dir* __dir, void* __arg) {
   }
 }
 
-int deltafs_plfsdir_close(Dir* __dir) {
+int deltafs_plfsdir_close(DELTAFS_PLFSDIR* __dir) {
   pdlfs::Status s;
 
   if (__dir != NULL) {
@@ -719,7 +720,5 @@ int deltafs_plfsdir_close(Dir* __dir) {
     return -1;
   }
 }
-
-}  // anonymous namespace
 
 }  // extern C
