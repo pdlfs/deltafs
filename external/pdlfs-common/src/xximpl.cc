@@ -127,7 +127,7 @@ static void* XXH_memcpy(void* dest, const void* src, size_t size) {
 }
 
 #define XXH_STATIC_LINKING_ONLY
-#include "xxhash_impl.h"
+#include "xximpl.h"
 
 /* *************************************
 *  Compiler Specific Options
