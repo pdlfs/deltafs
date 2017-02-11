@@ -43,7 +43,7 @@ extern bool ConsumeDecimalNumber(Slice* in, uint64_t* val);
 // Split a string into a list of substrings using a specified delimiter.
 // If max_splits is non-negative, the number of splits won't exceed it.
 // Return the size of the resulting array.
-extern size_t SplitString(std::vector<std::string>*, const Slice& value,
+extern size_t SplitString(std::vector<std::string>* result, const char* value,
                           char delim = ';', int max_splits = -1);
 
 // Parse a human-readable text to a long int value.

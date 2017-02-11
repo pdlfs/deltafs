@@ -247,7 +247,7 @@ void MetadataServer::Builder::LoadMDSTopology() {
 
   if (ok()) {
     std::string addrs = config::MetadataSrvAddrs();
-    size_t num_addrs = SplitString(&mdstopo_.srv_addrs, addrs, '&');
+    size_t num_addrs = SplitString(&mdstopo_.srv_addrs, addrs.c_str(), '&');
     if (num_addrs == 0) {
       std::string uri = GetLocalUri(srv_id_);
       if (uri.empty()) {

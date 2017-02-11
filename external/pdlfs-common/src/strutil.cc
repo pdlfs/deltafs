@@ -132,7 +132,7 @@ static Slice Trim(const Slice& v) {
   return input;
 }
 
-size_t SplitString(std::vector<std::string>* v, const Slice& value, char delim,
+size_t SplitString(std::vector<std::string>* v, const char* value, char delim,
                    int max_splits) {
   size_t count = 0;  // Number of resulting substrings
   int splits = 0;    // Number of split operations

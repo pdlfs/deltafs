@@ -26,10 +26,10 @@ namespace pdlfs {
 
 Fio::~Fio() {}
 
-static std::string FetchRoot(const Slice& conf_str) {
+static std::string FetchRoot(const char* input) {
   std::string root = "/tmp/deltafs_data";
   std::vector<std::string> confs;
-  SplitString(&confs, conf_str);
+  SplitString(&confs, input);
   for (size_t i = 0; i < confs.size(); i++) {
     Slice input = confs[i];
     if (input.size() != 0) {
@@ -58,7 +58,7 @@ Fio* Fio::Open(const Slice& fio_name, const Slice& fio_conf) {
 #endif
   if (fio_name == "posix") {
 #if defined(PDLFS_PLATFORM_POSIX)
-    return new PosixFio(FetchRoot(fio_conf));
+    return new PosixFio(FetchRoot(fio_conf.c_str()));
 #else
     return NULL;
 #endif

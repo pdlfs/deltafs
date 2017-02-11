@@ -1469,7 +1469,7 @@ void Client::Builder::LoadMDSTopology() {
 
   if (ok()) {
     std::string addrs = config::MetadataSrvAddrs();
-    size_t num_addrs = SplitString(&mdstopo_.srv_addrs, addrs, '&');
+    size_t num_addrs = SplitString(&mdstopo_.srv_addrs, addrs.c_str(), '&');
     if (num_addrs == 0) {
       for (size_t i = 0; i < num_srvs; i++) {
         std::string uri = TryObtainSrvUri(i);

@@ -304,10 +304,10 @@ int main(int argc, char* argv[]) {
   char tmp[4096];
   while (!shutting_down_requested) {
     Print(DELTAFS_PS1);
-    char* p = fgets(tmp, sizeof(tmp), stdin);
-    if (p != NULL) {
+    char* line = fgets(tmp, sizeof(tmp), stdin);
+    if (line != NULL) {
       std::vector<std::string> inputs;
-      size_t n = pdlfs::SplitString(&inputs, pdlfs::Slice(p), ' ');
+      size_t n = pdlfs::SplitString(&inputs, line, ' ');
       if (n != 0) {
         Exec(inputs);
       }

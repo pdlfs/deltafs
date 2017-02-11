@@ -102,12 +102,12 @@ static void LogDataPath(const std::string& path) {
 }
 
 static void ParseOptions(std::map<std::string, std::string>* map,
-                         const Slice& input) {
+                         const char* input) {
   std::vector<std::string> confs;
   size_t n = SplitString(&confs, input, ',');
   for (size_t i = 0; i < n; i++) {
     std::vector<std::string> pair;
-    SplitString(&pair, confs[i], '=');
+    SplitString(&pair, confs[i].c_str(), '=');
     if (pair.size() == 2) {
       (*map)[pair[0]] = pair[1];
     }
@@ -147,7 +147,7 @@ static Status ParseBool(const std::map<std::string, std::string>& options,
 Status Stor::Open(const std::string& conf, Stor** ptr) {
   *ptr = NULL;
   std::map<std::string, std::string> options;
-  ParseOptions(&options, conf);
+  ParseOptions(&options, conf.c_str());
 #if VERBOSE >= 1
   std::map<std::string, std::string>::iterator it;
   for (it = options.begin(); it != options.end(); ++it) {
