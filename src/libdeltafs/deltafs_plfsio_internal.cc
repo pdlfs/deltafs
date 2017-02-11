@@ -496,7 +496,17 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
   // Sanity checks
   assert(mu != NULL && cv != NULL);
 
-  // Determine the right table size and bloom filter size
+  // Determine the right table size and bloom filter size.
+  // Works best when the key and value sizes are fixed.
+  //
+  // Otherwise, if the estimated key or value sizes are greater
+  // than the real average, filter will be allocated with less bytes
+  // and there will be higher false positive rate.
+  //
+  // On the other hand, if the estimated sizes are less than
+  // the real, filter will waste memory and each
+  // write buffer will be allocated with
+  // less memory.
   size_t bytes_per_entry =
       VarintLength(options_.key_size) + VarintLength(options_.value_size);
   bytes_per_entry += options.key_size + options.value_size;
@@ -511,18 +521,22 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
   buffer_size_ = entries_per_buf_ * bytes_per_entry;
   // Compute bloom filter size (in both bits and bytes)
   bf_bits_ = entries_per_buf_ * options.bf_bits_per_key;
-  // For small n, we can see a very high false positive rate.  Fix it
-  // by enforcing a minimum bloom filter length.
+  // For small n, we can see a very high false positive rate.
+  // Fix it by enforcing a minimum bloom filter length.
   if (bf_bits_ > 0 && bf_bits_ < 64) {
     bf_bits_ = 64;
   }
+
   bf_bytes_ = (bf_bits_ + 7) / 8;
   bf_bits_ = bf_bytes_ * 8;
 
 #if VERBOSE >= 2
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.num_parts -> %d",
+          int(1 << options.lg_parts));
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.bufs_per_parts -> %d", 2);
   Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.entries_per_buf -> %d",
           int(entries_per_buf_));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.buffer_size -> %s",
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.buf_size -> %s",
           PrettySize(buffer_size_).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.bf_size -> %s",
           PrettySize(bf_bytes_).c_str());
@@ -714,14 +728,14 @@ void PlfsIoLogger::CompactWriteBuffer() {
   const size_t bf_bytes = bf_bytes_;
   mutex_->Unlock();
 #if VERBOSE >= 3
-  static unsigned long long seq = 0;
-  Verbose(__LOG_ARGS__, 3, "Compacting #%llu (epoch_flush=%d, finish=%d) ...",
-          ++seq, int(is_epoch_flush), int(is_finish));
+  Verbose(__LOG_ARGS__, 3,
+          "Compacting write buffer (epoch_flush=%d, finish=%d) ...",
+          int(is_epoch_flush), int(is_finish));
+  unsigned long long start = Env::Default()->NowMicros();
   unsigned long long size = 0;
   unsigned num_keys = 0;
 #endif
 
-  const uint64_t start = Env::Default()->NowMicros();
   BloomBlock* bloom_filter = NULL;
   if (bf_bits_per_key != 0 && bf_bytes != 0) {
     bloom_filter = new BloomBlock(bf_bits_per_key, bf_bytes);
@@ -753,11 +767,14 @@ void PlfsIoLogger::CompactWriteBuffer() {
     dest->Finish();
   }
 
-  uint64_t end = Env::Default()->NowMicros();
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3,
-          "Compacted #%llu: %llu bytes (%u records, %llu microsecs) %s", seq,
-          size, num_keys, static_cast<unsigned long long>(end - start),
+  unsigned long long end = Env::Default()->NowMicros();
+  if (num_keys != 0) {
+    Verbose(__LOG_ARGS__, 3, "Level-0 table: %llu bytes (%u records) %s", size,
+            num_keys, dest->status().ToString().c_str());
+  }
+
+  Verbose(__LOG_ARGS__, 3, "Compaction done (%llu us) %s", end - start,
           dest->status().ToString().c_str());
 #endif
 
