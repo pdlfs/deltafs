@@ -36,6 +36,7 @@ namespace pdlfs {
 // |MurmurHash3_x86_128  | 2684 mb/sec|
 // |MurmurHash3_x64_128  | 5058 mb/sec|
 //
-void murmur_x64_128(const void* key, int len, uint32_t seed, void* out);
+void murmur_x64_128(const void* key, const int len, const uint32_t seed,
+                    void* out);
 
 }  // namespace pdlfs

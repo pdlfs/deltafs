@@ -15,9 +15,9 @@
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/dbfiles.h"
 #include "pdlfs-common/logging.h"
+#include "pdlfs-common/murmur.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
-#include "pdlfs-common/xxhash.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -640,7 +640,8 @@ static inline pdlfs::Env* DirEnv() {
 
 static DirOptions ParseOptions(const char* conf) {
   DirOptions options = pdlfs::plfsio::ParseDirOptions(conf);
-  options.compaction_pool = NULL;
+  options.key_size = 10;
+  options.bf_bits_per_key = 10;
   options.env = DirEnv();
   return options;
 }
@@ -667,10 +668,9 @@ int deltafs_plfsdir_append(DELTAFS_PLFSDIR* __dir, const char* __fname,
   pdlfs::Status s;
 
   if (__dir != NULL && __fname != NULL) {
-    char tmp[8];
-    uint64_t h = pdlfs::xxhash64(__fname, strlen(__fname), 0);
-    pdlfs::EncodeFixed64(tmp, h);
-    pdlfs::Slice k(tmp, sizeof(tmp));
+    char tmp[16];
+    pdlfs::murmur_x64_128(__fname, strlen(__fname), 0, tmp);
+    pdlfs::Slice k(tmp, 10);
     s = reinterpret_cast<Writer*>(__dir)->Append(
         k, pdlfs::Slice(reinterpret_cast<const char*>(__buf), __sz));
   } else {
