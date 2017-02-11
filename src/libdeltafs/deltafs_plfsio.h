@@ -101,7 +101,7 @@ struct DirOptions {
 };
 
 // Parse a given configuration string to structured options.
-extern DirOptions ParseDirOptions(const char* cond);
+extern DirOptions ParseDirOptions(const char* conf);
 
 // Abstraction for a thread-unsafe and possibly-buffered
 // append-only log stream.

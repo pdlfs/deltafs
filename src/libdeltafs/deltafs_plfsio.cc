@@ -41,6 +41,54 @@ DirOptions::DirOptions()
       rank(0),
       env(NULL) {}
 
+DirOptions ParseDirOptions(const char* input) {
+  DirOptions options;
+  std::vector<std::string> confs;
+  size_t n = SplitString(&confs, input, '&');  // k1=v1 & k2=v2 & k3=v3
+  for (size_t i = 0; i < n; i++) {
+    std::vector<std::string> pairs;
+    SplitString(&pairs, confs[i].c_str(), '=', 1);
+    if (pairs.size() == 2) {
+      // XXX: parse more configurations
+      if (pairs[0] == "memtable_size") {
+        uint64_t val;
+        if (ParsePrettyNumber(pairs[1], &val)) {
+          options.memtable_size = val;
+        }
+      } else if (pairs[0] == "data_buffer") {
+        uint64_t val;
+        if (ParsePrettyNumber(pairs[1], &val)) {
+          options.data_buffer = val;
+        }
+      } else if (pairs[0] == "index_buffer") {
+        uint64_t val;
+        if (ParsePrettyNumber(pairs[1], &val)) {
+          options.index_buffer = val;
+        }
+      } else if (pairs[0] == "unique_keys") {
+        bool val;
+        if (ParsePrettyBool(pairs[1], &val)) {
+          options.unique_keys = val;
+        }
+      } else if (pairs[0] == "lg_parts") {
+        Slice s = pairs[1];
+        uint64_t val;
+        if (ConsumeDecimalNumber(&s, &val)) {
+          options.lg_parts = int(val);
+        }
+      } else if (pairs[0] == "rank") {
+        Slice s = pairs[1];
+        uint64_t val;
+        if (ConsumeDecimalNumber(&s, &val)) {
+          options.rank = int(val);
+        }
+      }
+    }
+  }
+
+  return options;
+}
+
 static const int kMaxNumProcesses = 100000000;  // 100 million
 
 void LogSink::Unref() {

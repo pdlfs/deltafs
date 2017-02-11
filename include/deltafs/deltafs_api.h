@@ -63,7 +63,7 @@ int deltafs_fdatasync(int __fd);
 int deltafs_close(int __fd);
 
 // ------------------------
-// light-weight plfsdir api
+// Light-weight plfsdir api
 // ------------------------
 
 typedef struct __deltafs_plfsdir {

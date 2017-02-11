@@ -624,32 +624,26 @@ void deltafs_print_sysinfo() {
 }
 
 // -------------------------
-// deltafs plfsdir api
+// Light-weight plfsdir api
 // -------------------------
 namespace {
 
 typedef DELTAFS_PLFSDIR Dir;
+
 // Dir options
-typedef pdlfs::plfsio::DirOptions Options;
+typedef pdlfs::plfsio::DirOptions DirOptions;
 // Dir writer
 typedef pdlfs::plfsio::Writer Writer;
 
-static Options ParseOptions(const char* conf) {
-  Options options;
+static inline pdlfs::Env* DirEnv() {
   // Avoid double-buffering
-  pdlfs::Env* env = pdlfs::port::posix::GetUnBufferedIOEnv();
-  pdlfs::Slice input = conf;  // XXX: FIXME
-  if (input.starts_with("rank=")) {
-    input.remove_prefix(strlen("rank="));
-    options.rank = atoi(input.c_str());
-  }
+  return pdlfs::port::posix::GetUnBufferedIOEnv();
+}
 
-  options.key_size = 8;
-  options.value_size = 40;
-  options.data_buffer = 8 << 20;
-  options.unique_keys = false;
-  options.env = env;
-
+static DirOptions ParseOptions(const char* conf) {
+  DirOptions options = pdlfs::plfsio::ParseDirOptions(conf);
+  options.compaction_pool = NULL;
+  options.env = DirEnv();
   return options;
 }
 
