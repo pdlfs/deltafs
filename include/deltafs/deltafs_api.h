@@ -87,6 +87,7 @@ int deltafs_plfsdir_write_stat(DELTAFS_PLFSDIR* __dir,
 int deltafs_plfsdir_append(DELTAFS_PLFSDIR* __dir, const char* __fname,
                            const void* __buf, size_t __sz);
 int deltafs_plfsdir_epoch_flush(DELTAFS_PLFSDIR* __dir, void* __arg);
+int deltafs_plfsdir_finish(DELTAFS_PLFSDIR* __dir);
 int deltafs_plfsdir_close(DELTAFS_PLFSDIR* __dir);
 
 #ifdef __cplusplus

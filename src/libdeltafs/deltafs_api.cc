@@ -725,13 +725,28 @@ int deltafs_plfsdir_epoch_flush(DELTAFS_PLFSDIR* __dir, void* __arg) {
   }
 }
 
+int deltafs_plfsdir_finish(DELTAFS_PLFSDIR* __dir) {
+  pdlfs::Status s;
+
+  if (__dir != NULL) {
+    s = reinterpret_cast<Writer*>(__dir)->Finish();
+  } else {
+    s = BadArgs();
+  }
+
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
 int deltafs_plfsdir_close(DELTAFS_PLFSDIR* __dir) {
   pdlfs::Status s;
 
   if (__dir != NULL) {
-    Writer* writer = reinterpret_cast<Writer*>(__dir);
-    s = writer->Finish();
-    delete writer;
+    delete reinterpret_cast<Writer*>(__dir);
   } else {
     s = BadArgs();
   }

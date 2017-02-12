@@ -47,11 +47,11 @@ DirOptions ParseDirOptions(const char* input) {
   DirOptions options;
   std::vector<std::string> confs;
   size_t n = SplitString(&confs, input, '&');  // k1=v1 & k2=v2 & k3=v3
+  std::vector<std::string> pairs;
   for (size_t i = 0; i < n; i++) {
-    std::vector<std::string> pairs;
+    pairs.resize(0);  // XXX: parse more configurations
     SplitString(&pairs, confs[i].c_str(), '=', 1);
     if (pairs.size() == 2) {
-      // XXX: parse more configurations
       if (pairs[0] == "memtable_size") {
         uint64_t val;
         if (ParsePrettyNumber(pairs[1], &val)) {
