@@ -148,6 +148,23 @@ class PlfsIoTest {
     return tmp;
   }
 
+  void Stats() {
+    char tmp[100];
+    const DirStats* stats = NULL;
+    if (writer_ != NULL) {
+      stats = writer_->stats();
+    }
+    if (stats != NULL) {
+      snprintf(tmp, sizeof(tmp),
+               "write_micros=%llu us, data_size=%llu bytes, "
+               "index_size=%llu bytes",
+               static_cast<unsigned long long>(stats->write_micros),
+               static_cast<unsigned long long>(stats->data_size),
+               static_cast<unsigned long long>(stats->index_size));
+      fprintf(stderr, "%s\n", tmp);
+    }
+  }
+
   DirOptions options_;
   std::string dirname_;
   Writer* writer_;
@@ -156,6 +173,7 @@ class PlfsIoTest {
 
 TEST(PlfsIoTest, Empty0) {
   MakeEpoch();
+  Stats();
   std::string val = Read("non-exists");
   ASSERT_TRUE(val.empty());
 }
@@ -168,6 +186,7 @@ TEST(PlfsIoTest, SingleEpoch0) {
   Write("k5", "v5");
   Write("k6", "v6");
   MakeEpoch();
+  Stats();
   ASSERT_EQ(Read("k1"), "v1");
   ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2");
@@ -185,12 +204,15 @@ TEST(PlfsIoTest, MultiEpoch0) {
   Write("k1", "v1");
   Write("k2", "v2");
   MakeEpoch();
+  Stats();
   Write("k1", "v3");
   Write("k2", "v4");
   MakeEpoch();
+  Stats();
   Write("k1", "v5");
   Write("k2", "v6");
   MakeEpoch();
+  Stats();
   ASSERT_EQ(Read("k1"), "v1v3v5");
   ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2v4v6");
@@ -201,12 +223,15 @@ TEST(PlfsIoTest, NoFilter0) {
   Write("k1", "v1");
   Write("k2", "v2");
   MakeEpoch();
+  Stats();
   Write("k3", "v3");
   Write("k4", "v4");
   MakeEpoch();
+  Stats();
   Write("k5", "v5");
   Write("k6", "v6");
   MakeEpoch();
+  Stats();
   ASSERT_EQ(Read("k1"), "v1");
   ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2");
@@ -225,15 +250,20 @@ TEST(PlfsIoTest, NoUniKeys0) {
   Write("k1", "v1");
   Write("k1", "v2");
   MakeEpoch();
+  Stats();
   Write("k0", "v3");
   Write("k1", "v4");
   Write("k1", "v5");
   MakeEpoch();
+  Stats();
   Write("k1", "v6");
   Write("k1", "v7");
   Write("k5", "v8");
   MakeEpoch();
+  Stats();
   Write("k1", "v9");
+  MakeEpoch();
+  Stats();
   ASSERT_EQ(Read("k1"), "v1v2v4v5v6v7v9");
 }
 

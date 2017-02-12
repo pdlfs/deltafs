@@ -189,6 +189,9 @@ class Writer {
   Writer() {}
   virtual ~Writer();
 
+  // Return a pointer to dir stats.
+  virtual const DirStats* stats() const = 0;
+
   // Open an I/O writer against a specified plfs-style directory.
   // Return OK on success, or a non-OK status on errors.
   static Status Open(const DirOptions& options, const std::string& dirname,

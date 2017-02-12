@@ -148,6 +148,7 @@ class WriterImpl : public Writer {
   WriterImpl(const DirOptions& options);
   virtual ~WriterImpl();
 
+  virtual const DirStats* stats() const { return &stats_; }
   virtual Status Append(const Slice& fname, const Slice& data);
   virtual Status Sync();
   virtual Status MakeEpoch();
