@@ -23,6 +23,8 @@
 namespace pdlfs {
 namespace plfsio {
 
+DirStats::DirStats() : write_micros(0), data_size(0), index_size(0) {}
+
 DirOptions::DirOptions()
     : memtable_size(32 << 20),
       key_size(8),
@@ -155,6 +157,7 @@ class WriterImpl : public Writer {
   void MaybeSlowdownCaller();
   friend class Writer;
 
+  DirStats stats_;
   const DirOptions options_;
   port::Mutex mutex_;
   port::CondVar cond_var_;
@@ -370,11 +373,10 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
   }
 
   if (status.ok()) {
-    port::Mutex* const mu = &impl->mutex_;
-    port::CondVar* const cv = &impl->cond_var_;
     PlfsIoLogger** io = new PlfsIoLogger*[num_parts];
-    for (size_t part = 0; part < num_parts; part++) {
-      io[part] = new PlfsIoLogger(impl->options_, mu, cv, data[0], index[part]);
+    for (size_t i = 0; i < num_parts; i++) {
+      io[i] = new PlfsIoLogger(impl->options_, &impl->mutex_, &impl->cond_var_,
+                               data[0], index[i], &impl->stats_);
     }
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;

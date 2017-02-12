@@ -481,13 +481,17 @@ Status TableLogger::Finish() {
 }
 
 PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
-                           port::CondVar* cv, LogSink* data, LogSink* index)
+                           port::CondVar* cv, LogSink* data, LogSink* index,
+                           DirStats* stats)
     : options_(options),
       mutex_(mu),
       bg_cv_(cv),
       has_bg_compaction_(false),
       pending_epoch_flush_(false),
       pending_finish_(false),
+      data_(data),
+      index_(index),
+      stats_(stats),
       table_logger_(options, data, index),
       mem_buf_(NULL),
       imm_buf_(NULL),
@@ -724,13 +728,16 @@ void PlfsIoLogger::CompactWriteBuffer() {
   TableLogger* const dest = &table_logger_;
   const size_t bf_bits_per_key = options_.bf_bits_per_key;
   const size_t bf_bytes = bf_bytes_;
+  uint64_t data_offset = data_->Ltell();
+  uint64_t index_offset = index_->Ltell();
   mutex_->Unlock();
+  uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3,
           "Compacting write buffer (epoch_flush=%d, finish=%d) ...",
           int(is_epoch_flush), int(is_finish));
-  unsigned long long start = Env::Default()->NowMicros();
-  unsigned long long size = 0;
+  unsigned long long key_size = 0;
+  unsigned long long val_size = 0;
   unsigned num_keys = 0;
 #endif
 
@@ -742,8 +749,8 @@ void PlfsIoLogger::CompactWriteBuffer() {
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {
 #if VERBOSE >= 2
-    size += iter->value().size();
-    size += iter->key().size();
+    val_size += iter->value().size();
+    key_size += iter->key().size();
     num_keys++;
 #endif
     if (bloom_filter != NULL) {
@@ -765,20 +772,26 @@ void PlfsIoLogger::CompactWriteBuffer() {
     dest->Finish();
   }
 
+  uint64_t end = Env::Default()->NowMicros();
+
 #if VERBOSE >= 3
-  unsigned long long end = Env::Default()->NowMicros();
   if (num_keys != 0 && dest->ok()) {
-    Verbose(__LOG_ARGS__, 3, "Level-0 table: %s (%u records)",
-            PrettySize(size).c_str(), num_keys);
+    Verbose(__LOG_ARGS__, 3, "Level-0 table: %u records (%s keys, %s values)",
+            num_keys, PrettySize(key_size).c_str(),
+            PrettySize(val_size).c_str());
   }
 
-  Verbose(__LOG_ARGS__, 3, "Compaction done (%llu us) %s", end - start,
+  Verbose(__LOG_ARGS__, 3, "Compaction done (%llu us) %s",
+          static_cast<unsigned long long>(end - start),
           dest->status().ToString().c_str());
 #endif
 
   delete iter;
   delete bloom_filter;
   mutex_->Lock();
+  stats_->data_size += data_->Ltell() - data_offset;
+  stats_->index_size += index_->Ltell() - index_offset;
+  stats_->write_micros += end - start;
   if (is_epoch_flush) {
     if (pending_epoch_flush) {
       pending_epoch_flush_ = false;

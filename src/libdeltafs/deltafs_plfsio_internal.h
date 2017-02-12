@@ -104,7 +104,7 @@ class TableLogger {
 class PlfsIoLogger {
  public:
   PlfsIoLogger(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
-               LogSink* data, LogSink* index);
+               LogSink* data, LogSink* index, DirStats* stats);
   ~PlfsIoLogger();
 
   // REQUIRES: mutex_ has been locked
@@ -133,6 +133,9 @@ class PlfsIoLogger {
   size_t bf_bits_;
 
   // State below is protected by mutex_
+  LogSink* data_;
+  LogSink* index_;
+  DirStats* stats_;
   bool has_bg_compaction_;
   bool pending_epoch_flush_;
   bool pending_finish_;

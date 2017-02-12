@@ -10,11 +10,25 @@
  */
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "pdlfs-common/env.h"
 
 namespace pdlfs {
 namespace plfsio {
+
+struct DirStats {
+  DirStats();
+
+  // Total physical bytes written to the data log.
+  uint64_t data_size;
+
+  // Total physical bytes written to the index log.
+  uint64_t index_size;
+
+  // Total time spent on compaction.
+  uint64_t write_micros;
+};
 
 struct DirOptions {
   DirOptions();
