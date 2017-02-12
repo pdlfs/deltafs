@@ -23,7 +23,7 @@
 namespace pdlfs {
 namespace plfsio {
 
-DirStats::DirStats() : write_micros(0), data_size(0), index_size(0) {}
+DirStats::DirStats() : data_size(0), index_size(0), write_micros(0) {}
 
 DirOptions::DirOptions()
     : memtable_size(32 << 20),
