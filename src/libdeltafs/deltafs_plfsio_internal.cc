@@ -532,10 +532,11 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
 
 #if VERBOSE >= 2
   int num_bufs = int(1 << options.lg_parts) * 2;
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.num_bufs -> %d", num_bufs);
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.buf_size -> %d x %s", num_bufs,
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.total_size -> %s",
+          PrettySize(options_.memtable_size).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.buf_size -> %d X %s", num_bufs,
           PrettySize(buf_size_).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.bf_size -> %d x %s", num_bufs,
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.bf_size -> %d X %s", num_bufs,
           PrettySize(bf_bytes_).c_str());
 #endif
 
