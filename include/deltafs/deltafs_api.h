@@ -9,6 +9,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include <stdint.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -66,15 +67,23 @@ int deltafs_close(int __fd);
 // Light-weight plfsdir api
 // ------------------------
 
-typedef struct __deltafs_plfsdir {
-} __deltafs_plfsdir_t;  // XXX: opaque handle for an opened plfsdir
-#define DELTAFS_PLFSDIR __deltafs_plfsdir_t
+typedef struct deltafs_plfsdir_stat {
+  uint64_t ds_wtim;  // total time spent on compaction (us)
+  off_t ds_isz;      // total index written (bytes)
+  off_t ds_dsz;      // total data written (bytes)
+} deltafs_plfsdir_stat_t;
+
+typedef struct deltafs_plfsdir {
+} deltafs_plfsdir_t;  // XXX: opaque handle for an opened plfsdir
+#define DELTAFS_PLFSDIR deltafs_plfsdir_t
 // Create an empty plfsdir dataset at a named location on the underlying storage
 // system. Use the conf string to alter the default behavior of this dataset.
 // The returned instance should be deleted by deltafs_plfsdir_close()
 // when it is no longer needed and ready to be closed.
 // Return NULL on errors, and a non-NULL pointer on success.
 DELTAFS_PLFSDIR* deltafs_plfsdir_create(const char* __name, const char* __conf);
+int deltafs_plfsdir_write_stat(DELTAFS_PLFSDIR* __dir,
+                               struct deltafs_plfsdir_stat* __statbuf);
 int deltafs_plfsdir_append(DELTAFS_PLFSDIR* __dir, const char* __fname,
                            const void* __buf, size_t __sz);
 int deltafs_plfsdir_epoch_flush(DELTAFS_PLFSDIR* __dir, void* __arg);

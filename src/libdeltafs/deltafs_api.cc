@@ -628,6 +628,8 @@ void deltafs_print_sysinfo() {
 // -------------------------
 namespace {
 
+// Dir stats
+typedef pdlfs::plfsio::DirStats DirStats;
 // Dir options
 typedef pdlfs::plfsio::DirOptions DirOptions;
 // Dir writer
@@ -660,6 +662,27 @@ DELTAFS_PLFSDIR* deltafs_plfsdir_create(const char* __name,
   } else {
     SetErrno(s);
     return NULL;
+  }
+}
+
+int deltafs_plfsdir_write_stat(DELTAFS_PLFSDIR* __dir,
+                               struct deltafs_plfsdir_stat* __statbuf) {
+  pdlfs::Status s;
+
+  if (__dir != NULL && __statbuf != NULL) {
+    const DirStats* stats = reinterpret_cast<Writer*>(__dir)->stats();
+    __statbuf->ds_wtim = stats->write_micros;
+    __statbuf->ds_isz = stats->index_size;
+    __statbuf->ds_dsz = stats->data_size;
+  } else {
+    s = BadArgs();
+  }
+
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
   }
 }
 
