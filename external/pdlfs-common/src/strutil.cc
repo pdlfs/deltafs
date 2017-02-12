@@ -163,19 +163,22 @@ size_t SplitString(std::vector<std::string>* v, const char* value, char delim,
 }
 
 std::string PrettySize(uint64_t input) {
-  char p[100];
+  char tmp[100];
   const unsigned long long n = static_cast<unsigned long long>(input);
   if (n >= 1024LLU * 1024LLU * 1024LLU) {
-    snprintf(p, sizeof(p), "%lluGB (%llu Bytes)", n / 1024 / 1024 / 1024, n);
+    double m = double(n) / 1024 / 1024 / 1024;
+    snprintf(tmp, sizeof(tmp), "%.1fGB (%llu Bytes)", m, n);
   } else if (n >= 1024LLU * 1024LLU) {
-    snprintf(p, sizeof(p), "%lluMB (%llu Bytes)", n / 1024 / 1024, n);
+    double m = double(n) / 1024 / 1024;
+    snprintf(tmp, sizeof(tmp), "%.1fMB (%llu Bytes)", m, n);
   } else if (n >= 1024LLU) {
-    snprintf(p, sizeof(p), "%lluK (%llu Bytes)", n / 1024, n);
+    double m = double(n) / 1024;
+    snprintf(tmp, sizeof(tmp), "%.1fKB (%llu Bytes)", m, n);
   } else {
-    snprintf(p, sizeof(p), "%llu Bytes", n);
+    snprintf(tmp, sizeof(tmp), "%llu Bytes", n);
   }
 
-  return p;
+  return tmp;
 }
 
 }  // namespace pdlfs

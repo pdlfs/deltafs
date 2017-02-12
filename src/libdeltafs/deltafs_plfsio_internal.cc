@@ -518,7 +518,7 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
 
   entries_per_buf_ /= 2;  // Due to double buffering
 
-  buffer_size_ = entries_per_buf_ * bytes_per_entry;
+  buf_size_ = entries_per_buf_ * bytes_per_entry;
   // Compute bloom filter size (in both bits and bytes)
   bf_bits_ = entries_per_buf_ * options.bf_bits_per_key;
   // For small n, we can see a very high false positive rate.
@@ -531,20 +531,17 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
   bf_bits_ = bf_bytes_ * 8;
 
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.num_parts -> %d",
-          int(1 << options.lg_parts));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.bufs_per_parts -> %d", 2);
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.entries_per_buf -> %d",
-          int(entries_per_buf_));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.buf_size -> %s",
-          PrettySize(buffer_size_).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.bf_size -> %s",
+  int num_bufs = int(1 << options.lg_parts) * 2;
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.num_bufs -> %d", num_bufs);
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.buf_size -> %d x %s", num_bufs,
+          PrettySize(buf_size_).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.bf_size -> %d x %s", num_bufs,
           PrettySize(bf_bytes_).c_str());
 #endif
 
   // Allocate memory
-  buf0_.Reserve(entries_per_buf_, buffer_size_);
-  buf1_.Reserve(entries_per_buf_, buffer_size_);
+  buf0_.Reserve(entries_per_buf_, buf_size_);
+  buf1_.Reserve(entries_per_buf_, buf_size_);
 
   mem_buf_ = &buf0_;
 }
@@ -643,7 +640,7 @@ Status PlfsIoLogger::Prepare(bool flush, bool finish) {
     if (!table_logger_.ok()) {
       status = table_logger_.status();
       break;
-    } else if (!flush && mem_buf_->CurrentBufferSize() < buffer_size_) {
+    } else if (!flush && mem_buf_->CurrentBufferSize() < buf_size_) {
       // There is room in current write buffer
       break;
     } else if (imm_buf_ != NULL) {
@@ -769,9 +766,9 @@ void PlfsIoLogger::CompactWriteBuffer() {
 
 #if VERBOSE >= 3
   unsigned long long end = Env::Default()->NowMicros();
-  if (num_keys != 0) {
-    Verbose(__LOG_ARGS__, 3, "Level-0 table: %llu bytes (%u records) %s", size,
-            num_keys, dest->status().ToString().c_str());
+  if (num_keys != 0 && dest->ok()) {
+    Verbose(__LOG_ARGS__, 3, "Level-0 table: %s (%u records)",
+            PrettySize(size).c_str(), num_keys);
   }
 
   Verbose(__LOG_ARGS__, 3, "Compaction done (%llu us) %s", end - start,

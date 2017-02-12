@@ -128,7 +128,7 @@ class PlfsIoLogger {
   port::Mutex* const mutex_;
   port::CondVar* const bg_cv_;
   uint32_t entries_per_buf_;
-  size_t buffer_size_;
+  size_t buf_size_;
   size_t bf_bytes_;
   size_t bf_bits_;
 
