@@ -803,7 +803,7 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
 }
 
 int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
-                           const void* __buf, size_t __sz) {
+                           int __epoch, const void* __buf, size_t __sz) {
   pdlfs::Status s;
 
   if (__dir != NULL && __dir->mode == O_WRONLY && __fname != NULL) {
@@ -824,7 +824,7 @@ int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
   }
 }
 
-int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, void* __arg) {
+int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch) {
   pdlfs::Status s;
 
   if (__dir != NULL && __dir->mode == O_WRONLY) {

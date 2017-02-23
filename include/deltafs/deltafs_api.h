@@ -88,14 +88,14 @@ int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
                          const char* __conf);
 int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
-                           const void* __buf, size_t __sz);
+                           int __epoch, const void* __buf, size_t __sz);
 /* Returns NULL if not found. A malloc()ed array otherwise.
    Stores the length of the array in *vallen. */
 char* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname);
 /* Returns NULL if not found. A malloc()ed array otherwise.
    Stores the length of the array in *vallen. */
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);
-int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, void* __arg);
+int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch);
 int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir);
 
