@@ -13,9 +13,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-// Used as a mode to create a special type of directories where all
-// I/O operations to files beneath these directories will be performed
-// in a parallel log-structured manner that resembles plfs.
+/* Used as a mode to create a special type of directories where all
+   I/O operations to files beneath these directories will be performed
+   in a parallel log-structured manner that resembles plfs */
 #define DELTAFS_DIR_PLFS_STYLE 0x10000
 #define DELTAFS_DIR_MASK 0xf0000
 
@@ -26,12 +26,14 @@
 extern "C" {
 #endif
 
-// ---------------------
-// main file system api
-// ---------------------
+/*
+ * ---------------------
+ * Main file system api
+ * ---------------------
+ */
 
 void deltafs_print_sysinfo();
-int deltafs_nonop();  // XXX: simply trigger client initialization
+int deltafs_nonop(); /* Simply trigger client initialization */
 mode_t deltafs_umask(mode_t __mode);
 int deltafs_chroot(const char* __path);
 int deltafs_chdir(const char* __path);
@@ -63,32 +65,39 @@ int deltafs_ftruncate(int __fd, off_t __len);
 int deltafs_fdatasync(int __fd);
 int deltafs_close(int __fd);
 
-// ------------------------
-// Light-weight plfsdir api
-// ------------------------
+/*
+ * ------------------------
+ * Light-weight plfsdir api
+ * ------------------------
+ */
 
-typedef struct deltafs_plfsdir_stat {
-  uint64_t ds_wtim;  // total time spent on compaction (us)
-  off_t ds_isz;      // total index written (bytes)
-  off_t ds_dsz;      // total data written (bytes)
-} deltafs_plfsdir_stat_t;
+struct deltafs_env; /* Opaque handle for an opened env */
+typedef struct deltafs_env deltafs_env_t;
+deltafs_env_t* deltafs_env_open(const char* __name, const char* __conf);
+int deltafs_env_is_system(deltafs_env_t* __env);
+int deltafs_env_close(deltafs_env_t* __env);
 
-typedef struct deltafs_plfsdir {
-} deltafs_plfsdir_t;  // XXX: opaque handle for an opened plfsdir
-#define DELTAFS_PLFSDIR deltafs_plfsdir_t
-// Create an empty plfsdir dataset at a named location on the underlying storage
-// system. Use the conf string to alter the default behavior of this dataset.
-// The returned instance should be deleted by deltafs_plfsdir_close()
-// when it is no longer needed and ready to be closed.
-// Return NULL on errors, and a non-NULL pointer on success.
-DELTAFS_PLFSDIR* deltafs_plfsdir_create(const char* __name, const char* __conf);
-int deltafs_plfsdir_write_stat(DELTAFS_PLFSDIR* __dir,
-                               struct deltafs_plfsdir_stat* __statbuf);
-int deltafs_plfsdir_append(DELTAFS_PLFSDIR* __dir, const char* __fname,
+struct deltafs_plfsdir; /* Opaque handle for an opened plfsdir */
+typedef struct deltafs_plfsdir deltafs_plfsdir_t;
+/* Returns NULL on errors. A heap-allocated plfsdir handle otherwise.
+   The returned object should be deleted by deltafs_plfsdir_close(). */
+deltafs_plfsdir_t* deltafs_plfsdir_create(int __mode);
+int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, int __key_size);
+int deltafs_plfsdir_set_filter_bits_per_key(deltafs_plfsdir_t* __dir, int __b);
+int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env);
+int deltafs_plfsdir_connect(deltafs_plfsdir_t* __dir, const char* __name,
+                            const char* __conf);
+int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
                            const void* __buf, size_t __sz);
-int deltafs_plfsdir_epoch_flush(DELTAFS_PLFSDIR* __dir, void* __arg);
-int deltafs_plfsdir_finish(DELTAFS_PLFSDIR* __dir);
-int deltafs_plfsdir_close(DELTAFS_PLFSDIR* __dir);
+/* Returns NULL if not found. A malloc()ed array otherwise.
+   Stores the length of the array in *vallen. */
+char* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname);
+/* Returns NULL if not found. A malloc()ed array otherwise.
+   Stores the length of the array in *vallen. */
+char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);
+int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, void* __arg);
+int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir);
+int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir);
 
 #ifdef __cplusplus
 }
