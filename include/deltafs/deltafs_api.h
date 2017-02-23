@@ -80,7 +80,7 @@ int deltafs_env_close(deltafs_env_t* __env);
 struct deltafs_plfsdir; /* Opaque handle for an opened plfsdir */
 typedef struct deltafs_plfsdir deltafs_plfsdir_t;
 /* Returns NULL on errors. A heap-allocated plfsdir handle otherwise.
-   The returned object should be deleted by deltafs_plfsdir_close(). */
+   The returned object should be deleted via deltafs_plfsdir_free_handle(). */
 deltafs_plfsdir_t* deltafs_plfsdir_create_handle(int __mode);
 int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, int __key_size);
 int deltafs_plfsdir_set_filter_bits_per_key(deltafs_plfsdir_t* __dir, int __b);
