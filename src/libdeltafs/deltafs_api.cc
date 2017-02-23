@@ -632,48 +632,160 @@ namespace {
 typedef pdlfs::plfsio::DirStats DirStats;
 // Dir options
 typedef pdlfs::plfsio::DirOptions DirOptions;
+
 // Dir writer
 typedef pdlfs::plfsio::Writer Writer;
+// Dir Reader
+typedef pdlfs::plfsio::Reader Reader;
 
-static inline pdlfs::Env* DirEnv() {
+// Dir Env
+typedef pdlfs::Env Env;
+
+static inline Env* DefaultDirEnv() {
   // Avoid double-buffering
   return pdlfs::port::posix::GetUnBufferedIOEnv();
 }
 
-static DirOptions ParseOptions(const char* conf) {
-  DirOptions options = pdlfs::plfsio::ParseDirOptions(conf);
-  options.key_size = 10;
-  options.bf_bits_per_key = 10;
-  options.env = DirEnv();
-  return options;
+static inline DirOptions ParseOptions(const char* conf) {
+  return pdlfs::plfsio::ParseDirOptions(conf);
 }
 
 }  // namespace
 
-DELTAFS_PLFSDIR* deltafs_plfsdir_create(const char* __name,
-                                        const char* __conf) {
-  pdlfs::Status s;
-  Writer* writer = NULL;
-  s = Writer::Open(ParseOptions(__conf), __name, &writer);
+struct deltafs_env {
+  Env* env;
+  int sys;
+};
 
-  if (s.ok()) {
-    assert(writer != NULL);
-    return reinterpret_cast<DELTAFS_PLFSDIR*>(writer);
+deltafs_env_t* deltafs_env_open(const char* __name, const char* __conf) {
+  if (__name == NULL) {
+    __name = "posix.unbufferedio";
+  }
+  if (__conf == NULL) {
+    __conf = "";
+  }
+
+  bool is_system;
+  Env* env = Env::Open(__name, __conf, &is_system);
+
+  if (env != NULL) {
+    deltafs_env_t* result = (deltafs_env_t*)malloc(sizeof(deltafs_env_t));
+    result->sys = int(is_system);
+    result->env = env;
+    return result;
   } else {
-    SetErrno(s);
+    SetErrno(BadArgs());
     return NULL;
   }
 }
 
-int deltafs_plfsdir_write_stat(DELTAFS_PLFSDIR* __dir,
-                               struct deltafs_plfsdir_stat* __statbuf) {
+int deltafs_env_is_system(deltafs_env_t* __env) {
+  if (__env != NULL) {
+    return __env->sys;
+  } else {
+    return 0;
+  }
+}
+
+int deltafs_env_close(deltafs_env_t* __env) {
+  if (__env != NULL) {
+    if (!__env->sys) {
+      delete __env->env;
+    }
+    free(__env);
+    return 0;
+  } else {
+    return 0;
+  }
+}
+
+struct deltafs_plfsdir {
+  Env* env;
+  int filter_bits_per_key;
+  int key_size;
+  int mode;
+  union {
+    Writer* writer;
+    Reader* reader;
+  } io;
+};
+
+deltafs_plfsdir_t* deltafs_plfsdir_create(int __mode) {
+  __mode = __mode & O_ACCMODE;
+  if (__mode == O_RDONLY || __mode == O_WRONLY) {
+    deltafs_plfsdir_t* dir =
+        (deltafs_plfsdir_t*)malloc(sizeof(deltafs_plfsdir_t));
+    dir->env = DefaultDirEnv();
+    dir->filter_bits_per_key = 10;
+    dir->key_size = 10;
+    dir->mode = __mode;
+
+    if (__mode == O_RDONLY) {
+      dir->io.reader = NULL;
+    } else {
+      dir->io.writer = NULL;
+    }
+
+    return dir;
+  } else {
+    SetErrno(BadArgs());
+    return NULL;
+  }
+}
+
+int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, int __key_size) {
+  if (__key_size < 8) {
+    __key_size = 8;
+  } else if (__key_size > 16) {
+    __key_size = 16;
+  }
+  if (__dir != NULL) {
+    __dir->key_size = __key_size;
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
+int deltafs_plfsdir_set_filter_bits_per_key(deltafs_plfsdir_t* __dir,
+                                            int __bits_per_key) {
+  if (__bits_per_key < 0) {
+    __bits_per_key = 0;
+  }
+  if (__dir != NULL) {
+    __dir->filter_bits_per_key = __bits_per_key;
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
+int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env) {
+  if (__dir != NULL && __env != NULL) {
+    __dir->env = __env->env;
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
+int deltafs_plfsdir_connect(deltafs_plfsdir_t* __dir, const char* __name,
+                            const char* __conf) {
   pdlfs::Status s;
 
-  if (__dir != NULL && __statbuf != NULL) {
-    const DirStats* stats = reinterpret_cast<Writer*>(__dir)->stats();
-    __statbuf->ds_wtim = stats->write_micros;
-    __statbuf->ds_isz = stats->index_size;
-    __statbuf->ds_dsz = stats->data_size;
+  if (__dir != NULL && __name != NULL && __conf != NULL) {
+    DirOptions options = ParseOptions(__conf);
+    options.bf_bits_per_key = __dir->filter_bits_per_key;
+    options.key_size = __dir->key_size;
+    options.env = __dir->env;
+    if (__dir->mode == O_WRONLY) {
+      s = Writer::Open(options, __name, &__dir->io.writer);
+    } else {
+      s = Reader::Open(options, __name, &__dir->io.reader);
+    }
   } else {
     s = BadArgs();
   }
@@ -686,15 +798,15 @@ int deltafs_plfsdir_write_stat(DELTAFS_PLFSDIR* __dir,
   }
 }
 
-int deltafs_plfsdir_append(DELTAFS_PLFSDIR* __dir, const char* __fname,
+int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
                            const void* __buf, size_t __sz) {
   pdlfs::Status s;
 
-  if (__dir != NULL && __fname != NULL) {
+  if (__dir != NULL && __dir->mode == O_WRONLY && __fname != NULL) {
     char tmp[16];
     pdlfs::murmur_x64_128(__fname, strlen(__fname), 0, tmp);
-    pdlfs::Slice k(tmp, 10);
-    s = reinterpret_cast<Writer*>(__dir)->Append(
+    pdlfs::Slice k(tmp, __dir->key_size);
+    s = __dir->io.writer->Append(
         k, pdlfs::Slice(reinterpret_cast<const char*>(__buf), __sz));
   } else {
     s = BadArgs();
@@ -708,11 +820,11 @@ int deltafs_plfsdir_append(DELTAFS_PLFSDIR* __dir, const char* __fname,
   }
 }
 
-int deltafs_plfsdir_epoch_flush(DELTAFS_PLFSDIR* __dir, void* __arg) {
+int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, void* __arg) {
   pdlfs::Status s;
 
-  if (__dir != NULL) {
-    s = reinterpret_cast<Writer*>(__dir)->MakeEpoch();
+  if (__dir != NULL && __dir->mode == O_WRONLY) {
+    s = __dir->io.writer->MakeEpoch();
   } else {
     s = BadArgs();
   }
@@ -725,11 +837,11 @@ int deltafs_plfsdir_epoch_flush(DELTAFS_PLFSDIR* __dir, void* __arg) {
   }
 }
 
-int deltafs_plfsdir_finish(DELTAFS_PLFSDIR* __dir) {
+int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
   pdlfs::Status s;
 
-  if (__dir != NULL) {
-    s = reinterpret_cast<Writer*>(__dir)->Finish();
+  if (__dir != NULL && __dir->mode == O_WRONLY) {
+    s = __dir->io.writer->Finish();
   } else {
     s = BadArgs();
   }
@@ -742,21 +854,70 @@ int deltafs_plfsdir_finish(DELTAFS_PLFSDIR* __dir) {
   }
 }
 
-int deltafs_plfsdir_close(DELTAFS_PLFSDIR* __dir) {
-  pdlfs::Status s;
+char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
+                                   const char* __key) {
+  char tmp[100];
 
-  if (__dir != NULL) {
-    delete reinterpret_cast<Writer*>(__dir);
+  if (__dir != NULL && __key != NULL) {
+    if (__dir->mode == O_WRONLY) {
+      const DirStats* const stats = __dir->io.writer->stats();
+      if (stats != NULL) {
+        if (strcmp(__key, "compaction_time") == 0) {
+          snprintf(tmp, sizeof(tmp), "%llu",
+                   static_cast<unsigned long long>(stats->write_micros));
+          return strdup(tmp);
+        } else if (strcmp(__key, "index_size") == 0) {
+          snprintf(tmp, sizeof(tmp), "%llu",
+                   static_cast<unsigned long long>(stats->index_size));
+          return strdup(tmp);
+        } else if (strcmp(__key, "data_size")) {
+          snprintf(tmp, sizeof(tmp), "%llu",
+                   static_cast<unsigned long long>(stats->data_size));
+          return strdup(tmp);
+        }
+      }
+    } else {
+      // TODO
+    }
+  }
+
+  return NULL;
+}
+
+char* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname) {
+  pdlfs::Status s;
+  char* buf;
+
+  if (__dir != NULL && __dir->mode == O_RDONLY) {
+    std::string tmp;
+    s = __dir->io.reader->ReadAll(__fname, &tmp);
+    if (s.ok()) {
+      buf = (char*)malloc(tmp.size());
+      memcpy(buf, tmp.data(), tmp.size());
+    }
   } else {
     s = BadArgs();
   }
 
   if (s.ok()) {
-    return 0;
+    return buf;
   } else {
     SetErrno(s);
-    return -1;
+    return NULL;
   }
+}
+
+int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir) {
+  if (__dir != NULL) {
+    if (__dir->mode == O_WRONLY) {
+      delete __dir->io.writer;
+    } else {
+      delete __dir->io.reader;
+    }
+    free(__dir);
+  }
+
+  return 0;
 }
 
 }  // extern C
