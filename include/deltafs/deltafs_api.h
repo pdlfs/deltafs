@@ -81,12 +81,12 @@ struct deltafs_plfsdir; /* Opaque handle for an opened plfsdir */
 typedef struct deltafs_plfsdir deltafs_plfsdir_t;
 /* Returns NULL on errors. A heap-allocated plfsdir handle otherwise.
    The returned object should be deleted by deltafs_plfsdir_close(). */
-deltafs_plfsdir_t* deltafs_plfsdir_create(int __mode);
+deltafs_plfsdir_t* deltafs_plfsdir_create_handle(int __mode);
 int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, int __key_size);
 int deltafs_plfsdir_set_filter_bits_per_key(deltafs_plfsdir_t* __dir, int __b);
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env);
-int deltafs_plfsdir_connect(deltafs_plfsdir_t* __dir, const char* __name,
-                            const char* __conf);
+int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
+                         const char* __conf);
 int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
                            const void* __buf, size_t __sz);
 /* Returns NULL if not found. A malloc()ed array otherwise.
@@ -97,7 +97,7 @@ char* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname);
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);
 int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, void* __arg);
 int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir);
-int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir);
+int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir);
 
 #ifdef __cplusplus
 }

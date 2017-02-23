@@ -647,7 +647,11 @@ static inline Env* DefaultDirEnv() {
 }
 
 static inline DirOptions ParseOptions(const char* conf) {
-  return pdlfs::plfsio::ParseDirOptions(conf);
+  if (conf != NULL) {
+    return pdlfs::plfsio::ParseDirOptions(conf);
+  } else {
+    return DirOptions();
+  }
 }
 
 }  // namespace
@@ -710,7 +714,7 @@ struct deltafs_plfsdir {
   } io;
 };
 
-deltafs_plfsdir_t* deltafs_plfsdir_create(int __mode) {
+deltafs_plfsdir_t* deltafs_plfsdir_create_handle(int __mode) {
   __mode = __mode & O_ACCMODE;
   if (__mode == O_RDONLY || __mode == O_WRONLY) {
     deltafs_plfsdir_t* dir =
@@ -772,11 +776,11 @@ int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env) {
   }
 }
 
-int deltafs_plfsdir_connect(deltafs_plfsdir_t* __dir, const char* __name,
-                            const char* __conf) {
+int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
+                         const char* __conf) {
   pdlfs::Status s;
 
-  if (__dir != NULL && __name != NULL && __conf != NULL) {
+  if (__dir != NULL && __name != NULL) {
     DirOptions options = ParseOptions(__conf);
     options.bf_bits_per_key = __dir->filter_bits_per_key;
     options.key_size = __dir->key_size;
@@ -907,7 +911,7 @@ char* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname) {
   }
 }
 
-int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir) {
+int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
   if (__dir != NULL) {
     if (__dir->mode == O_WRONLY) {
       delete __dir->io.writer;
