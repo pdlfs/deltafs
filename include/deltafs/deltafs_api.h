@@ -73,6 +73,8 @@ int deltafs_close(int __fd);
 
 struct deltafs_env; /* Opaque handle for an opened env */
 typedef struct deltafs_env deltafs_env_t;
+/* Returns NULL on errors. A heap-allocated env instance otherwise.
+   The returned object should be deleted via deltafs_env_close(). */
 deltafs_env_t* deltafs_env_open(const char* __name, const char* __conf);
 int deltafs_env_is_system(deltafs_env_t* __env);
 int deltafs_env_close(deltafs_env_t* __env);
@@ -90,10 +92,10 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
 int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
                            int __epoch, const void* __buf, size_t __sz);
 /* Returns NULL if not found. A malloc()ed array otherwise.
-   Stores the length of the array in *vallen. */
+   The result should be deleted by free(). */
 char* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname);
 /* Returns NULL if not found. A malloc()ed array otherwise.
-   Stores the length of the array in *vallen. */
+   The result should be deleted by free(). */
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);
 int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch);
 int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir);
