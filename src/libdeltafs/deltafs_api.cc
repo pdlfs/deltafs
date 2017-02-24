@@ -893,11 +893,14 @@ char* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname) {
   char* buf;
 
   if (__dir != NULL && __dir->mode == O_RDONLY) {
-    std::string tmp;
-    s = __dir->io.reader->ReadAll(__fname, &tmp);
+    std::string dst;
+    char tmp[16];
+    pdlfs::murmur_x64_128(__fname, strlen(__fname), 0, tmp);
+    pdlfs::Slice k(tmp, __dir->key_size);
+    s = __dir->io.reader->ReadAll(__fname, &dst);
     if (s.ok()) {
-      buf = (char*)malloc(tmp.size());
-      memcpy(buf, tmp.data(), tmp.size());
+      buf = (char*)malloc(dst.size());
+      memcpy(buf, dst.data(), dst.size());
     }
   } else {
     s = BadArgs();
