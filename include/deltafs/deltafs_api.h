@@ -66,6 +66,16 @@ int deltafs_fdatasync(int __fd);
 int deltafs_close(int __fd);
 
 /*
+ * -------------
+ * Version query
+ * -------------
+ */
+
+int deltafs_version_major();
+int deltafs_version_minor();
+int deltafs_version_patch();
+
+/*
  * ------------------------
  * Light-weight plfsdir api
  * ------------------------

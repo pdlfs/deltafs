@@ -8,6 +8,7 @@
  */
 
 #include "deltafs/deltafs_api.h"
+#include "deltafs/deltafs_config.h"
 
 #include "deltafs_client.h"
 #include "deltafs_plfsio.h"
@@ -16,6 +17,7 @@
 #include "pdlfs-common/dbfiles.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/murmur.h"
+#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
 
@@ -622,6 +624,13 @@ void deltafs_print_sysinfo() {
   // Print to system logger, usually stderr or glog
   pdlfs::PrintSysInfo();
 }
+
+// -------------
+// Version query
+// -------------
+int deltafs_version_major() { return PDLFS_COMMON_VERSION_MAJOR; }
+int deltafs_version_minor() { return PDLFS_COMMON_VERSION_MINOR; }
+int deltafs_version_patch() { return PDLFS_COMMON_VERSION_PATCH; }
 
 // -------------------------
 // Light-weight plfsdir api
