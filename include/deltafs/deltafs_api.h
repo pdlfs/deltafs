@@ -85,7 +85,6 @@ typedef struct deltafs_plfsdir deltafs_plfsdir_t;
    The returned object should be deleted via deltafs_plfsdir_free_handle(). */
 deltafs_plfsdir_t* deltafs_plfsdir_create_handle(int __mode);
 int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, int __key_size);
-int deltafs_plfsdir_set_filter_bits_per_key(deltafs_plfsdir_t* __dir, int __b);
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
                          const char* __conf);

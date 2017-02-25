@@ -714,7 +714,6 @@ int deltafs_env_close(deltafs_env_t* __env) {
 
 struct deltafs_plfsdir {
   Env* env;
-  int filter_bits_per_key;
   int key_size;
   int mode;
   union {
@@ -729,7 +728,6 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(int __mode) {
     deltafs_plfsdir_t* dir =
         (deltafs_plfsdir_t*)malloc(sizeof(deltafs_plfsdir_t));
     dir->env = DefaultDirEnv();
-    dir->filter_bits_per_key = 10;
     dir->key_size = 10;
     dir->mode = __mode;
 
@@ -761,20 +759,6 @@ int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, int __key_size) {
   }
 }
 
-int deltafs_plfsdir_set_filter_bits_per_key(deltafs_plfsdir_t* __dir,
-                                            int __bits_per_key) {
-  if (__bits_per_key < 0) {
-    __bits_per_key = 0;
-  }
-  if (__dir != NULL) {
-    __dir->filter_bits_per_key = __bits_per_key;
-    return 0;
-  } else {
-    SetErrno(BadArgs());
-    return -1;
-  }
-}
-
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env) {
   if (__dir != NULL && __env != NULL) {
     __dir->env = __env->env;
@@ -791,7 +775,6 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
 
   if (__dir != NULL && __name != NULL) {
     DirOptions options = ParseOptions(__conf);
-    options.bf_bits_per_key = __dir->filter_bits_per_key;
     options.key_size = __dir->key_size;
     options.env = __dir->env;
     if (__dir->mode == O_WRONLY) {

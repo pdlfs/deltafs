@@ -45,45 +45,58 @@ DirOptions::DirOptions()
 
 DirOptions ParseDirOptions(const char* input) {
   DirOptions options;
-  std::vector<std::string> confs;
-  size_t n = SplitString(&confs, input, '&');  // k1=v1 & k2=v2 & k3=v3
-  std::vector<std::string> pairs;
+  std::vector<std::string> conf_segments;
+  size_t n = SplitString(&conf_segments, input, '&');  // k1=v1 & k2=v2 & k3=v3
+  std::vector<std::string> conf_pair;
   for (size_t i = 0; i < n; i++) {
-    pairs.resize(0);  // XXX: parse more configurations
-    SplitString(&pairs, confs[i].c_str(), '=', 1);
-    if (pairs.size() == 2) {
-      if (pairs[0] == "memtable_size") {
-        uint64_t val;
-        if (ParsePrettyNumber(pairs[1], &val)) {
-          options.memtable_size = val;
-        }
-      } else if (pairs[0] == "data_buffer") {
-        uint64_t val;
-        if (ParsePrettyNumber(pairs[1], &val)) {
-          options.data_buffer = val;
-        }
-      } else if (pairs[0] == "index_buffer") {
-        uint64_t val;
-        if (ParsePrettyNumber(pairs[1], &val)) {
-          options.index_buffer = val;
-        }
-      } else if (pairs[0] == "unique_keys") {
-        bool val;
-        if (ParsePrettyBool(pairs[1], &val)) {
-          options.unique_keys = val;
-        }
-      } else if (pairs[0] == "lg_parts") {
-        Slice s = pairs[1];
-        uint64_t val;
-        if (ConsumeDecimalNumber(&s, &val)) {
-          options.lg_parts = int(val);
-        }
-      } else if (pairs[0] == "rank") {
-        Slice s = pairs[1];
-        uint64_t val;
-        if (ConsumeDecimalNumber(&s, &val)) {
-          options.rank = int(val);
-        }
+    conf_pair.resize(0);
+    SplitString(&conf_pair, conf_segments[i].c_str(), '=', 1);
+    if (conf_pair.size() != 2) {
+      continue;
+    }
+    Slice conf_key = conf_pair[0];
+    Slice conf_value = conf_pair[1];
+    uint64_t num;
+    bool flag;
+    if (conf_key == "lg_parts") {
+      if (ConsumeDecimalNumber(&conf_value, &num)) {
+        options.lg_parts = int(num);
+      }
+    } else if (conf_key == "rank") {
+      if (ConsumeDecimalNumber(&conf_value, &num)) {
+        options.rank = int(num);
+      }
+    } else if (conf_key == "memtable_size") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.memtable_size = num;
+      }
+    } else if (conf_key == "data_buffer") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.data_buffer = num;
+      }
+    } else if (conf_key == "index_buffer") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.index_buffer = num;
+      }
+    } else if (conf_key == "verify_checksums") {
+      if (ParsePrettyBool(conf_value, &flag)) {
+        options.verify_checksums = flag;
+      }
+    } else if (conf_key == "unique_keys") {
+      if (ParsePrettyBool(conf_value, &flag)) {
+        options.unique_keys = flag;
+      }
+    } else if (conf_key == "filter_bits_per_key") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.bf_bits_per_key = num;
+      }
+    } else if (conf_key == "value_size") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.value_size = num;
+      }
+    } else if (conf_key == "key_size") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.key_size = num;
       }
     }
   }
