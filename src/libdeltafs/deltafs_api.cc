@@ -888,7 +888,8 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
   return NULL;
 }
 
-char* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname) {
+char* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
+                              size_t* __sz) {
   pdlfs::Status s;
   char* buf;
 
@@ -901,6 +902,9 @@ char* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname) {
     if (s.ok()) {
       buf = (char*)malloc(dst.size());
       memcpy(buf, dst.data(), dst.size());
+      if (__sz != NULL) {
+        *__sz = dst.size();
+      }
     }
   } else {
     s = BadArgs();
