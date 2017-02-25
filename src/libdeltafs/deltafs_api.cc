@@ -897,6 +897,18 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
   return NULL;
 }
 
+long long deltafs_plfsdir_get_integer_property(deltafs_plfsdir_t* __dir,
+                                               const char* __key) {
+  char* val = deltafs_plfsdir_get_property(__dir, __key);
+  if (val != NULL) {
+    long long result = atoll(val);
+    free(val);
+    return result;
+  } else {
+    return 0;
+  }
+}
+
 void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
                               size_t* __sz) {
   pdlfs::Status s;

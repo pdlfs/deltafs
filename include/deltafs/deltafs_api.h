@@ -66,16 +66,6 @@ int deltafs_fdatasync(int __fd);
 int deltafs_close(int __fd);
 
 /*
- * -------------
- * Version query
- * -------------
- */
-
-int deltafs_version_major();
-int deltafs_version_minor();
-int deltafs_version_patch();
-
-/*
  * ------------------------
  * Light-weight plfsdir api
  * ------------------------
@@ -109,9 +99,21 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
 /* Returns NULL if not found. A malloc()ed array otherwise.
    The result should be deleted by free(). */
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);
+long long deltafs_plfsdir_get_integer_property(deltafs_plfsdir_t* __dir,
+                                               const char* __key);
 int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch);
 int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir);
+
+/*
+ * -------------
+ * Version query
+ * -------------
+ */
+
+int deltafs_version_major();
+int deltafs_version_minor();
+int deltafs_version_patch();
 
 #ifdef __cplusplus
 }
