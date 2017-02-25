@@ -104,7 +104,7 @@ int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
 /* Returns NULL if not found. A malloc()ed array otherwise.
    Stores the length of the file in *__sz.
    The result should be deleted by free(). */
-char* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
+void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
                               size_t* __sz);
 /* Returns NULL if not found. A malloc()ed array otherwise.
    The result should be deleted by free(). */
