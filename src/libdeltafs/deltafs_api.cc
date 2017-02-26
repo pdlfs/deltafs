@@ -794,6 +794,29 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
   }
 }
 
+// XXX: make proper use of the input epoch
+int deltafs_plfsdir_post(deltafs_plfsdir_t* __dir, const char* __key,
+                         size_t __keylen, int __epoch, const char* __value,
+                         size_t __sz) {
+  pdlfs::Status s;
+
+  if (__dir != NULL && __dir->mode == O_WRONLY && __key != NULL &&
+      __keylen != 0) {
+    pdlfs::Slice k(__key, __keylen);
+    s = __dir->io.writer->Append(k, pdlfs::Slice(__value, __sz));
+  } else {
+    s = BadArgs();
+  }
+
+  if (s.ok()) {
+    return 0;
+  } else {
+    SetErrno(s);
+    return -1;
+  }
+}
+
+// XXX: make proper use of the input epoch
 int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
                            int __epoch, const void* __buf, size_t __sz) {
   pdlfs::Status s;
@@ -892,12 +915,45 @@ long long deltafs_plfsdir_get_integer_property(deltafs_plfsdir_t* __dir,
   }
 }
 
+char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
+                          size_t __keylen, size_t* __sz) {
+  pdlfs::Status s;
+  char* buf;
+
+  buf = NULL;
+
+  if (__dir != NULL && __dir->mode == O_RDONLY && __key != NULL &&
+      __keylen != 0) {
+    std::string dst;
+    s = __dir->io.reader->ReadAll(pdlfs::Slice(__key, __keylen), &dst);
+    if (s.ok()) {
+      buf = static_cast<char*>(malloc(dst.size()));
+      memcpy(buf, dst.data(), dst.size());
+      if (__sz != NULL) {
+        *__sz = dst.size();
+      }
+    }
+  } else {
+    s = BadArgs();
+  }
+
+  if (s.ok()) {
+    assert(buf != NULL);
+    return buf;
+  } else {
+    SetErrno(s);
+    return NULL;
+  }
+}
+
 void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
                               size_t* __sz) {
   pdlfs::Status s;
   void* buf;
 
-  if (__dir != NULL && __dir->mode == O_RDONLY) {
+  buf = NULL;
+
+  if (__dir != NULL && __dir->mode == O_RDONLY && __fname != NULL) {
     std::string dst;
     char tmp[16];
     pdlfs::murmur_x64_128(__fname, strlen(__fname), 0, tmp);
@@ -915,6 +971,7 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
   }
 
   if (s.ok()) {
+    assert(buf != NULL);
     return buf;
   } else {
     SetErrno(s);

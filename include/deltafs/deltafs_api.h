@@ -88,8 +88,19 @@ int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, int __key_size);
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
                          const char* __conf);
+int deltafs_plfsdir_post(deltafs_plfsdir_t* __dir, const char* __key,
+                         size_t __keylen, int __epoch, const char* __value,
+                         size_t __sz);
+/* Appends a piece of data into a given file.
+   __fname is hashed to become a fixed-sized key.
+   Return 0 on success, -1 on errors. */
 int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
                            int __epoch, const void* __buf, size_t __sz);
+/* Returns NULL if not found. A malloc()ed array otherwise.
+   Stores the size of the value in *__sz.
+   The result should be deleted by free(). */
+char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
+                          size_t __keylen, size_t* __sz);
 /* Returns NULL if not found. A malloc()ed array otherwise.
    Stores the length of the file in *__sz.
    The result should be deleted by free(). */
@@ -98,6 +109,8 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
 /* Returns NULL if not found. A malloc()ed array otherwise.
    The result should be deleted by free(). */
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);
+/* A helper wrapper implemented on top of deltafs_plfsdir_get_property().
+   Used when the property is known to be an integer. */
 long long deltafs_plfsdir_get_integer_property(deltafs_plfsdir_t* __dir,
                                                const char* __key);
 int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch);
