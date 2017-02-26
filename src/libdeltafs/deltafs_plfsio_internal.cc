@@ -445,8 +445,11 @@ Status TableLogger::Finish() {
   Footer footer;
 
   assert(!pending_epoch_entry_);
-  const size_t size = epoch_block_.Finish().size();
-  Slice raw_contents = epoch_block_.Finalize(0);  // No padding for meta blocks
+  Slice contents = epoch_block_.Finish();
+  const size_t size = contents.size();
+  // NOTE: raw_contents invalidates contents
+  Slice raw_contents =
+      epoch_block_.Finalize(0);  // No padding is needed for metadata blocks
   const uint64_t offset = index_log_->Ltell();
   status_ = index_log_->Lwrite(raw_contents);
 
@@ -468,7 +471,17 @@ Status TableLogger::Finish() {
   }
 
   if (ok()) {
-    status_ = index_log_->Lwrite(tail);
+    // Add enough padding to ensure the final size of the index log
+    // is some multiple of the physical write size.
+    const uint64_t total_size = index_log_->Ltell() + tail.size();
+    const size_t off = total_size % options_.index_buffer;
+    if (off != 0) {
+      const size_t padding = options_.index_buffer - off;
+      status_ = index_log_->Lwrite(std::string(padding, 0));
+      if (status_.ok()) {
+        status_ = index_log_->Lwrite(tail);
+      }
+    }
   }
 
 #if VERBOSE >= 6
