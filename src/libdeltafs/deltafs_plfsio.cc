@@ -198,6 +198,7 @@ class WriterImpl : public Writer {
   port::CondVar cond_var_;
   size_t num_parts_;
   uint32_t part_mask_;
+  bool finished_;  // If Finish() has been called
   PlfsIoLogger** io_;
   LogSink* data_;
 };
@@ -207,6 +208,7 @@ WriterImpl::WriterImpl(const DirOptions& options)
       cond_var_(&mutex_),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
+      finished_(false),
       io_(NULL),
       data_(NULL) {}
 
@@ -245,9 +247,8 @@ Status WriterImpl::EnsureDataPadding(LogSink* sink) {
 
 Status WriterImpl::Finish() {
   Status status;
-  {
+  if (!finished_) {
     MutexLock ml(&mutex_);
-
     bool dry_run = true;
     // Check partition status in a single pass
     while (true) {
@@ -302,19 +303,25 @@ Status WriterImpl::Finish() {
         }
       }
     }
+
+    if (status.ok()) {
+      finished_ = true;
+    }
   }
 
   if (status.IsBufferFull()) {
     MaybeSlowdownCaller();
   }
+
   return status;
 }
 
 Status WriterImpl::MakeEpoch() {
   Status status;
-  {
+  if (finished_) {
+    status = Status::AssertionFailed("finished");
+  } else {
     MutexLock ml(&mutex_);
-
     bool dry_run = true;
     // Check partition status in a single pass
     while (true) {
@@ -352,12 +359,17 @@ Status WriterImpl::MakeEpoch() {
 
 Status WriterImpl::Append(const Slice& fname, const Slice& data) {
   Status status;
-  uint32_t hash = Hash(fname.data(), fname.size(), 0);
-  uint32_t part = hash & part_mask_;
-  if (part < num_parts_) {
-    MutexLock ml(&mutex_);
-    status = io_[part]->Add(fname, data);
+  if (finished_) {
+    status = Status::AssertionFailed("finished");
+  } else {
+    uint32_t hash = Hash(fname.data(), fname.size(), 0);
+    uint32_t part = hash & part_mask_;
+    if (part < num_parts_) {
+      MutexLock ml(&mutex_);
+      status = io_[part]->Add(fname, data);
+    }
   }
+
   if (status.IsBufferFull()) {
     MaybeSlowdownCaller();
   }
@@ -365,8 +377,7 @@ Status WriterImpl::Append(const Slice& fname, const Slice& data) {
 }
 
 Status WriterImpl::Sync() {
-  // TODO
-  return Status::NotSupported(Slice());
+  return Status::NotSupported(Slice());  // TODO
 }
 
 Writer::~Writer() {}
@@ -393,13 +404,11 @@ static Status NewLogSink(const std::string& name, Env* env, size_t buf_size,
   WritableFile* file;
   Status status = env->NewWritableFile(name, &file);
   if (status.ok()) {
-    if (bytes != NULL) {
-      file = new MeasuredWritableFile(file, bytes);
-    }
-    UnsafeBufferedWritableFile* buffered_file =
+    if (bytes != NULL) file = new MeasuredWritableFile(file, bytes);
+    UnsafeBufferedWritableFile* buf =
         new UnsafeBufferedWritableFile(file, buf_size);
     PrintLogInfo(name, buf_size);
-    LogSink* sink = new LogSink(buffered_file);
+    LogSink* sink = new LogSink(buf);
     sink->Ref();
     *ptr = sink;
   } else {
