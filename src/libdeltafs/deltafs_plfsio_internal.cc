@@ -579,6 +579,8 @@ Status PlfsIoLogger::Wait() {
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
+
+  return Status::OK();
 }
 
 // If dry_run is set, we will only perform status checks (which includes write
