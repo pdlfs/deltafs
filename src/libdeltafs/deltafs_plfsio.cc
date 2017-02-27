@@ -216,8 +216,8 @@ void WriterImpl::MaybeSlowdownCaller() {
 
 Status WriterImpl::EnsureDataPadding(LogSink* sink) {
   Status status;
-  const uint64_t offset = sink->Ltell();
-  const size_t overflow = offset % options_.data_buffer;
+  const uint64_t total_size = sink->Ltell();
+  const size_t overflow = total_size % options_.data_buffer;
 
   if (overflow != 0) {
     const uint64_t start = Env::Default()->NowMicros();
