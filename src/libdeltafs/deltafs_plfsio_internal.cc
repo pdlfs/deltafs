@@ -573,6 +573,14 @@ PlfsIoLogger::~PlfsIoLogger() {
   }
 }
 
+// Block until compaction finishes.
+Status PlfsIoLogger::Wait() {
+  mutex_->AssertHeld();
+  while (has_bg_compaction_) {
+    bg_cv_->Wait();
+  }
+}
+
 // If dry_run is set, we will only perform status checks (which includes write
 // errors, buffer space, and compaction queue depth) such that no
 // compaction jobs will be scheduled.

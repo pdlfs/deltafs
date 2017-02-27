@@ -214,7 +214,9 @@ class Writer {
   // REQUIRES: Finish() has not been called.
   virtual Status MakeEpoch() = 0;
 
-  // Flush data and finalize all indexing.
+  // Flush data, finalize indexing, and wait for all outstanding
+  // compaction jobs to finish.
+  // REQUIRES: Finish() has not been called.
   virtual Status Finish() = 0;
 
  private:

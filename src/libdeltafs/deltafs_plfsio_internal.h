@@ -111,6 +111,7 @@ class PlfsIoLogger {
   Status Add(const Slice& key, const Slice& value);
   Status MakeEpoch(bool dry_run);
   Status Finish(bool dry_run);
+  Status Wait();  // Wait for on-going compaction to finish
 
  private:
   // No copying allowed

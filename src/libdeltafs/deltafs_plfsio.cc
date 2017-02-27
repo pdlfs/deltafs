@@ -183,6 +183,7 @@ class WriterImpl : public Writer {
   size_t num_parts_;
   uint32_t part_mask_;
   PlfsIoLogger** io_;
+  LogSink* data_;
 };
 
 WriterImpl::WriterImpl(const DirOptions& options)
@@ -190,7 +191,8 @@ WriterImpl::WriterImpl(const DirOptions& options)
       cond_var_(&mutex_),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
-      io_(NULL) {}
+      io_(NULL),
+      data_(NULL) {}
 
 WriterImpl::~WriterImpl() {
   MutexLock l(&mutex_);
@@ -198,6 +200,9 @@ WriterImpl::~WriterImpl() {
     delete io_[i];
   }
   delete[] io_;
+  if (data_ != NULL) {
+    data_->Unref();
+  }
 }
 
 void WriterImpl::MaybeSlowdownCaller() {
@@ -237,6 +242,33 @@ Status WriterImpl::Finish() {
         status = io_[i]->Finish(dry_run);
         if (!status.ok()) {
           break;
+        }
+      }
+    }
+
+    // Wait for compaction
+    if (status.ok()) {
+      for (size_t i = 0; i < num_parts_; i++) {
+        status_ = io_[i]->Wait();
+        if (!status.ok()) {
+          break;
+        }
+      }
+    }
+
+    // Padding
+    if (status.ok() && data_ != NULL) {
+      if (options_.tail_padding) {
+        const uint64_t offset = data_->Ltell();
+        const size_t overflow = offset % options_.data_buffer;
+        if (overflow != 0) {
+          const uint64_t start = Env::Default()->NowMicros();
+          const size_t padding = options_.data_buffer - overflow;
+          assert(padding < options_.data_buffer);
+          status = data_->Lwrite(std::string(padding, 0));
+          const uint64_t end = Env::Default()->NowMicros();
+          stats_.write_micros = end - start;
+          stats_.data_size += padding;
         }
       }
     }
@@ -399,6 +431,8 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
       io[i] = new PlfsIoLogger(impl->options_, &impl->mutex_, &impl->cond_var_,
                                data[0], index[i], &impl->stats_);
     }
+    impl->data_ = data[0];
+    impl->data_->Ref();
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
     impl->io_ = io;
