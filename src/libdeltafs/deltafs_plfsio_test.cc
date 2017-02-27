@@ -121,6 +121,7 @@ class PlfsIoTest {
 
   void Finish() {
     ASSERT_OK(writer_->Finish());
+    Stats();
     delete writer_;
     writer_ = NULL;
   }
@@ -149,18 +150,21 @@ class PlfsIoTest {
   }
 
   void Stats() {
-    char tmp[100];
+    char tmp[200];
     const CompactionStats* stats = NULL;
     if (writer_ != NULL) {
       stats = writer_->stats();
     }
     if (stats != NULL) {
       snprintf(tmp, sizeof(tmp),
-               "write_micros=%llu us, data_size=%llu bytes, "
-               "index_size=%llu bytes",
-               static_cast<unsigned long long>(stats->write_micros),
+               ">> index_size=%llu bytes, index_written=%llu bytes\n"
+               ">> data_size=%llu bytes, data_written=%llu bytes\n"
+               ">> write_micros=%llu us\n",
+               static_cast<unsigned long long>(stats->index_size),
+               static_cast<unsigned long long>(stats->index_written),
                static_cast<unsigned long long>(stats->data_size),
-               static_cast<unsigned long long>(stats->index_size));
+               static_cast<unsigned long long>(stats->data_written),
+               static_cast<unsigned long long>(stats->write_micros));
       fprintf(stderr, "%s\n", tmp);
     }
   }
@@ -173,7 +177,6 @@ class PlfsIoTest {
 
 TEST(PlfsIoTest, Empty0) {
   MakeEpoch();
-  Stats();
   std::string val = Read("non-exists");
   ASSERT_TRUE(val.empty());
 }
@@ -186,7 +189,6 @@ TEST(PlfsIoTest, SingleEpoch0) {
   Write("k5", "v5");
   Write("k6", "v6");
   MakeEpoch();
-  Stats();
   ASSERT_EQ(Read("k1"), "v1");
   ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2");
@@ -204,15 +206,12 @@ TEST(PlfsIoTest, MultiEpoch0) {
   Write("k1", "v1");
   Write("k2", "v2");
   MakeEpoch();
-  Stats();
   Write("k1", "v3");
   Write("k2", "v4");
   MakeEpoch();
-  Stats();
   Write("k1", "v5");
   Write("k2", "v6");
   MakeEpoch();
-  Stats();
   ASSERT_EQ(Read("k1"), "v1v3v5");
   ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2v4v6");
@@ -223,15 +222,12 @@ TEST(PlfsIoTest, NoFilter0) {
   Write("k1", "v1");
   Write("k2", "v2");
   MakeEpoch();
-  Stats();
   Write("k3", "v3");
   Write("k4", "v4");
   MakeEpoch();
-  Stats();
   Write("k5", "v5");
   Write("k6", "v6");
   MakeEpoch();
-  Stats();
   ASSERT_EQ(Read("k1"), "v1");
   ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2");
@@ -250,20 +246,16 @@ TEST(PlfsIoTest, NoUniKeys0) {
   Write("k1", "v1");
   Write("k1", "v2");
   MakeEpoch();
-  Stats();
   Write("k0", "v3");
   Write("k1", "v4");
   Write("k1", "v5");
   MakeEpoch();
-  Stats();
   Write("k1", "v6");
   Write("k1", "v7");
   Write("k5", "v8");
   MakeEpoch();
-  Stats();
   Write("k1", "v9");
   MakeEpoch();
-  Stats();
   ASSERT_EQ(Read("k1"), "v1v2v4v5v6v7v9");
 }
 
