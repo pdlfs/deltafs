@@ -198,6 +198,7 @@ class WriterImpl : public Writer {
   port::CondVar cond_var_;
   size_t num_parts_;
   uint32_t part_mask_;
+  Status finish_status_;
   bool finished_;  // If Finish() has been called
   PlfsIoLogger** io_;
   LogSink* data_;
@@ -247,7 +248,9 @@ Status WriterImpl::EnsureDataPadding(LogSink* sink) {
 
 Status WriterImpl::Finish() {
   Status status;
-  if (!finished_) {
+  if (!finish_status_.ok()) {
+    status = finish_status_;
+  } else if (!finished_) {
     MutexLock ml(&mutex_);
     bool dry_run = true;
     // Check partition status in a single pass
@@ -301,6 +304,13 @@ Status WriterImpl::Finish() {
         if (!status.ok()) {
           break;
         }
+      }
+    }
+
+    // Set error status
+    if (!status.ok()) {
+      if (!status.IsBufferFull()) {
+        finish_status_ = status;
       }
     }
 
