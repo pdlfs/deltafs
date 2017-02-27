@@ -9,7 +9,7 @@
 
 #include "rados_env.h"
 
-#include "pdlfs-common/buffered_file.h"
+#include "pdlfs-common/env_buf.h"
 
 namespace pdlfs {
 namespace rados {

@@ -10,7 +10,7 @@
 #include "deltafs_plfsio.h"
 #include "deltafs_plfsio_internal.h"
 
-#include "pdlfs-common/buffered_file.h"
+#include "pdlfs-common/env_buf.h"
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"

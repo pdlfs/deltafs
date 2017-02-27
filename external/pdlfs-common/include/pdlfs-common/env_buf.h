@@ -15,12 +15,14 @@
 
 namespace pdlfs {
 
-// Hold a certain amount of data before eventually writing to *base.
+// Buffer a certain amount of data before eventually writing to *base.
 // Ignore flush calls and only sync calls are respected.
 // May lose data for clients that rely on flushes to ensure data durability.
 // To avoid losing data, clients may call sync at a certain time interval,
-// such as 5 seconds. Clients may also call FFlush to force data flush.
-// Implementation is not thread safe.
+// or call FFlush() to force data flush.
+// NOTE: *base will be deleted when this wrapper is deleted
+// NOTE: using write buffer will cause an extra copy of data in memory
+// NOTE: implementation is not thread safe
 class UnsafeBufferedWritableFile : public WritableFile {
  public:
   UnsafeBufferedWritableFile(WritableFile* base, size_t buf_size)
@@ -94,13 +96,39 @@ class UnsafeBufferedWritableFile : public WritableFile {
   std::string buf_;
 };
 
+// Measure the total amount of data written into *base.
+// NOTE: *base will be deleted when this wrapper is deleted
+// NOTE: implementation is not thread safe
+class MeasuredWritableFile : public WritableFile {
+ public:
+  MeasuredWritableFile(WritableFile* base) : base_(base), bytes_(0) {}
+
+  virtual ~MeasuredWritableFile() { delete base_; }
+
+  virtual Status Close() { return base_->Close(); }
+  virtual Status Flush() { return base_->Flush(); }
+  virtual Status Sync() { return base_->Sync(); }
+
+  virtual Status Append(const Slice& data) {
+    Status s = base_->Append(data);
+    if (s.ok()) {
+      bytes_ += data.size();
+    }
+    return s;
+  }
+
+ private:
+  WritableFile* base_;
+  uint64_t bytes_;
+};
+
 // Convert a sequential file to a random access file by pre-loading all
 // its contents into memory and use that to serve all future read requests
 // to the file. At most "max_buf_size_" worth of data will be loaded and
 // buffered in memory. When reading from the buffered file, the returned
 // Slices will remain valid until the file is deleted. Callers must
 // explicitly call Load() to load the file contents.
-// Implementation is not thread safe.
+// NOTE: implementation is not thread safe
 class WholeFileBufferedRandomAccessFile : public RandomAccessFile {
  public:
   WholeFileBufferedRandomAccessFile(SequentialFile* base, size_t buf_size,
