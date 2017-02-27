@@ -589,6 +589,18 @@ Status PlfsIoLogger::Wait() {
   return Status::OK();
 }
 
+// Close log files.
+Status PlfsIoLogger::Close() {
+  mutex_->AssertHeld();
+  mutex_->Unlock();
+  Status s = data_->Lclose();
+  if (s.ok()) {
+    s = index_->Lclose();
+  }
+  mutex_->Lock();
+  return s;
+}
+
 // If dry_run is set, we will only perform status checks (which includes write
 // errors, buffer space, and compaction queue depth) such that no
 // compaction jobs will be scheduled.

@@ -126,15 +126,25 @@ void LogSink::Unref() {
 
 LogSink::~LogSink() {
   if (file_ != NULL) {
+    Status s = Lclose();
+    file_ = NULL;
+    if (!s.ok()) {
+      Error(__LOG_ARGS__, "%s", s.ToString().c_str());
+    }
+  }
+}
+
+Status LogSink::Lclose() {
+  Status s;
+  if (file_ != NULL) {
     if (kSyncBeforeClosing) {
-      Status s = file_->Sync();
-      if (!s.ok()) {
-        Error(__LOG_ARGS__, "%s", s.ToString().c_str());
-      }
+      s = file_->Sync();
     }
     file_->Close();
     delete file_;
+    file_ = NULL;
   }
+  return s;
 }
 
 void LogSource::Unref() {
@@ -280,6 +290,16 @@ Status WriterImpl::Finish() {
     if (status.ok() && data_ != NULL) {
       if (options_.tail_padding) {
         status = EnsureDataPadding(data_);
+      }
+    }
+
+    // Close logs
+    if (status.ok()) {
+      for (size_t i = 0; i < num_parts_; i++) {
+        status = io_[i]->Close();
+        if (!status.ok()) {
+          break;
+        }
       }
     }
   }

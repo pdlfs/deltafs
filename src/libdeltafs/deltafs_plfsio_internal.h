@@ -112,6 +112,7 @@ class PlfsIoLogger {
   Status MakeEpoch(bool dry_run);
   Status Finish(bool dry_run);
   Status Wait();  // Wait for on-going compaction to finish
+  Status Close();
 
  private:
   // No copying allowed

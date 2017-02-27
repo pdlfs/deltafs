@@ -133,16 +133,21 @@ class LogSink {
   uint64_t Ltell() const { return offset_; }
 
   Status Lwrite(const Slice& data) {
-    Status result = file_->Append(data);
-    if (result.ok()) {
-      result = file_->Flush();
+    if (file_ == NULL) {
+      return Status::AssertionFailed("file already closed");
+    } else {
+      Status result = file_->Append(data);
       if (result.ok()) {
-        offset_ += data.size();
+        result = file_->Flush();
+        if (result.ok()) {
+          offset_ += data.size();
+        }
       }
+      return result;
     }
-    return result;
   }
 
+  Status Lclose();
   void Ref() { refs_++; }
   void Unref();
 
