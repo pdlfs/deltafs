@@ -23,7 +23,8 @@
 namespace pdlfs {
 namespace plfsio {
 
-DirStats::DirStats() : data_size(0), index_size(0), write_micros(0) {}
+CompactionStats::CompactionStats()
+    : data_size(0), index_size(0), write_micros(0) {}
 
 DirOptions::DirOptions()
     : memtable_size(32 << 20),
@@ -166,7 +167,7 @@ class WriterImpl : public Writer {
   WriterImpl(const DirOptions& options);
   virtual ~WriterImpl();
 
-  virtual const DirStats* stats() const { return &stats_; }
+  virtual const CompactionStats* stats() const { return &stats_; }
   virtual Status Append(const Slice& fname, const Slice& data);
   virtual Status Sync();
   virtual Status MakeEpoch();
@@ -177,7 +178,7 @@ class WriterImpl : public Writer {
   void MaybeSlowdownCaller();
   friend class Writer;
 
-  DirStats stats_;
+  CompactionStats stats_;
   const DirOptions options_;
   port::Mutex mutex_;
   port::CondVar cond_var_;
@@ -220,14 +221,9 @@ Status WriterImpl::EnsureDataPadding(LogSink* sink) {
   const size_t overflow = total_size % options_.data_buffer;
 
   if (overflow != 0) {
-    const uint64_t start = Env::Default()->NowMicros();
     const size_t padding = options_.data_buffer - overflow;
     assert(padding < options_.data_buffer);
-
     status = sink->Lwrite(std::string(padding, 0));
-    const uint64_t end = Env::Default()->NowMicros();
-    stats_.write_micros = end - start;
-    stats_.data_size += padding;
   }
 
   return status;

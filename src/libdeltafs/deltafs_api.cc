@@ -638,7 +638,7 @@ int deltafs_version_patch() { return PDLFS_COMMON_VERSION_PATCH; }
 namespace {
 
 // Dir stats
-typedef pdlfs::plfsio::DirStats DirStats;
+typedef pdlfs::plfsio::CompactionStats CompactionStats;
 // Dir options
 typedef pdlfs::plfsio::DirOptions DirOptions;
 
@@ -879,7 +879,7 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
 
   if (__dir != NULL && __key != NULL) {
     if (__dir->mode == O_WRONLY) {
-      const DirStats* const stats = __dir->io.writer->stats();
+      const CompactionStats* stats = __dir->io.writer->stats();
       if (stats != NULL) {
         if (strcmp(__key, "compaction_time") == 0) {
           snprintf(tmp, sizeof(tmp), "%llu",

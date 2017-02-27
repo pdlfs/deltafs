@@ -17,17 +17,15 @@
 namespace pdlfs {
 namespace plfsio {
 
-struct DirStats {
-  DirStats();
-
-  // Total physical bytes written to the data log.
-  uint64_t data_size;
+struct CompactionStats {
+  CompactionStats();
+  // Total time spent on compaction.
+  uint64_t write_micros;
 
   // Total physical bytes written to the index log.
   uint64_t index_size;
-
-  // Total time spent on compaction.
-  uint64_t write_micros;
+  // Total physical bytes written to the data log.
+  uint64_t data_size;
 };
 
 struct DirOptions {
@@ -194,7 +192,7 @@ class Writer {
   virtual ~Writer();
 
   // Return a pointer to dir stats.
-  virtual const DirStats* stats() const = 0;
+  virtual const CompactionStats* stats() const = 0;
 
   // Open an I/O writer against a specified plfs-style directory.
   // Return OK on success, or a non-OK status on errors.

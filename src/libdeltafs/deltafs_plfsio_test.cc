@@ -150,7 +150,7 @@ class PlfsIoTest {
 
   void Stats() {
     char tmp[100];
-    const DirStats* stats = NULL;
+    const CompactionStats* stats = NULL;
     if (writer_ != NULL) {
       stats = writer_->stats();
     }

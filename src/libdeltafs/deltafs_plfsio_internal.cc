@@ -503,7 +503,7 @@ Status TableLogger::Finish() {
 
 PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
                            port::CondVar* cv, LogSink* data, LogSink* index,
-                           DirStats* stats)
+                           CompactionStats* stats)
     : options_(options),
       mutex_(mu),
       bg_cv_(cv),
