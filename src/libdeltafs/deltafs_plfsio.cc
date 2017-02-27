@@ -24,7 +24,11 @@ namespace pdlfs {
 namespace plfsio {
 
 CompactionStats::CompactionStats()
-    : data_size(0), index_size(0), write_micros(0) {}
+    : write_micros(0),
+      index_written(0),
+      index_size(0),
+      data_written(0),
+      data_size(0) {}
 
 DirOptions::DirOptions()
     : memtable_size(32 << 20),
@@ -355,21 +359,26 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   return result;
 }
 
-static void PrintLogStream(const std::string& name, size_t buf_size) {
+static void PrintLogInfo(const std::string& name, size_t buf_size) {
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Open plfs io log: %s (buffer=%s)", name.c_str(),
+  Verbose(__LOG_ARGS__, 3, "Open log: %s (buffer/cache=%s)", name.c_str(),
           PrettySize(buf_size).c_str());
 #endif
 }
 
+// If bytes is not NULL, also create a MeasuredWritableFile to
+// count the total number of bytes written to the log.
 static Status NewLogSink(const std::string& name, Env* env, size_t buf_size,
-                         LogSink** ptr) {
+                         LogSink** ptr, uint64_t* bytes = NULL) {
   WritableFile* file;
   Status status = env->NewWritableFile(name, &file);
   if (status.ok()) {
+    if (bytes != NULL) {
+      file = new MeasuredWritableFile(file, bytes);
+    }
     UnsafeBufferedWritableFile* buffered_file =
         new UnsafeBufferedWritableFile(file, buf_size);
-    PrintLogStream(name, buf_size);
+    PrintLogInfo(name, buf_size);
     LogSink* sink = new LogSink(buffered_file);
     sink->Ref();
     *ptr = sink;
@@ -421,11 +430,12 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
   status = NewLogSink(DataFileName(name, my_rank), env, options.data_buffer,
-                      &data[0]);
+                      &data[0], &impl->stats_.data_written);
   for (size_t part = 0; part < num_parts; part++) {
     if (status.ok()) {
       status = NewLogSink(PartitionIndexFileName(name, my_rank, part), env,
-                          options.index_buffer, &index[part]);
+                          options.index_buffer, &index[part],
+                          &impl->stats_.index_written);
     } else {
       break;
     }
@@ -523,7 +533,7 @@ static Status NewLogSrc(const std::string& fname, Env* env, LogSource** ptr) {
     if (!status.ok()) {
       delete buffered_file;
     } else {
-      PrintLogStream(fname, size);
+      PrintLogInfo(fname, size);
       LogSource* src = new LogSource(buffered_file, size);
       src->Ref();
       *ptr = src;
@@ -545,7 +555,7 @@ static Status NewUnbufferedLogSrc(const std::string& fname, Env* env,
     }
   }
   if (status.ok()) {
-    PrintLogStream(fname, 0);
+    PrintLogInfo(fname, 0);
     LogSource* src = new LogSource(file, size);
     src->Ref();
     *ptr = src;

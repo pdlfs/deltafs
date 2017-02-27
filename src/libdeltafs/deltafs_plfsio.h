@@ -23,8 +23,12 @@ struct CompactionStats {
   uint64_t write_micros;
 
   // Total physical bytes written to the index log.
+  uint64_t index_written;
+  // Total size of the index log.
   uint64_t index_size;
   // Total physical bytes written to the data log.
+  uint64_t data_written;
+  // Total size of the data log.
   uint64_t data_size;
 };
 
