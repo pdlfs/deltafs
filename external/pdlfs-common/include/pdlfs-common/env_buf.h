@@ -96,12 +96,14 @@ class UnsafeBufferedWritableFile : public WritableFile {
   std::string buf_;
 };
 
-// Measure the total amount of data written into *base.
+// Measure the total amount of data written into *base and store
+// the result in an external counter.
 // NOTE: *base will be deleted when this wrapper is deleted
 // NOTE: implementation is not thread safe
 class MeasuredWritableFile : public WritableFile {
  public:
-  MeasuredWritableFile(WritableFile* base) : base_(base), bytes_(0) {}
+  MeasuredWritableFile(WritableFile* base, uint64_t* dst)
+      : base_(base), bytes_(dst) {}
 
   virtual ~MeasuredWritableFile() { delete base_; }
 
@@ -112,14 +114,14 @@ class MeasuredWritableFile : public WritableFile {
   virtual Status Append(const Slice& data) {
     Status s = base_->Append(data);
     if (s.ok()) {
-      bytes_ += data.size();
+      *bytes_ += data.size();
     }
     return s;
   }
 
  private:
   WritableFile* base_;
-  uint64_t bytes_;
+  uint64_t* bytes_;
 };
 
 // Convert a sequential file to a random access file by pre-loading all
