@@ -471,16 +471,18 @@ Status TableLogger::Finish() {
   }
 
   if (ok()) {
-    // Add enough padding to ensure the final size of the index log
-    // is some multiple of the physical write size.
-    const uint64_t total_size = index_log_->Ltell() + tail.size();
-    const size_t off = total_size % options_.index_buffer;
-    if (off != 0) {
-      const size_t padding = options_.index_buffer - off;
-      status_ = index_log_->Lwrite(std::string(padding, 0));
-      if (status_.ok()) {
-        status_ = index_log_->Lwrite(tail);
+    if (options_.tail_padding) {
+      // Add enough padding to ensure the final size of the index log
+      // is some multiple of the physical write size.
+      const uint64_t total_size = index_log_->Ltell() + tail.size();
+      const size_t off = total_size % options_.index_buffer;
+      if (off != 0) {
+        const size_t padding = options_.index_buffer - off;
+        status_ = index_log_->Lwrite(std::string(padding, 0));
       }
+    }
+    if (status_.ok()) {
+      status_ = index_log_->Lwrite(tail);
     }
   }
 

@@ -73,6 +73,11 @@ struct DirOptions {
   // Default: 2MB
   size_t index_buffer;
 
+  // Add necessary padding to the end of a log to ensure the final size
+  // is always some multiple of the write size.
+  // Default: false
+  bool tail_padding;
+
   // Thread pool used to run background compaction jobs.
   // If set to NULL, Env::Default() will be used to schedule jobs.
   // Default: NULL

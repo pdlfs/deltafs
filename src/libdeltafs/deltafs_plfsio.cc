@@ -34,6 +34,7 @@ DirOptions::DirOptions()
       block_util(0.999),
       data_buffer(2 << 20),
       index_buffer(2 << 20),
+      tail_padding(false),
       compaction_pool(NULL),
       non_blocking(false),
       slowdown_micros(0),
@@ -77,6 +78,10 @@ DirOptions ParseDirOptions(const char* input) {
     } else if (conf_key == "index_buffer") {
       if (ParsePrettyNumber(conf_value, &num)) {
         options.index_buffer = num;
+      }
+    } else if (conf_key == "tail_padding") {
+      if (ParsePrettyBool(conf_value, &flag)) {
+        options.tail_padding = flag;
       }
     } else if (conf_key == "verify_checksums") {
       if (ParsePrettyBool(conf_value, &flag)) {
@@ -362,6 +367,8 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
           PrettySize(options.data_buffer).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.index_buffer -> %s",
           PrettySize(options.index_buffer).c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.tail_padding -> %d",
+          int(options.tail_padding));
   Verbose(__LOG_ARGS__, 2, "plfsdir.unique_keys -> %d",
           int(options.unique_keys));
   Verbose(__LOG_ARGS__, 2, "plfsdir.num_parts_per_rank -> %u",
