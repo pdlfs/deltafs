@@ -126,7 +126,6 @@ extern DirOptions ParseDirOptions(const char* conf);
 // append-only log stream.
 class LogSink {
  public:
-  LogSink(WritableFile* f, uint64_t s) : file_(f), offset_(s), refs_(0) {}
   explicit LogSink(WritableFile* f) : file_(f), offset_(0), refs_(0) {}
 
   uint64_t Ltell() const { return offset_; }
