@@ -173,6 +173,7 @@ class WriterImpl : public Writer {
   virtual Status Finish();
 
  private:
+  Status EnsureDataPadding(LogSink* sink);
   void MaybeSlowdownCaller();
   friend class Writer;
 
@@ -213,6 +214,25 @@ void WriterImpl::MaybeSlowdownCaller() {
   }
 }
 
+Status WriterImpl::EnsureDataPadding(LogSink* sink) {
+  Status status;
+  const uint64_t offset = sink->Ltell();
+  const size_t overflow = offset % options_.data_buffer;
+
+  if (overflow != 0) {
+    const uint64_t start = Env::Default()->NowMicros();
+    const size_t padding = options_.data_buffer - overflow;
+    assert(padding < options_.data_buffer);
+
+    status = sink->Lwrite(std::string(padding, 0));
+    const uint64_t end = Env::Default()->NowMicros();
+    stats_.write_micros = end - start;
+    stats_.data_size += padding;
+  }
+
+  return status;
+}
+
 Status WriterImpl::Finish() {
   Status status;
   {
@@ -249,7 +269,7 @@ Status WriterImpl::Finish() {
     // Wait for compaction
     if (status.ok()) {
       for (size_t i = 0; i < num_parts_; i++) {
-        status_ = io_[i]->Wait();
+        status = io_[i]->Wait();
         if (!status.ok()) {
           break;
         }
@@ -259,17 +279,7 @@ Status WriterImpl::Finish() {
     // Padding
     if (status.ok() && data_ != NULL) {
       if (options_.tail_padding) {
-        const uint64_t offset = data_->Ltell();
-        const size_t overflow = offset % options_.data_buffer;
-        if (overflow != 0) {
-          const uint64_t start = Env::Default()->NowMicros();
-          const size_t padding = options_.data_buffer - overflow;
-          assert(padding < options_.data_buffer);
-          status = data_->Lwrite(std::string(padding, 0));
-          const uint64_t end = Env::Default()->NowMicros();
-          stats_.write_micros = end - start;
-          stats_.data_size += padding;
-        }
+        status = EnsureDataPadding(data_);
       }
     }
   }
