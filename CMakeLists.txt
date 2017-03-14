@@ -40,6 +40,7 @@
 #   -DPDLFS_VERBOSE=1                      -- set max log verbose level
 #
 # DELTAFS specific compile time options flags:
+#   -DDELTAFS_BBOS=ON                      -- build BBOS env
 #   -DDELTAFS_BENCHMARKS=ON                -- build our MPI-based benchmarks
 #   -DDELTAFS_MPI=ON                       -- enable MPI in deltafs
 #
@@ -82,6 +83,7 @@ include (cmake-options)
 include (pdlfs-options)
 
 # user hooks to configure deltafs
+set (DELTAFS_BBOS "OFF" CACHE BOOL "Build Deltafs BBOS Env")
 set (DELTAFS_BENCHMARKS "OFF" CACHE BOOL "Build benchmarks (requires MPI)")
 set (DELTAFS_MPI "OFF" CACHE
      BOOL "Enable DELTAFS MPI-based communication")
@@ -94,6 +96,11 @@ if (DELTAFS_MPI OR DELTAFS_BENCHMARKS)
     if (NOT MPI_FOUND)
         message (FATAL_ERROR "MPI not found (required for DELTAFS_MPI or benchmarks)")
     endif ()
+endif ()
+
+if (DELTAFS_BBOS)
+  find_package (bbos CONFIG REQUIRED)
+  message (STATUS "deltafs bbos enabled")
 endif ()
 
 add_subdirectory (external/pdlfs-common/src)
