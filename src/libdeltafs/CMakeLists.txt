@@ -18,6 +18,7 @@ set (deltafs-srcs deltafs_api.cc deltafs_client.cc deltafs_conf.cc
      deltafs_plfsio_format.cc deltafs_sysinfo.cc
      mds.cc mds_api.cc mds_cli.cc mds_factory.cc mds_srv.cc
      snap_stor.cc)
+
 set (deltafs-tests deltafs_plfsio_test mds_api_test.cc mds_srv_test.cc)
 
 # configure/load in standard modules we plan to use
@@ -28,6 +29,13 @@ find_package (Threads REQUIRED)
 
 # common lib is always required
 set (DELTAFS_REQUIRED_PACKAGES "deltafs-common")
+
+# optional deltafs-bb
+if (DELTAFS_BBOS)
+    list (APPEND deltafs-srcs bbos_env.cc)
+    list (APPEND DELTAFS_REQUIRED_PACKAGES bbos)
+endif ()
+
 
 if (DELTAFS_MPI)
     list (APPEND DELTAFS_REQUIRED_PACKAGES MPI)
@@ -69,6 +77,10 @@ target_include_directories (deltafs PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../../include>
     $<INSTALL_INTERFACE:include>)
 target_link_libraries (deltafs deltafs-common)
+if (DELTAFS_BBOS)
+    target_link_libraries (deltafs bbos)
+endif ()
+
 # special handling for MPI, where the config comes in via MPI_<lang>_ vars.
 # we only add to the build interface so that we don't put hardcoded paths
 # in the config files.
