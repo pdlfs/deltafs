@@ -14,7 +14,7 @@
 #include <sys/stat.h>
 #include <deque>
 
-#include "../../../external/pdlfs-common/include/pdlfs-common/env.h"
+#include "pdlfs-common/env.h"
 #include <bbos/bbos_api.h>
 
 namespace pdlfs {
@@ -44,7 +44,7 @@ class BbosBufferedSequentialFile : public SequentialFile {
     size_t total_data_read = 0;
     do {
       data_read = bbos_read(bb_handle_, obj_name_.c_str(), (void *)(scratch + total_data_read),
-                            total_data_read, total_data_read - data_read);
+                            total_data_read, n - total_data_read);
       if(data_read < 0) {
         return IOError(obj_name_, data_read);
       }
@@ -76,7 +76,7 @@ class BbosSequentialFile : public SequentialFile {
     size_t total_data_read = 0;
     do {
       data_read = bbos_read(bb_handle_, obj_name_.c_str(), (void *)(scratch + total_data_read),
-                            total_data_read, total_data_read - data_read);
+                            total_data_read, n - total_data_read);
       if(data_read < 0) {
         return IOError(obj_name_, data_read);
       }
@@ -109,7 +109,7 @@ class BbosRandomAccessFile : public RandomAccessFile {
     size_t total_data_read = 0;
     do {
       data_read = bbos_read(bb_handle_, obj_name_.c_str(), (void *)(scratch + total_data_read + offset),
-                            total_data_read, total_data_read - data_read);
+                            total_data_read, n - total_data_read);
       if(data_read < 0) {
         return IOError(obj_name_, data_read);
       }
@@ -212,16 +212,17 @@ class BbosEnv: public Env {
   bbos_handle_t bb_handle_;
 
  public:
-  explicit BbosEnv() {
-    if(bbos_init("bmi+tcp://localhost:19900", "bmi+tcp://localhost:19900", &bb_handle_) != BB_SUCCESS) {
-      return;
+  explicit BbosEnv(const char *local, const char *server,
+                 void *vhclass, void *vhctx) {
+    if(bbos_init_ext(local, server, vhclass, vhctx, &bb_handle_) != BB_SUCCESS) {
+      abort();
     }
   }
   virtual ~BbosEnv() { abort(); }
 
   virtual Status NewSequentialFile(const Slice& fname,
                                    SequentialFile** result) {
-    int ret = bbos_mkobj(bb_handle_, fname.c_str(), WRITE_OPTIMIZED);
+    int ret = bbos_mkobj(bb_handle_, fname.c_str(), READ_OPTIMIZED);
     if(ret == BB_SUCCESS) {
       *result = new BbosSequentialFile(bb_handle_, fname.ToString());
       return Status::OK();
