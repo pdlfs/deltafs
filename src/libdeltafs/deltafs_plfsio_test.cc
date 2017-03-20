@@ -10,6 +10,7 @@
 #include "deltafs_plfsio_internal.h"
 
 #include "pdlfs-common/coding.h"
+#include "pdlfs-common/murmur.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 
@@ -157,9 +158,9 @@ class PlfsIoTest {
     }
     if (stats != NULL) {
       snprintf(tmp, sizeof(tmp),
-               ">> index_size=%llu bytes, index_written=%llu bytes\n"
-               ">> data_size=%llu bytes, data_written=%llu bytes\n"
-               ">> write_micros=%llu us\n",
+               "isz=%8llu B, idu=%8llu B, "
+               "dsz=%8llu B, ddu=%8llu B, "
+               "micros=%llu us\n",
                static_cast<unsigned long long>(stats->index_size),
                static_cast<unsigned long long>(stats->index_written),
                static_cast<unsigned long long>(stats->data_size),
@@ -259,9 +260,47 @@ TEST(PlfsIoTest, NoUniKeys0) {
   ASSERT_EQ(Read("k1"), "v1v2v4v5v6v7v9");
 }
 
+static void BM_LogAndApply(size_t num_entries) {
+  Writer* writer;
+  DirOptions options;
+  options.verify_checksums = false;
+  options.env = TestEnv();
+  options.key_size = 10;
+  options.value_size = 40;
+  options.bf_bits_per_key = 10;
+  std::string dirhome = test::TmpDir() + "/plfsio_test_benchmark";
+  DestroyDir(dirhome, options);
+  ASSERT_OK(Writer::Open(options, dirhome, &writer));
+
+  uint64_t start = Env::Default()->NowMicros();
+
+  char key[16];
+  std::string dummy_value(options.value_size, 'x');
+  for (size_t i = 0; i < num_entries; i++) {
+    murmur_x64_128(&i, sizeof(i), 0, key);
+    ASSERT_OK(writer->Append(Slice(key, options.key_size), dummy_value));
+  }
+  ASSERT_OK(writer->Finish());
+
+  uint64_t end = Env::Default()->NowMicros();
+
+  fprintf(stderr, "%llu keys, %llu us, %.2f us/key",
+          static_cast<unsigned long long>(num_entries),
+          static_cast<unsigned long long>(end - start),
+          double(end - start) / double(num_entries));
+
+  delete writer;
+}
+
 }  // namespace plfsio
 }  // namespace pdlfs
 
 int main(int argc, char* argv[]) {
+  if (argc > 1 && std::string(argv[1]) == "--benchmark") {
+    ::pdlfs::plfsio::BM_LogAndApply(1 << 20);
+    ::pdlfs::plfsio::BM_LogAndApply(4 << 20);
+    ::pdlfs::plfsio::BM_LogAndApply(16 << 20);
+  }
+
   return ::pdlfs::test::RunAllTests(&argc, &argv);
 }
