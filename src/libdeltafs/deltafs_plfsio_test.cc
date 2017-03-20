@@ -302,7 +302,7 @@ int main(int argc, char* argv[]) {
     ::pdlfs::plfsio::BM_LogAndApply(4 << 20);
     ::pdlfs::plfsio::BM_LogAndApply(16 << 20);
     ::pdlfs::plfsio::BM_LogAndApply(64 << 20);
-    return;
+    return 0;
   }
 
   return ::pdlfs::test::RunAllTests(&argc, &argv);
