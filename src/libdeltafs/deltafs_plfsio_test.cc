@@ -284,10 +284,11 @@ static void BM_LogAndApply(size_t num_entries) {
 
   uint64_t end = Env::Default()->NowMicros();
 
-  fprintf(stderr, "%llu keys, %llu us, %.2f us/key",
+  fprintf(stderr, "%llu keys, %llu us, %.2f us/key, %.3f MBps (value_only)\n",
           static_cast<unsigned long long>(num_entries),
           static_cast<unsigned long long>(end - start),
-          double(end - start) / double(num_entries));
+          double(end - start) / double(num_entries),
+          double(num_entries * options.value_size) / double(end - start));
 
   delete writer;
 }
@@ -300,6 +301,8 @@ int main(int argc, char* argv[]) {
     ::pdlfs::plfsio::BM_LogAndApply(1 << 20);
     ::pdlfs::plfsio::BM_LogAndApply(4 << 20);
     ::pdlfs::plfsio::BM_LogAndApply(16 << 20);
+    ::pdlfs::plfsio::BM_LogAndApply(64 << 20);
+    return;
   }
 
   return ::pdlfs::test::RunAllTests(&argc, &argv);
