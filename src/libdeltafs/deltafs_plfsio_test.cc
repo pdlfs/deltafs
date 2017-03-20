@@ -160,7 +160,7 @@ class PlfsIoTest {
       snprintf(tmp, sizeof(tmp),
                "isz=%8llu B, idu=%8llu B, "
                "dsz=%8llu B, ddu=%8llu B, "
-               "micros=%llu us\n",
+               "micros=%llu us",
                static_cast<unsigned long long>(stats->index_size),
                static_cast<unsigned long long>(stats->index_written),
                static_cast<unsigned long long>(stats->data_size),
@@ -284,11 +284,29 @@ static void BM_LogAndApply(size_t num_entries) {
 
   uint64_t end = Env::Default()->NowMicros();
 
-  fprintf(stderr, "%llu keys, %llu us, %.2f us/key, %.3f MBps (value_only)\n",
+  fprintf(stderr, "== %9llu keys, %5.1f s, %5.2f us/key, %8.3f MB/s (value)\n",
           static_cast<unsigned long long>(num_entries),
-          static_cast<unsigned long long>(end - start),
+          double(end - start) / double(1000000),
           double(end - start) / double(num_entries),
           double(num_entries * options.value_size) / double(end - start));
+
+  char tmp[200];
+  const CompactionStats* stats = NULL;
+  if (writer != NULL) {
+    stats = writer->stats();
+  }
+  if (stats != NULL) {
+    snprintf(tmp, sizeof(tmp),
+             "isz=%8llu B, idu=%8llu B, "
+             "dsz=%8llu B, ddu=%8llu B, "
+             "micros=%llu us",
+             static_cast<unsigned long long>(stats->index_size),
+             static_cast<unsigned long long>(stats->index_written),
+             static_cast<unsigned long long>(stats->data_size),
+             static_cast<unsigned long long>(stats->data_written),
+             static_cast<unsigned long long>(stats->write_micros));
+    fprintf(stderr, "%s\n", tmp);
+  }
 
   delete writer;
 }
