@@ -700,7 +700,6 @@ Status PlfsIoLogger::Prepare(bool flush, bool finish) {
       }
     } else {
       // Attempt to switch to a new write buffer
-      mem_buf_->Finish();
       assert(imm_buf_ == NULL);
       imm_buf_ = mem_buf_;
       if (flush) {
@@ -762,7 +761,7 @@ void PlfsIoLogger::DoCompaction() {
 
 void PlfsIoLogger::CompactWriteBuffer() {
   mutex_->AssertHeld();
-  const WriteBuffer* const buffer = imm_buf_;
+  WriteBuffer* const buffer = imm_buf_;
   assert(buffer != NULL);
   const bool pending_finish = pending_finish_;
   const bool pending_epoch_flush = pending_epoch_flush_;
@@ -788,6 +787,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
   if (bf_bits_per_key != 0 && bf_bytes != 0) {
     bloom_filter = new BloomBlock(bf_bits_per_key, bf_bytes);
   }
+  buffer->Finish();
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {
