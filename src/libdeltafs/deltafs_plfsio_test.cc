@@ -297,8 +297,8 @@ static void BM_LogAndApply(size_t num_entries) {
   }
   if (stats != NULL) {
     snprintf(tmp, sizeof(tmp),
-             "isz=%8llu B, idu=%8llu B, "
-             "dsz=%8llu B, ddu=%8llu B, "
+             "isz=%12llu B, idu=%12llu B, "
+             "dsz=%12llu B, ddu=%12llu B, "
              "micros=%llu us",
              static_cast<unsigned long long>(stats->index_size),
              static_cast<unsigned long long>(stats->index_written),
@@ -316,10 +316,10 @@ static void BM_LogAndApply(size_t num_entries) {
 
 int main(int argc, char* argv[]) {
   if (argc > 1 && std::string(argv[1]) == "--benchmark") {
-    ::pdlfs::plfsio::BM_LogAndApply(1 << 20);
+    ::pdlfs::plfsio::BM_LogAndApply(2 << 20);
     ::pdlfs::plfsio::BM_LogAndApply(4 << 20);
+    ::pdlfs::plfsio::BM_LogAndApply(8 << 20);
     ::pdlfs::plfsio::BM_LogAndApply(16 << 20);
-    ::pdlfs::plfsio::BM_LogAndApply(64 << 20);
     return 0;
   }
 
