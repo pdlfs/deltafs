@@ -1,5 +1,3 @@
-#include "pdlfs-common/testharness.h"
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2017 Carnegie Mellon University.
@@ -10,6 +8,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/testharness.h"
 #include "pdlfs-common/pdlfs_config.h"
 #if defined(PDLFS_GFLAGS)
 #include <gflags/gflags.h>
@@ -49,7 +48,10 @@ int RunAllTests(int* argc, char*** argv) {
 #if defined(PDLFS_GFLAGS)
   ::google::ParseCommandLineFlags(argc, argv, true);
 #endif
-  const char* matcher = getenv("TESTS");
+  const char* matcher = getenv("PDLFS_TESTS");
+  if (matcher == NULL) {
+    matcher = getenv("TESTS");
+  }
 #if defined(PDLFS_GLOG)
   ::google::InitGoogleLogging((*argv)[0]);
   ::google::InstallFailureSignalHandler();
@@ -62,11 +64,11 @@ int RunAllTests(int* argc, char*** argv) {
         std::string name = t.base;
         name.push_back('.');
         name.append(t.name);
-        if (matcher[0] != '~') {
+        if (matcher[0] != '~') {  // only run tests that matches
           if (strstr(name.c_str(), matcher) == NULL) {
             continue;
           }
-        } else {
+        } else {  // skip tests that matches
           if (strstr(name.c_str(), matcher + 1) != NULL) {
             continue;
           }
