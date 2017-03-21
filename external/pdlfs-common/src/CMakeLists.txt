@@ -226,10 +226,10 @@ target_compile_definitions (${PDLFS_NAME} PUBLIC -DPDLFS_CONFIG=${PDLFS_NAME})
 foreach (lcv ${PDLFS_COMMON_DEFINES})
     target_compile_definitions (${PDLFS_NAME} PUBLIC "-D${lcv}")
 endforeach ()
-target_include_directories (${PDLFS_NAME} PUBLIC
+target_include_directories (${PDLFS_NAME} PUBLIC $<INSTALL_INTERFACE:include>)
+target_include_directories (${PDLFS_NAME} BEFORE PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>
-    $<INSTALL_INTERFACE:include>)
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
 if (CMAKE_THREAD_LIBS_INIT)
   target_link_libraries (${PDLFS_NAME} "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
