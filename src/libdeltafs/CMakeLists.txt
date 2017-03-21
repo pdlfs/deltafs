@@ -72,10 +72,10 @@ set (deltafs-all-tests ${deltafs-tests})
 # we need a -I pointing to the build dir for pdlfs_config_expand.h)
 #
 add_library (deltafs ${deltafs-all-srcs})
-target_include_directories (deltafs PUBLIC
+target_include_directories (deltafs PUBLIC $<INSTALL_INTERFACE:include>)
+target_include_directories (deltafs BEFORE PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../../include>
-    $<INSTALL_INTERFACE:include>)
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../../include>)
 target_link_libraries (deltafs deltafs-common)
 if (DELTAFS_BBOS)
     target_link_libraries (deltafs bbos)
