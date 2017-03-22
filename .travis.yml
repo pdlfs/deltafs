@@ -118,6 +118,7 @@ install:
               -DPDLFS_MERCURY_RPC=ON \
               -DPDLFS_RADOS=OFF \
               -DPDLFS_SNAPPY=ON \
+              -DDELTAFS_COMMON_INTREE=ON \
               ..
   - make && make install
   - echo "Installed into /tmp/${PKG}"
