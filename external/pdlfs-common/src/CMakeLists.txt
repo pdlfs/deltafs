@@ -311,19 +311,8 @@ install (FILES
          DESTINATION include/pdlfs-common)
 
 #
-# tests... we EXCLUDE_FROM_ALL the tests and add a custom target
-# "pdl-build-tests" to build tests (we prefix with "pdl-" since
-# custom targets must be globally unique).   if the top-level
-# CMakeLists.txt calls enable_testing (), then you can "make pdl-build-tests"
-# and then "make test" (or run ctest directly).
+# tests: use "pdl-build-tests" custom target defined in pdlfs-options.cmake
 #
-if (NOT TARGET pdl-build-tests)           # can only define it once
-    if (BUILD_TESTS)
-        add_custom_target (pdl-build-tests ALL)
-    else ()
-        add_custom_target (pdl-build-tests)
-    endif ()
-endif ()
 foreach (lcv ${pdlfs-all-tests})
 
     # use basename as test name

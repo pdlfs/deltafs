@@ -44,6 +44,21 @@ include (xpkg-import)
 #
 
 #
+# tests... we EXCLUDE_FROM_ALL the tests and add a custom target
+# "pdl-build-tests" to build tests (we prefix with "pdl-" since
+# custom targets must be globally unique).   if the top-level
+# CMakeLists.txt calls enable_testing (), then you can "make pdl-build-tests"
+# and then "make test" (or run ctest directly).
+#
+if (NOT TARGET pdl-build-tests)           # can only define it once
+    if (BUILD_TESTS)
+        add_custom_target (pdl-build-tests ALL)
+    else ()
+        add_custom_target (pdl-build-tests)
+    endif ()
+endif ()
+
+#
 # PDLFS_COMMON_LIBNAME allows clients to do custom compile-time configuration
 # of the library and install the customized version under an alternate name
 # (e.g. lib/libdeltafs-common.a instead of lib/pdlfs-common.a).  note that
