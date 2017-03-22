@@ -42,6 +42,7 @@
 # DELTAFS specific compile time options flags:
 #   -DDELTAFS_BBOS=ON                      -- build BBOS env
 #   -DDELTAFS_BENCHMARKS=ON                -- build our MPI-based benchmarks
+#   -DDELTAFS_COMMON_INTREE=OFF            -- in-tree common lib (for devel)
 #   -DDELTAFS_MPI=ON                       -- enable MPI in deltafs
 #
 #    If you want to force a particular MPI compiler other than what we
@@ -85,6 +86,8 @@ include (pdlfs-options)
 # user hooks to configure deltafs
 set (DELTAFS_BBOS "OFF" CACHE BOOL "Build Deltafs BBOS Env")
 set (DELTAFS_BENCHMARKS "OFF" CACHE BOOL "Build benchmarks (requires MPI)")
+set (DELTAFS_COMMON_INTREE "OFF" CACHE BOOL
+     "Build in-tree common lib (for devel)")
 set (DELTAFS_MPI "OFF" CACHE
      BOOL "Enable DELTAFS MPI-based communication")
 
@@ -103,7 +106,17 @@ if (DELTAFS_BBOS)
   message (STATUS "deltafs bbos enabled")
 endif ()
 
-add_subdirectory (external/pdlfs-common/src)
+#
+# we build the in-tree pdlfs-common if DELTAFS_COMMON_INTREE is set,
+# otherwise we look for one already built in our install or prefix path.
+#
+if (DELTAFS_COMMON_INTREE)
+    add_subdirectory (external/pdlfs-common/src)
+else ()
+    message ("OK ${PDLFS_COMPONENT_CFG}") # XXXCDC
+    find_package (deltafs-common REQUIRED COMPONENTS ${PDLFS_COMPONENT_CFG})
+endif ()
+
 add_subdirectory (src)
 if (DELTAFS_BENCHMARKS)
     add_subdirectory (benchmarks)
