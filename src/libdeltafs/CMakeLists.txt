@@ -170,7 +170,7 @@ install (FILES
    DESTINATION include/deltafs)
 
 #
-# tests... we EXCLUDE_FROM_ALL the tests and use pdlfs-common's
+# tests... we EXCLUDE_FROM_ALL the tests and use pdlfs-options.cmake's
 # pdl-build-tests target for building.
 #
 foreach (lcv ${deltafs-all-tests})
