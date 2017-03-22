@@ -86,7 +86,7 @@ include (pdlfs-options)
 # user hooks to configure deltafs
 set (DELTAFS_BBOS "OFF" CACHE BOOL "Build Deltafs BBOS Env")
 set (DELTAFS_BENCHMARKS "OFF" CACHE BOOL "Build benchmarks (requires MPI)")
-set (DELTAFS_COMMON_INTREE "OFF" CACHE BOOL
+set (DELTAFS_COMMON_INTREE "ON" CACHE BOOL   # XXXCDC: TMP DEFAULT TO ON
      "Build in-tree common lib (for devel)")
 set (DELTAFS_MPI "OFF" CACHE
      BOOL "Enable DELTAFS MPI-based communication")
