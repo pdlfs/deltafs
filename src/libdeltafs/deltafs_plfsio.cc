@@ -565,7 +565,7 @@ static Status NewLogSrc(const std::string& fname, Env* env, LogSource** ptr) {
     }
   }
   if (status.ok()) {
-    const size_t io_size = 1 << 20;  // Less physical I/O ops
+    const size_t io_size = 8 << 20;  // Less physical I/O ops
     WholeFileBufferedRandomAccessFile* buffered_file =
         new WholeFileBufferedRandomAccessFile(file, size, io_size);
     status = buffered_file->Load();
