@@ -77,16 +77,6 @@ set (THREADS_PREFER_PTHREAD_FLAG TRUE)
 # (3.1 was released late 2014)
 find_package (Threads REQUIRED)
 
-if (TARGET gflags AND PDLFS_GFLAGS)
-    list (APPEND PDLFS_REQUIRED_PACKAGES gflags)
-    list (APPEND pdlfs-xtra-libs gflags)
-endif ()
-
-if (TARGET glog::glog AND PDLFS_GLOG)
-    list (APPEND PDLFS_REQUIRED_XDUALIMPORTS glog::glog,glog,libglog)
-    list (APPEND pdlfs-xtra-libs glog::glog)
-endif ()
-
 if (TARGET margo AND PDLFS_MARGO_RPC)
     list (APPEND PDLFS_REQUIRED_XPKGIMPORTS margo)  # for *-config.cmake
     list (APPEND pdlfs-xtra-libs margo)             # for build
@@ -108,6 +98,18 @@ endif ()
 if (TARGET snappy AND PDLFS_SNAPPY)
     list (APPEND PDLFS_REQUIRED_PACKAGES Snappy)
     list (APPEND pdlfs-xtra-libs snappy)
+endif ()
+
+if (TARGET glog::glog AND PDLFS_GLOG)
+    list (APPEND PDLFS_REQUIRED_XDUALIMPORTS glog::glog,glog,libglog)
+    list (APPEND pdlfs-xtra-libs glog::glog)
+endif ()
+
+if (PDLFS_GFLAGS)
+    if (TARGET gflags OR TARGET gflags-shared OR TARGET gflags-static)
+        list (APPEND PDLFS_REQUIRED_PACKAGES gflags)
+        list (APPEND pdlfs-xtra-libs gflags)
+    endif ()
 endif ()
 
 #
