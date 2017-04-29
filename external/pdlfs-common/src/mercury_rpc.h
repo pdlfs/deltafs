@@ -75,7 +75,7 @@ class MercuryRPC {
   MercuryRPC(const MercuryRPC&);
 
   static inline MercuryRPC* registered_data(hg_handle_t handle) {
-    hg_info* info = HG_Get_info(handle);
+    const hg_info* info = HG_Get_info(handle);
     void* data = HG_Registered_data(info->hg_class, info->id);
     MercuryRPC* rpc = reinterpret_cast<MercuryRPC*>(data);
     assert(rpc != NULL);
