@@ -12,7 +12,19 @@
 namespace pdlfs {
 namespace bbos {
 
-inline Status BbosError(const std::string& err_msg, int err_num) {
+// Convert a hierarchical file path to a flattened bbos object name
+std::string BbosName(const char* fname) {
+  std::string result(fname);
+  std::string::size_type start_pos = 0;
+  while ((start_pos = result.find("/", start_pos)) != std::string::npos) {
+    result.replace(start_pos, 1, "--");
+    start_pos += 2;
+  }
+  return result;
+}
+
+// Map bbos errors to deltafs errors
+Status BbosError(const std::string& err_msg, int err_num) {
   switch (err_num) {
     case BB_INVALID_READ:
       return Status::IOError(err_msg, "read past EOF");
@@ -42,29 +54,30 @@ class BbosEnv : public Env {
   virtual Status NewSequentialFile(const Slice& fname,
                                    SequentialFile** result) {
     // XXX: do we need to check object existence and how?
-    *result = new BbosSequentialFile(fname.c_str(), bb_handle_);
+    *result = new BbosSequentialFile(BbosName(fname.c_str()), bb_handle_);
     return Status::OK();
   }
 
   virtual Status NewRandomAccessFile(const Slice& fname,
                                      RandomAccessFile** result) {
     // XXX: do we need to check object existence and how?
-    *result = new BbosRandomAccessFile(fname.c_str(), bb_handle_);
+    *result = new BbosRandomAccessFile(BbosName(fname.c_str()), bb_handle_);
     return Status::OK();
   }
 
   virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
-    int ret =
-        bbos_mkobj(bb_handle_, fname.c_str(),
-                   static_cast<bbos_mkobj_flag_t>(TryResolveBbosType(fname)));
+    std::string obj_name = BbosName(fname.c_str());
+    int ret = bbos_mkobj(
+        bb_handle_, obj_name.c_str(),
+        static_cast<bbos_mkobj_flag_t>(TryResolveBbosType(obj_name)));
     if (ret != BB_SUCCESS) {
       std::string bbos_err_msg("cannot create bbos object '");
-      bbos_err_msg += fname.c_str();
+      bbos_err_msg += obj_name;
       bbos_err_msg += "'";
       *result = NULL;
       return BbosError(bbos_err_msg, ret);
     } else {
-      *result = new BbosWritableFile(fname.c_str(), bb_handle_);
+      *result = new BbosWritableFile(obj_name, bb_handle_);
       return Status::OK();
     }
   }
@@ -74,10 +87,11 @@ class BbosEnv : public Env {
   }
 
   virtual Status GetFileSize(const Slice& fname, uint64_t* file_size) {
-    off_t ret = bbos_get_size(bb_handle_, fname.c_str());
+    std::string obj_name = BbosName(fname.c_str());
+    off_t ret = bbos_get_size(bb_handle_, obj_name.c_str());
     if (ret < 0) {
       std::string bbos_err_msg("cannot get bbos object length '");
-      bbos_err_msg += fname.c_str();
+      bbos_err_msg += obj_name;
       bbos_err_msg += "'";
       *file_size = 0;
       return BbosError(bbos_err_msg, ret);

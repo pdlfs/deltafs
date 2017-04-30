@@ -46,7 +46,7 @@ class BbosSequentialFile : public SequentialFile {
   uint64_t off_;
 
  public:
-  BbosSequentialFile(const char* obj_name, bbos_handle_t bbos)
+  BbosSequentialFile(const std::string& obj_name, bbos_handle_t bbos)
       : obj_name_(obj_name), bbos_(bbos), off_(0) {}
 
   virtual ~BbosSequentialFile() {}
@@ -79,7 +79,7 @@ class BbosRandomAccessFile : public RandomAccessFile {
   bbos_handle_t bbos_;
 
  public:
-  BbosRandomAccessFile(const char* obj_name, bbos_handle_t bbos)
+  BbosRandomAccessFile(const std::string& obj_name, bbos_handle_t bbos)
       : obj_name_(obj_name), bbos_(bbos) {}
 
   virtual ~BbosRandomAccessFile() {}
@@ -107,7 +107,7 @@ class BbosWritableFile : public WritableFile {
   bbos_handle_t bbos_;
 
  public:
-  BbosWritableFile(const char* obj_name, bbos_handle_t bbos)
+  BbosWritableFile(const std::string& obj_name, bbos_handle_t bbos)
       : obj_name_(obj_name), bbos_(bbos) {}
 
   virtual ~BbosWritableFile() {}
