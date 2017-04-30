@@ -13,7 +13,9 @@
 #include "pdlfs-common/env.h"
 
 namespace pdlfs {
+namespace bbos {
 
+// Convert bbos error codes to standard deltafs error status
 extern Status BbosError(const std::string& err_msg, int err_num);
 
 // Thread-unsafe sequential read-only file abstraction built on top of bbos
@@ -93,7 +95,7 @@ class BbosWritableFile : public WritableFile {
   virtual Status Append(const Slice& buf) {
     uint64_t size = buf.size();
     const char* data = buf.data();
-    // Do partial writes
+    // No partial writes
     do {
       ssize_t ret =
           bbos_append(bbos_, obj_name_.c_str(), const_cast<char*>(data), size);
@@ -124,4 +126,5 @@ class BbosWritableFile : public WritableFile {
   }
 };
 
+}  // namespace bbos
 }  // namespace pdlfs

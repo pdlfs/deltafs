@@ -10,6 +10,7 @@
 #include "bbos_env.h"
 
 namespace pdlfs {
+namespace bbos {
 
 inline Status BbosError(const std::string& err_msg, int err_num) {
   switch (err_num) {
@@ -150,4 +151,5 @@ class BbosEnv : public Env {
   }
 };
 
+}  // namespace bbos
 }  // namespace pdlfs
