@@ -15,8 +15,28 @@
 namespace pdlfs {
 namespace bbos {
 
+// Object types defined by bbos
+enum BbosType {
+  kData = WRITE_OPTIMIZED,
+  kIndex = READ_OPTIMIZED,
+
+  // Default to write optimized
+  kDefault = kData
+};
+
 // Convert bbos error codes to standard deltafs error status
 extern Status BbosError(const std::string& err_msg, int err_num);
+
+// Determine object type according to a given file name
+inline BbosType TryResolveBbosType(const Slice& name) {
+  if (name.ends_with(".idx")) {
+    return BbosType::kIndex;
+  } else if (name.ends_with(".dat")) {
+    return BbosType::kData;
+  } else {
+    return BbosType::kDefault;
+  }
+}
 
 // Thread-unsafe sequential read-only file abstraction built on top of bbos
 class BbosSequentialFile : public SequentialFile {

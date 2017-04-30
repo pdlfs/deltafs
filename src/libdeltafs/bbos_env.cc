@@ -54,7 +54,9 @@ class BbosEnv : public Env {
   }
 
   virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
-    int ret = bbos_mkobj(bb_handle_, fname.c_str(), WRITE_OPTIMIZED);  // FIXME
+    int ret =
+        bbos_mkobj(bb_handle_, fname.c_str(),
+                   static_cast<bbos_mkobj_flag_t>(TryResolveBbosType(fname)));
     if (ret != BB_SUCCESS) {
       std::string bbos_err_msg("cannot create bbos object '");
       bbos_err_msg += fname.c_str();
