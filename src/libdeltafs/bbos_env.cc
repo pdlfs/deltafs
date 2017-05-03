@@ -167,5 +167,37 @@ class BbosEnv : public Env {
   }
 };
 
+// The following method creates a new bbos Env object
+// each time it is called. The result should be deleted by the caller
+// when it is no longer needed.
+Status CreateNewBbosEnv(Env** result, const char* hg_local,
+                        const char* hg_remote, void* hg_class, void* hg_ctx) {
+  *result = NULL;
+  bbos_handle_t bb_handle;
+  Status s;
+
+  if (hg_local == NULL) {
+    s = Status::InvalidArgument("mercury uri is null");
+  } else if (hg_remote == NULL) {
+    s = Status::InvalidArgument("mercury remote uri is null");
+  } else if (hg_class != NULL && hg_ctx != NULL) {
+    int ret = bbos_init_ext(hg_local, hg_remote, hg_class, hg_ctx, &bb_handle);
+    if (ret != BB_SUCCESS) {
+      s = BbosError("cannot create bbos handle", ret);
+    }
+  } else {
+    int ret = bbos_init(hg_local, hg_remote, &bb_handle);
+    if (ret != BB_SUCCESS) {
+      s = BbosError("cannot create bbos handle", ret);
+    }
+  }
+
+  if (s.ok()) {
+    *result = new BbosEnv(bb_handle);
+  }
+
+  return s;
+}
+
 }  // namespace bbos
 }  // namespace pdlfs

@@ -11,14 +11,20 @@
 
 #include <bbos/bbos_api.h>
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/status.h"
 
 namespace pdlfs {
 namespace bbos {
 
+// Env factory methods
+extern Status CreateNewBbosEnv(Env**, const char* hg_local,
+                               const char* hg_remote, void* hg_class,
+                               void* hg_ctx);
+
 // Object types defined by bbos
 enum BbosType {
-  kData = WRITE_OPTIMIZED,
-  kIndex = READ_OPTIMIZED,
+  kData = WRITE_OPTIMIZED,  // Sequential writes and random reads
+  kIndex = READ_OPTIMIZED,  // Sequential writes and reads
 
   // Default to write optimized
   kDefault = kData
