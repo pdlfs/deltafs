@@ -170,8 +170,8 @@ class BbosEnv : public Env {
 // The following method creates a new bbos Env object
 // each time it is called. The result should be deleted by the caller
 // when it is no longer needed.
-Status CreateNewBbosEnv(Env** result, const char* hg_local,
-                        const char* hg_remote, void* hg_class, void* hg_ctx) {
+Status BbosInit(Env** result, const char* hg_local, const char* hg_remote,
+                void* hg_class, void* hg_ctx) {
   *result = NULL;
   bbos_handle_t bb_handle;
   Status s;

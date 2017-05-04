@@ -17,9 +17,8 @@ namespace pdlfs {
 namespace bbos {
 
 // Env factory methods
-extern Status CreateNewBbosEnv(Env**, const char* hg_local,
-                               const char* hg_remote, void* hg_class,
-                               void* hg_ctx);
+extern Status BbosInit(Env**, const char* hg_local, const char* hg_remote,
+                       void* hg_class, void* hg_ctx);
 
 // Object types defined by bbos
 enum BbosType {

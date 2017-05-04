@@ -75,7 +75,7 @@ struct deltafs_env; /* Opaque handle for an opened env */
 typedef struct deltafs_env deltafs_env_t;
 /* Returns NULL on errors. A heap-allocated env instance otherwise.
    The returned object should be deleted via deltafs_env_close(). */
-deltafs_env_t* deltafs_env_open(const char* __name, const char* __conf);
+deltafs_env_t* deltafs_env_open(int __argc, void** __argv);
 int deltafs_env_is_system(deltafs_env_t* __env);
 int deltafs_env_close(deltafs_env_t* __env);
 
