@@ -35,7 +35,8 @@ namespace pdlfs {
 extern void PrintSysInfo();
 
 // Create a new (or get an existing) Env instance with the specified args.
-static Status EnvOpen(int argc, void** argv, Env** result, bool* is_system) {
+static Status EnvOpenArgs(int argc, void** argv, Env** result,
+                          bool* is_system) {
   *is_system = false;
   *result = NULL;
   Status s;
@@ -65,7 +66,7 @@ static Status EnvOpen(int argc, void** argv, Env** result, bool* is_system) {
   return s;
 }
 
-static Env* CreateOrGetEnv(int argc, void** argv, bool* is_system) {
+static Env* EnvInit(int argc, void** argv, bool* is_system) {
   Env* result;
   char argv0[] = "posix.unbufferedio";
   if (argc == 0) {
@@ -73,7 +74,7 @@ static Env* CreateOrGetEnv(int argc, void** argv, bool* is_system) {
     argc = 1;
   }
 
-  Status s = EnvOpen(argc, argv, &result, is_system);
+  Status s = EnvOpenArgs(argc, argv, &result, is_system);
 
   if (s.ok()) {
     return result;
@@ -719,12 +720,14 @@ static inline DirOptions ParseOptions(const char* conf) {
 
 struct deltafs_env {
   Env* env;
+  // True iff env belongs to the system
+  // and should not be deleted
   int sys;
 };
 
-deltafs_env_t* deltafs_env_open(int __argc, void** __argv) {
+deltafs_env_t* deltafs_env_init(int __argc, void** __argv) {
   bool is_system;
-  Env* env = pdlfs::CreateOrGetEnv(__argc, __argv, &is_system);
+  Env* env = pdlfs::EnvInit(__argc, __argv, &is_system);
 
   if (env != NULL) {
     deltafs_env_t* result = (deltafs_env_t*)malloc(sizeof(deltafs_env_t));
