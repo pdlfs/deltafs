@@ -11,11 +11,8 @@
 #include "deltafs/deltafs_config.h"
 
 #include "deltafs_client.h"
+#include "deltafs_common.h"
 #include "deltafs_plfsio.h"
-
-#if defined(DELTAFS_BBOS)
-#include "bbos_env.h"
-#endif
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/dbfiles.h"
@@ -31,61 +28,6 @@
 #include <string.h>
 
 #include <string>
-
-namespace pdlfs {
-// Obtain OS and compiler settings
-extern void PrintSysInfo();
-
-// Create a new (or get an existing) Env instance with the specified args.
-static Status EnvOpenArgs(int argc, void** argv, Env** result,
-                          bool* is_system) {
-  *is_system = false;
-  *result = NULL;
-  Status s;
-
-  if (argc >= 1) {
-    const char* name = static_cast<const char*>(argv[0]);
-    if (strcmp(name, "bbos") == 0) {  // bbos requires special handling
-      if (argc >= 5) {
-        const char* hg_local = static_cast<const char*>(argv[1]);
-        const char* hg_remote = static_cast<const char*>(argv[2]);
-        void* hg_class = argv[3];
-        void* hg_ctx = argv[4];
-        s = bbos::BbosInit(result, hg_local, hg_remote, hg_class, hg_ctx);
-      } else {
-        s = Status::InvalidArgument(Slice());
-      }
-    } else {
-      const char* conf = "";
-      if (argc >= 2) conf = static_cast<const char*>(argv[1]);
-      *result = Env::Open(name, conf, is_system);
-    }
-  } else {  // return the default env
-    *result = Env::Default();
-    *is_system = true;
-  }
-
-  return s;
-}
-
-static Env* EnvInit(int argc, void** argv, bool* is_system) {
-  Env* result;
-  char argv0[] = "posix.unbufferedio";
-  if (argc == 0) {
-    argv = reinterpret_cast<void**>(&argv0);
-    argc = 1;
-  }
-
-  Status s = EnvOpenArgs(argc, argv, &result, is_system);
-
-  if (s.ok()) {
-    return result;
-  } else {
-    return NULL;
-  }
-}
-
-}  // namespace pdlfs
 
 extern "C" {
 #ifndef EHOSTUNREACH
@@ -729,7 +671,7 @@ struct deltafs_env {
 
 deltafs_env_t* deltafs_env_init(int __argc, void** __argv) {
   bool is_system;
-  Env* env = pdlfs::EnvInit(__argc, __argv, &is_system);
+  Env* env = pdlfs::TryOpenEnv(__argc, __argv, &is_system);
 
   if (env != NULL) {
     deltafs_env_t* result = (deltafs_env_t*)malloc(sizeof(deltafs_env_t));
