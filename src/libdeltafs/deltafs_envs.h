@@ -26,6 +26,11 @@ struct EnvRef {
 // Open an Env instance according to a given configuration string
 extern EnvRef OpenEnvOrDie(const char* name, const char* conf);
 
+// Attempt to open an Env instance using the given Env configuration string.
+// Return a pointer to the Env instance on success, or commit abort() on errors.
+// If success, also set *is_system to True iff the env belongs to the system
+// and should not ever be deleted. Otherwise, the returned env
+// instance should be deleted when no longer needed.
 inline Env* TryOpenEnv(const char* name, const char* conf, bool* is_system) {
   if (name == NULL) name = "posix.unbufferedio";
   if (strlen(name) == 0) name = "posix.unbufferedio";
@@ -38,6 +43,11 @@ inline Env* TryOpenEnv(const char* name, const char* conf, bool* is_system) {
 // Open an Env instance using the specified direct arguments
 extern EnvRef OpenEnvOrDie(int argc, void* argv[]);
 
+// Attempt to open an Env instance using the given set of direct arguments.
+// Return a pointer to the Env instance on success, or commit abort() on errors.
+// If success, also set *is_system to True iff the env belongs to the
+// system and should not ever be deleted. Otherwise, the returned env
+// should be deleted when no longer needed.
 inline Env* TryOpenEnv(int argc, void* argv[], bool* is_system) {
   EnvRef ref;
   if (argc != 0) {
