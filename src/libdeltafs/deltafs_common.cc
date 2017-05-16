@@ -117,7 +117,7 @@ void PrintSysInfo() {
 #endif
 }
 
-EnvRef OpenEnvWithArgsOrDie(int argc, void* argv[]) {
+EnvRef OpenEnvOrDie(int argc, void* argv[]) {
   if (argc >= 1) {
     const char* name = static_cast<const char*>(argv[0]);
 #if defined(DELTAFS_BBOS)

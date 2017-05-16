@@ -10,6 +10,7 @@
 #include "pdlfs-common/env.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 namespace pdlfs {
 // Obtain OS and compiler settings
@@ -25,7 +26,29 @@ struct EnvRef {
 // Open an Env instance according to a given configuration string
 extern EnvRef OpenEnvOrDie(const char* name, const char* conf);
 
+inline Env* TryOpenEnv(const char* name, const char* conf, bool* is_system) {
+  if (name == NULL) name = "posix.unbufferedio";
+  if (strlen(name) == 0) name = "posix.unbufferedio";
+  if (conf == NULL) conf = "";
+  EnvRef ref = OpenEnvOrDie(name, conf);
+  *is_system = ref.is_system;
+  return ref.env;
+}
+
 // Open an Env instance using the specified direct arguments
-extern EnvRef OpenEnvWithArgsOrDie(int argc, void* argv[]);
+extern EnvRef OpenEnvOrDie(int argc, void* argv[]);
+
+inline Env* TryOpenEnv(int argc, void* argv[], bool* is_system) {
+  EnvRef ref;
+  if (argc != 0) {
+    ref = OpenEnvOrDie(argc, argv);
+  } else {
+    char argv0[] = "posix.unbufferedio";
+    argv = reinterpret_cast<void**>(&argv0);
+    ref = OpenEnvOrDie(1, argv);
+  }
+  *is_system = ref.is_system;
+  return ref.env;
+}
 
 }  // namespace pdlfs
