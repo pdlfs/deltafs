@@ -12,7 +12,7 @@
 
 #include "pdlfs-common/logging.h"
 
-#include "deltafs_common.h"
+#include "deltafs_envs.h"
 #if defined(DELTAFS_BBOS)
 #include "bbos_env.h"
 #endif

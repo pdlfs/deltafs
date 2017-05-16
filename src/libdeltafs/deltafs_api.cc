@@ -11,7 +11,7 @@
 #include "deltafs/deltafs_config.h"
 
 #include "deltafs_client.h"
-#include "deltafs_common.h"
+#include "deltafs_envs.h"
 #include "deltafs_plfsio.h"
 
 #include "pdlfs-common/coding.h"
