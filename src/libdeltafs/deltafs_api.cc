@@ -13,7 +13,9 @@
 #include "deltafs_client.h"
 #include "deltafs_plfsio.h"
 
+#if defined(DELTAFS_BBOS)
 #include "bbos_env.h"
+#endif
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/dbfiles.h"

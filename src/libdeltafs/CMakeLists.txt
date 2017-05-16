@@ -78,6 +78,7 @@ target_include_directories (deltafs BEFORE PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../../include>)
 target_link_libraries (deltafs deltafs-common)
 if (DELTAFS_BBOS)
+    target_compile_definitions(deltafs PUBLIC "-DDELTAFS_BBOS")
     target_link_libraries (deltafs bbos)
 endif ()
 
