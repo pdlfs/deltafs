@@ -31,7 +31,7 @@ CompactionStats::CompactionStats()
       data_size(0) {}
 
 DirOptions::DirOptions()
-    : memtable_size(32 << 20),
+    : memtable_buffer(32 << 20),
       key_size(8),
       value_size(32),
       bf_bits_per_key(8),
@@ -46,8 +46,8 @@ DirOptions::DirOptions()
       unique_keys(true),
       verify_checksums(false),
       lg_parts(0),
-      rank(0),
-      env(NULL) {}
+      env(NULL),
+      rank(0) {}
 
 DirOptions ParseDirOptions(const char* input) {
   DirOptions options;
@@ -74,7 +74,7 @@ DirOptions ParseDirOptions(const char* input) {
       }
     } else if (conf_key == "memtable_size") {
       if (ParsePrettyNumber(conf_value, &num)) {
-        options.memtable_size = num;
+        options.memtable_buffer = num;
       }
     } else if (conf_key == "data_buffer") {
       if (ParsePrettyNumber(conf_value, &num)) {

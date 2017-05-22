@@ -35,18 +35,19 @@ struct CompactionStats {
 struct DirOptions {
   DirOptions();
 
-  // Total memory budget for the memory table.
-  // Size includes both the raw table and the bloom filter
-  // associated with the table.
-  // Recommend to allocate 3% of RAM per core for the table.
+  // Total memory reserved for creating memory tables.
+  // This includes both the buffer space for sorting tables and the
+  // buffer space for creating the bloom filter associated with each table.
+  // This, however, does *not* include the buffer space for accumulating
+  // writes to ensure an optimized write size.
   // Default: 32MB
-  size_t memtable_size;
+  size_t memtable_buffer;
 
-  // Average size of keys.
+  // Estimated average key size.
   // Default: 8 bytes
   size_t key_size;
 
-  // Average size of values.
+  // Estimated average value size.
   // Default: 32 bytes
   size_t value_size;
 
@@ -55,15 +56,15 @@ struct DirOptions {
   // Default: 8 bits
   size_t bf_bits_per_key;
 
-  // Approximate size of user data packed per block.
-  // Block is used as the packaging format and the basic I/O unit for both
-  // reading and writing data logs. The size of index and filter
-  // blocks are not affected by this option.
+  // Approximate size of user data packed per data block.
+  // Here block is used both as the packaging format and as the basic I/O unit
+  // for reading and writing the underlying data log objects. The size of all
+  // index and filter blocks are *not* affected by this option.
   // Default: 128K
   size_t block_size;
 
-  // Start padding if estimated block size reaches the specified
-  // utilization target.
+  // Start zero padding if current estimated block size reaches the
+  // specified utilization target.
   // Default: 0.999 (99.9%)
   double block_util;
 
@@ -75,8 +76,9 @@ struct DirOptions {
   // Default: 2MB
   size_t index_buffer;
 
-  // Add necessary padding to the end of a log to ensure the final size
-  // is always some multiple of the write size.
+  // Add necessary padding to the end of each log object to ensure the
+  // final object size is always some multiple of the write size.
+  // Required by some underlying object stores.
   // Default: false
   bool tail_padding;
 
@@ -97,11 +99,13 @@ struct DirOptions {
   uint64_t slowdown_micros;
 
   // True if keys are unique within each epoch.
+  // Keys are unique if each key appears no more than once within
+  // each epoch.
   // Default: true
   bool unique_keys;
 
-  // True if all data read from underlying storage will be
-  // verified against corresponding checksums.
+  // True if all data read from underlying storage will be verified
+  // against the corresponding checksums stored.
   // Default: false
   bool verify_checksums;
 
@@ -111,14 +115,14 @@ struct DirOptions {
   // Default: 0
   int lg_parts;
 
-  // Rank of the process.
-  // Default: 0
-  int rank;
-
-  // Env instance used to access raw files stored in the underlying
+  // Env instance used to access objects or files stored in the underlying
   // storage system. If NULL, Env::Default() will be used.
   // Default: NULL
   Env* env;
+
+  // Rank of the process in the directory.
+  // Default: 0
+  int rank;
 };
 
 // Parse a given configuration string to structured options.
