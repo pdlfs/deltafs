@@ -76,6 +76,10 @@ DirOptions ParseDirOptions(const char* input) {
       if (ParsePrettyNumber(conf_value, &num)) {
         options.memtable_buffer = num;
       }
+    } else if (conf_key == "memtable_buffer") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.memtable_buffer = num;
+      }
     } else if (conf_key == "data_buffer") {
       if (ParsePrettyNumber(conf_value, &num)) {
         options.data_buffer = num;
