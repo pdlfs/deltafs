@@ -442,7 +442,7 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
 #if VERBOSE >= 2
   Verbose(__LOG_ARGS__, 2, "plfsdir.name -> %s", name.c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.memtable_size -> %s",
-          PrettySize(options.memtable_size).c_str());
+          PrettySize(options.memtable_buffer).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.key_size -> %s",
           PrettySize(options.key_size).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.value_size -> %s",
