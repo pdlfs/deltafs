@@ -404,10 +404,10 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   return result;
 }
 
-static void PrintLogInfo(const std::string& name, size_t buf_size) {
+static void PrintLogInfo(const std::string& name, size_t mem_size) {
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Open log: %s (buffer/cache=%s)", name.c_str(),
-          PrettySize(buf_size).c_str());
+  Verbose(__LOG_ARGS__, 3, "Open log file or object: %s (reserved_mem=%s)",
+          name.c_str(), PrettySize(mem_size).c_str());
 #endif
 }
 
@@ -418,11 +418,11 @@ static Status NewLogSink(const std::string& name, Env* env, size_t buf_size,
   WritableFile* file;
   Status status = env->NewWritableFile(name, &file);
   if (status.ok()) {
+    assert(file != NULL);
     if (bytes != NULL) file = new MeasuredWritableFile(file, bytes);
-    UnsafeBufferedWritableFile* buf =
-        new UnsafeBufferedWritableFile(file, buf_size);
+    if (buf_size != 0) file = new UnsafeBufferedWritableFile(file, buf_size);
     PrintLogInfo(name, buf_size);
-    LogSink* sink = new LogSink(buf);
+    LogSink* sink = new LogSink(file);
     sink->Ref();
     *ptr = sink;
   } else {
