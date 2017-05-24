@@ -71,7 +71,7 @@ struct DirOptions {
   // Number of data blocks to accumulate before flush out to the storage in a
   // single atomic batch. The use of uberblocks can reduce the I/O
   // contention among multiple concurrent compaction threads that compete
-  // for access to the shared data log.
+  // for access to a shared data log.
   // When each uberblock is sufficiently large, there is less need for a
   // separate write buffer allocation for the data log, which also
   // avoids an extra copy of data.
@@ -81,13 +81,13 @@ struct DirOptions {
   // Write buffer size for each physical data log.
   // Set to zero to disable buffering and each data block flush
   // becomes an actual physical write to the underlying storage.
-  // Default: 2MB
+  // Default: 4MB
   size_t data_buffer;
 
   // Write buffer size for each physical index log.
   // Set to zero to disable buffering and each index block flush
   // becomes an actual physical write to the underlying storage.
-  // Default: 2MB
+  // Default: 4MB
   size_t index_buffer;
 
   // Add necessary padding to the end of each log object to ensure the
