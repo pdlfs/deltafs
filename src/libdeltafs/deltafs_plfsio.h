@@ -69,10 +69,14 @@ struct DirOptions {
   double block_util;
 
   // Write buffer size for each physical data log.
+  // Set to zero to disable buffering such that each data block flush
+  // becomes an actual physical write to the underlying storage.
   // Default: 2MB
   size_t data_buffer;
 
   // Write buffer size for each physical index log.
+  // Set to zero to disable buffering such that each non-data block flush
+  // becomes an actual physical write to the underlying storage.
   // Default: 2MB
   size_t index_buffer;
 

@@ -119,8 +119,6 @@ DirOptions ParseDirOptions(const char* input) {
   return options;
 }
 
-static const int kMaxNumProcesses = 100000000;  // 100 million
-
 void LogSink::Unref() {
   assert(refs_ > 0);
   refs_--;
@@ -169,14 +167,12 @@ LogSource::~LogSource() {
 static std::string PartitionIndexFileName(const std::string& parent, int rank,
                                           int partition) {
   char tmp[30];
-  assert(rank < kMaxNumProcesses);
   snprintf(tmp, sizeof(tmp), "/L-%08x.idx.%02x", rank, partition);
   return parent + tmp;
 }
 
 static std::string DataFileName(const std::string& parent, int rank) {
   char tmp[30];
-  assert(rank < kMaxNumProcesses);
   snprintf(tmp, sizeof(tmp), "/L-%08x.dat", rank);
   return parent + tmp;
 }
