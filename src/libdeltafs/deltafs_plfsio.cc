@@ -186,7 +186,7 @@ class WriterImpl : public Writer {
   virtual ~WriterImpl();
 
   virtual const CompactionStats* stats() const { return &stats_; }
-  virtual Status Append(const Slice& fname, const Slice& data);
+  virtual Status Append(const Slice& fid, const Slice& data);
   virtual Status Sync();
   virtual Status MakeEpoch();
   virtual Status Finish();
@@ -194,7 +194,7 @@ class WriterImpl : public Writer {
  private:
   Status TryMakeEpoch();
   Status TryFinish();
-  Status TryAppend(const Slice& fname, const Slice& data);
+  Status TryAppend(const Slice& fid, const Slice& data);
   Status EnsureDataPadding(LogSink* sink, char p = 0);
   void MaybeSlowdownCaller();
   friend class Writer;
@@ -376,23 +376,23 @@ Status WriterImpl::MakeEpoch() {
   return status;
 }
 
-Status WriterImpl::TryAppend(const Slice& fname, const Slice& data) {
+Status WriterImpl::TryAppend(const Slice& fid, const Slice& data) {
   Status status;
   if (finished_) {
     status = Status::AssertionFailed("finished");
   } else {
-    uint32_t hash = Hash(fname.data(), fname.size(), 0);
-    uint32_t part = hash & part_mask_;
+    const uint32_t hash = Hash(fid.data(), fid.size(), 0);
+    const uint32_t part = hash & part_mask_;
     assert(part < num_parts_);
     MutexLock ml(&mutex_);
-    status = io_[part]->Add(fname, data);
+    status = io_[part]->Add(fid, data);
   }
 
   return status;
 }
 
-Status WriterImpl::Append(const Slice& fname, const Slice& data) {
-  Status status = TryAppend(fname, data);
+Status WriterImpl::Append(const Slice& fid, const Slice& data) {
+  Status status = TryAppend(fid, data);
   if (status.IsBufferFull()) MaybeSlowdownCaller();
   return status;
 }

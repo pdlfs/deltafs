@@ -241,7 +241,7 @@ class Writer {
 
   // Append a piece of data to a specified file under a given plfs directory.
   // REQUIRES: Finish() has not been called.
-  virtual Status Append(const Slice& fname, const Slice& data) = 0;
+  virtual Status Append(const Slice& fid, const Slice& data) = 0;
 
   // Sync data to storage.  Not supported so far.
   // REQUIRES: Finish() has not been called.
