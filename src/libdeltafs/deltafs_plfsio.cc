@@ -335,7 +335,7 @@ Status WriterImpl::Finish() {
 Status WriterImpl::TryMakeEpoch() {
   Status status;
   if (finished_) {
-    status = Status::AssertionFailed("finished");
+    status = Status::AssertionFailed("plfsdir already finished");
   } else {
     MutexLock ml(&mutex_);
     bool dry_run = true;
@@ -379,7 +379,7 @@ Status WriterImpl::MakeEpoch() {
 Status WriterImpl::TryAppend(const Slice& fid, const Slice& data) {
   Status status;
   if (finished_) {
-    status = Status::AssertionFailed("finished");
+    status = Status::AssertionFailed("plfsdir already finished");
   } else {
     const uint32_t hash = Hash(fid.data(), fid.size(), 0);
     const uint32_t part = hash & part_mask_;
