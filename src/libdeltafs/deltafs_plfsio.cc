@@ -141,13 +141,15 @@ Status LogSink::Lclose(bool sync) {
     if (status.ok()) {
       status = file_->Close();
     }
-    if (!status.ok()) {
-      Error(__LOG_ARGS__, "Error closing log object (or file) %s: %s",
-            filename_.c_str(), status.ToString().c_str());
-    }
     delete file_;
     file_ = NULL;
   }
+
+  if (!status.ok()) {
+    Error(__LOG_ARGS__, "Error closing %s: %s", filename_.c_str(),
+          status.ToString().c_str());
+  }
+
   return status;
 }
 
@@ -404,8 +406,8 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
 
 static void PrintLogInfo(const std::string& name, size_t mem_size) {
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Accessing %s, mem reserved: %s", name.c_str(),
-          PrettySize(mem_size).c_str());
+  Verbose(__LOG_ARGS__, 3, "Reading or writing %s, mem reserved: %s",
+          name.c_str(), PrettySize(mem_size).c_str());
 #endif
 }
 
@@ -683,7 +685,7 @@ Status Reader::Open(const DirOptions& opts, const std::string& dirname,
 
 static Status DeleteLogStream(const std::string& fname, Env* env) {
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Delete plfs io log: %s", fname.c_str());
+  Verbose(__LOG_ARGS__, 3, "Removing %s ...", fname.c_str());
 #endif
   return env->DeleteFile(fname);
 }
