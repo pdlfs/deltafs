@@ -120,6 +120,11 @@ struct DirOptions {
   // Default: NULL
   Env* env;
 
+  // True if the underlying storage is implemented as a parallel
+  // file system rather than an object storage.
+  // Default: true
+  bool is_env_pfs;
+
   // Rank of the process in the directory.
   // Default: 0
   int rank;

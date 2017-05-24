@@ -47,6 +47,7 @@ DirOptions::DirOptions()
       verify_checksums(false),
       lg_parts(0),
       env(NULL),
+      is_env_pfs(true),
       rank(0) {}
 
 DirOptions ParseDirOptions(const char* input) {
@@ -436,7 +437,7 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
                     Writer** ptr) {
   *ptr = NULL;
   DirOptions options = SanitizeWriteOptions(opts);
-  const size_t num_parts = 1u << options.lg_parts;
+  const size_t num_parts = static_cast<size_t>(1 << options.lg_parts);
   const int my_rank = options.rank;
   Env* const env = options.env;
 #if VERBOSE >= 2
@@ -466,12 +467,14 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
   Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", my_rank);
 #endif
   Status status;
-  // Ignore error since it may already exist
-  env->CreateDir(name);
+  if (options.is_env_pfs) {
+    // Ignore error since it may already exist
+    env->CreateDir(name);
+  }
 
   WriterImpl* impl = new WriterImpl(options);
   std::vector<LogSink*> index(num_parts, NULL);
-  std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
+  std::vector<LogSink*> data(1, NULL);  // Shared among all directory partitions
   status = NewLogSink(DataFileName(name, my_rank), env, options.data_buffer,
                       &data[0], &impl->stats_.data_written);
   for (size_t part = 0; part < num_parts; part++) {
