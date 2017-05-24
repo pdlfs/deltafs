@@ -151,7 +151,8 @@ extern DirOptions ParseDirOptions(const char* conf);
 // append-only log stream.
 class LogSink {
  public:
-  explicit LogSink(WritableFile* f) : file_(f), offset_(0), refs_(0) {}
+  LogSink(const std::string& filename, WritableFile* f)
+      : filename_(filename), file_(f), offset_(0), refs_(0) {}
 
   uint64_t Ltell() const { return offset_; }
 
@@ -178,18 +179,17 @@ class LogSink {
     }
   }
 
-  Status Lclose();
+  Status Lclose(bool sync = true);
   void Ref() { refs_++; }
   void Unref();
 
  private:
-  enum { kSyncBeforeClosing = true };
-
   ~LogSink();
   // No copying allowed
   void operator=(const LogSink&);
   LogSink(const LogSink&);
 
+  std::string filename_;
   WritableFile* file_;
   uint64_t offset_;
   uint32_t refs_;

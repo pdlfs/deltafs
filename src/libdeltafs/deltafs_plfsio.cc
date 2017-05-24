@@ -130,25 +130,25 @@ void LogSink::Unref() {
 
 LogSink::~LogSink() {
   if (file_ != NULL) {
-    Status s = Lclose();
-    file_ = NULL;
-    if (!s.ok()) {
-      Error(__LOG_ARGS__, "%s", s.ToString().c_str());
-    }
+    Lclose();
   }
 }
 
-Status LogSink::Lclose() {
-  Status s;
+Status LogSink::Lclose(bool sync) {
+  Status status;
   if (file_ != NULL) {
-    if (kSyncBeforeClosing) {
-      s = file_->Sync();
+    if (sync) status = file_->Sync();
+    if (status.ok()) {
+      status = file_->Close();
     }
-    file_->Close();
+    if (!status.ok()) {
+      Error(__LOG_ARGS__, "Error closing log object (or file) %s: %s",
+            filename_.c_str(), status.ToString().c_str());
+    }
     delete file_;
     file_ = NULL;
   }
-  return s;
+  return status;
 }
 
 void LogSource::Unref() {
@@ -404,8 +404,8 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
 
 static void PrintLogInfo(const std::string& name, size_t mem_size) {
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Open log file or object: %s (reserved_mem=%s)",
-          name.c_str(), PrettySize(mem_size).c_str());
+  Verbose(__LOG_ARGS__, 3, "Accessing %s, mem reserved: %s", name.c_str(),
+          PrettySize(mem_size).c_str());
 #endif
 }
 
@@ -420,7 +420,7 @@ static Status NewLogSink(const std::string& name, Env* env, size_t buf_size,
     if (bytes != NULL) file = new MeasuredWritableFile(file, bytes);
     if (buf_size != 0) file = new UnsafeBufferedWritableFile(file, buf_size);
     PrintLogInfo(name, buf_size);
-    LogSink* sink = new LogSink(file);
+    LogSink* sink = new LogSink(name, file);
     sink->Ref();
     *ptr = sink;
   } else {
