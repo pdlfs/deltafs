@@ -12,6 +12,7 @@
 #include "pdlfs-common/crc32c.h"
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/logging.h"
+#include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/strutil.h"
 
 #include <assert.h>
@@ -702,14 +703,10 @@ Status PlfsIoLogger::Prepare(bool flush, bool finish) {
       // Attempt to switch to a new write buffer
       assert(imm_buf_ == NULL);
       imm_buf_ = mem_buf_;
-      if (flush) {
-        imm_buf_is_epoch_flush_ = true;
-        flush = false;
-      }
-      if (finish) {
-        imm_buf_is_finish_ = true;
-        finish = false;
-      }
+      if (flush) imm_buf_is_epoch_flush_ = true;
+      flush = false;
+      if (finish) imm_buf_is_finish_ = true;
+      finish = false;
       WriteBuffer* const current_buf = mem_buf_;
       MaybeSchedualCompaction();
       if (current_buf == &buf0_) {
@@ -725,35 +722,34 @@ Status PlfsIoLogger::Prepare(bool flush, bool finish) {
 
 void PlfsIoLogger::MaybeSchedualCompaction() {
   mutex_->AssertHeld();
-  if (!has_bg_compaction_) {
-    if (imm_buf_ != NULL) {
-      has_bg_compaction_ = true;
-      if (options_.compaction_pool != NULL) {
-        options_.compaction_pool->Schedule(PlfsIoLogger::BGWork, this);
-      } else {
-        Env::Default()->Schedule(PlfsIoLogger::BGWork, this);
-      }
-    }
+
+  if (has_bg_compaction_) return;  // Skip if there is one already scheduled
+  if (imm_buf_ == NULL) return;    // Nothing to be scheduled
+
+  has_bg_compaction_ = true;
+
+  if (options_.compaction_pool != NULL) {
+    options_.compaction_pool->Schedule(PlfsIoLogger::BGWork, this);
+  } else {
+    Env::Default()->Schedule(PlfsIoLogger::BGWork, this);
   }
 }
 
 void PlfsIoLogger::BGWork(void* arg) {
-  PlfsIoLogger* io = reinterpret_cast<PlfsIoLogger*>(arg);
-  io->mutex_->Lock();
-  io->DoCompaction();
-  io->mutex_->Unlock();
+  PlfsIoLogger* ins = reinterpret_cast<PlfsIoLogger*>(arg);
+  MutexLock ml(ins->mutex_);
+  ins->DoCompaction();
 }
 
 void PlfsIoLogger::DoCompaction() {
   mutex_->AssertHeld();
   assert(has_bg_compaction_);
-  if (imm_buf_ != NULL) {
-    CompactWriteBuffer();
-    imm_buf_->Reset();
-    imm_buf_is_epoch_flush_ = false;
-    imm_buf_is_finish_ = false;
-    imm_buf_ = NULL;
-  }
+  assert(imm_buf_ != NULL);
+  CompactWriteBuffer();
+  imm_buf_->Reset();
+  imm_buf_is_epoch_flush_ = false;
+  imm_buf_is_finish_ = false;
+  imm_buf_ = NULL;
   has_bg_compaction_ = false;
   MaybeSchedualCompaction();
   bg_cv_->SignalAll();
