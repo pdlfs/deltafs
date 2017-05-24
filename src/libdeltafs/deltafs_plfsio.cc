@@ -192,7 +192,10 @@ class WriterImpl : public Writer {
   virtual Status Finish();
 
  private:
-  Status EnsureDataPadding(LogSink* sink);
+  Status TryMakeEpoch();
+  Status TryFinish();
+  Status TryAppend(const Slice& fname, const Slice& data);
+  Status EnsureDataPadding(LogSink* sink, char p = 0);
   void MaybeSlowdownCaller();
   friend class Writer;
 
@@ -236,21 +239,18 @@ void WriterImpl::MaybeSlowdownCaller() {
   }
 }
 
-Status WriterImpl::EnsureDataPadding(LogSink* sink) {
-  Status status;
+Status WriterImpl::EnsureDataPadding(LogSink* sink, char padding) {
   const uint64_t total_size = sink->Ltell();
   const size_t overflow = total_size % options_.data_buffer;
-
   if (overflow != 0) {
-    const size_t padding = options_.data_buffer - overflow;
-    assert(padding < options_.data_buffer);
-    status = sink->Lwrite(std::string(padding, 0));
+    const size_t n = options_.data_buffer - overflow;
+    return sink->Lwrite(std::string(n, padding));
+  } else {
+    return Status::OK();
   }
-
-  return status;
 }
 
-Status WriterImpl::Finish() {
+Status WriterImpl::TryFinish() {
   Status status;
   if (!finish_status_.ok()) {
     status = finish_status_;
@@ -323,14 +323,16 @@ Status WriterImpl::Finish() {
     }
   }
 
-  if (status.IsBufferFull()) {
-    MaybeSlowdownCaller();
-  }
-
   return status;
 }
 
-Status WriterImpl::MakeEpoch() {
+Status WriterImpl::Finish() {
+  Status status = TryFinish();
+  if (status.IsBufferFull()) MaybeSlowdownCaller();
+  return status;
+}
+
+Status WriterImpl::TryMakeEpoch() {
   Status status;
   if (finished_) {
     status = Status::AssertionFailed("finished");
@@ -365,28 +367,33 @@ Status WriterImpl::MakeEpoch() {
     }
   }
 
-  if (status.IsBufferFull()) {
-    MaybeSlowdownCaller();
-  }
   return status;
 }
 
-Status WriterImpl::Append(const Slice& fname, const Slice& data) {
+Status WriterImpl::MakeEpoch() {
+  Status status = TryMakeEpoch();
+  if (status.IsBufferFull()) MaybeSlowdownCaller();
+  return status;
+}
+
+Status WriterImpl::TryAppend(const Slice& fname, const Slice& data) {
   Status status;
   if (finished_) {
     status = Status::AssertionFailed("finished");
   } else {
     uint32_t hash = Hash(fname.data(), fname.size(), 0);
     uint32_t part = hash & part_mask_;
-    if (part < num_parts_) {
-      MutexLock ml(&mutex_);
-      status = io_[part]->Add(fname, data);
-    }
+    assert(part < num_parts_);
+    MutexLock ml(&mutex_);
+    status = io_[part]->Add(fname, data);
   }
 
-  if (status.IsBufferFull()) {
-    MaybeSlowdownCaller();
-  }
+  return status;
+}
+
+Status WriterImpl::Append(const Slice& fname, const Slice& data) {
+  Status status = TryAppend(fname, data);
+  if (status.IsBufferFull()) MaybeSlowdownCaller();
   return status;
 }
 
