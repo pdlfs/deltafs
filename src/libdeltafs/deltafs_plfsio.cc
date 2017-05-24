@@ -37,6 +37,7 @@ DirOptions::DirOptions()
       bf_bits_per_key(8),
       block_size(128 << 10),
       block_util(0.999),
+      uberblock_depth(16),
       data_buffer(2 << 20),
       index_buffer(2 << 20),
       tail_padding(false),
