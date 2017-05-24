@@ -155,6 +155,14 @@ class LogSink {
 
   uint64_t Ltell() const { return offset_; }
 
+  Status Lsync() {
+    if (file_ == NULL) {
+      return Status::AssertionFailed("file already closed");
+    } else {
+      return file_->Sync();
+    }
+  }
+
   Status Lwrite(const Slice& data) {
     if (file_ == NULL) {
       return Status::AssertionFailed("file already closed");
