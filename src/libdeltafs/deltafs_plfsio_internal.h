@@ -73,13 +73,11 @@ class TableLogger {
   void EndEpoch();
 
  private:
-  enum RestartInterval { kDatBlkInt = 16, kDefInt = 1 };
+  const DirOptions& options_;
 
   // No copying allowed
   void operator=(const TableLogger&);
   TableLogger(const TableLogger&);
-
-  const DirOptions& options_;
 
   Status status_;
   std::string smallest_key_;
@@ -87,15 +85,15 @@ class TableLogger {
   std::string last_key_;
   BlockBuilder data_block_;
   BlockBuilder index_block_;
-  BlockBuilder epoch_block_;
+  BlockBuilder meta_block_;
   bool pending_index_entry_;
   BlockHandle pending_index_handle_;
-  bool pending_epoch_entry_;
-  TableHandle pending_epoch_handle_;
-  uint32_t num_tables_;   // Number of tables within an epoch
-  uint32_t num_epoches_;  // Number of epoches generated
-  LogSink* data_log_;
-  LogSink* index_log_;
+  bool pending_meta_entry_;
+  TableHandle pending_meta_handle_;
+  uint32_t num_tables_;  // Number of tables within an epoch
+  uint32_t num_epochs_;  // Number of epochs generated
+  LogSink* data_sink_;
+  LogSink* meta_sink_;
   bool finished_;
 };
 

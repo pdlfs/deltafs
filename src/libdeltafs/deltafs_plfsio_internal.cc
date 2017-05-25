@@ -240,42 +240,32 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
 TableLogger::TableLogger(const DirOptions& options, LogSink* data,
                          LogSink* index)
     : options_(options),
-      data_block_(kDatBlkInt),
-      index_block_(kDefInt),
-      epoch_block_(kDefInt),
+      data_block_(16),
+      index_block_(1),
+      meta_block_(1),
       pending_index_entry_(false),
-      pending_epoch_entry_(false),
+      pending_meta_entry_(false),
       num_tables_(0),
-      num_epoches_(0),
-      data_log_(data),
-      index_log_(index),
+      num_epochs_(0),
+      data_sink_(data),
+      meta_sink_(index),
       finished_(false) {
   // Sanity checks
-  assert(index_log_ != NULL && data_log_ != NULL);
+  assert(meta_sink_ != NULL && data_sink_ != NULL);
 
-  index_log_->Ref();
-  data_log_->Ref();
-
-#if VERBOSE >= 4
-  Verbose(__LOG_ARGS__, 4, "Epoch #%d: started", int(num_epoches_));
-#endif
+  meta_sink_->Ref();
+  data_sink_->Ref();
 
   // Allocate memory
   data_block_.Reserve(options_.block_size);
 
   index_block_.Reserve(1 << 10);
-  epoch_block_.Reserve(1 << 10);
+  meta_block_.Reserve(1 << 10);
 }
 
 TableLogger::~TableLogger() {
-  index_log_->Unref();
-  data_log_->Unref();
-  if (num_tables_ == 0) {
-#if VERBOSE >= 4
-    Verbose(__LOG_ARGS__, 4, "Epoch #%d: auto discarded since it is empty",
-            int(num_epoches_));
-#endif
-  }
+  meta_sink_->Unref();
+  data_sink_->Unref();
 }
 
 void TableLogger::EndEpoch() {
@@ -284,13 +274,13 @@ void TableLogger::EndEpoch() {
   if (ok() && num_tables_ != 0) {
 #if VERBOSE >= 4
     Verbose(__LOG_ARGS__, 4, "Epoch #%d: closed (%d tables) %s",
-            int(num_epoches_), int(num_tables_), status_.ToString().c_str());
+            int(num_epochs_), int(num_tables_), status_.ToString().c_str());
 #endif
     num_tables_ = 0;
-    assert(num_epoches_ < kMaxEpoches);
-    num_epoches_++;
+    assert(num_epochs_ < kMaxEpoches);
+    num_epochs_++;
 #if VERBOSE >= 4
-    Verbose(__LOG_ARGS__, 4, "Epoch #%d: started", int(num_epoches_));
+    Verbose(__LOG_ARGS__, 4, "Epoch #%d: started", int(num_epochs_));
 #endif
   }
 }
@@ -311,13 +301,13 @@ void TableLogger::EndTable(T* filter_block) {
     return;  // No more work
   }
 
-  assert(!pending_epoch_entry_);
+  assert(!pending_meta_entry_);
   Slice contents = index_block_.Finish();
   const size_t size = contents.size();
   // NOTE: raw_contents invalidates contents
   Slice raw_contents = index_block_.Finalize(0);  // No padding for indices
-  const uint64_t offset = index_log_->Ltell();
-  status_ = index_log_->Lwrite(raw_contents);
+  const uint64_t offset = meta_sink_->Ltell();
+  status_ = meta_sink_->Lwrite(raw_contents);
 
 #if VERBOSE >= 6
   Verbose(__LOG_ARGS__, 6, "[IBLK] written: (offset=%llu, size=%llu/%llu) %s",
@@ -335,7 +325,7 @@ void TableLogger::EndTable(T* filter_block) {
     if (filter_block != NULL) {
       filter_size = filter_block->Finish().size();
       raw_filter_contents = filter_block->Finalize();
-      status_ = index_log_->Lwrite(raw_filter_contents);
+      status_ = meta_sink_->Lwrite(raw_filter_contents);
     }
   }
 
@@ -349,22 +339,22 @@ void TableLogger::EndTable(T* filter_block) {
 
   if (ok()) {
     index_block_.Reset();
-    pending_epoch_handle_.set_filter_offset(filter_offset);
-    pending_epoch_handle_.set_filter_size(filter_size);
-    pending_epoch_handle_.set_offset(offset);
-    pending_epoch_handle_.set_size(size);
-    pending_epoch_entry_ = true;
+    pending_meta_handle_.set_filter_offset(filter_offset);
+    pending_meta_handle_.set_filter_size(filter_size);
+    pending_meta_handle_.set_offset(offset);
+    pending_meta_handle_.set_size(size);
+    pending_meta_entry_ = true;
   }
 
-  if (pending_epoch_entry_) {
+  if (pending_meta_entry_) {
     assert(index_block_.empty());
-    pending_epoch_handle_.set_smallest_key(smallest_key_);
+    pending_meta_handle_.set_smallest_key(smallest_key_);
     BytewiseComparator()->FindShortSuccessor(&largest_key_);
-    pending_epoch_handle_.set_largest_key(largest_key_);
+    pending_meta_handle_.set_largest_key(largest_key_);
     std::string handle_encoding;
-    pending_epoch_handle_.EncodeTo(&handle_encoding);
-    epoch_block_.Add(EpochKey(num_epoches_, num_tables_), handle_encoding);
-    pending_epoch_entry_ = false;
+    pending_meta_handle_.EncodeTo(&handle_encoding);
+    meta_block_.Add(EpochKey(num_epochs_, num_tables_), handle_encoding);
+    pending_meta_entry_ = false;
   }
 
   if (ok()) {
@@ -385,8 +375,8 @@ void TableLogger::EndBlock() {
   const size_t size = contents.size();
   // NOTE: raw_contents invalidates contents
   Slice raw_contents = data_block_.Finalize(options_.block_size);
-  const uint64_t offset = data_log_->Ltell();
-  status_ = data_log_->Lwrite(raw_contents);
+  const uint64_t offset = data_sink_->Ltell();
+  status_ = data_sink_->Lwrite(raw_contents);
 
 #if VERBOSE >= 6
   Verbose(__LOG_ARGS__, 6, "[DBLK] written: (offset=%llu, size=%llu/%llu) %s",
@@ -424,7 +414,6 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 
   // Add an index entry if there is one pending insertion
   if (pending_index_entry_) {
-    assert(data_block_.empty());
     BytewiseComparator()->FindShortestSeparator(&last_key_, key);
     std::string handle_encoding;
     pending_index_handle_.EncodeTo(&handle_encoding);
@@ -449,14 +438,14 @@ Status TableLogger::Finish() {
   std::string tail;
   Footer footer;
 
-  assert(!pending_epoch_entry_);
-  Slice contents = epoch_block_.Finish();
+  assert(!pending_meta_entry_);
+  Slice contents = meta_block_.Finish();
   const size_t size = contents.size();
   // NOTE: raw_contents invalidates contents
   Slice raw_contents =
-      epoch_block_.Finalize(0);  // No padding is needed for metadata blocks
-  const uint64_t offset = index_log_->Ltell();
-  status_ = index_log_->Lwrite(raw_contents);
+      meta_block_.Finalize(0);  // No padding is needed for metadata blocks
+  const uint64_t offset = meta_sink_->Ltell();
+  status_ = meta_sink_->Lwrite(raw_contents);
 
 #if VERBOSE >= 6
   Verbose(__LOG_ARGS__, 6, "[EIDX] written: (offset=%llu, size=%llu/%llu) %s",
@@ -471,7 +460,7 @@ Status TableLogger::Finish() {
     epoch_index_handle.set_offset(offset);
 
     footer.set_epoch_index_handle(epoch_index_handle);
-    footer.set_num_epoches(num_epoches_);
+    footer.set_num_epoches(num_epochs_);
     footer.EncodeTo(&tail);
   }
 
@@ -479,18 +468,18 @@ Status TableLogger::Finish() {
     if (options_.tail_padding) {
       // Add enough padding to ensure the final size of the index log
       // is some multiple of the physical write size.
-      const uint64_t total_size = index_log_->Ltell() + tail.size();
+      const uint64_t total_size = meta_sink_->Ltell() + tail.size();
       const size_t overflow = total_size % options_.index_buffer;
       if (overflow != 0) {
         const size_t padding = options_.index_buffer - overflow;
         assert(padding < options_.index_buffer);
-        status_ = index_log_->Lwrite(std::string(padding, 0));
+        status_ = meta_sink_->Lwrite(std::string(padding, 0));
       }
     }
   }
 
   if (ok()) {
-    status_ = index_log_->Lwrite(tail);
+    status_ = meta_sink_->Lwrite(tail);
   }
 
 #if VERBOSE >= 6
@@ -564,9 +553,6 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
           2 * (1 << options_.lg_parts), PrettySize(tb_bytes_).c_str());
   Verbose(__LOG_ARGS__, 2, "C: plfsdir.memtable.bf_size -> %d x %s",
           2 * (1 << options_.lg_parts), PrettySize(bf_bytes_).c_str());
-  Verbose(__LOG_ARGS__, 2, "C: plfsdir.memtable.bits_per_entry -> %d + %d bits",
-          static_cast<int>(8 * bytes_per_entry),
-          static_cast<int>(options_.bf_bits_per_key));
 #endif
 
   // Allocate memory
