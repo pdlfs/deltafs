@@ -536,9 +536,9 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
   size_t overhead_per_entry = static_cast<size_t>(
       4 + VarintLength(options_.key_size) + VarintLength(options_.value_size));
   size_t bytes_per_entry =
-      options.key_size + options.value_size + overhead_per_entry;
+      options_.key_size + options_.value_size + overhead_per_entry;
 
-  size_t total_bits_per_entry = 8 * bytes_per_entry + options.bf_bits_per_key;
+  size_t total_bits_per_entry = 8 * bytes_per_entry + options_.bf_bits_per_key;
 
   // Estimated amount of entries per table
   entries_per_tb_ = static_cast<uint32_t>(ceil(
@@ -549,7 +549,7 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
 
   tb_bytes_ = entries_per_tb_ * bytes_per_entry;
   // Compute bloom filter size (in both bits and bytes)
-  bf_bits_ = entries_per_tb_ * options.bf_bits_per_key;
+  bf_bits_ = entries_per_tb_ * options_.bf_bits_per_key;
   // For small n, we can see a very high false positive rate.
   // Fix it by enforcing a minimum bloom filter length.
   if (bf_bits_ > 0 && bf_bits_ < 64) {
@@ -566,7 +566,7 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
           2 * (1 << options_.lg_parts), PrettySize(bf_bytes_).c_str());
   Verbose(__LOG_ARGS__, 2, "C: plfsdir.memtable.bits_per_entry -> %d + %d bits",
           static_cast<int>(8 * bytes_per_entry),
-          static_cast<int>(options.bf_bits_per_key));
+          static_cast<int>(options_.bf_bits_per_key));
 #endif
 
   // Allocate memory
