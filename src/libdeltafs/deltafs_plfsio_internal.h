@@ -115,24 +115,25 @@ class PlfsIoLogger {
   Status Close();
 
  private:
+  Status Prepare(bool epoch_flush = false, bool force_finish = false);
+
   // No copying allowed
   void operator=(const PlfsIoLogger&);
   PlfsIoLogger(const PlfsIoLogger&);
 
   static void BGWork(void*);
-  void MaybeSchedualCompaction();
-  Status Prepare(bool do_epoch_flush, bool do_finish);
+  void MaybeScheduleCompaction();
   void CompactWriteBuffer();
   void DoCompaction();
 
   // Constant after construction
   const DirOptions& options_;
-  port::Mutex* const mutex_;
+  port::Mutex* const mu_;
   port::CondVar* const bg_cv_;
-  uint32_t entries_per_buf_;
-  size_t buf_size_;
-  size_t bf_bytes_;
   size_t bf_bits_;
+  size_t bf_bytes_;          // Target bloom filter size
+  uint32_t entries_per_tb_;  // Number of entries packed per table
+  size_t tb_bytes_;          // Target table size
 
   // State below is protected by mutex_
   LogSink* data_;

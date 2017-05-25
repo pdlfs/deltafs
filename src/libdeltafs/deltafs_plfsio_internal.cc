@@ -506,7 +506,7 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
                            port::CondVar* cv, LogSink* data, LogSink* index,
                            CompactionStats* stats)
     : options_(options),
-      mutex_(mu),
+      mu_(mu),
       bg_cv_(cv),
       data_(data),
       index_(index),
@@ -533,20 +533,23 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
   // the real, filter will waste memory and each
   // write buffer will be allocated with
   // less memory.
+  size_t overhead_per_entry = static_cast<size_t>(
+      4 + VarintLength(options_.key_size) + VarintLength(options_.value_size));
   size_t bytes_per_entry =
-      VarintLength(options_.key_size) + VarintLength(options_.value_size);
-  bytes_per_entry += options.key_size + options.value_size;
+      options.key_size + options.value_size + overhead_per_entry;
+
   size_t total_bits_per_entry = 8 * bytes_per_entry + options.bf_bits_per_key;
+
   // Estimated amount of entries per table
-  entries_per_buf_ = static_cast<uint32_t>(
-      ceil(8 * options_.memtable_buffer / total_bits_per_entry));
-  entries_per_buf_ /= (1 << options_.lg_parts);  // Due to data partitioning
+  entries_per_tb_ = static_cast<uint32_t>(ceil(
+      8.0 * double(options_.memtable_buffer) / double(total_bits_per_entry)));
+  entries_per_tb_ /= (1 << options_.lg_parts);  // Due to data partitioning
 
-  entries_per_buf_ /= 2;  // Due to double buffering
+  entries_per_tb_ /= 2;  // Due to double buffering
 
-  buf_size_ = entries_per_buf_ * bytes_per_entry;
+  tb_bytes_ = entries_per_tb_ * bytes_per_entry;
   // Compute bloom filter size (in both bits and bytes)
-  bf_bits_ = entries_per_buf_ * options.bf_bits_per_key;
+  bf_bits_ = entries_per_tb_ * options.bf_bits_per_key;
   // For small n, we can see a very high false positive rate.
   // Fix it by enforcing a minimum bloom filter length.
   if (bf_bits_ > 0 && bf_bits_ < 64) {
@@ -557,24 +560,24 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
   bf_bits_ = bf_bytes_ * 8;
 
 #if VERBOSE >= 2
-  int num_bufs = int(1 << options.lg_parts) * 2;
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.total_size -> %s",
-          PrettySize(options_.memtable_buffer).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.buf_size -> %d X %s", num_bufs,
-          PrettySize(buf_size_).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable.bf_size -> %d X %s", num_bufs,
-          PrettySize(bf_bytes_).c_str());
+  Verbose(__LOG_ARGS__, 2, "C: plfsdir.memtable.tb_size -> %d x %s",
+          2 * (1 << options_.lg_parts), PrettySize(tb_bytes_).c_str());
+  Verbose(__LOG_ARGS__, 2, "C: plfsdir.memtable.bf_size -> %d x %s",
+          2 * (1 << options_.lg_parts), PrettySize(bf_bytes_).c_str());
+  Verbose(__LOG_ARGS__, 2, "C: plfsdir.memtable.bits_per_entry -> %d + %d bits",
+          static_cast<int>(8 * bytes_per_entry),
+          static_cast<int>(options.bf_bits_per_key));
 #endif
 
   // Allocate memory
-  buf0_.Reserve(entries_per_buf_, buf_size_);
-  buf1_.Reserve(entries_per_buf_, buf_size_);
+  buf0_.Reserve(entries_per_tb_, tb_bytes_);
+  buf1_.Reserve(entries_per_tb_, tb_bytes_);
 
   mem_buf_ = &buf0_;
 }
 
 PlfsIoLogger::~PlfsIoLogger() {
-  mutex_->AssertHeld();
+  mu_->AssertHeld();
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
@@ -582,7 +585,7 @@ PlfsIoLogger::~PlfsIoLogger() {
 
 // Block until compaction finishes.
 Status PlfsIoLogger::Wait() {
-  mutex_->AssertHeld();
+  mu_->AssertHeld();
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
@@ -592,13 +595,13 @@ Status PlfsIoLogger::Wait() {
 
 // Close log files.
 Status PlfsIoLogger::Close() {
-  mutex_->AssertHeld();
-  mutex_->Unlock();
+  mu_->AssertHeld();
+  mu_->Unlock();
   Status s = data_->Lclose();
   if (s.ok()) {
     s = index_->Lclose();
   }
-  mutex_->Lock();
+  mu_->Lock();
   return s;
 }
 
@@ -606,7 +609,7 @@ Status PlfsIoLogger::Close() {
 // errors, buffer space, and compaction queue depth) such that no
 // compaction jobs will be scheduled.
 Status PlfsIoLogger::Finish(bool dry_run) {
-  mutex_->AssertHeld();
+  mu_->AssertHeld();
   while (pending_finish_ ||
          pending_epoch_flush_ ||  // The previous job is still in-progress
          imm_buf_ != NULL) {      // There's an on-going compaction job
@@ -624,7 +627,7 @@ Status PlfsIoLogger::Finish(bool dry_run) {
   } else {
     pending_finish_ = true;
     pending_epoch_flush_ = true;
-    status = Prepare(true, true);
+    status = Prepare(pending_epoch_flush_, pending_finish_);
     if (!status.ok()) {
       pending_epoch_flush_ = false;  // Avoid blocking future attempts
       pending_finish_ = false;
@@ -642,7 +645,7 @@ Status PlfsIoLogger::Finish(bool dry_run) {
 // errors, buffer space, and compaction queue depth) such that no
 // compaction jobs will be scheduled.
 Status PlfsIoLogger::MakeEpoch(bool dry_run) {
-  mutex_->AssertHeld();
+  mu_->AssertHeld();
   while (pending_epoch_flush_ ||  // The previous job is still in-progress
          imm_buf_ != NULL) {      // There's an on-going compaction job
     if (dry_run || options_.non_blocking) {
@@ -658,7 +661,7 @@ Status PlfsIoLogger::MakeEpoch(bool dry_run) {
     status = table_logger_.status();
   } else {
     pending_epoch_flush_ = true;
-    status = Prepare(true, false);
+    status = Prepare(pending_epoch_flush_);
     if (!status.ok()) {
       pending_epoch_flush_ = false;  // Avoid blocking future attempts
     } else if (status.ok() && !options_.non_blocking) {
@@ -672,8 +675,8 @@ Status PlfsIoLogger::MakeEpoch(bool dry_run) {
 }
 
 Status PlfsIoLogger::Add(const Slice& key, const Slice& value) {
-  mutex_->AssertHeld();
-  Status status = Prepare(false, false);
+  mu_->AssertHeld();
+  Status status = Prepare();
   if (status.ok()) {
     mem_buf_->Add(key, value);
   }
@@ -682,14 +685,14 @@ Status PlfsIoLogger::Add(const Slice& key, const Slice& value) {
 }
 
 Status PlfsIoLogger::Prepare(bool flush, bool finish) {
-  mutex_->AssertHeld();
+  mu_->AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
   while (true) {
     if (!table_logger_.ok()) {
       status = table_logger_.status();
       break;
-    } else if (!flush && mem_buf_->CurrentBufferSize() < buf_size_) {
+    } else if (!flush && mem_buf_->CurrentBufferSize() < tb_bytes_) {
       // There is room in current write buffer
       break;
     } else if (imm_buf_ != NULL) {
@@ -708,7 +711,7 @@ Status PlfsIoLogger::Prepare(bool flush, bool finish) {
       if (finish) imm_buf_is_finish_ = true;
       finish = false;
       WriteBuffer* const current_buf = mem_buf_;
-      MaybeSchedualCompaction();
+      MaybeScheduleCompaction();
       if (current_buf == &buf0_) {
         mem_buf_ = &buf1_;
       } else {
@@ -720,8 +723,8 @@ Status PlfsIoLogger::Prepare(bool flush, bool finish) {
   return status;
 }
 
-void PlfsIoLogger::MaybeSchedualCompaction() {
-  mutex_->AssertHeld();
+void PlfsIoLogger::MaybeScheduleCompaction() {
+  mu_->AssertHeld();
 
   if (has_bg_compaction_) return;  // Skip if there is one already scheduled
   if (imm_buf_ == NULL) return;    // Nothing to be scheduled
@@ -737,12 +740,12 @@ void PlfsIoLogger::MaybeSchedualCompaction() {
 
 void PlfsIoLogger::BGWork(void* arg) {
   PlfsIoLogger* ins = reinterpret_cast<PlfsIoLogger*>(arg);
-  MutexLock ml(ins->mutex_);
+  MutexLock ml(ins->mu_);
   ins->DoCompaction();
 }
 
 void PlfsIoLogger::DoCompaction() {
-  mutex_->AssertHeld();
+  mu_->AssertHeld();
   assert(has_bg_compaction_);
   assert(imm_buf_ != NULL);
   CompactWriteBuffer();
@@ -751,12 +754,12 @@ void PlfsIoLogger::DoCompaction() {
   imm_buf_is_finish_ = false;
   imm_buf_ = NULL;
   has_bg_compaction_ = false;
-  MaybeSchedualCompaction();
+  MaybeScheduleCompaction();
   bg_cv_->SignalAll();
 }
 
 void PlfsIoLogger::CompactWriteBuffer() {
-  mutex_->AssertHeld();
+  mu_->AssertHeld();
   WriteBuffer* const buffer = imm_buf_;
   assert(buffer != NULL);
   const bool pending_finish = pending_finish_;
@@ -768,7 +771,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
   const size_t bf_bytes = bf_bytes_;
   uint64_t data_offset = data_->Ltell();
   uint64_t index_offset = index_->Ltell();
-  mutex_->Unlock();
+  mu_->Unlock();
   uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3,
@@ -827,7 +830,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
 
   delete iter;
   delete bloom_filter;
-  mutex_->Lock();
+  mu_->Lock();
   stats_->data_size += data_->Ltell() - data_offset;
   stats_->index_size += index_->Ltell() - index_offset;
   stats_->write_micros += end - start;
