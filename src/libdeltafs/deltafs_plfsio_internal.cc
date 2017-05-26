@@ -265,9 +265,8 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   meta_block_.Reserve(estimated_meta_size);
 
   uncommitted_indexes_.reserve(1 << 10);
-  std::string direct_buffer;
-  direct_buffer.reserve(options.block_buffer);
-  data_block_.SwitchBuffer(&direct_buffer);  // Avoids an extra copy of data
+  data_block_.Reserve(options_.block_buffer);
+  data_block_.SwitchBuffer(NULL);
   data_block_.Reset();
 }
 
@@ -279,9 +278,14 @@ TableLogger::~TableLogger() {
 void TableLogger::EndEpoch() {
   assert(!finished_);  // Finish() has not been called
   EndTable(static_cast<BloomBlock*>(NULL));
-  if (ok() && num_tables_ != 0) {
+  if (!ok()) {
+    return;  // Abort
+  } else if (num_tables_ == 0) {
+    return;  // Empty epoch
+  } else if (num_epochs_ >= kMaxEpoches) {
+    status_ = Status::AssertionFailed("Too many epochs");
+  } else {
     num_tables_ = 0;
-    assert(num_epochs_ < kMaxEpoches);
     num_epochs_++;
   }
 }
@@ -351,11 +355,12 @@ void TableLogger::EndTable(T* filter_block) {
     pending_meta_entry_ = false;
   }
 
-  if (ok()) {
+  if (num_tables_ >= kMaxTablesPerEpoch) {
+    status_ = Status::AssertionFailed("Too many tables");
+  } else {
     smallest_key_.clear();
     largest_key_.clear();
     last_key_.clear();
-    assert(num_tables_ < kMaxTablesPerEpoch);
     num_tables_++;
   }
 }
