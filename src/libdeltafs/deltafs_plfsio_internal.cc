@@ -240,6 +240,8 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
 TableLogger::TableLogger(const DirOptions& options, LogSink* data,
                          LogSink* index)
     : options_(options),
+      num_uncommitted_index_(0),
+      num_uncommitted_data_(0),
       data_block_(16),
       index_block_(1),
       meta_block_(1),
@@ -247,8 +249,6 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
       pending_meta_entry_(false),
       num_tables_(0),
       num_epochs_(0),
-      num_uncommitted_index_(0),
-      num_uncommitted_data_(0),
       data_sink_(data),
       meta_sink_(index),
       finished_(false) {
@@ -274,16 +274,9 @@ void TableLogger::EndEpoch() {
   assert(!finished_);  // Finish() has not been called
   EndTable(static_cast<BloomBlock*>(NULL));
   if (ok() && num_tables_ != 0) {
-#if VERBOSE >= 4
-    Verbose(__LOG_ARGS__, 4, "Epoch #%d: closed (%d tables) %s",
-            int(num_epochs_), int(num_tables_), status_.ToString().c_str());
-#endif
     num_tables_ = 0;
     assert(num_epochs_ < kMaxEpoches);
     num_epochs_++;
-#if VERBOSE >= 4
-    Verbose(__LOG_ARGS__, 4, "Epoch #%d: started", int(num_epochs_));
-#endif
   }
 }
 
@@ -313,7 +306,6 @@ void TableLogger::EndTable(T* filter_block) {
   const size_t size = contents.size();
   Slice final_contents =
       index_block_.Finalize();  // No zero padding necessary for index blocks
-  const size_t final_size = final_contents.size();
   const uint64_t offset = meta_sink_->Ltell();
   status_ = meta_sink_->Lwrite(final_contents);
   if (!ok()) return;  // Abort
@@ -462,7 +454,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 }
 
 Status TableLogger::Finish() {
-  assert(!finished_);
+  assert(!finished_);  // Finish() has not been called
   EndEpoch();
   finished_ = true;
   if (!ok()) return status_;
@@ -473,54 +465,37 @@ Status TableLogger::Finish() {
   assert(!pending_meta_entry_);
   Slice contents = meta_block_.Finish();
   const size_t size = contents.size();
-  // NOTE: raw_contents invalidates contents
-  Slice raw_contents =
-      meta_block_.Finalize(0);  // No padding is needed for metadata blocks
+  Slice final_contents =
+      meta_block_.Finalize();  // No padding is needed for metadata blocks
   const uint64_t offset = meta_sink_->Ltell();
-  status_ = meta_sink_->Lwrite(raw_contents);
+  status_ = meta_sink_->Lwrite(final_contents);
+  if (!ok()) return status_;
 
-#if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "[EIDX] written: (offset=%llu, size=%llu/%llu) %s",
-          static_cast<unsigned long long>(offset),
-          static_cast<unsigned long long>(size),
-          static_cast<unsigned long long>(raw_contents.size()),
-          status_.ToString().c_str());
-#endif
+  epoch_index_handle.set_size(size);
+  epoch_index_handle.set_offset(offset);
+  footer.set_epoch_index_handle(epoch_index_handle);
+  footer.set_num_epoches(num_epochs_);
+  footer.EncodeTo(&tail);
 
-  if (ok()) {
-    epoch_index_handle.set_size(size);
-    epoch_index_handle.set_offset(offset);
-
-    footer.set_epoch_index_handle(epoch_index_handle);
-    footer.set_num_epoches(num_epochs_);
-    footer.EncodeTo(&tail);
-  }
-
-  if (ok()) {
-    if (options_.tail_padding) {
-      // Add enough padding to ensure the final size of the index log
-      // is some multiple of the physical write size.
-      const uint64_t total_size = meta_sink_->Ltell() + tail.size();
-      const size_t overflow = total_size % options_.index_buffer;
-      if (overflow != 0) {
-        const size_t padding = options_.index_buffer - overflow;
-        assert(padding < options_.index_buffer);
-        status_ = meta_sink_->Lwrite(std::string(padding, 0));
-      }
+  if (options_.tail_padding) {
+    // Add enough padding to ensure the final size of the index log
+    // is some multiple of the physical write size.
+    const uint64_t total_size = meta_sink_->Ltell() + tail.size();
+    const size_t overflow = total_size % options_.index_buffer;
+    if (overflow != 0) {
+      const size_t n = options_.index_buffer - overflow;
+      status_ = meta_sink_->Lwrite(std::string(n, 0));
+    } else {
+      // No need to pad
     }
   }
 
   if (ok()) {
     status_ = meta_sink_->Lwrite(tail);
+    return status_;
+  } else {
+    return status_;
   }
-
-#if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "[TAIL] written: (size=%llu) %s",
-          static_cast<unsigned long long>(tail.size()),
-          status_.ToString().c_str());
-#endif
-
-  return status_;
 }
 
 PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
