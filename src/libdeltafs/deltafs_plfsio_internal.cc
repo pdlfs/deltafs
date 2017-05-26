@@ -24,7 +24,7 @@ extern const char* GetLengthPrefixedSlice(const char* p, const char* limit,
                                           Slice* result);
 namespace plfsio {
 
-static uint32_t BloomHash(const Slice& key) {
+static inline uint32_t BloomHash(const Slice& key) {
   return Hash(key.data(), key.size(), 0xbc9f1d34);
 }
 
@@ -237,6 +237,14 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
   num_entries_++;
 }
 
+OutputStats::OutputStats()
+    : total_data_size(0),
+      data_bytes(0),
+      total_index_size(0),
+      index_bytes(0),
+      value_bytes(0),
+      key_bytes(0) {}
+
 TableLogger::TableLogger(const DirOptions& options, LogSink* data,
                          LogSink* index)
     : options_(options),
@@ -317,8 +325,11 @@ void TableLogger::EndTable(T* filter_block) {
   const size_t size = contents.size();
   Slice final_contents =
       index_block_.Finalize();  // No zero padding necessary for index blocks
+  const size_t final_size = final_contents.size();
   const uint64_t offset = meta_sink_->Ltell();
   status_ = meta_sink_->Lwrite(final_contents);
+  output_stats_.total_index_size += final_size;
+  output_stats_.index_bytes += size;
   if (!ok()) return;  // Abort
 
   size_t filter_size = 0;
@@ -329,7 +340,10 @@ void TableLogger::EndTable(T* filter_block) {
     Slice filer_contents = filter_block->Finish();
     filter_size = filer_contents.size();
     final_filter_contents = filter_block->Finalize();
+    const size_t final_filter_size = final_filter_contents.size();
     status_ = meta_sink_->Lwrite(final_filter_contents);
+    output_stats_.total_index_size += final_filter_size;
+    output_stats_.index_bytes += filter_size;
   } else {
     // No filter configured
   }
@@ -417,6 +431,8 @@ void TableLogger::Flush() {
 
   const size_t final_size = final_contents.size();
   const uint64_t offset = data_block_.buffer_store()->size() - final_size;
+  output_stats_.total_data_size += final_size;
+  output_stats_.data_bytes += size;
 
   if (ok()) {
     data_block_.SwitchBuffer(NULL);
@@ -462,6 +478,9 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   }
 
   last_key_ = key.ToString();
+  output_stats_.value_bytes += value.size();
+  output_stats_.key_bytes += key.size();
+
   data_block_.Add(key, value);
   if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize >=
       static_cast<uint64_t>(options_.block_size * options_.block_util)) {

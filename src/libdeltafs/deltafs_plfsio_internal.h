@@ -46,6 +46,22 @@ class WriteBuffer {
   class Iter;
 };
 
+struct OutputStats {
+  OutputStats();
+
+  // Total size of data blocks
+  size_t total_data_size;
+  size_t data_bytes;  // Excluding padding and tails
+
+  // Total size of non-index blocks
+  size_t total_index_size;
+  size_t index_bytes;  // Excluding padding and tails
+
+  // Total size of data compacted
+  size_t value_bytes;
+  size_t key_bytes;
+};
+
 // Write table contents into a set of log files.
 class TableLogger {
  public:
@@ -78,6 +94,7 @@ class TableLogger {
 
  private:
   const DirOptions& options_;
+  OutputStats output_stats_;
 
   // No copying allowed
   void operator=(const TableLogger&);
