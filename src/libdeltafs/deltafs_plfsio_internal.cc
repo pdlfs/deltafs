@@ -769,9 +769,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
   mu_->Unlock();
   uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3,
-          "Compacting write buffer (epoch_flush=%d, force_finish=%d) ...",
-          int(is_epoch_flush), int(is_finish));
+  Verbose(__LOG_ARGS__, 3, "Compacting write buffer ...");
   unsigned long long key_size = 0;
   unsigned long long val_size = 0;
   unsigned num_keys = 0;
@@ -812,8 +810,8 @@ void PlfsIoLogger::CompactWriteBuffer() {
   uint64_t end = Env::Default()->NowMicros();
 
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Compaction done (%d us)",
-          static_cast<int>(end - start));
+  Verbose(__LOG_ARGS__, 3, "Compaction done: %d entries (%d us)",
+          num_keys, static_cast<int>(end - start));
 #endif
 
   delete iter;
