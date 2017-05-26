@@ -230,10 +230,10 @@ void WriteBuffer::Reserve(uint32_t num_entries, size_t buffer_size) {
 void WriteBuffer::Add(const Slice& key, const Slice& value) {
   assert(!finished_);       // Finish() has not been called
   assert(key.size() != 0);  // Key cannot be empty
-  size_t offset = buffer_.size();
+  const size_t offset = buffer_.size();
   PutLengthPrefixedSlice(&buffer_, key);
   PutLengthPrefixedSlice(&buffer_, value);
-  offsets_.push_back(offset);
+  offsets_.push_back(static_cast<uint32_t>(offset));
   num_entries_++;
 }
 
@@ -259,10 +259,16 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   data_sink_->Ref();
 
   // Allocate memory
-  data_block_.Reserve(options_.block_size);
+  const size_t estimated_index_size_per_table = 4 << 10;
+  index_block_.Reserve(estimated_index_size_per_table);
+  const size_t estimated_meta_size = 16 << 10;
+  meta_block_.Reserve(estimated_meta_size);
 
-  index_block_.Reserve(1 << 10);
-  meta_block_.Reserve(1 << 10);
+  uncommitted_indexes_.reserve(1 << 10);
+  std::string direct_buffer;
+  direct_buffer.reserve(options.block_buffer);
+  data_block_.SwitchBuffer(&direct_buffer);  // Avoids an extra copy of data
+  data_block_.Reset();
 }
 
 TableLogger::~TableLogger() {
@@ -355,13 +361,13 @@ void TableLogger::EndTable(T* filter_block) {
 }
 
 void TableLogger::Commit() {
-  assert(!finished_);                // Finish() has not been called
-  if (data_buffer_.empty()) return;  // Empty block
-  if (!ok()) return;                 // Abort
+  assert(!finished_);                  // Finish() has not been called
+  if (data_buffer()->empty()) return;  // Empty block
+  if (!ok()) return;                   // Abort
 
   assert(num_uncommitted_data_ == num_uncommitted_index_);
   const size_t offset = data_sink_->Ltell();
-  status_ = data_sink_->Lwrite(data_buffer_);
+  status_ = data_sink_->Lwrite(*data_buffer());
   if (!ok()) return;  // Abort
 
   Slice key;
@@ -384,7 +390,9 @@ void TableLogger::Commit() {
   assert(num_index_committed == num_uncommitted_index_);
   num_uncommitted_data_ = num_uncommitted_index_ = 0;
   uncommitted_indexes_.clear();
-  data_buffer_.clear();
+  data_block_.buffer_store()->clear();
+  data_block_.SwitchBuffer(NULL);
+  data_block_.Reset();
 }
 
 void TableLogger::Flush() {
@@ -402,10 +410,10 @@ void TableLogger::Flush() {
   }
 
   const size_t final_size = final_contents.size();
-  data_buffer_.append(final_contents.data(), final_size);
-  const uint64_t offset = data_buffer_.size() - final_size;
+  const uint64_t offset = data_buffer()->size() - final_size;
 
   if (ok()) {
+    data_block_.SwitchBuffer(NULL);
     data_block_.Reset();
     pending_index_handle_.set_size(size);
     pending_index_handle_.set_offset(offset);
@@ -443,7 +451,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   }
 
   // Commit all flushed data blocks
-  if (data_buffer_.size() >= options_.block_buffer) {
+  if (data_buffer()->size() >= options_.block_buffer) {
     Commit();
   }
 
@@ -810,8 +818,8 @@ void PlfsIoLogger::CompactWriteBuffer() {
   uint64_t end = Env::Default()->NowMicros();
 
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Compaction done: %d entries (%d us)",
-          num_keys, static_cast<int>(end - start));
+  Verbose(__LOG_ARGS__, 3, "Compaction done: %d entries (%d us)", num_keys,
+          static_cast<int>(end - start));
 #endif
 
   delete iter;

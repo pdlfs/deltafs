@@ -78,6 +78,7 @@ class TableLogger {
 
  private:
   const DirOptions& options_;
+  std::string* data_buffer() { return data_block_.buffer_store(); }
 
   // No copying allowed
   void operator=(const TableLogger&);
@@ -87,8 +88,6 @@ class TableLogger {
   std::string smallest_key_;
   std::string largest_key_;
   std::string last_key_;
-  std::string uncommitted_indexes_;
-  std::string data_buffer_;
   uint32_t num_uncommitted_index_;  // Number of uncommitted index entries
   uint32_t num_uncommitted_data_;   // Number of uncommitted data blocks
   BlockBuilder data_block_;
@@ -100,6 +99,7 @@ class TableLogger {
   TableHandle pending_meta_handle_;
   uint32_t num_tables_;  // Number of tables within an epoch
   uint32_t num_epochs_;  // Number of epochs generated
+  std::string uncommitted_indexes_;
   LogSink* data_sink_;
   LogSink* meta_sink_;
   bool finished_;
