@@ -50,16 +50,20 @@ struct OutputStats {
   OutputStats();
 
   // Total size of data blocks
-  size_t total_data_size;
-  size_t data_bytes;  // Excluding padding and tails
+  size_t final_data_size;
+  size_t data_size;  // Excluding padding and block tails
 
-  // Total size of non-index blocks
-  size_t total_index_size;
-  size_t index_bytes;  // Excluding padding and tails
+  // Total size of index blocks
+  size_t final_index_size;
+  size_t index_size;  // Excluding block tails
+
+  // Total size of filter blocks
+  size_t final_filter_size;
+  size_t filter_size;  // Excluding block tails
 
   // Total size of data compacted
-  size_t value_bytes;
-  size_t key_bytes;
+  size_t value_size;
+  size_t key_size;
 };
 
 // Write table contents into a set of log files.

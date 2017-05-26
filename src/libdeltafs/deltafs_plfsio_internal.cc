@@ -238,12 +238,14 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
 }
 
 OutputStats::OutputStats()
-    : total_data_size(0),
-      data_bytes(0),
-      total_index_size(0),
-      index_bytes(0),
-      value_bytes(0),
-      key_bytes(0) {}
+    : final_data_size(0),
+      data_size(0),
+      final_index_size(0),
+      index_size(0),
+      final_filter_size(0),
+      filter_size(0),
+      value_size(0),
+      key_size(0) {}
 
 TableLogger::TableLogger(const DirOptions& options, LogSink* data,
                          LogSink* index)
@@ -321,15 +323,15 @@ void TableLogger::EndTable(T* filter_block) {
     return;  // Empty table
   }
 
-  Slice contents = index_block_.Finish();
-  const size_t size = contents.size();
-  Slice final_contents =
+  Slice index_contents = index_block_.Finish();
+  const size_t index_size = index_contents.size();
+  Slice final_index_contents =
       index_block_.Finalize();  // No zero padding necessary for index blocks
-  const size_t final_size = final_contents.size();
-  const uint64_t offset = meta_sink_->Ltell();
-  status_ = meta_sink_->Lwrite(final_contents);
-  output_stats_.total_index_size += final_size;
-  output_stats_.index_bytes += size;
+  const size_t final_index_size = final_index_contents.size();
+  const uint64_t index_offset = meta_sink_->Ltell();
+  status_ = meta_sink_->Lwrite(final_index_contents);
+  output_stats_.final_index_size += final_index_size;
+  output_stats_.index_size += index_size;
   if (!ok()) return;  // Abort
 
   size_t filter_size = 0;
@@ -342,8 +344,8 @@ void TableLogger::EndTable(T* filter_block) {
     final_filter_contents = filter_block->Finalize();
     const size_t final_filter_size = final_filter_contents.size();
     status_ = meta_sink_->Lwrite(final_filter_contents);
-    output_stats_.total_index_size += final_filter_size;
-    output_stats_.index_bytes += filter_size;
+    output_stats_.final_filter_size += final_filter_size;
+    output_stats_.filter_size += filter_size;
   } else {
     // No filter configured
   }
@@ -352,8 +354,8 @@ void TableLogger::EndTable(T* filter_block) {
     index_block_.Reset();
     pending_meta_handle_.set_filter_offset(filter_offset);
     pending_meta_handle_.set_filter_size(filter_size);
-    pending_meta_handle_.set_offset(offset);
-    pending_meta_handle_.set_size(size);
+    pending_meta_handle_.set_offset(index_offset);
+    pending_meta_handle_.set_size(index_size);
     assert(!pending_meta_entry_);
     pending_meta_entry_ = true;
   } else {
@@ -431,8 +433,8 @@ void TableLogger::Flush() {
 
   const size_t final_size = final_contents.size();
   const uint64_t offset = data_block_.buffer_store()->size() - final_size;
-  output_stats_.total_data_size += final_size;
-  output_stats_.data_bytes += size;
+  output_stats_.final_data_size += final_size;
+  output_stats_.data_size += size;
 
   if (ok()) {
     data_block_.SwitchBuffer(NULL);
@@ -478,8 +480,8 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   }
 
   last_key_ = key.ToString();
-  output_stats_.value_bytes += value.size();
-  output_stats_.key_bytes += key.size();
+  output_stats_.value_size += value.size();
+  output_stats_.key_size += key.size();
 
   data_block_.Add(key, value);
   if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize >=
