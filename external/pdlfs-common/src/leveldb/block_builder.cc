@@ -11,11 +11,11 @@
 #include "block_builder.h"
 #include "format.h"
 
-#include <assert.h>
-#include <algorithm>
-
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/crc32c.h"
+
+#include <assert.h>
+#include <algorithm>
 
 // BlockBuilder generates blocks where keys are prefix-compressed:
 //
@@ -45,6 +45,7 @@ namespace pdlfs {
 BlockBuilder::BlockBuilder(int restart_interval, const Comparator* cmp)
     : restart_interval_(restart_interval),
       cmp_(cmp),
+      buffer_start_(0),
       counter_(0),
       finished_(false) {
   restarts_.push_back(0);  // First restart point is at offset 0
@@ -56,8 +57,13 @@ BlockBuilder::BlockBuilder(int restart_interval, const Comparator* cmp)
   }
 }
 
+void BlockBuilder::SwitchBuffer(std::string* buffer) {
+  if (buffer != NULL) buffer->swap(buffer_);
+  buffer_start_ = buffer_.size();
+}
+
 void BlockBuilder::Reset() {
-  buffer_.clear();
+  buffer_.resize(buffer_start_);
   restarts_.clear();
   restarts_.push_back(0);  // First restart point is at offset 0
   counter_ = 0;
@@ -66,12 +72,12 @@ void BlockBuilder::Reset() {
 }
 
 size_t BlockBuilder::CurrentSizeEstimate() const {
-  if (!finished_)
-    return (buffer_.size() +                       // Raw data buffer
-            restarts_.size() * sizeof(uint32_t) +  // Restart array
-            sizeof(uint32_t));                     // Restart array length
-  else {
-    return buffer_.size();
+  size_t result = buffer_.size() - buffer_start_;
+  if (!finished_) {
+    // Plus restart array contents and its length
+    return result + restarts_.size() * sizeof(uint32_t) + sizeof(uint32_t);
+  } else {
+    return result;
   }
 }
 
@@ -83,7 +89,9 @@ Slice BlockBuilder::Finish() {
   }
   PutFixed32(&buffer_, restarts_.size());  // Remember the array size
   finished_ = true;
-  return buffer_;
+  Slice result = buffer_;
+  result.remove_prefix(buffer_start_);
+  return result;
 }
 
 Slice BlockBuilder::Finalize(uint64_t padding_target) {
@@ -95,17 +103,19 @@ Slice BlockBuilder::Finalize(uint64_t padding_target) {
   crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
   EncodeFixed32(trailer + 1, crc32c::Mask(crc));
   buffer_.append(trailer, sizeof(trailer));
-  if (padding_target != 0 && buffer_.size() < padding_target) {
-    buffer_.resize(padding_target, 0);
+  if (padding_target != 0 && buffer_.size() < buffer_start_ + padding_target) {
+    buffer_.resize(buffer_start_ + padding_target, 0);
   }
-  return buffer_;
+  Slice result = buffer_;
+  result.remove_prefix(buffer_start_);
+  return result;
 }
 
 void BlockBuilder::Add(const Slice& key, const Slice& value) {
   Slice last_key_piece(last_key_);
   assert(!finished_);
   assert(counter_ <= restart_interval_);
-  assert(buffer_.empty() || cmp_->Compare(key, last_key_piece) >= 0);
+  assert(empty() || cmp_->Compare(key, last_key_piece) >= 0);
   size_t shared = 0;
   if (counter_ < restart_interval_) {
     // See how much sharing to do with previous string
@@ -115,15 +125,17 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
     }
   } else {
     // Restart compression
-    restarts_.push_back(buffer_.size());
+    const ssize_t offset = buffer_.size() - buffer_start_;
+    assert(offset > 0);
+    restarts_.push_back(static_cast<uint32_t>(offset));
     counter_ = 0;
   }
   const size_t non_shared = key.size() - shared;
 
   // Add "<shared><non_shared><value_size>" to buffer_
-  PutVarint32(&buffer_, shared);
-  PutVarint32(&buffer_, non_shared);
-  PutVarint32(&buffer_, value.size());
+  PutVarint32(&buffer_, static_cast<uint32_t>(shared));
+  PutVarint32(&buffer_, static_cast<uint32_t>(non_shared));
+  PutVarint32(&buffer_, static_cast<uint32_t>(value.size()));
 
   // Add string delta to buffer_ followed by value
   buffer_.append(key.data() + shared, non_shared);

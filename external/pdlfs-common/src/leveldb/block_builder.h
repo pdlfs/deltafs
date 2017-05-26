@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2017 Carnegie Mellon University.
@@ -9,6 +7,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+
+#pragma once
 
 #include <stdint.h>
 #include <vector>
@@ -23,11 +23,17 @@ class BlockBuilder {
  public:
   BlockBuilder(int restart_interval, const Comparator* cmp = NULL);
 
+  // Optionally, caller may specify a direct buffer space to switch with
+  // the one currently used by the builder.
+  // This allows the builder to append data to an external buffer space and
+  // potentially avoids an extra copy of data.
+  void SwitchBuffer(std::string* buffer);
+
   // Reset the contents as if the BlockBuilder was just constructed.
   void Reset();
 
   // Reserve a certain amount of buffer space.
-  void Reserve(size_t size) { buffer_.reserve(size); }
+  void Reserve(size_t size) { buffer_.reserve(buffer_start_ + size); }
 
   // REQUIRES: Finish() has not been called since the last call to Reset().
   // REQUIRES: key is larger than any previously added key
@@ -59,12 +65,13 @@ class BlockBuilder {
   const Comparator* comparator() const { return cmp_; }
 
   // Return true iff no entries have been added since the last Reset()
-  bool empty() const { return buffer_.empty(); }
+  bool empty() const { return buffer_.size() <= buffer_start_; }
 
  private:
   int restart_interval_;
   const Comparator* cmp_;
   std::string buffer_;              // Destination buffer
+  size_t buffer_start_;             // Start offset of the buffer space
   std::vector<uint32_t> restarts_;  // Restart points
   int counter_;                     // Number of entries emitted since restart
   bool finished_;                   // Has Finish() been called?
