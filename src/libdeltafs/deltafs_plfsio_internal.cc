@@ -331,6 +331,8 @@ void TableLogger::EndTable(T* filter_block) {
     pending_meta_handle_.set_size(size);
     assert(!pending_meta_entry_);
     pending_meta_entry_ = true;
+  } else {
+    return;  // Abort
   }
 
   if (pending_meta_entry_) {
@@ -768,7 +770,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
   uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3,
-          "Compacting write buffer (epoch_flush=%d, finish=%d) ...",
+          "Compacting write buffer (epoch_flush=%d, force_finish=%d) ...",
           int(is_epoch_flush), int(is_finish));
   unsigned long long key_size = 0;
   unsigned long long val_size = 0;
@@ -810,15 +812,8 @@ void PlfsIoLogger::CompactWriteBuffer() {
   uint64_t end = Env::Default()->NowMicros();
 
 #if VERBOSE >= 3
-  if (num_keys != 0 && dest->ok()) {
-    Verbose(__LOG_ARGS__, 3, "Level-0 table: %u records (%s keys, %s values)",
-            num_keys, PrettySize(key_size).c_str(),
-            PrettySize(val_size).c_str());
-  }
-
-  Verbose(__LOG_ARGS__, 3, "Compaction done (%llu us) %s",
-          static_cast<unsigned long long>(end - start),
-          dest->status().ToString().c_str());
+  Verbose(__LOG_ARGS__, 3, "Compaction done (%d us)",
+          static_cast<int>(end - start));
 #endif
 
   delete iter;
