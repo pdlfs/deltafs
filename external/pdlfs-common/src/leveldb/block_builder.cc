@@ -97,6 +97,7 @@ Slice BlockBuilder::Finish() {
 Slice BlockBuilder::Finalize(uint64_t padding_target) {
   assert(finished_);
   Slice contents = buffer_;  // Contents without the trailer and padding
+  contents.remove_prefix(buffer_start_);
   char trailer[kBlockTrailerSize];
   trailer[0] = kNoCompression;
   uint32_t crc = crc32c::Value(contents.data(), contents.size());
@@ -131,11 +132,12 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
     counter_ = 0;
   }
   const size_t non_shared = key.size() - shared;
+  const size_t vlen = value.size();
 
   // Add "<shared><non_shared><value_size>" to buffer_
   PutVarint32(&buffer_, static_cast<uint32_t>(shared));
   PutVarint32(&buffer_, static_cast<uint32_t>(non_shared));
-  PutVarint32(&buffer_, static_cast<uint32_t>(value.size()));
+  PutVarint32(&buffer_, static_cast<uint32_t>(vlen));
 
   // Add string delta to buffer_ followed by value
   buffer_.append(key.data() + shared, non_shared);
