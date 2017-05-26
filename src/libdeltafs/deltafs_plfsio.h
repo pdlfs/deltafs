@@ -57,26 +57,28 @@ struct DirOptions {
   size_t bf_bits_per_key;
 
   // Approximate size of user data packed per data block.
-  // Here block is used both as the packaging format and as the basic I/O unit
-  // for reading and writing the underlying data log objects. The size of all
-  // index and filter blocks are *not* affected by this option.
+  // Note that block is used both as the packaging format and as the logical I/O
+  // unit for reading and writing the underlying data log objects.
+  // The size of all index and filter blocks are *not* affected
+  // by this option.
   // Default: 128K
   size_t block_size;
 
   // Start zero padding if current estimated block size reaches the
-  // specified utilization target.
+  // specified utilization target. Only applies to data blocks.
   // Default: 0.999 (99.9%)
   double block_util;
 
-  // Number of data blocks to accumulate before flush out to the storage in a
-  // single atomic batch. The use of uberblocks can reduce the I/O
+  // Set to false to disable the zero padding of data blocks.
+  // Default: true
+  bool block_padding;
+
+  // Number of data blocks to accumulate before flush out to the data log in a
+  // single atomic batch. Aggregating data block writes can reduce the I/O
   // contention among multiple concurrent compaction threads that compete
   // for access to a shared data log.
-  // When each uberblock is sufficiently large, there is less need for a
-  // separate write buffer allocation for the data log, which also
-  // avoids an extra copy of data.
-  // Default: 16
-  int uberblock_depth;
+  // Default: 2MB
+  size_t block_buffer;
 
   // Write buffer size for each physical data log.
   // Set to zero to disable buffering and each data block flush

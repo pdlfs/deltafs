@@ -58,9 +58,13 @@ class TableLogger {
   void Add(const Slice& key, const Slice& value);
   Status Finish();
 
-  // Force the start of a new data block.
+  // End the current block and force the start of a new data block.
   // REQUIRES: Finish() has not been called.
-  void EndBlock();
+  void Flush();
+
+  // Commit all flushed data blocks and finalize their indexes.
+  // REQUIRES: Finish() has not been called.
+  void Commit();
 
   // Force the start of a new table.
   // Caller may optionally specify a corresponding filter block.
@@ -92,6 +96,10 @@ class TableLogger {
   TableHandle pending_meta_handle_;
   uint32_t num_tables_;  // Number of tables within an epoch
   uint32_t num_epochs_;  // Number of epochs generated
+  std::string uncommitted_indexes_;
+  std::string data_buffer_;
+  uint32_t num_uncommitted_index_;  // Number of uncommitted index entries
+  uint32_t num_uncommitted_data_;   // Number of uncommitted data blocks
   LogSink* data_sink_;
   LogSink* meta_sink_;
   bool finished_;

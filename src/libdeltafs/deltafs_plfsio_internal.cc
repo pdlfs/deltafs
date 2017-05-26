@@ -247,6 +247,8 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
       pending_meta_entry_(false),
       num_tables_(0),
       num_epochs_(0),
+      num_uncommitted_index_(0),
+      num_uncommitted_data_(0),
       data_sink_(data),
       meta_sink_(index),
       finished_(false) {
@@ -288,54 +290,46 @@ void TableLogger::EndEpoch() {
 template <typename T>
 void TableLogger::EndTable(T* filter_block) {
   assert(!finished_);  // Finish() has not been called
-  EndBlock();
-  if (!ok()) return;  // Abort
-  if (pending_index_entry_) {
-    assert(data_block_.empty());
+
+  Flush();
+  if (!ok()) {
+    return;
+  } else if (pending_index_entry_) {
     BytewiseComparator()->FindShortSuccessor(&last_key_);
-    std::string handle_encoding;
-    pending_index_handle_.EncodeTo(&handle_encoding);
-    index_block_.Add(last_key_, handle_encoding);
+    PutLengthPrefixedSlice(&uncommitted_indexes_, last_key_);
+    pending_index_handle_.EncodeTo(&uncommitted_indexes_);
     pending_index_entry_ = false;
-  } else if (index_block_.empty()) {
-    return;  // No more work
+    num_uncommitted_index_++;
   }
 
-  assert(!pending_meta_entry_);
+  Commit();
+  if (!ok()) {
+    return;
+  } else if (index_block_.empty()) {
+    return;  // Empty table
+  }
+
   Slice contents = index_block_.Finish();
   const size_t size = contents.size();
-  // NOTE: raw_contents invalidates contents
-  Slice raw_contents = index_block_.Finalize(0);  // No padding for indices
+  Slice final_contents =
+      index_block_.Finalize();  // No zero padding necessary for index blocks
+  const size_t final_size = final_contents.size();
   const uint64_t offset = meta_sink_->Ltell();
-  status_ = meta_sink_->Lwrite(raw_contents);
-
-#if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "[IBLK] written: (offset=%llu, size=%llu/%llu) %s",
-          static_cast<unsigned long long>(offset),
-          static_cast<unsigned long long>(size),
-          static_cast<unsigned long long>(raw_contents.size()),
-          status_.ToString().c_str());
-#endif
+  status_ = meta_sink_->Lwrite(final_contents);
+  if (!ok()) return;  // Abort
 
   size_t filter_size = 0;
-  const uint64_t filter_offset = offset + raw_contents.size();
-  Slice raw_filter_contents;
+  const uint64_t filter_offset = meta_sink_->Ltell();
+  Slice final_filter_contents;
 
-  if (ok()) {
-    if (filter_block != NULL) {
-      filter_size = filter_block->Finish().size();
-      raw_filter_contents = filter_block->Finalize();
-      status_ = meta_sink_->Lwrite(raw_filter_contents);
-    }
+  if (filter_block != NULL) {
+    Slice filer_contents = filter_block->Finish();
+    filter_size = filer_contents.size();
+    final_filter_contents = filter_block->Finalize();
+    status_ = meta_sink_->Lwrite(final_filter_contents);
+  } else {
+    // No filter configured
   }
-
-#if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "[FBLK] written: (offset=%llu, size=%llu/%llu) %s",
-          static_cast<unsigned long long>(filter_offset),
-          static_cast<unsigned long long>(filter_size),
-          static_cast<unsigned long long>(raw_filter_contents.size()),
-          status_.ToString().c_str());
-#endif
 
   if (ok()) {
     index_block_.Reset();
@@ -343,11 +337,11 @@ void TableLogger::EndTable(T* filter_block) {
     pending_meta_handle_.set_filter_size(filter_size);
     pending_meta_handle_.set_offset(offset);
     pending_meta_handle_.set_size(size);
+    assert(!pending_meta_entry_);
     pending_meta_entry_ = true;
   }
 
   if (pending_meta_entry_) {
-    assert(index_block_.empty());
     pending_meta_handle_.set_smallest_key(smallest_key_);
     BytewiseComparator()->FindShortSuccessor(&largest_key_);
     pending_meta_handle_.set_largest_key(largest_key_);
@@ -366,31 +360,64 @@ void TableLogger::EndTable(T* filter_block) {
   }
 }
 
-void TableLogger::EndBlock() {
+void TableLogger::Commit() {
+  assert(!finished_);                // Finish() has not been called
+  if (data_buffer_.empty()) return;  // Empty block
+  if (!ok()) return;                 // Abort
+
+  assert(num_uncommitted_data_ == num_uncommitted_index_);
+  const size_t offset = data_sink_->Ltell();
+  status_ = data_sink_->Lwrite(data_buffer_);
+  if (!ok()) return;  // Abort
+
+  Slice key;
+  int num_index_committed = 0;
+  Slice input = uncommitted_indexes_;
+  std::string handle_encoding;
+  BlockHandle handle;
+  while (!input.empty()) {
+    if (GetLengthPrefixedSlice(&input, &key)) {
+      handle.DecodeFrom(&input);
+      handle.set_offset(offset + handle.offset());
+      handle.EncodeTo(&handle_encoding);
+      index_block_.Add(key, handle_encoding);
+      num_index_committed++;
+    } else {
+      break;
+    }
+  }
+
+  assert(num_index_committed == num_uncommitted_index_);
+  num_uncommitted_data_ = num_uncommitted_index_ = 0;
+  uncommitted_indexes_.clear();
+  data_buffer_.clear();
+}
+
+void TableLogger::Flush() {
   assert(!finished_);               // Finish() has not been called
-  if (data_block_.empty()) return;  // No more work
+  if (data_block_.empty()) return;  // Empty block
   if (!ok()) return;                // Abort
-  assert(!pending_index_entry_);
+
   Slice contents = data_block_.Finish();
   const size_t size = contents.size();
-  // NOTE: raw_contents invalidates contents
-  Slice raw_contents = data_block_.Finalize(options_.block_size);
-  const uint64_t offset = data_sink_->Ltell();
-  status_ = data_sink_->Lwrite(raw_contents);
+  Slice final_contents;
+  if (options_.block_padding) {
+    final_contents = data_block_.Finalize(options_.block_size);
+  } else {
+    final_contents = data_block_.Finalize();
+  }
 
-#if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "[DBLK] written: (offset=%llu, size=%llu/%llu) %s",
-          static_cast<unsigned long long>(offset),
-          static_cast<unsigned long long>(size),
-          static_cast<unsigned long long>(raw_contents.size()),
-          status_.ToString().c_str());
-#endif
+  const size_t final_size = final_contents.size();
+  data_buffer_.append(final_contents.data(), final_size);
+  const uint64_t offset = data_buffer_.size() - final_size;
 
   if (ok()) {
     data_block_.Reset();
     pending_index_handle_.set_size(size);
     pending_index_handle_.set_offset(offset);
+    assert(!pending_index_entry_);
     pending_index_entry_ = true;
+    num_uncommitted_data_++;
   }
 }
 
@@ -415,17 +442,22 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   // Add an index entry if there is one pending insertion
   if (pending_index_entry_) {
     BytewiseComparator()->FindShortestSeparator(&last_key_, key);
-    std::string handle_encoding;
-    pending_index_handle_.EncodeTo(&handle_encoding);
-    index_block_.Add(last_key_, handle_encoding);
+    PutLengthPrefixedSlice(&uncommitted_indexes_, last_key_);
+    pending_index_handle_.EncodeTo(&uncommitted_indexes_);
     pending_index_entry_ = false;
+    num_uncommitted_index_++;
+  }
+
+  // Commit all flushed data blocks
+  if (data_buffer_.size() >= options_.block_buffer) {
+    Commit();
   }
 
   last_key_ = key.ToString();
   data_block_.Add(key, value);
   if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize >=
       static_cast<uint64_t>(options_.block_size * options_.block_util)) {
-    EndBlock();
+    Flush();
   }
 }
 
