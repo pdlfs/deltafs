@@ -78,7 +78,6 @@ class TableLogger {
 
  private:
   const DirOptions& options_;
-  std::string* data_buffer() { return data_block_.buffer_store(); }
 
   // No copying allowed
   void operator=(const TableLogger&);

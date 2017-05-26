@@ -361,13 +361,13 @@ void TableLogger::EndTable(T* filter_block) {
 }
 
 void TableLogger::Commit() {
-  assert(!finished_);                  // Finish() has not been called
-  if (data_buffer()->empty()) return;  // Empty block
-  if (!ok()) return;                   // Abort
+  assert(!finished_);  // Finish() has not been called
+  if (data_block_.buffer_store()->empty()) return;  // Empty block
+  if (!ok()) return;                                // Abort
 
   assert(num_uncommitted_data_ == num_uncommitted_index_);
   const size_t offset = data_sink_->Ltell();
-  status_ = data_sink_->Lwrite(*data_buffer());
+  status_ = data_sink_->Lwrite(*data_block_.buffer_store());
   if (!ok()) return;  // Abort
 
   Slice key;
@@ -410,7 +410,7 @@ void TableLogger::Flush() {
   }
 
   const size_t final_size = final_contents.size();
-  const uint64_t offset = data_buffer()->size() - final_size;
+  const uint64_t offset = data_block_.buffer_store()->size() - final_size;
 
   if (ok()) {
     data_block_.SwitchBuffer(NULL);
@@ -451,7 +451,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   }
 
   // Commit all flushed data blocks
-  if (data_buffer()->size() >= options_.block_buffer) {
+  if (data_block_.buffer_store()->size() >= options_.block_buffer) {
     Commit();
   }
 
