@@ -58,7 +58,7 @@ BlockBuilder::BlockBuilder(int restart_interval, const Comparator* cmp)
 }
 
 void BlockBuilder::SwitchBuffer(std::string* buffer) {
-  if (buffer != NULL) buffer->swap(buffer_);
+  if (buffer != NULL && buffer != &buffer_) buffer->swap(buffer_);
   buffer_start_ = buffer_.size();
 }
 

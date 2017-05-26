@@ -67,6 +67,9 @@ class BlockBuilder {
   // Return true iff no entries have been added since the last Reset()
   bool empty() const { return buffer_.size() <= buffer_start_; }
 
+  // Return a pointer to the underlying buffer space
+  std::string* buffer_store() { return &buffer_; }
+
  private:
   int restart_interval_;
   const Comparator* cmp_;
