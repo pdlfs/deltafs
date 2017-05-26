@@ -265,7 +265,8 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   meta_block_.Reserve(estimated_meta_size);
 
   uncommitted_indexes_.reserve(1 << 10);
-  data_block_.Reserve(options_.block_buffer);
+  data_block_.buffer_store()->reserve(options_.block_buffer);
+  data_block_.buffer_store()->clear();
   data_block_.SwitchBuffer(NULL);
   data_block_.Reset();
 }
@@ -345,7 +346,9 @@ void TableLogger::EndTable(T* filter_block) {
     return;  // Abort
   }
 
-  if (pending_meta_entry_) {
+  if (num_tables_ >= kMaxTablesPerEpoch) {
+    status_ = Status::AssertionFailed("Too many tables");
+  } else if (pending_meta_entry_) {
     pending_meta_handle_.set_smallest_key(smallest_key_);
     BytewiseComparator()->FindShortSuccessor(&largest_key_);
     pending_meta_handle_.set_largest_key(largest_key_);
@@ -355,9 +358,7 @@ void TableLogger::EndTable(T* filter_block) {
     pending_meta_entry_ = false;
   }
 
-  if (num_tables_ >= kMaxTablesPerEpoch) {
-    status_ = Status::AssertionFailed("Too many tables");
-  } else {
+  if (ok()) {
     smallest_key_.clear();
     largest_key_.clear();
     last_key_.clear();
@@ -367,7 +368,7 @@ void TableLogger::EndTable(T* filter_block) {
 
 void TableLogger::Commit() {
   assert(!finished_);  // Finish() has not been called
-  if (data_block_.buffer_store()->empty()) return;  // Empty block
+  if (data_block_.buffer_store()->empty()) return;  // Empty commit
   if (!ok()) return;                                // Abort
 
   assert(num_uncommitted_data_ == num_uncommitted_index_);
