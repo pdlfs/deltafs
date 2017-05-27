@@ -613,18 +613,24 @@ PlfsIoLogger::~PlfsIoLogger() {
   }
 }
 
-// Block until compaction finishes.
+// Block until compaction finishes and return the
+// latest compaction status.
 Status PlfsIoLogger::Wait() {
+  Status status;
   mu_->AssertHeld();
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
 
-  return Status::OK();
+  status = table_logger_.status();
+  return status;
 }
 
-// Close log files.
-Status PlfsIoLogger::Close() {
+// Pre-close all linked log files.
+// Usually, log files are reference counted and are closed when
+// de-referenced by the last opener.
+// Optionally, caller may force the closing of all log files.
+Status PlfsIoLogger::PreClose() {
   mu_->AssertHeld();
   mu_->Unlock();
   Status s = data_->Lclose();
@@ -635,10 +641,14 @@ Status PlfsIoLogger::Close() {
   return s;
 }
 
-// If dry_run is set, we will only perform status checks (which includes write
-// errors, buffer space, and compaction queue depth) such that no
-// compaction jobs will be scheduled.
-Status PlfsIoLogger::Finish(bool dry_run) {
+// If dry_run is set, will only perform status checks and no compaction
+// jobs will be scheduled or waited for. Return immediately, and return OK if
+// compaction may be scheduled in future without waiting, or a special status if
+// compaction cannot be scheduled immediately, or a status that indicates an
+// error. Otherwise, **wait** until a compaction can be scheduled and **wait**
+// again until it finishes, unless options_.non_blocking is set. If no_wait is
+// set, will return immediately as soon as a compaction is scheduled.
+Status PlfsIoLogger::Finish(bool dry_run, bool no_wait) {
   mu_->AssertHeld();
   while (pending_finish_ ||
          pending_epoch_flush_ ||  // The previous job is still in-progress
@@ -659,9 +669,10 @@ Status PlfsIoLogger::Finish(bool dry_run) {
     pending_epoch_flush_ = true;
     status = Prepare(pending_epoch_flush_, pending_finish_);
     if (!status.ok()) {
-      pending_epoch_flush_ = false;  // Avoid blocking future attempts
+      pending_epoch_flush_ =
+          false;  // Avoid blocking future attempts potentially infinitely
       pending_finish_ = false;
-    } else if (status.ok() && !options_.non_blocking) {
+    } else if (!no_wait && !options_.non_blocking) {
       while (pending_epoch_flush_ || pending_finish_) {
         bg_cv_->Wait();
       }
@@ -671,10 +682,14 @@ Status PlfsIoLogger::Finish(bool dry_run) {
   return status;
 }
 
-// If dry_run is set, we will only perform status checks (which includes write
-// errors, buffer space, and compaction queue depth) such that no
-// compaction jobs will be scheduled.
-Status PlfsIoLogger::MakeEpoch(bool dry_run) {
+// If dry_run is set, will only perform status checks and no compaction
+// jobs will be scheduled or waited for. Return immediately, and return OK if
+// compaction may be scheduled in future without waiting, or a special status if
+// compaction cannot be scheduled immediately, or a status that indicates an
+// error. Otherwise, **wait** until a compaction can be scheduled and **wait**
+// again until it finishes, unless options_.non_blocking is set. If no_wait is
+// set, will return immediately as soon as a compaction is scheduled.
+Status PlfsIoLogger::MakeEpoch(bool dry_run, bool no_wait) {
   mu_->AssertHeld();
   while (pending_epoch_flush_ ||  // The previous job is still in-progress
          imm_buf_ != NULL) {      // There's an on-going compaction job
@@ -693,8 +708,9 @@ Status PlfsIoLogger::MakeEpoch(bool dry_run) {
     pending_epoch_flush_ = true;
     status = Prepare(pending_epoch_flush_);
     if (!status.ok()) {
-      pending_epoch_flush_ = false;  // Avoid blocking future attempts
-    } else if (status.ok() && !options_.non_blocking) {
+      pending_epoch_flush_ =
+          false;  // Avoid blocking future attempts potentially infinitely
+    } else if (!no_wait && !options_.non_blocking) {
       while (pending_epoch_flush_) {
         bg_cv_->Wait();
       }
@@ -707,10 +723,7 @@ Status PlfsIoLogger::MakeEpoch(bool dry_run) {
 Status PlfsIoLogger::Add(const Slice& key, const Slice& value) {
   mu_->AssertHeld();
   Status status = Prepare();
-  if (status.ok()) {
-    mem_buf_->Add(key, value);
-  }
-
+  if (status.ok()) mem_buf_->Add(key, value);
   return status;
 }
 

@@ -257,11 +257,12 @@ Status WriterImpl::TryFinish() {
     status = finish_status_;
   } else if (!finished_) {
     MutexLock ml(&mutex_);
+    const bool no_wait = true;
     bool dry_run = true;
     // Check partition status in a single pass
     while (true) {
       for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->Finish(dry_run);
+        status = io_[i]->Finish(dry_run, no_wait);
         if (!status.ok()) {
           break;
         }
@@ -278,7 +279,7 @@ Status WriterImpl::TryFinish() {
     if (status.ok()) {
       dry_run = false;
       for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->Finish(dry_run);
+        status = io_[i]->Finish(dry_run, no_wait);
         if (!status.ok()) {
           break;
         }
@@ -305,7 +306,7 @@ Status WriterImpl::TryFinish() {
     // Close logs
     if (status.ok()) {
       for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->Close();
+        status = io_[i]->PreClose();
         if (!status.ok()) {
           break;
         }
@@ -339,11 +340,12 @@ Status WriterImpl::TryMakeEpoch() {
     status = Status::AssertionFailed("plfsdir already finished");
   } else {
     MutexLock ml(&mutex_);
+    const bool no_wait = true;
     bool dry_run = true;
     // Check partition status in a single pass
     while (true) {
       for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->MakeEpoch(dry_run);
+        status = io_[i]->MakeEpoch(dry_run, no_wait);
         if (!status.ok()) {
           break;
         }
@@ -360,7 +362,17 @@ Status WriterImpl::TryMakeEpoch() {
     if (status.ok()) {
       dry_run = false;
       for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->MakeEpoch(dry_run);
+        status = io_[i]->MakeEpoch(dry_run, no_wait);
+        if (!status.ok()) {
+          break;
+        }
+      }
+    }
+
+    // Wait for compaction
+    if (status.ok()) {
+      for (size_t i = 0; i < num_parts_; i++) {
+        status = io_[i]->Wait();
         if (!status.ok()) {
           break;
         }

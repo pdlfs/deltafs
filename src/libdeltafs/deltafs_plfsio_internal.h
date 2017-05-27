@@ -134,11 +134,15 @@ class PlfsIoLogger {
   ~PlfsIoLogger();
 
   // REQUIRES: mutex_ has been locked
-  Status Add(const Slice& key, const Slice& value);
-  Status MakeEpoch(bool dry_run);
-  Status Finish(bool dry_run);
-  Status Wait();  // Wait for on-going compaction to finish
-  Status Close();
+
+  Status Wait();  // Wait for all on-going compactions to finish
+  Status Add(const Slice& key,
+             const Slice& value);  // May trigger a new compaction
+  // Force a compaction and maybe wait for it
+  Status MakeEpoch(bool dry_run, bool no_wait);
+  Status Finish(bool dry_run, bool no_wait);
+  // Pre-close all log files before de-referencing them
+  Status PreClose();
 
  private:
   Status Prepare(bool epoch_flush = false, bool force_finish = false);

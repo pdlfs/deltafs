@@ -249,12 +249,12 @@ class Writer {
   // REQUIRES: Finish() has not been called.
   virtual Status Sync() = 0;
 
-  // Flush data to make an epoch that benefits future read operations.
+  // Force a compaction and start a new epoch.
   // REQUIRES: Finish() has not been called.
   virtual Status MakeEpoch() = 0;
 
-  // Flush data, finalize indexing, and wait for all outstanding
-  // compaction jobs to finish.
+  // Force a compaction and finalize all log files.
+  // No further write operation is allowed after this call.
   // REQUIRES: Finish() has not been called.
   virtual Status Finish() = 0;
 
