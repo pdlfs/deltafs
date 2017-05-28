@@ -645,9 +645,9 @@ Status PlfsIoLogger::PreClose() {
 // jobs will be scheduled or waited for. Return immediately, and return OK if
 // compaction may be scheduled in future without waiting, or a special status if
 // compaction cannot be scheduled immediately, or a status that indicates an
-// error. Otherwise, **wait** until a compaction can be scheduled and **wait**
-// again until it finishes, unless options_.non_blocking is set. If no_wait is
-// set, will return immediately as soon as a compaction is scheduled.
+// error. Otherwise, **wait** until a compaction can be scheduled unless
+// options_.non_blocking is set. After a compaction has been scheduled,
+// **wait** until it finishes unless no_wait is set.
 Status PlfsIoLogger::Finish(bool dry_run, bool no_wait) {
   mu_->AssertHeld();
   while (pending_finish_ ||
@@ -672,7 +672,7 @@ Status PlfsIoLogger::Finish(bool dry_run, bool no_wait) {
       pending_epoch_flush_ =
           false;  // Avoid blocking future attempts potentially infinitely
       pending_finish_ = false;
-    } else if (!no_wait && !options_.non_blocking) {
+    } else if (!no_wait) {
       while (pending_epoch_flush_ || pending_finish_) {
         bg_cv_->Wait();
       }
@@ -686,9 +686,9 @@ Status PlfsIoLogger::Finish(bool dry_run, bool no_wait) {
 // jobs will be scheduled or waited for. Return immediately, and return OK if
 // compaction may be scheduled in future without waiting, or a special status if
 // compaction cannot be scheduled immediately, or a status that indicates an
-// error. Otherwise, **wait** until a compaction can be scheduled and **wait**
-// again until it finishes, unless options_.non_blocking is set. If no_wait is
-// set, will return immediately as soon as a compaction is scheduled.
+// error. Otherwise, **wait** until a compaction can be scheduled unless
+// options_.non_blocking is set. After a compaction has been scheduled,
+// **wait** until it finishes unless no_wait is set.
 Status PlfsIoLogger::MakeEpoch(bool dry_run, bool no_wait) {
   mu_->AssertHeld();
   while (pending_epoch_flush_ ||  // The previous job is still in-progress
@@ -710,7 +710,7 @@ Status PlfsIoLogger::MakeEpoch(bool dry_run, bool no_wait) {
     if (!status.ok()) {
       pending_epoch_flush_ =
           false;  // Avoid blocking future attempts potentially infinitely
-    } else if (!no_wait && !options_.non_blocking) {
+    } else if (!no_wait) {
       while (pending_epoch_flush_) {
         bg_cv_->Wait();
       }
