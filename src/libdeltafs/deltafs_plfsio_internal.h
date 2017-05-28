@@ -173,6 +173,7 @@ class PlfsIoLogger {
   bool pending_epoch_flush_;
   bool pending_finish_;
   TableLogger table_logger_;
+  void* filter_;  // void* since different types of filter might be used
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;
   bool imm_buf_is_epoch_flush_;

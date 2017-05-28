@@ -560,6 +560,7 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
       pending_epoch_flush_(false),
       pending_finish_(false),
       table_logger_(options, data, index),
+      filter_(NULL),
       mem_buf_(NULL),
       imm_buf_(NULL),
       imm_buf_is_epoch_flush_(false),
@@ -620,6 +621,10 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
   // Allocate memory
   buf0_.Reserve(entries_per_tb_, tb_bytes_);
   buf1_.Reserve(entries_per_tb_, tb_bytes_);
+
+  if (options_.bf_bits_per_key != 0) {
+    filter_ = new BloomBlock(options_.bf_bits_per_key, bf_bytes_);
+  }
 
   mem_buf_ = &buf0_;
 }
@@ -828,66 +833,58 @@ void PlfsIoLogger::CompactWriteBuffer() {
   const bool pending_epoch_flush = pending_epoch_flush_;
   const bool is_finish = imm_buf_is_finish_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
-  TableLogger* const dest = &table_logger_;
-  const size_t bf_bits_per_key = options_.bf_bits_per_key;
-  const size_t bf_bytes = bf_bytes_;
-  uint64_t data_offset = data_->Ltell();
-  uint64_t index_offset = index_->Ltell();
+  TableLogger* const tb = &table_logger_;
+  BloomBlock* const bf = reinterpret_cast<BloomBlock*>(filter_);
   mu_->Unlock();
   uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Compacting memtable: (num_entries=%d/%d)...",
           int(buffer->NumEntries()), int(entries_per_tb_));
-  unsigned long long key_size = 0;
-  unsigned long long val_size = 0;
-  unsigned num_keys = 0;
+#endif
+#ifndef NDEBUG
+  uint32_t num_keys = 0;
 #endif
 
-  BloomBlock* bloom_filter = NULL;
-  if (bf_bits_per_key != 0 && bf_bytes != 0) {
-    bloom_filter = new BloomBlock(bf_bits_per_key, bf_bytes);
-  }
+  if (bf != NULL) bf->Reset();
   buffer->Finish();
+
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {
-#if VERBOSE >= 2
-    val_size += iter->value().size();
-    key_size += iter->key().size();
+#ifndef NDEBUG
     num_keys++;
 #endif
-    if (bloom_filter != NULL) {
-      bloom_filter->AddKey(iter->key());
+    if (bf != NULL) {
+      bf->AddKey(iter->key());
     }
-    dest->Add(iter->key(), iter->value());
-    if (!dest->ok()) {
+    tb->Add(iter->key(), iter->value());
+    if (!tb->ok()) {
       break;
     }
   }
 
-  if (dest->ok()) {
-    dest->EndTable(bloom_filter);
-  }
-  if (is_epoch_flush) {
-    dest->EndEpoch();
-  }
-  if (is_finish) {
-    dest->Finish();
+  if (tb->ok()) {
+    assert(num_keys == buffer->NumEntries());
+    tb->EndTable(bf);  // Inject the filter into the table
+
+    if (is_epoch_flush) {
+      tb->EndEpoch();
+    }
+    if (is_finish) {
+      tb->Finish();
+    }
   }
 
   uint64_t end = Env::Default()->NowMicros();
 
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Compaction done: %d entries (%d us)", num_keys,
+  Verbose(__LOG_ARGS__, 3, "Compaction done: %d entries (%d us)",
+          static_cast<int>(buffer->NumEntries()),
           static_cast<int>(end - start));
 #endif
 
   delete iter;
-  delete bloom_filter;
   mu_->Lock();
-  stats_->data_size += data_->Ltell() - data_offset;
-  stats_->index_size += index_->Ltell() - index_offset;
-  stats_->write_micros += end - start;
   if (is_epoch_flush) {
     if (pending_epoch_flush) {
       pending_epoch_flush_ = false;
