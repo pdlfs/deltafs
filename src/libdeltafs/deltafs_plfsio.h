@@ -36,8 +36,8 @@ struct DirOptions {
   DirOptions();
 
   // Total memory reserved for creating memory tables.
-  // This includes both the buffer space for sorting tables and the
-  // buffer space for creating the bloom filter associated with each table.
+  // This includes both the buffer space for writing and sorting tables and the
+  // buffer space for creating the data and filter blocks of each table.
   // This, however, does *not* include the buffer space for accumulating
   // writes to ensure an optimized write size.
   // Default: 32MB

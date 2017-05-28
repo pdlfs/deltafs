@@ -567,20 +567,26 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
   // write buffer will be allocated with
   // less memory.
   size_t overhead_per_entry = static_cast<size_t>(
-      4 + VarintLength(options_.key_size) + VarintLength(options_.value_size));
+      VarintLength(options_.key_size) + VarintLength(options_.value_size) +
+      sizeof(uint32_t)  // Offset of an entry in buffer
+      );
   size_t bytes_per_entry =
       options_.key_size + options_.value_size + overhead_per_entry;
 
-  size_t total_bits_per_entry = 8 * bytes_per_entry + options_.bf_bits_per_key;
+  size_t bits_per_entry = 8 * bytes_per_entry;
+
+  size_t total_bits_per_entry =
+      options_.bf_bits_per_key + 2 * bits_per_entry;  // Due to double buffering
+
+  size_t table_buffer =  // Total write buffer available for each table
+      options_.memtable_buffer / static_cast<uint32_t>(1 << options_.lg_parts) -
+      options_.block_buffer;  // Reserved for compaction
 
   // Estimated amount of entries per table
-  entries_per_tb_ = static_cast<uint32_t>(ceil(
-      8.0 * double(options_.memtable_buffer) / double(total_bits_per_entry)));
-  entries_per_tb_ /= (1 << options_.lg_parts);  // Due to data partitioning
+  entries_per_tb_ = static_cast<uint32_t>(
+      ceil(8.0 * double(table_buffer) / double(total_bits_per_entry)));
 
-  entries_per_tb_ /= 2;  // Due to double buffering
-
-  tb_bytes_ = entries_per_tb_ * bytes_per_entry;
+  tb_bytes_ = entries_per_tb_ * (bytes_per_entry - sizeof(uint32_t));
   // Compute bloom filter size (in both bits and bytes)
   bf_bits_ = entries_per_tb_ * options_.bf_bits_per_key;
   // For small n, we can see a very high false positive rate.
@@ -818,7 +824,8 @@ void PlfsIoLogger::CompactWriteBuffer() {
   mu_->Unlock();
   uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Compacting write buffer ...");
+  Verbose(__LOG_ARGS__, 3, "Compacting memtable: (num_entries=%d/%d)...",
+          int(buffer->NumEntries()), int(entries_per_tb_));
   unsigned long long key_size = 0;
   unsigned long long val_size = 0;
   unsigned num_keys = 0;
