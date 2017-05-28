@@ -616,13 +616,14 @@ PlfsIoLogger::~PlfsIoLogger() {
 // Block until compaction finishes and return the
 // latest compaction status.
 Status PlfsIoLogger::Wait() {
-  Status status;
   mu_->AssertHeld();
-  while (has_bg_compaction_) {
+  Status status;
+  while (table_logger_.ok() && has_bg_compaction_) {
     bg_cv_->Wait();
   }
-
-  status = table_logger_.status();
+  if (!table_logger_.ok()) {
+    status = table_logger_.status();
+  }
   return status;
 }
 
