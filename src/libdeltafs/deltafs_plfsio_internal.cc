@@ -654,9 +654,10 @@ PlfsIoLogger::~PlfsIoLogger() {
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
-
   BloomBlock* bf = static_cast<BloomBlock*>(filter_);
-  delete bf;
+  if (bf != NULL) {
+    delete bf;
+  }
 }
 
 // Block until compaction finishes and return the

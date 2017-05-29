@@ -9,10 +9,11 @@
 
 #pragma once
 
+#include <pdlfs-common/port.h>
+#include "pdlfs-common/env.h"
+
 #include <stddef.h>
 #include <stdint.h>
-
-#include "pdlfs-common/env.h"
 
 namespace pdlfs {
 namespace plfsio {
@@ -157,22 +158,30 @@ extern DirOptions ParseDirOptions(const char* conf);
 // append-only log stream.
 class LogSink {
  public:
-  LogSink(const std::string& filename, WritableFile* f)
-      : filename_(filename), file_(f), offset_(0), refs_(0) {}
+  LogSink(const std::string& filename, WritableFile* f, port::Mutex* mu = NULL)
+      : mu_(mu), filename_(filename), file_(f), offset_(0), refs_(0) {}
 
   uint64_t Ltell() const { return offset_; }
 
+  void Lock() {
+    if (mu_ != NULL) {
+      mu_->Lock();
+    }
+  }
+
+#if 0
   Status Lsync() {
     if (file_ == NULL) {
-      return Status::AssertionFailed("file already closed");
+      return Status::AssertionFailed("File already closed", filename_);
     } else {
       return file_->Sync();
     }
   }
+#endif
 
   Status Lwrite(const Slice& data) {
     if (file_ == NULL) {
-      return Status::AssertionFailed("file already closed");
+      return Status::AssertionFailed("File already closed", filename_);
     } else {
       Status result = file_->Append(data);
       if (result.ok()) {
@@ -182,6 +191,12 @@ class LogSink {
         }
       }
       return result;
+    }
+  }
+
+  void Unlock() {
+    if (mu_ != NULL) {
+      mu_->Unlock();
     }
   }
 
@@ -195,8 +210,9 @@ class LogSink {
   void operator=(const LogSink&);
   LogSink(const LogSink&);
 
-  std::string filename_;
-  WritableFile* file_;
+  port::Mutex* const mu_;  // Constant after construction
+  const std::string filename_;
+  WritableFile* file_;  // State protected by mu_
   uint64_t offset_;
   uint32_t refs_;
 };
