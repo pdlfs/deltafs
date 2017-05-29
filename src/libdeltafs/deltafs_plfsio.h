@@ -43,6 +43,10 @@ struct DirOptions {
   // Default: 32MB
   size_t memtable_buffer;
 
+  // Flush memtable as soon as it reaches the specified utilization target.
+  // Default: 1 (100%)
+  double memtable_util;
+
   // Estimated average key size.
   // Default: 8 bytes
   size_t key_size;

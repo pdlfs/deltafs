@@ -32,6 +32,7 @@ CompactionStats::CompactionStats()
 
 DirOptions::DirOptions()
     : memtable_buffer(32 << 20),
+      memtable_util(1.0),
       key_size(8),
       value_size(32),
       bf_bits_per_key(8),

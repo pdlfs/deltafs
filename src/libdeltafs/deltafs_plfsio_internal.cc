@@ -760,7 +760,9 @@ Status PlfsIoLogger::Prepare(bool flush, bool finish) {
     if (!table_logger_.ok()) {
       status = table_logger_.status();
       break;
-    } else if (!flush && mem_buf_->CurrentBufferSize() < tb_bytes_) {
+    } else if (!flush &&
+               mem_buf_->CurrentBufferSize() <
+                   static_cast<size_t>(tb_bytes_ * options_.memtable_util)) {
       // There is room in current write buffer
       break;
     } else if (imm_buf_ != NULL) {
