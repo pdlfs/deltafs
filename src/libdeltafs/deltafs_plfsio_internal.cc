@@ -411,9 +411,11 @@ void TableLogger::Commit() {
   if (data_block_.buffer_store()->empty()) return;  // Empty commit
   if (!ok()) return;                                // Abort
 
+  data_sink_->Lock();
   assert(num_uncommitted_data_ == num_uncommitted_index_);
   const size_t offset = data_sink_->Ltell();
   status_ = data_sink_->Lwrite(*data_block_.buffer_store());
+  data_sink_->Unlock();
   if (!ok()) return;  // Abort
 
   Slice key;

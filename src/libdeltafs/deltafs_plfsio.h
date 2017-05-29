@@ -169,16 +169,6 @@ class LogSink {
     }
   }
 
-#if 0
-  Status Lsync() {
-    if (file_ == NULL) {
-      return Status::AssertionFailed("File already closed", filename_);
-    } else {
-      return file_->Sync();
-    }
-  }
-#endif
-
   Status Lwrite(const Slice& data) {
     if (file_ == NULL) {
       return Status::AssertionFailed("File already closed", filename_);
@@ -192,6 +182,12 @@ class LogSink {
       }
       return result;
     }
+  }
+
+  Status Lsync() {
+    Status status;
+    if (file_ != NULL) status = file_->Sync();
+    return status;
   }
 
   void Unlock() {
