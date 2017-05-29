@@ -80,9 +80,9 @@ class TableLogger {
 
   // End the current block and force the start of a new data block.
   // REQUIRES: Finish() has not been called.
-  void Flush();
+  void EndBlock();
 
-  // Commit all flushed data blocks and finalize their indexes.
+  // Flush buffered data blocks and finalize their indexes.
   // REQUIRES: Finish() has not been called.
   void Commit();
 

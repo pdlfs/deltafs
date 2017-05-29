@@ -317,7 +317,7 @@ template <typename T>
 void TableLogger::EndTable(T* filter_block) {
   assert(!finished_);  // Finish() has not been called
 
-  Flush();
+  EndBlock();
   if (!ok()) {
     return;
   } else if (pending_index_entry_) {
@@ -429,7 +429,7 @@ void TableLogger::Commit() {
   data_block_.Reset();
 }
 
-void TableLogger::Flush() {
+void TableLogger::EndBlock() {
   assert(!finished_);               // Finish() has not been called
   if (data_block_.empty()) return;  // Empty block
   if (!ok()) return;                // Abort
@@ -486,8 +486,9 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
     num_uncommitted_index_++;
   }
 
-  // Commit all flushed data blocks
-  if (data_block_.buffer_store()->size() >= options_.block_buffer) {
+  // Flush block buffer if it is about to full
+  if (data_block_.buffer_store()->size() + options_.block_size >
+      options_.block_buffer) {
     Commit();
   }
 
@@ -498,7 +499,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   data_block_.Add(key, value);
   if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize >=
       static_cast<uint64_t>(options_.block_size * options_.block_util)) {
-    Flush();
+    EndBlock();
   }
 }
 
@@ -591,7 +592,7 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
   size_t total_bits_per_entry =
       options_.bf_bits_per_key + 2 * bits_per_entry;  // Due to double buffering
 
-  size_t table_buffer =  // Total write buffer available for each table
+  size_t table_buffer =  // Total write buffer for each memtable partition
       options_.memtable_buffer / static_cast<uint32_t>(1 << options_.lg_parts) -
       options_.block_buffer;  // Reserved for compaction
 
@@ -838,8 +839,8 @@ void PlfsIoLogger::CompactWriteBuffer() {
   mu_->Unlock();
   uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Compacting memtable: (num_entries=%d/%d)...",
-          int(buffer->NumEntries()), int(entries_per_tb_));
+  Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes)...",
+          int(buffer->CurrentBufferSize()), int(tb_bytes_));
 #endif
 #ifndef NDEBUG
   uint32_t num_keys = 0;
@@ -864,6 +865,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
   }
 
   if (tb->ok()) {
+    // Paranoid checks
     assert(num_keys == buffer->NumEntries());
     tb->EndTable(bf);  // Inject the filter into the table
 
