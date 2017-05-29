@@ -203,9 +203,10 @@ class WriterImpl : public Writer {
 
   CompactionStats stats_;
   const DirOptions options_;
+  port::Mutex io_mutex_;  // Protecting the shared data log
   port::Mutex mutex_;
   port::CondVar cond_var_;
-  size_t num_parts_;
+  uint32_t num_parts_;
   uint32_t part_mask_;
   Status finish_status_;
   bool finished_;  // If Finish() has been called
@@ -432,10 +433,13 @@ static void PrintLogInfo(const std::string& name, size_t mem_size) {
 #endif
 }
 
-// If bytes is not NULL, also create a MeasuredWritableFile to
-// count the total number of bytes written to the log.
-static Status NewLogSink(const std::string& name, Env* env, size_t buf_size,
-                         LogSink** ptr, uint64_t* bytes = NULL) {
+// If mu is not NULL, return a LogSink associated with the mutex.
+// If buf_size is not zero, create a stacked UnsafeBufferedWritableFile to
+// ensure the write size. If bytes is not NULL, also create a stacked
+// MeasuredWritableFile to track the size of data written to the log.
+static Status NewLogSink(LogSink** ptr, const std::string& name, Env* env,
+                         size_t buf_size, port::Mutex* mu = NULL,
+                         uint64_t* bytes = NULL) {
   WritableFile* file;
   Status status = env->NewWritableFile(name, &file);
   if (status.ok()) {
@@ -443,7 +447,7 @@ static Status NewLogSink(const std::string& name, Env* env, size_t buf_size,
     if (bytes != NULL) file = new MeasuredWritableFile(file, bytes);
     if (buf_size != 0) file = new UnsafeBufferedWritableFile(file, buf_size);
     PrintLogInfo(name, buf_size);
-    LogSink* sink = new LogSink(name, file);
+    LogSink* sink = new LogSink(name, file, mu);
     sink->Ref();
     *ptr = sink;
   } else {
@@ -457,7 +461,7 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
                     Writer** ptr) {
   *ptr = NULL;
   DirOptions options = SanitizeWriteOptions(opts);
-  const size_t num_parts = static_cast<size_t>(1 << options.lg_parts);
+  const uint32_t num_parts = static_cast<uint32_t>(1 << options.lg_parts);
   const int my_rank = options.rank;
   Env* const env = options.env;
 #if VERBOSE >= 2
@@ -495,15 +499,17 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
   WriterImpl* impl = new WriterImpl(options);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all directory partitions
-  status = NewLogSink(DataFileName(name, my_rank), env, options.data_buffer,
-                      &data[0], &impl->stats_.data_written);
-  for (size_t part = 0; part < num_parts; part++) {
-    if (status.ok()) {
-      status = NewLogSink(PartitionIndexFileName(name, my_rank, part), env,
-                          options.index_buffer, &index[part],
-                          &impl->stats_.index_written);
-    } else {
-      break;
+  status = NewLogSink(&data[0], DataFileName(name, my_rank), env,
+                      options.data_buffer, &impl->io_mutex_,
+                      &impl->stats_.data_written);
+  if (status.ok()) {
+    for (size_t part = 0; part < num_parts; part++) {
+      status = NewLogSink(
+          &index[part], PartitionIndexFileName(name, my_rank, int(part)), env,
+          options.index_buffer, NULL, &impl->stats_.index_written);
+      if (!status.ok()) {
+        break;
+      }
     }
   }
 
