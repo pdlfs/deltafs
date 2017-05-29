@@ -613,9 +613,9 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
   bf_bits_ = bf_bytes_ * 8;
 
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "C: plfsdir.memtable.tb_size -> %d x %s",
+  Verbose(__LOG_ARGS__, 2, "OPT: plfsdir.memtable.tb_size -> %d x %s",
           2 * (1 << options_.lg_parts), PrettySize(tb_bytes_).c_str());
-  Verbose(__LOG_ARGS__, 2, "C: plfsdir.memtable.bf_size -> %d x %s",
+  Verbose(__LOG_ARGS__, 2, "OPT: plfsdir.memtable.bf_size -> %d x %s",
           2 * (1 << options_.lg_parts), PrettySize(bf_bytes_).c_str());
 #endif
 
@@ -850,7 +850,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
 
   if (bf != NULL) bf->Reset();
   buffer->FinishAndSort();
-  assert(buffer->CurrentBufferCapacity() < tb_bytes_);
+  assert(buffer->CurrentBufferCapacity() <= tb_bytes_);
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {
