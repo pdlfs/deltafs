@@ -218,7 +218,7 @@ struct STLLessThan {
 };
 }  // namespace
 
-void WriteBuffer::Finish() {
+void WriteBuffer::FinishAndSort() {
   // Sort entries
   assert(!finished_);
   std::vector<uint32_t>::iterator begin = offsets_.begin();
@@ -841,7 +841,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
   mu_->Unlock();
   uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes)...",
+  Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes) ...",
           int(buffer->CurrentBufferSize()), int(tb_bytes_));
 #endif
 #ifndef NDEBUG
@@ -849,8 +849,8 @@ void PlfsIoLogger::CompactWriteBuffer() {
 #endif
 
   if (bf != NULL) bf->Reset();
-  buffer->Finish();
-
+  buffer->FinishAndSort();
+  assert(buffer->CurrentBufferCapacity() < tb_bytes_);
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {

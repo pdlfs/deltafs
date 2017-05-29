@@ -25,11 +25,12 @@ class WriteBuffer {
   ~WriteBuffer() {}
 
   void Reserve(uint32_t num_entries, size_t buffer_size);
+  size_t CurrentBufferCapacity() const { return buffer_.capacity(); }
   size_t CurrentBufferSize() const { return buffer_.size(); }
   uint32_t NumEntries() const { return num_entries_; }
   void Add(const Slice& key, const Slice& value);
   Iterator* NewIterator() const;
-  void Finish();
+  void FinishAndSort();
   void Reset();
 
  private:
