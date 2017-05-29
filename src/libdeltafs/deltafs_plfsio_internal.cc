@@ -850,7 +850,6 @@ void PlfsIoLogger::CompactWriteBuffer() {
 
   if (bf != NULL) bf->Reset();
   buffer->FinishAndSort();
-  assert(buffer->CurrentBufferCapacity() <= tb_bytes_);
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {
