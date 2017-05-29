@@ -250,14 +250,26 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
 }
 
 OutputStats::OutputStats()
-    : final_data_size(0),
+    : footer_size(0),
+      final_data_size(0),
       data_size(0),
+      final_meta_size(0),
+      meta_size(0),
       final_index_size(0),
       index_size(0),
       final_filter_size(0),
       filter_size(0),
       value_size(0),
       key_size(0) {}
+
+static size_t TotalNonDataBlockSize(const OutputStats& stats) {
+  return stats.filter_size + stats.index_size + stats.meta_size +
+         stats.footer_size;
+}
+
+static size_t TotalDataBlockSize(const OutputStats& stats) {
+  return stats.data_size;
+}
 
 TableLogger::TableLogger(const DirOptions& options, LogSink* data,
                          LogSink* index)
@@ -434,25 +446,26 @@ void TableLogger::EndBlock() {
   if (data_block_.empty()) return;  // Empty block
   if (!ok()) return;                // Abort
 
-  Slice contents = data_block_.Finish();
-  const size_t size = contents.size();
-  Slice final_contents;
+  Slice block_contents = data_block_.Finish();
+  const size_t block_size = block_contents.size();
+  Slice final_block_contents;
   if (options_.block_padding) {
-    final_contents = data_block_.Finalize(options_.block_size);
+    final_block_contents = data_block_.Finalize(options_.block_size);
   } else {
-    final_contents = data_block_.Finalize();
+    final_block_contents = data_block_.Finalize();
   }
 
-  const size_t final_size = final_contents.size();
-  const uint64_t offset = data_block_.buffer_store()->size() - final_size;
-  output_stats_.final_data_size += final_size;
-  output_stats_.data_size += size;
+  const size_t final_block_size = final_block_contents.size();
+  const uint64_t block_offset =
+      data_block_.buffer_store()->size() - final_block_size;
+  output_stats_.final_data_size += final_block_size;
+  output_stats_.data_size += block_size;
 
   if (ok()) {
     data_block_.SwitchBuffer(NULL);
     data_block_.Reset();
-    pending_index_handle_.set_size(size);
-    pending_index_handle_.set_offset(offset);
+    pending_index_handle_.set_size(block_size);
+    pending_index_handle_.set_offset(block_offset);
     assert(!pending_index_entry_);
     pending_index_entry_ = true;
     num_uncommitted_data_++;
@@ -509,28 +522,33 @@ Status TableLogger::Finish() {
   finished_ = true;
   if (!ok()) return status_;
   BlockHandle epoch_index_handle;
-  std::string tail;
+  std::string footer_buf;
   Footer footer;
 
   assert(!pending_meta_entry_);
-  Slice contents = meta_block_.Finish();
-  const size_t size = contents.size();
-  Slice final_contents =
-      meta_block_.Finalize();  // No padding is needed for metadata blocks
-  const uint64_t offset = meta_sink_->Ltell();
-  status_ = meta_sink_->Lwrite(final_contents);
+  Slice meta_contents = meta_block_.Finish();
+  const size_t meta_size = meta_contents.size();
+  Slice final_meta_contents =
+      meta_block_.Finalize();  // No padding is needed for the root meta block
+  const size_t final_meta_size = final_meta_contents.size();
+  const uint64_t meta_offset = meta_sink_->Ltell();
+  status_ = meta_sink_->Lwrite(final_meta_contents);
+  output_stats_.final_meta_size += final_meta_size;
+  output_stats_.meta_size += meta_size;
   if (!ok()) return status_;
 
-  epoch_index_handle.set_size(size);
-  epoch_index_handle.set_offset(offset);
+  epoch_index_handle.set_size(meta_size);
+  epoch_index_handle.set_offset(meta_offset);
   footer.set_epoch_index_handle(epoch_index_handle);
   footer.set_num_epoches(num_epochs_);
-  footer.EncodeTo(&tail);
+  footer.EncodeTo(&footer_buf);
+
+  const size_t footer_size = footer_buf.size();
 
   if (options_.tail_padding) {
     // Add enough padding to ensure the final size of the index log
     // is some multiple of the physical write size.
-    const uint64_t total_size = meta_sink_->Ltell() + tail.size();
+    const uint64_t total_size = meta_sink_->Ltell() + footer_size;
     const size_t overflow = total_size % options_.index_buffer;
     if (overflow != 0) {
       const size_t n = options_.index_buffer - overflow;
@@ -541,7 +559,8 @@ Status TableLogger::Finish() {
   }
 
   if (ok()) {
-    status_ = meta_sink_->Lwrite(tail);
+    status_ = meta_sink_->Lwrite(footer_buf);
+    output_stats_.footer_size += footer_size;
     return status_;
   } else {
     return status_;

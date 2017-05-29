@@ -50,19 +50,26 @@ class WriteBuffer {
 struct OutputStats {
   OutputStats();
 
+  // Footer
+  size_t footer_size;
+
   // Total size of data blocks
-  size_t final_data_size;
-  size_t data_size;  // Excluding padding and block tails
+  size_t final_data_size;  // Including padding and block trailers
+  size_t data_size;
+
+  // Total size of the root meta block
+  size_t final_meta_size;
+  size_t meta_size;
 
   // Total size of index blocks
   size_t final_index_size;
-  size_t index_size;  // Excluding block tails
+  size_t index_size;
 
   // Total size of filter blocks
   size_t final_filter_size;
-  size_t filter_size;  // Excluding block tails
+  size_t filter_size;
 
-  // Total size of data compacted
+  // Total size of user data compacted
   size_t value_size;
   size_t key_size;
 };
