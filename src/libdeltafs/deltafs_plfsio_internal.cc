@@ -654,6 +654,9 @@ PlfsIoLogger::~PlfsIoLogger() {
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
+
+  BloomBlock* bf = static_cast<BloomBlock*>(filter_);
+  delete bf;
 }
 
 // Block until compaction finishes and return the
@@ -856,16 +859,15 @@ void PlfsIoLogger::CompactWriteBuffer() {
   const bool is_finish = imm_buf_is_finish_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   TableLogger* const tb = &table_logger_;
-  BloomBlock* const bf = reinterpret_cast<BloomBlock*>(filter_);
+  BloomBlock* const bf = static_cast<BloomBlock*>(filter_);
   mu_->Unlock();
-
   const OutputStats start_stats = tb->output_stats_;
   uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes) ...",
-          int(buffer->CurrentBufferSize()), int(tb_bytes_));
+          static_cast<int>(buffer->CurrentBufferSize()),
+          static_cast<int>(tb_bytes_));
 #endif
-
 #ifndef NDEBUG
   uint32_t num_keys = 0;
 #endif
