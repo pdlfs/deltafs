@@ -77,7 +77,7 @@ struct OutputStats {
 // Write table contents into a set of log files.
 class TableLogger {
  public:
-  TableLogger(const DirOptions& options, LogSink* data, LogSink* index);
+  TableLogger(const DirOptions& options, LogSink* data, LogSink* indx);
   ~TableLogger();
 
   bool ok() const { return status_.ok(); }
@@ -130,7 +130,7 @@ class TableLogger {
   uint32_t num_epochs_;  // Number of epochs generated
   std::string uncommitted_indexes_;
   LogSink* data_sink_;
-  LogSink* meta_sink_;
+  LogSink* indx_sink_;
   bool finished_;
 };
 
@@ -139,7 +139,7 @@ class TableLogger {
 class PlfsIoLogger {
  public:
   PlfsIoLogger(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
-               LogSink* data, LogSink* index, CompactionStats* stats);
+               LogSink* data, LogSink* indx, CompactionStats* stats);
   ~PlfsIoLogger();
 
   // REQUIRES: mutex_ has been locked
@@ -176,7 +176,7 @@ class PlfsIoLogger {
 
   // State below is protected by mutex_
   LogSink* data_;
-  LogSink* index_;
+  LogSink* indx_;
   CompactionStats* compaction_stats_;
   bool has_bg_compaction_;
   bool pending_epoch_flush_;

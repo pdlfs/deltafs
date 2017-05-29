@@ -272,7 +272,7 @@ static size_t TotalDataSize(const OutputStats& stats) {
 }
 
 TableLogger::TableLogger(const DirOptions& options, LogSink* data,
-                         LogSink* index)
+                         LogSink* indx)
     : options_(options),
       num_uncommitted_index_(0),
       num_uncommitted_data_(0),
@@ -284,12 +284,12 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
       num_tables_(0),
       num_epochs_(0),
       data_sink_(data),
-      meta_sink_(index),
+      indx_sink_(indx),
       finished_(false) {
   // Sanity checks
-  assert(meta_sink_ != NULL && data_sink_ != NULL);
+  assert(indx_sink_ != NULL && data_sink_ != NULL);
 
-  meta_sink_->Ref();
+  indx_sink_->Ref();
   data_sink_->Ref();
 
   // Allocate memory
@@ -306,7 +306,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
 }
 
 TableLogger::~TableLogger() {
-  meta_sink_->Unref();
+  indx_sink_->Unref();
   data_sink_->Unref();
 }
 
@@ -352,14 +352,14 @@ void TableLogger::EndTable(T* filter_block) {
   Slice final_index_contents =
       index_block_.Finalize();  // No zero padding necessary for index blocks
   const size_t final_index_size = final_index_contents.size();
-  const uint64_t index_offset = meta_sink_->Ltell();
-  status_ = meta_sink_->Lwrite(final_index_contents);
+  const uint64_t index_offset = indx_sink_->Ltell();
+  status_ = indx_sink_->Lwrite(final_index_contents);
   output_stats_.final_index_size += final_index_size;
   output_stats_.index_size += index_size;
   if (!ok()) return;  // Abort
 
   size_t filter_size = 0;
-  const uint64_t filter_offset = meta_sink_->Ltell();
+  const uint64_t filter_offset = indx_sink_->Ltell();
   Slice final_filter_contents;
 
   if (filter_block != NULL) {
@@ -367,7 +367,7 @@ void TableLogger::EndTable(T* filter_block) {
     filter_size = filer_contents.size();
     final_filter_contents = filter_block->Finalize();
     const size_t final_filter_size = final_filter_contents.size();
-    status_ = meta_sink_->Lwrite(final_filter_contents);
+    status_ = indx_sink_->Lwrite(final_filter_contents);
     output_stats_.final_filter_size += final_filter_size;
     output_stats_.filter_size += filter_size;
   } else {
@@ -533,8 +533,8 @@ Status TableLogger::Finish() {
   Slice final_meta_contents =
       meta_block_.Finalize();  // No padding is needed for the root meta block
   const size_t final_meta_size = final_meta_contents.size();
-  const uint64_t meta_offset = meta_sink_->Ltell();
-  status_ = meta_sink_->Lwrite(final_meta_contents);
+  const uint64_t meta_offset = indx_sink_->Ltell();
+  status_ = indx_sink_->Lwrite(final_meta_contents);
   output_stats_.final_meta_size += final_meta_size;
   output_stats_.meta_size += meta_size;
   if (!ok()) return status_;
@@ -550,18 +550,18 @@ Status TableLogger::Finish() {
   if (options_.tail_padding) {
     // Add enough padding to ensure the final size of the index log
     // is some multiple of the physical write size.
-    const uint64_t total_size = meta_sink_->Ltell() + footer_size;
+    const uint64_t total_size = indx_sink_->Ltell() + footer_size;
     const size_t overflow = total_size % options_.index_buffer;
     if (overflow != 0) {
       const size_t n = options_.index_buffer - overflow;
-      status_ = meta_sink_->Lwrite(std::string(n, 0));
+      status_ = indx_sink_->Lwrite(std::string(n, 0));
     } else {
       // No need to pad
     }
   }
 
   if (ok()) {
-    status_ = meta_sink_->Lwrite(footer_buf);
+    status_ = indx_sink_->Lwrite(footer_buf);
     output_stats_.footer_size += footer_size;
     return status_;
   } else {
@@ -570,18 +570,18 @@ Status TableLogger::Finish() {
 }
 
 PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
-                           port::CondVar* cv, LogSink* data, LogSink* index,
+                           port::CondVar* cv, LogSink* data, LogSink* indx,
                            CompactionStats* stats)
     : options_(options),
       mu_(mu),
       bg_cv_(cv),
       data_(data),
-      index_(index),
+      indx_(indx),
       compaction_stats_(stats),
       has_bg_compaction_(false),
       pending_epoch_flush_(false),
       pending_finish_(false),
-      table_logger_(options, data, index),
+      table_logger_(options, data, indx),
       filter_(NULL),
       mem_buf_(NULL),
       imm_buf_(NULL),
@@ -589,6 +589,10 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
       imm_buf_is_finish_(false) {
   // Sanity checks
   assert(mu != NULL && cv != NULL);
+  assert(data_ != NULL && indx_ != NULL);
+
+  data_->Ref();
+  indx_->Ref();
 
   // Determine the right table size and bloom filter size.
   // Works best when the key and value sizes are fixed.
@@ -660,6 +664,8 @@ PlfsIoLogger::~PlfsIoLogger() {
   if (bf != NULL) {
     delete bf;
   }
+  data_->Unref();
+  indx_->Unref();
 }
 
 // Block until compaction finishes and return the
@@ -683,12 +689,12 @@ Status PlfsIoLogger::Wait() {
 Status PlfsIoLogger::PreClose() {
   mu_->AssertHeld();
   mu_->Unlock();
-  Status s = data_->Lclose();
-  if (s.ok()) {
-    s = index_->Lclose();
+  Status status = data_->Lclose();
+  if (status.ok()) {
+    status = indx_->Lclose();
   }
   mu_->Lock();
-  return s;
+  return status;
 }
 
 // If dry_run is set, will only perform status checks and no compaction
