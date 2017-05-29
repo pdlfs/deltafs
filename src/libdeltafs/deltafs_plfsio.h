@@ -173,6 +173,9 @@ class LogSink {
     if (file_ == NULL) {
       return Status::AssertionFailed("File already closed", filename_);
     } else {
+      if (mu_ != NULL) {
+        mu_->AssertHeld();
+      }
       Status result = file_->Append(data);
       if (result.ok()) {
         result = file_->Flush();
@@ -186,7 +189,10 @@ class LogSink {
 
   Status Lsync() {
     Status status;
-    if (file_ != NULL) status = file_->Sync();
+    if (file_ != NULL) {
+      if (mu_ != NULL) mu_->AssertHeld();
+      status = file_->Sync();
+    }
     return status;
   }
 

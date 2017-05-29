@@ -426,21 +426,22 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   return result;
 }
 
-static void PrintLogInfo(const std::string& name, size_t mem_size) {
+static void PrintLogInfo(const std::string& name, const size_t mem_size) {
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Reading or writing %s, mem reserved: %s",
           name.c_str(), PrettySize(mem_size).c_str());
 #endif
 }
 
+// Try opening a log file and store its handle in *ptr.
 // If mu is not NULL, return a LogSink associated with the mutex.
 // If buf_size is not zero, create a stacked UnsafeBufferedWritableFile to
 // ensure the write size. If bytes is not NULL, also create a stacked
 // MeasuredWritableFile to track the size of data written to the log.
 static Status NewLogSink(LogSink** ptr, const std::string& name, Env* env,
-                         size_t buf_size, port::Mutex* mu = NULL,
+                         const size_t buf_size, port::Mutex* mu = NULL,
                          uint64_t* bytes = NULL) {
-  WritableFile* file;
+  WritableFile* file = NULL;
   Status status = env->NewWritableFile(name, &file);
   if (status.ok()) {
     assert(file != NULL);
