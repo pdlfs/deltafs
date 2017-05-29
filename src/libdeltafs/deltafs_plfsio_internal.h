@@ -107,6 +107,7 @@ class TableLogger {
  private:
   const DirOptions& options_;
   OutputStats output_stats_;
+  friend class PlfsIoLogger;
 
   // No copying allowed
   void operator=(const TableLogger&);
@@ -176,7 +177,7 @@ class PlfsIoLogger {
   // State below is protected by mutex_
   LogSink* data_;
   LogSink* index_;
-  CompactionStats* stats_;
+  CompactionStats* compaction_stats_;
   bool has_bg_compaction_;
   bool pending_epoch_flush_;
   bool pending_finish_;

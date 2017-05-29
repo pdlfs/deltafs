@@ -262,12 +262,12 @@ OutputStats::OutputStats()
       value_size(0),
       key_size(0) {}
 
-static size_t TotalNonDataBlockSize(const OutputStats& stats) {
+static size_t TotalIndexSize(const OutputStats& stats) {
   return stats.filter_size + stats.index_size + stats.meta_size +
          stats.footer_size;
 }
 
-static size_t TotalDataBlockSize(const OutputStats& stats) {
+static size_t TotalDataSize(const OutputStats& stats) {
   return stats.data_size;
 }
 
@@ -575,7 +575,7 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
       bg_cv_(cv),
       data_(data),
       index_(index),
-      stats_(stats),
+      compaction_stats_(stats),
       has_bg_compaction_(false),
       pending_epoch_flush_(false),
       pending_finish_(false),
@@ -858,15 +858,17 @@ void PlfsIoLogger::CompactWriteBuffer() {
   TableLogger* const tb = &table_logger_;
   BloomBlock* const bf = reinterpret_cast<BloomBlock*>(filter_);
   mu_->Unlock();
+
+  const OutputStats start_stats = tb->output_stats_;
   uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes) ...",
           int(buffer->CurrentBufferSize()), int(tb_bytes_));
 #endif
+
 #ifndef NDEBUG
   uint32_t num_keys = 0;
 #endif
-
   if (bf != NULL) bf->Reset();
   buffer->FinishAndSort();
   Iterator* const iter = buffer->NewIterator();
@@ -897,6 +899,7 @@ void PlfsIoLogger::CompactWriteBuffer() {
     }
   }
 
+  const OutputStats end_stats = tb->output_stats_;
   uint64_t end = Env::Default()->NowMicros();
 
 #if VERBOSE >= 3
@@ -907,6 +910,11 @@ void PlfsIoLogger::CompactWriteBuffer() {
 
   delete iter;
   mu_->Lock();
+  compaction_stats_->index_size +=
+      TotalIndexSize(end_stats) - TotalIndexSize(start_stats);
+  compaction_stats_->data_size +=
+      TotalDataSize(end_stats) - TotalDataSize(start_stats);
+
   if (is_epoch_flush) {
     if (pending_epoch_flush) {
       pending_epoch_flush_ = false;
