@@ -107,7 +107,7 @@ class TableLogger {
  private:
   const DirOptions& options_;
   OutputStats output_stats_;
-  friend class PlfsIoLogger;
+  friend class DirLogger;
 
   // No copying allowed
   void operator=(const TableLogger&);
@@ -136,11 +136,11 @@ class TableLogger {
 
 // Sequentially format and write data as multiple sorted runs of indexed tables.
 // Implementation is thread-safe and uses background threads.
-class PlfsIoLogger {
+class DirLogger {
  public:
-  PlfsIoLogger(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
-               LogSink* data, LogSink* indx, CompactionStats* stats);
-  ~PlfsIoLogger();
+  DirLogger(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
+            LogSink* data, LogSink* indx, CompactionStats* stats);
+  ~DirLogger();
 
   // REQUIRES: mutex_ has been locked
 
@@ -157,12 +157,12 @@ class PlfsIoLogger {
   Status Prepare(bool epoch_flush = false, bool force_finish = false);
 
   // No copying allowed
-  void operator=(const PlfsIoLogger&);
-  PlfsIoLogger(const PlfsIoLogger&);
+  void operator=(const DirLogger&);
+  DirLogger(const DirLogger&);
 
   static void BGWork(void*);
   void MaybeScheduleCompaction();
-  void CompactWriteBuffer();
+  void CompactMemtable();
   void DoCompaction();
 
   // Constant after construction

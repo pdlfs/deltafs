@@ -513,7 +513,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 
   data_block_.Add(key, value);
   if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize >=
-      static_cast<uint64_t>(options_.block_size * options_.block_util)) {
+      static_cast<size_t>(options_.block_size * options_.block_util)) {
     EndBlock();
   }
 }
@@ -569,9 +569,9 @@ Status TableLogger::Finish() {
   }
 }
 
-PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
-                           port::CondVar* cv, LogSink* data, LogSink* indx,
-                           CompactionStats* stats)
+DirLogger::DirLogger(const DirOptions& options, port::Mutex* mu,
+                     port::CondVar* cv, LogSink* data, LogSink* indx,
+                     CompactionStats* stats)
     : options_(options),
       mu_(mu),
       bg_cv_(cv),
@@ -655,7 +655,7 @@ PlfsIoLogger::PlfsIoLogger(const DirOptions& options, port::Mutex* mu,
   mem_buf_ = &buf0_;
 }
 
-PlfsIoLogger::~PlfsIoLogger() {
+DirLogger::~DirLogger() {
   mu_->AssertHeld();
   while (has_bg_compaction_) {
     bg_cv_->Wait();
@@ -670,7 +670,7 @@ PlfsIoLogger::~PlfsIoLogger() {
 
 // Block until compaction finishes and return the
 // latest compaction status.
-Status PlfsIoLogger::Wait() {
+Status DirLogger::Wait() {
   mu_->AssertHeld();
   Status status;
   while (table_logger_.ok() && has_bg_compaction_) {
@@ -686,7 +686,7 @@ Status PlfsIoLogger::Wait() {
 // Usually, log files are reference counted and are closed when
 // de-referenced by the last opener.
 // Optionally, caller may force the closing of all log files.
-Status PlfsIoLogger::PreClose() {
+Status DirLogger::PreClose() {
   mu_->AssertHeld();
   mu_->Unlock();
   Status status = data_->Lclose();
@@ -704,7 +704,7 @@ Status PlfsIoLogger::PreClose() {
 // error. Otherwise, **wait** until a compaction can be scheduled unless
 // options_.non_blocking is set. After a compaction has been scheduled,
 // **wait** until it finishes unless no_wait is set.
-Status PlfsIoLogger::Finish(bool dry_run, bool no_wait) {
+Status DirLogger::Finish(bool dry_run, bool no_wait) {
   mu_->AssertHeld();
   while (pending_finish_ ||
          pending_epoch_flush_ ||  // The previous job is still in-progress
@@ -745,7 +745,7 @@ Status PlfsIoLogger::Finish(bool dry_run, bool no_wait) {
 // error. Otherwise, **wait** until a compaction can be scheduled unless
 // options_.non_blocking is set. After a compaction has been scheduled,
 // **wait** until it finishes unless no_wait is set.
-Status PlfsIoLogger::MakeEpoch(bool dry_run, bool no_wait) {
+Status DirLogger::MakeEpoch(bool dry_run, bool no_wait) {
   mu_->AssertHeld();
   while (pending_epoch_flush_ ||  // The previous job is still in-progress
          imm_buf_ != NULL) {      // There's an on-going compaction job
@@ -776,14 +776,14 @@ Status PlfsIoLogger::MakeEpoch(bool dry_run, bool no_wait) {
   return status;
 }
 
-Status PlfsIoLogger::Add(const Slice& key, const Slice& value) {
+Status DirLogger::Add(const Slice& key, const Slice& value) {
   mu_->AssertHeld();
   Status status = Prepare();
   if (status.ok()) mem_buf_->Add(key, value);
   return status;
 }
 
-Status PlfsIoLogger::Prepare(bool flush, bool finish) {
+Status DirLogger::Prepare(bool flush, bool finish) {
   mu_->AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
@@ -824,7 +824,7 @@ Status PlfsIoLogger::Prepare(bool flush, bool finish) {
   return status;
 }
 
-void PlfsIoLogger::MaybeScheduleCompaction() {
+void DirLogger::MaybeScheduleCompaction() {
   mu_->AssertHeld();
 
   if (has_bg_compaction_) return;  // Skip if there is one already scheduled
@@ -833,23 +833,23 @@ void PlfsIoLogger::MaybeScheduleCompaction() {
   has_bg_compaction_ = true;
 
   if (options_.compaction_pool != NULL) {
-    options_.compaction_pool->Schedule(PlfsIoLogger::BGWork, this);
+    options_.compaction_pool->Schedule(DirLogger::BGWork, this);
   } else {
-    Env::Default()->Schedule(PlfsIoLogger::BGWork, this);
+    Env::Default()->Schedule(DirLogger::BGWork, this);
   }
 }
 
-void PlfsIoLogger::BGWork(void* arg) {
-  PlfsIoLogger* ins = reinterpret_cast<PlfsIoLogger*>(arg);
+void DirLogger::BGWork(void* arg) {
+  DirLogger* ins = reinterpret_cast<DirLogger*>(arg);
   MutexLock ml(ins->mu_);
   ins->DoCompaction();
 }
 
-void PlfsIoLogger::DoCompaction() {
+void DirLogger::DoCompaction() {
   mu_->AssertHeld();
   assert(has_bg_compaction_);
   assert(imm_buf_ != NULL);
-  CompactWriteBuffer();
+  CompactMemtable();
   imm_buf_->Reset();
   imm_buf_is_epoch_flush_ = false;
   imm_buf_is_finish_ = false;
@@ -859,7 +859,7 @@ void PlfsIoLogger::DoCompaction() {
   bg_cv_->SignalAll();
 }
 
-void PlfsIoLogger::CompactWriteBuffer() {
+void DirLogger::CompactMemtable() {
   mu_->AssertHeld();
   WriteBuffer* const buffer = imm_buf_;
   assert(buffer != NULL);

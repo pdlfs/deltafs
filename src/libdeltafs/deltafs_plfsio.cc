@@ -209,7 +209,7 @@ class WriterImpl : public Writer {
   uint32_t part_mask_;
   Status finish_status_;
   bool finished_;  // If Finish() has been called
-  PlfsIoLogger** io_;
+  DirLogger** io_;
   LogSink* data_;
 };
 
@@ -508,10 +508,10 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
   }
 
   if (status.ok()) {
-    PlfsIoLogger** io = new PlfsIoLogger*[num_parts];
+    DirLogger** io = new DirLogger*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {
-      io[i] = new PlfsIoLogger(impl->options_, &impl->mutex_, &impl->cond_var_,
-                               data[0], index[i], &impl->stats_);
+      io[i] = new DirLogger(impl->options_, &impl->mutex_, &impl->cond_var_,
+                            data[0], index[i], &impl->stats_);
     }
     impl->data_ = data[0];
     impl->data_->Ref();
