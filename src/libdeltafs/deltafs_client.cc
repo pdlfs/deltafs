@@ -824,7 +824,7 @@ Status Client::Fdatasync(int fd) {
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       mutex_.Unlock();
-      s = writer->Sync();
+      s = writer->Flush();
       mutex_.Lock();
     }
     return s;
@@ -943,7 +943,7 @@ Status Client::Flush(int fd) {
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       mutex_.Unlock();
-      s = writer->MakeEpoch();
+      s = writer->FlushEpoch();
       mutex_.Lock();
     }
     return s;

@@ -267,17 +267,19 @@ class Writer {
   // REQUIRES: Finish() has not been called.
   virtual Status Append(const Slice& fid, const Slice& data, int epoch = 0) = 0;
 
-  // Sync data to storage.  Not supported so far.
+  // Force a memtable compaction.
   // REQUIRES: Finish() has not been called.
-  virtual Status Sync() = 0;
+  virtual Status Flush(int epoch = 0) = 0;
 
-  // Force a compaction and start a new epoch.
+  // Force a memtable compaction and start a new epoch.
   // REQUIRES: Finish() has not been called.
-  virtual Status MakeEpoch(int epoch = 0) = 0;
+  virtual Status FlushEpoch(int epoch = 0) = 0;
+
+  // Wait for all on-going compactions to finish.
+  virtual Status Wait() = 0;
 
   // Force a compaction and finalize all log files.
   // No further write operation is allowed after this call.
-  // REQUIRES: Finish() has not been called.
   virtual Status Finish() = 0;
 
  private:

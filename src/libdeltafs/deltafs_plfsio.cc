@@ -188,9 +188,10 @@ class DirWriterImpl : public Writer {
   virtual ~DirWriterImpl();
 
   virtual const CompactionStats* stats() const { return &stats_; }
+  virtual Status Wait();
   virtual Status Append(const Slice& fid, const Slice& data, int epoch);
-  virtual Status Sync();
-  virtual Status MakeEpoch(int epoch);
+  virtual Status Flush(int epoch);
+  virtual Status FlushEpoch(int epoch);
   virtual Status Finish();
 
  private:
@@ -346,8 +347,8 @@ Status DirWriterImpl::Finish() {
       status = TryFlush(epoch_flush, finalize);
       if (status.ok()) status = WaitForCompaction();
       if (status.ok()) status = CloseLogs();
-      cond_var_.SignalAll();
       has_pending_flush_ = false;
+      cond_var_.SignalAll();
       finish_status_ = status;
       finished_ = true;
       break;
@@ -356,7 +357,7 @@ Status DirWriterImpl::Finish() {
   return status;
 }
 
-Status DirWriterImpl::MakeEpoch(int epoch) {
+Status DirWriterImpl::FlushEpoch(int epoch) {
   Status status;
   MutexLock ml(&mutex_);
   while (true) {
@@ -375,10 +376,55 @@ Status DirWriterImpl::MakeEpoch(int epoch) {
       has_pending_flush_ = true;
       const bool epoch_flush = true;
       status = TryFlush(epoch_flush);
-      if (status.ok()) status = WaitForCompaction();
       if (status.ok()) num_epochs_++;
-      cond_var_.SignalAll();
       has_pending_flush_ = false;
+      cond_var_.SignalAll();
+      break;
+    }
+  }
+  return status;
+}
+
+Status DirWriterImpl::Flush(int epoch) {
+  Status status;
+  MutexLock ml(&mutex_);
+  while (true) {
+    if (finished_) {
+      status = Status::AssertionFailed("Plfsdir already finished");
+      break;
+    } else if (has_pending_flush_) {
+      cond_var_.Wait();
+    } else if (epoch != num_epochs_) {
+      status = Status::AssertionFailed("Bad epoch num");
+      break;
+    } else {
+      has_pending_flush_ = true;
+      status = TryFlush();
+      has_pending_flush_ = false;
+      cond_var_.SignalAll();
+      break;
+    }
+  }
+  return status;
+}
+
+Status DirWriterImpl::Append(const Slice& fid, const Slice& data, int epoch) {
+  Status status;
+  MutexLock ml(&mutex_);
+  while (true) {
+    if (finished_) {
+      status = Status::AssertionFailed("Plfsdir already finished");
+      break;
+    } else if (has_pending_flush_) {
+      cond_var_.Wait();
+    } else if (epoch != num_epochs_) {
+      status = Status::AssertionFailed("Bad epoch num");
+      break;
+    } else {
+      status = TryAppend(fid, data);
+      if (status.IsBufferFull()) {
+        MaybeSlowdownCaller();
+      }
       break;
     }
   }
@@ -395,24 +441,15 @@ Status DirWriterImpl::TryAppend(const Slice& fid, const Slice& data) {
   return status;
 }
 
-Status DirWriterImpl::Append(const Slice& fid, const Slice& data, int epoch) {
+Status DirWriterImpl::Wait() {
   Status status;
   MutexLock ml(&mutex_);
-  if (finished_) {
-    status = Status::AssertionFailed("Plfsdir already finished");
-  } else if (epoch != num_epochs_) {
-    status = Status::AssertionFailed("Bad epoch num");
+  if (!finished_) {
+    status = WaitForCompaction();
   } else {
-    status = TryAppend(fid, data);
-    if (status.IsBufferFull()) {
-      MaybeSlowdownCaller();
-    }
+    status = finish_status_;
   }
   return status;
-}
-
-Status DirWriterImpl::Sync() {
-  return Status::NotSupported(Slice());  // TODO
 }
 
 Writer::~Writer() {}
