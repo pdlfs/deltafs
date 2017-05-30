@@ -455,6 +455,10 @@ Writer::~Writer() {}
 static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   DirOptions result = options;
   if (result.env == NULL) result.env = Env::Default();
+  if (result.memtable_util < 0.5) result.memtable_util = 0.5;
+  if (result.memtable_util > 1.0) result.memtable_util = 1.0;
+  if (result.block_util < 0.5) result.block_util = 0.5;
+  if (result.block_util > 1.0) result.block_util = 1.0;
   if (result.lg_parts < 0) result.lg_parts = 0;
   if (result.lg_parts > 8) result.lg_parts = 8;
   return result;
