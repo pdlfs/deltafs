@@ -257,11 +257,14 @@ Status DirWriterImpl::EnsureDataPadding(LogSink* sink, char padding) {
 
 Status DirWriterImpl::TryFinish() {
   mutex_.AssertHeld();
+  DirLogger::FlushOptions flush_options;
+  flush_options.flush_epoch = true;
+  flush_options.finalize = true;
   Status status;
   // Do it
   if (status.ok()) {
     for (size_t i = 0; i < num_parts_; i++) {
-      status = io_[i]->Finish(false, false);
+      status = io_[i]->Flush(flush_options);
       if (!status.ok()) {
         break;
       }
@@ -313,6 +316,8 @@ Status DirWriterImpl::Finish() {
 
 Status DirWriterImpl::TryMakeEpoch() {
   mutex_.AssertHeld();
+  DirLogger::FlushOptions flush_options;
+  flush_options.flush_epoch = true;
   Status status;
   std::vector<DirLogger*> remaining;
   for (size_t i = 0; i < num_parts_; i++) remaining.push_back(io_[i]);
@@ -320,12 +325,14 @@ Status DirWriterImpl::TryMakeEpoch() {
   while (!remaining.empty()) {
     waiting_list.clear();
     for (size_t i = 0; i < remaining.size(); i++) {
-      status = remaining[i]->MakeEpoch(true, true);
+      flush_options.dry_run = true;
+      status = remaining[i]->Flush(flush_options);
+      flush_options.dry_run = false;
       if (status.IsBufferFull()) {
         waiting_list.push_back(remaining[i]);
         status = Status::OK();
       } else if (status.ok()) {
-        remaining[i]->MakeEpoch(false, true);
+        remaining[i]->Flush(flush_options);
       } else {
         break;
       }

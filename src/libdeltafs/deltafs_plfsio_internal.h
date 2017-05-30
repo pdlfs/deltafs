@@ -102,7 +102,7 @@ class TableLogger {
 
   // Force the start of a new epoch.
   // REQUIRES: Finish() has not been called.
-  void EndEpoch();
+  void FlushEpoch();
 
  private:
   const DirOptions& options_;
@@ -143,18 +143,38 @@ class DirLogger {
   ~DirLogger();
 
   // REQUIRES: mutex_ has been locked
-
   Status Wait();  // Wait for all on-going compactions to finish
-  Status Add(const Slice& key,
-             const Slice& value);  // May trigger a new compaction
+  // May trigger a new compaction
+  Status Add(const Slice& key, const Slice& value);
+
   // Force a compaction and maybe wait for it
-  Status MakeEpoch(bool dry_run, bool no_wait);
-  Status Finish(bool dry_run, bool no_wait);
+  struct FlushOptions {
+    FlushOptions();
+
+    // Do not wait for compaction to finish
+    // Default: true
+    bool no_wait;
+
+    // Status checks only
+    // Default: false
+    bool dry_run;
+
+    // Force a new epoch
+    // Default: false
+    bool flush_epoch;
+
+    // Finalize the directory
+    // Default: false
+    bool finalize;
+  };
+  Status Flush(const FlushOptions& options);
+
   // Pre-close all log files before de-referencing them
   Status PreClose();
 
  private:
-  Status Prepare(bool epoch_flush = false, bool force_finish = false);
+  Status Prepare(bool force = false, bool epoch_flush = false,
+                 bool finalize = false);
 
   // No copying allowed
   void operator=(const DirLogger&);
@@ -167,8 +187,8 @@ class DirLogger {
 
   // Constant after construction
   const DirOptions& options_;
-  port::Mutex* const mu_;
   port::CondVar* const bg_cv_;
+  port::Mutex* const mu_;
   size_t bf_bits_;
   size_t bf_bytes_;          // Target bloom filter size
   uint32_t entries_per_tb_;  // Number of entries packed per table
@@ -178,18 +198,21 @@ class DirLogger {
   LogSink* data_;
   LogSink* indx_;
   CompactionStats* compaction_stats_;
+  uint32_t num_flush_requested_;
+  uint32_t num_flush_completed_;
   bool has_bg_compaction_;
-  bool pending_epoch_flush_;
-  bool pending_finish_;
   TableLogger table_logger_;
   void* filter_;  // void* since different types of filter might be used
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;
   bool imm_buf_is_epoch_flush_;
-  bool imm_buf_is_finish_;
+  bool imm_buf_is_final_;
   WriteBuffer buf0_;
   WriteBuffer buf1_;
 };
+
+inline DirLogger::FlushOptions::FlushOptions()
+    : no_wait(true), dry_run(false), flush_epoch(false), finalize(false) {}
 
 // Retrieve table contents from a set of indexed log files.
 class PlfsIoReader {

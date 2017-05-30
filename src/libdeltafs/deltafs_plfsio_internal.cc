@@ -310,7 +310,7 @@ TableLogger::~TableLogger() {
   data_sink_->Unref();
 }
 
-void TableLogger::EndEpoch() {
+void TableLogger::FlushEpoch() {
   assert(!finished_);  // Finish() has not been called
   EndTable(static_cast<BloomBlock*>(NULL));
   if (!ok()) {
@@ -520,7 +520,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 
 Status TableLogger::Finish() {
   assert(!finished_);  // Finish() has not been called
-  EndEpoch();
+  FlushEpoch();
   finished_ = true;
   if (!ok()) return status_;
   BlockHandle epoch_index_handle;
@@ -573,20 +573,20 @@ DirLogger::DirLogger(const DirOptions& options, port::Mutex* mu,
                      port::CondVar* cv, LogSink* data, LogSink* indx,
                      CompactionStats* stats)
     : options_(options),
-      mu_(mu),
       bg_cv_(cv),
+      mu_(mu),
       data_(data),
       indx_(indx),
       compaction_stats_(stats),
+      num_flush_requested_(0),
+      num_flush_completed_(0),
       has_bg_compaction_(false),
-      pending_epoch_flush_(false),
-      pending_finish_(false),
       table_logger_(options, data, indx),
       filter_(NULL),
       mem_buf_(NULL),
       imm_buf_(NULL),
       imm_buf_is_epoch_flush_(false),
-      imm_buf_is_finish_(false) {
+      imm_buf_is_final_(false) {
   // Sanity checks
   assert(mu != NULL && cv != NULL);
   assert(data_ != NULL && indx_ != NULL);
@@ -697,19 +697,19 @@ Status DirLogger::PreClose() {
   return status;
 }
 
-// If dry_run is set, will only perform status checks and no compaction
+// If dry_run has been set, simply perform status checks and no compaction
 // jobs will be scheduled or waited for. Return immediately, and return OK if
-// compaction may be scheduled in future without waiting, or a special status if
-// compaction cannot be scheduled immediately, or a status that indicates an
-// error. Otherwise, **wait** until a compaction can be scheduled unless
+// compaction may be scheduled immediately without waiting, or return a special
+// status if compaction cannot be scheduled immediately due to lack of buffer
+// space, or directly return a status that indicates an I/O error.
+// Otherwise, **wait** until a compaction is scheduled unless
 // options_.non_blocking is set. After a compaction has been scheduled,
-// **wait** until it finishes unless no_wait is set.
-Status DirLogger::Finish(bool dry_run, bool no_wait) {
+// **wait** until it finishes unless no_wait has been set.
+Status DirLogger::Flush(const FlushOptions& flush_options) {
   mu_->AssertHeld();
-  while (pending_finish_ ||
-         pending_epoch_flush_ ||  // The previous job is still in-progress
-         imm_buf_ != NULL) {      // There's an on-going compaction job
-    if (dry_run || options_.non_blocking) {
+  // Wait for buffer space
+  while (imm_buf_ != NULL) {
+    if (flush_options.dry_run || options_.non_blocking) {
       return Status::BufferFull(Slice());
     } else {
       bg_cv_->Wait();
@@ -717,58 +717,18 @@ Status DirLogger::Finish(bool dry_run, bool no_wait) {
   }
 
   Status status;
-  if (dry_run) {
-    // Status check only
-    status = table_logger_.status();
+  if (flush_options.dry_run) {
+    status = table_logger_.status();  // Status check only
   } else {
-    pending_finish_ = true;
-    pending_epoch_flush_ = true;
-    status = Prepare(pending_epoch_flush_, pending_finish_);
-    if (!status.ok()) {
-      pending_epoch_flush_ =
-          false;  // Avoid blocking future attempts potentially infinitely
-      pending_finish_ = false;
-    } else if (!no_wait) {
-      while (pending_epoch_flush_ || pending_finish_) {
-        bg_cv_->Wait();
-      }
-    }
-  }
-
-  return status;
-}
-
-// If dry_run is set, will only perform status checks and no compaction
-// jobs will be scheduled or waited for. Return immediately, and return OK if
-// compaction may be scheduled in future without waiting, or a special status if
-// compaction cannot be scheduled immediately, or a status that indicates an
-// error. Otherwise, **wait** until a compaction can be scheduled unless
-// options_.non_blocking is set. After a compaction has been scheduled,
-// **wait** until it finishes unless no_wait is set.
-Status DirLogger::MakeEpoch(bool dry_run, bool no_wait) {
-  mu_->AssertHeld();
-  while (pending_epoch_flush_ ||  // The previous job is still in-progress
-         imm_buf_ != NULL) {      // There's an on-going compaction job
-    if (dry_run || options_.non_blocking) {
-      return Status::BufferFull(Slice());
-    } else {
-      bg_cv_->Wait();
-    }
-  }
-
-  Status status;
-  if (dry_run) {
-    // Status check only
-    status = table_logger_.status();
-  } else {
-    pending_epoch_flush_ = true;
-    status = Prepare(pending_epoch_flush_);
-    if (!status.ok()) {
-      pending_epoch_flush_ =
-          false;  // Avoid blocking future attempts potentially infinitely
-    } else if (!no_wait) {
-      while (pending_epoch_flush_) {
-        bg_cv_->Wait();
+    num_flush_requested_++;
+    const uint32_t thres = num_flush_requested_;
+    const bool force = true;
+    status = Prepare(force, flush_options.flush_epoch, flush_options.finalize);
+    if (status.ok()) {
+      if (!flush_options.no_wait) {
+        while (num_flush_completed_ < thres) {
+          bg_cv_->Wait();
+        }
       }
     }
   }
@@ -783,7 +743,7 @@ Status DirLogger::Add(const Slice& key, const Slice& value) {
   return status;
 }
 
-Status DirLogger::Prepare(bool flush, bool finish) {
+Status DirLogger::Prepare(bool force, bool epoch_flush, bool finalize) {
   mu_->AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
@@ -791,7 +751,7 @@ Status DirLogger::Prepare(bool flush, bool finish) {
     if (!table_logger_.ok()) {
       status = table_logger_.status();
       break;
-    } else if (!flush &&
+    } else if (!force &&
                mem_buf_->CurrentBufferSize() <
                    static_cast<size_t>(tb_bytes_ * options_.memtable_util)) {
       // There is room in current write buffer
@@ -805,12 +765,13 @@ Status DirLogger::Prepare(bool flush, bool finish) {
       }
     } else {
       // Attempt to switch to a new write buffer
+      force = false;
       assert(imm_buf_ == NULL);
       imm_buf_ = mem_buf_;
-      if (flush) imm_buf_is_epoch_flush_ = true;
-      flush = false;
-      if (finish) imm_buf_is_finish_ = true;
-      finish = false;
+      if (epoch_flush) imm_buf_is_epoch_flush_ = true;
+      epoch_flush = false;
+      if (finalize) imm_buf_is_final_ = true;
+      finalize = false;
       WriteBuffer* const current_buf = mem_buf_;
       MaybeScheduleCompaction();
       if (current_buf == &buf0_) {
@@ -852,7 +813,7 @@ void DirLogger::DoCompaction() {
   CompactMemtable();
   imm_buf_->Reset();
   imm_buf_is_epoch_flush_ = false;
-  imm_buf_is_finish_ = false;
+  imm_buf_is_final_ = false;
   imm_buf_ = NULL;
   has_bg_compaction_ = false;
   MaybeScheduleCompaction();
@@ -863,9 +824,7 @@ void DirLogger::CompactMemtable() {
   mu_->AssertHeld();
   WriteBuffer* const buffer = imm_buf_;
   assert(buffer != NULL);
-  const bool pending_finish = pending_finish_;
-  const bool pending_epoch_flush = pending_epoch_flush_;
-  const bool is_finish = imm_buf_is_finish_;
+  const bool is_final = imm_buf_is_final_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   TableLogger* const tb = &table_logger_;
   BloomBlock* const bf = static_cast<BloomBlock*>(filter_);
@@ -903,9 +862,9 @@ void DirLogger::CompactMemtable() {
     tb->EndTable(bf);  // Inject the filter into the table
 
     if (is_epoch_flush) {
-      tb->EndEpoch();
+      tb->FlushEpoch();
     }
-    if (is_finish) {
+    if (is_final) {
       tb->Finish();
     }
   }
@@ -926,16 +885,7 @@ void DirLogger::CompactMemtable() {
   compaction_stats_->data_size +=
       TotalDataSize(end_stats) - TotalDataSize(start_stats);
 
-  if (is_epoch_flush) {
-    if (pending_epoch_flush) {
-      pending_epoch_flush_ = false;
-    }
-  }
-  if (is_finish) {
-    if (pending_finish) {
-      pending_finish_ = false;
-    }
-  }
+  num_flush_completed_++;
 }
 
 template <typename T>
