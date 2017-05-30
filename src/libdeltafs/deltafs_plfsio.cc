@@ -317,12 +317,10 @@ Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
     }
 
     if (status.ok()) {
-      if (remaining.size() != waiting_list.size()) {
-        remaining.swap(waiting_list);
-      } else {
-        // Waiting for buffer space
-        cond_var_.Wait();
+      if (!waiting_list.empty()) {
+        cond_var_.Wait();  // Waiting for buffer space
       }
+      waiting_list.swap(remaining);
     } else {
       break;
     }
