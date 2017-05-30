@@ -296,9 +296,7 @@ Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
   for (size_t i = 0; i < num_parts_; i++) remaining.push_back(io_[i]);
   std::vector<DirLogger*> waiting_list;
 
-  DirLogger::FlushOptions flush_options;
-  flush_options.epoch_flush = epoch_flush;
-  flush_options.finalize = finalize;
+  DirLogger::FlushOptions flush_options(epoch_flush, finalize);
   while (!remaining.empty()) {
     waiting_list.clear();
     for (size_t i = 0; i < remaining.size(); i++) {

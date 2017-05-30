@@ -149,20 +149,17 @@ class DirLogger {
 
   // Force a compaction and maybe wait for it
   struct FlushOptions {
-    FlushOptions();
+    FlushOptions(bool epoch_flush = false, bool finalize = false);
 
     // Do not wait for compaction to finish
     // Default: true
     bool no_wait;
-
     // Status checks only
     // Default: false
     bool dry_run;
-
     // Force a new epoch
     // Default: false
     bool epoch_flush;
-
     // Finalize the directory
     // Default: false
     bool finalize;
@@ -211,8 +208,11 @@ class DirLogger {
   WriteBuffer buf1_;
 };
 
-inline DirLogger::FlushOptions::FlushOptions()
-    : no_wait(true), dry_run(false), epoch_flush(false), finalize(false) {}
+inline DirLogger::FlushOptions::FlushOptions(bool epoch_flush, bool finalize)
+    : no_wait(true),
+      dry_run(false),
+      epoch_flush(epoch_flush),
+      finalize(finalize) {}
 
 // Retrieve table contents from a set of indexed log files.
 class PlfsIoReader {
