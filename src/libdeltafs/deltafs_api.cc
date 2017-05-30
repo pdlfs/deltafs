@@ -835,7 +835,7 @@ int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch) {
   pdlfs::Status s;
 
   if (__dir != NULL && __dir->mode == O_WRONLY) {
-    s = __dir->io.writer->FlushEpoch();
+    s = __dir->io.writer->EpochFlush();
   } else {
     s = BadArgs();
   }

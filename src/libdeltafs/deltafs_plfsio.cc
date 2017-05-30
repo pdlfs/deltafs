@@ -191,7 +191,7 @@ class DirWriterImpl : public Writer {
   virtual Status Wait();
   virtual Status Append(const Slice& fid, const Slice& data, int epoch);
   virtual Status Flush(int epoch);
-  virtual Status FlushEpoch(int epoch);
+  virtual Status EpochFlush(int epoch);
   virtual Status Finish();
 
  private:
@@ -357,7 +357,7 @@ Status DirWriterImpl::Finish() {
   return status;
 }
 
-Status DirWriterImpl::FlushEpoch(int epoch) {
+Status DirWriterImpl::EpochFlush(int epoch) {
   Status status;
   MutexLock ml(&mutex_);
   while (true) {
@@ -366,10 +366,10 @@ Status DirWriterImpl::FlushEpoch(int epoch) {
       break;
     } else if (has_pending_flush_) {
       cond_var_.Wait();
-    } else if (epoch < num_epochs_) {
+    } else if (epoch != -1 && epoch < num_epochs_) {
       status = Status::AlreadyExists(Slice());
       break;
-    } else if (epoch > num_epochs_) {
+    } else if (epoch != -1 && epoch > num_epochs_) {
       status = Status::NotFound(Slice());
       break;
     } else {
@@ -394,7 +394,7 @@ Status DirWriterImpl::Flush(int epoch) {
       break;
     } else if (has_pending_flush_) {
       cond_var_.Wait();
-    } else if (epoch != num_epochs_) {
+    } else if (epoch != -1 && epoch != num_epochs_) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {
@@ -417,7 +417,7 @@ Status DirWriterImpl::Append(const Slice& fid, const Slice& data, int epoch) {
       break;
     } else if (has_pending_flush_) {
       cond_var_.Wait();
-    } else if (epoch != num_epochs_) {
+    } else if (epoch != -1 && epoch != num_epochs_) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {

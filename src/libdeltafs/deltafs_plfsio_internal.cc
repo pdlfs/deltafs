@@ -310,7 +310,7 @@ TableLogger::~TableLogger() {
   data_sink_->Unref();
 }
 
-void TableLogger::FlushEpoch() {
+void TableLogger::MakeEpoch() {
   assert(!finished_);  // Finish() has not been called
   EndTable(static_cast<BloomBlock*>(NULL));
   if (!ok()) {
@@ -520,7 +520,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 
 Status TableLogger::Finish() {
   assert(!finished_);  // Finish() has not been called
-  FlushEpoch();
+  MakeEpoch();
   finished_ = true;
   if (!ok()) return status_;
   BlockHandle epoch_index_handle;
@@ -862,7 +862,7 @@ void DirLogger::CompactMemtable() {
     tb->EndTable(bf);  // Inject the filter into the table
 
     if (is_epoch_flush) {
-      tb->FlushEpoch();
+      tb->MakeEpoch();
     }
     if (is_final) {
       tb->Finish();

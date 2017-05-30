@@ -264,16 +264,20 @@ class Writer {
                      Writer** result);
 
   // Append a piece of data to a specified file under a given plfs directory.
+  // Set epoch to -1 to disable epoch validation.
   // REQUIRES: Finish() has not been called.
-  virtual Status Append(const Slice& fid, const Slice& data, int epoch = 0) = 0;
+  virtual Status Append(const Slice& fid, const Slice& data,
+                        int epoch = -1) = 0;
 
   // Force a memtable compaction.
+  // Set epoch to -1 to disable epoch validation.
   // REQUIRES: Finish() has not been called.
-  virtual Status Flush(int epoch = 0) = 0;
+  virtual Status Flush(int epoch = -1) = 0;
 
   // Force a memtable compaction and start a new epoch.
+  // Set epoch to -1 to disable epoch validation.
   // REQUIRES: Finish() has not been called.
-  virtual Status FlushEpoch(int epoch = 0) = 0;
+  virtual Status EpochFlush(int epoch = -1) = 0;
 
   // Wait for all on-going compactions to finish.
   virtual Status Wait() = 0;

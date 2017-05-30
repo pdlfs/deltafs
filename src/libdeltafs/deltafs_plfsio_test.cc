@@ -135,7 +135,7 @@ class PlfsIoTest {
 
   void MakeEpoch() {
     if (writer_ == NULL) OpenWriter();
-    ASSERT_OK(writer_->FlushEpoch(epoch_));
+    ASSERT_OK(writer_->EpochFlush(epoch_));
     epoch_++;
   }
 

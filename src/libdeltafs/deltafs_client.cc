@@ -943,7 +943,7 @@ Status Client::Flush(int fd) {
       plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       mutex_.Unlock();
-      s = writer->FlushEpoch();
+      s = writer->EpochFlush();
       mutex_.Lock();
     }
     return s;

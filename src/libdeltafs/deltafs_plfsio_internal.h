@@ -102,7 +102,7 @@ class TableLogger {
 
   // Force the start of a new epoch.
   // REQUIRES: Finish() has not been called.
-  void FlushEpoch();
+  void MakeEpoch();
 
  private:
   const DirOptions& options_;
