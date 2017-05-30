@@ -723,7 +723,7 @@ Status DirLogger::Flush(const FlushOptions& flush_options) {
     num_flush_requested_++;
     const uint32_t thres = num_flush_requested_;
     const bool force = true;
-    status = Prepare(force, flush_options.flush_epoch, flush_options.finalize);
+    status = Prepare(force, flush_options.epoch_flush, flush_options.finalize);
     if (status.ok()) {
       if (!flush_options.no_wait) {
         while (num_flush_completed_ < thres) {

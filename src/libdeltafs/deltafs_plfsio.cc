@@ -194,10 +194,10 @@ class DirWriterImpl : public Writer {
   virtual Status Finish();
 
  private:
-  Status TryMakeEpoch();
-  Status TryFinish();
+  Status TryFlush(bool epoch_flush = false, bool finalize = false);
   Status TryAppend(const Slice& fid, const Slice& data);
   Status EnsureDataPadding(LogSink* sink, char p = 0);
+  Status CloseLogs();
   void MaybeSlowdownCaller();
   friend class Writer;
 
@@ -255,40 +255,12 @@ Status DirWriterImpl::EnsureDataPadding(LogSink* sink, char padding) {
   }
 }
 
-Status DirWriterImpl::TryFinish() {
-  mutex_.AssertHeld();
-  DirLogger::FlushOptions flush_options;
-  flush_options.flush_epoch = true;
-  flush_options.finalize = true;
+Status DirWriterImpl::CloseLogs() {
   Status status;
-  // Do it
-  if (status.ok()) {
-    for (size_t i = 0; i < num_parts_; i++) {
-      status = io_[i]->Flush(flush_options);
-      if (!status.ok()) {
-        break;
-      }
-    }
+  if (options_.tail_padding) {
+    status = EnsureDataPadding(data_);
   }
 
-  // Wait for compaction
-  if (status.ok()) {
-    for (size_t i = 0; i < num_parts_; i++) {
-      status = io_[i]->Wait();
-      if (!status.ok()) {
-        break;
-      }
-    }
-  }
-
-  // Padding
-  if (status.ok()) {
-    if (options_.tail_padding) {
-      status = EnsureDataPadding(data_);
-    }
-  }
-
-  // Close logs
   if (status.ok()) {
     for (size_t i = 0; i < num_parts_; i++) {
       status = io_[i]->PreClose();
@@ -301,23 +273,11 @@ Status DirWriterImpl::TryFinish() {
   return status;
 }
 
-Status DirWriterImpl::Finish() {
-  Status status;
-  MutexLock ml(&mutex_);
-  if (finished_) {
-    status = finish_status_;
-  } else {
-    status = TryFinish();
-    finish_status_ = status;
-    finished_ = true;
-  }
-  return status;
-}
-
-Status DirWriterImpl::TryMakeEpoch() {
+Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
   mutex_.AssertHeld();
   DirLogger::FlushOptions flush_options;
-  flush_options.flush_epoch = true;
+  flush_options.epoch_flush = epoch_flush;
+  flush_options.finalize = finalize;
   Status status;
   std::vector<DirLogger*> remaining;
   for (size_t i = 0; i < num_parts_; i++) remaining.push_back(io_[i]);
@@ -348,16 +308,33 @@ Status DirWriterImpl::TryMakeEpoch() {
     }
   }
 
-  // Wait for compaction
-  if (status.ok()) {
-    for (size_t i = 0; i < num_parts_; i++) {
-      status = io_[i]->Wait();
-      if (!status.ok()) {
-        break;
+  return status;
+}
+
+Status DirWriterImpl::Finish() {
+  Status status;
+  MutexLock ml(&mutex_);
+  if (finished_) {
+    status = finish_status_;
+  } else {
+    const bool epoch_flush = true;
+    const bool finalize = true;
+    status = TryFlush(epoch_flush, finalize);
+    // Wait for compaction
+    if (status.ok()) {
+      for (size_t i = 0; i < num_parts_; i++) {
+        status = io_[i]->Wait();
+        if (!status.ok()) {
+          break;
+        }
       }
     }
+    if (status.ok()) {
+      status = CloseLogs();
+    }
+    finish_status_ = status;
+    finished_ = true;
   }
-
   return status;
 }
 
@@ -369,7 +346,17 @@ Status DirWriterImpl::MakeEpoch(int epoch) {
   } else if (epoch != num_epochs_) {
     status = Status::AssertionFailed("Bad epoch num");
   } else {
-    status = TryMakeEpoch();
+    const bool epoch_flush = true;
+    status = TryFlush(epoch_flush);
+    // Wait for compaction
+    if (status.ok()) {
+      for (size_t i = 0; i < num_parts_; i++) {
+        status = io_[i]->Wait();
+        if (!status.ok()) {
+          break;
+        }
+      }
+    }
     if (status.ok()) {
       num_epochs_++;
     }

@@ -161,7 +161,7 @@ class DirLogger {
 
     // Force a new epoch
     // Default: false
-    bool flush_epoch;
+    bool epoch_flush;
 
     // Finalize the directory
     // Default: false
@@ -212,7 +212,7 @@ class DirLogger {
 };
 
 inline DirLogger::FlushOptions::FlushOptions()
-    : no_wait(true), dry_run(false), flush_epoch(false), finalize(false) {}
+    : no_wait(true), dry_run(false), epoch_flush(false), finalize(false) {}
 
 // Retrieve table contents from a set of indexed log files.
 class PlfsIoReader {
