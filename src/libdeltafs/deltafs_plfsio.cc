@@ -182,15 +182,15 @@ static std::string DataFileName(const std::string& parent, int rank) {
   return parent + tmp;
 }
 
-class WriterImpl : public Writer {
+class DirWriterImpl : public Writer {
  public:
-  WriterImpl(const DirOptions& options);
-  virtual ~WriterImpl();
+  DirWriterImpl(const DirOptions& options);
+  virtual ~DirWriterImpl();
 
   virtual const CompactionStats* stats() const { return &stats_; }
-  virtual Status Append(const Slice& fid, const Slice& data);
+  virtual Status Append(const Slice& fid, const Slice& data, int epoch);
   virtual Status Sync();
-  virtual Status MakeEpoch();
+  virtual Status MakeEpoch(int epoch);
   virtual Status Finish();
 
  private:
@@ -206,6 +206,7 @@ class WriterImpl : public Writer {
   port::Mutex io_mutex_;  // Protecting the shared data log
   port::Mutex mutex_;
   port::CondVar cond_var_;
+  int num_epochs_;
   uint32_t num_parts_;
   uint32_t part_mask_;
   Status finish_status_;
@@ -214,16 +215,17 @@ class WriterImpl : public Writer {
   LogSink* data_;
 };
 
-WriterImpl::WriterImpl(const DirOptions& options)
+DirWriterImpl::DirWriterImpl(const DirOptions& options)
     : options_(options),
       cond_var_(&mutex_),
+      num_epochs_(0),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
       finished_(false),
       io_(NULL),
       data_(NULL) {}
 
-WriterImpl::~WriterImpl() {
+DirWriterImpl::~DirWriterImpl() {
   MutexLock l(&mutex_);
   for (size_t i = 0; i < num_parts_; i++) {
     delete io_[i];
@@ -234,7 +236,7 @@ WriterImpl::~WriterImpl() {
   }
 }
 
-void WriterImpl::MaybeSlowdownCaller() {
+void DirWriterImpl::MaybeSlowdownCaller() {
   Env* const env = options_.env;
   const uint64_t micros = options_.slowdown_micros;
   if (micros != 0) {
@@ -242,7 +244,7 @@ void WriterImpl::MaybeSlowdownCaller() {
   }
 }
 
-Status WriterImpl::EnsureDataPadding(LogSink* sink, char padding) {
+Status DirWriterImpl::EnsureDataPadding(LogSink* sink, char padding) {
   const uint64_t total_size = sink->Ltell();
   const size_t overflow = total_size % options_.data_buffer;
   if (overflow != 0) {
@@ -253,166 +255,148 @@ Status WriterImpl::EnsureDataPadding(LogSink* sink, char padding) {
   }
 }
 
-Status WriterImpl::TryFinish() {
+Status DirWriterImpl::TryFinish() {
+  mutex_.AssertHeld();
   Status status;
-  if (!finish_status_.ok()) {
+  // Do it
+  if (status.ok()) {
+    for (size_t i = 0; i < num_parts_; i++) {
+      status = io_[i]->Finish(false, false);
+      if (!status.ok()) {
+        break;
+      }
+    }
+  }
+
+  // Wait for compaction
+  if (status.ok()) {
+    for (size_t i = 0; i < num_parts_; i++) {
+      status = io_[i]->Wait();
+      if (!status.ok()) {
+        break;
+      }
+    }
+  }
+
+  // Padding
+  if (status.ok()) {
+    if (options_.tail_padding) {
+      status = EnsureDataPadding(data_);
+    }
+  }
+
+  // Close logs
+  if (status.ok()) {
+    for (size_t i = 0; i < num_parts_; i++) {
+      status = io_[i]->PreClose();
+      if (!status.ok()) {
+        break;
+      }
+    }
+  }
+
+  return status;
+}
+
+Status DirWriterImpl::Finish() {
+  Status status;
+  MutexLock ml(&mutex_);
+  if (finished_) {
     status = finish_status_;
-  } else if (!finished_) {
-    MutexLock ml(&mutex_);
-    const bool no_wait = true;
-    bool dry_run = true;
-    // Check partition status in a single pass
-    while (true) {
-      for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->Finish(dry_run, no_wait);
-        if (!status.ok()) {
-          break;
-        }
-      }
-      if (status.IsBufferFull() && !options_.non_blocking) {
-        // Wait for buffer space
-        cond_var_.Wait();
+  } else {
+    status = TryFinish();
+    finish_status_ = status;
+    finished_ = true;
+  }
+  return status;
+}
+
+Status DirWriterImpl::TryMakeEpoch() {
+  mutex_.AssertHeld();
+  Status status;
+  std::vector<DirLogger*> remaining;
+  for (size_t i = 0; i < num_parts_; i++) remaining.push_back(io_[i]);
+  std::vector<DirLogger*> waiting_list;
+  while (!remaining.empty()) {
+    waiting_list.clear();
+    for (size_t i = 0; i < remaining.size(); i++) {
+      status = remaining[i]->MakeEpoch(true, true);
+      if (status.IsBufferFull()) {
+        waiting_list.push_back(remaining[i]);
+        status = Status::OK();
+      } else if (status.ok()) {
+        remaining[i]->MakeEpoch(false, true);
       } else {
         break;
       }
     }
-
-    // Do it
     if (status.ok()) {
-      dry_run = false;
-      for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->Finish(dry_run, no_wait);
-        if (!status.ok()) {
-          break;
-        }
+      if (remaining.size() != waiting_list.size()) {
+        remaining.swap(waiting_list);
+      } else {
+        cond_var_.Wait();
       }
-    }
-
-    // Wait for compaction
-    if (status.ok()) {
-      for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->Wait();
-        if (!status.ok()) {
-          break;
-        }
-      }
-    }
-
-    // Padding
-    if (status.ok() && data_ != NULL) {
-      if (options_.tail_padding) {
-        status = EnsureDataPadding(data_);
-      }
-    }
-
-    // Close logs
-    if (status.ok()) {
-      for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->PreClose();
-        if (!status.ok()) {
-          break;
-        }
-      }
-    }
-
-    // Set error status
-    if (!status.ok()) {
-      if (!status.IsBufferFull()) {
-        finish_status_ = status;
-      }
-    }
-
-    if (status.ok()) {
-      finished_ = true;
+    } else {
+      break;
     }
   }
 
-  return status;
-}
-
-Status WriterImpl::Finish() {
-  Status status = TryFinish();
-  if (status.IsBufferFull()) MaybeSlowdownCaller();
-  return status;
-}
-
-Status WriterImpl::TryMakeEpoch() {
-  Status status;
-  if (finished_) {
-    status = Status::AssertionFailed("plfsdir already finished");
-  } else {
-    MutexLock ml(&mutex_);
-    const bool no_wait = true;
-    bool dry_run = true;
-    // Check partition status in a single pass
-    while (true) {
-      for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->MakeEpoch(dry_run, no_wait);
-        if (!status.ok()) {
-          break;
-        }
-      }
-      if (status.IsBufferFull() && !options_.non_blocking) {
-        // Wait for buffer space
-        cond_var_.Wait();
-      } else {
+  // Wait for compaction
+  if (status.ok()) {
+    for (size_t i = 0; i < num_parts_; i++) {
+      status = io_[i]->Wait();
+      if (!status.ok()) {
         break;
       }
     }
-
-    // Do it
-    if (status.ok()) {
-      dry_run = false;
-      for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->MakeEpoch(dry_run, no_wait);
-        if (!status.ok()) {
-          break;
-        }
-      }
-    }
-
-    // Wait for compaction
-    if (status.ok()) {
-      for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->Wait();
-        if (!status.ok()) {
-          break;
-        }
-      }
-    }
   }
 
   return status;
 }
 
-Status WriterImpl::MakeEpoch() {
-  Status status = TryMakeEpoch();
-  if (status.IsBufferFull()) MaybeSlowdownCaller();
-  return status;
-}
-
-Status WriterImpl::TryAppend(const Slice& fid, const Slice& data) {
+Status DirWriterImpl::MakeEpoch(int epoch) {
   Status status;
+  MutexLock ml(&mutex_);
   if (finished_) {
-    status = Status::AssertionFailed("plfsdir already finished");
+    status = Status::AssertionFailed("Plfsdir already finished");
+  } else if (epoch != num_epochs_) {
+    status = Status::AssertionFailed("Bad epoch num");
   } else {
-    const uint32_t hash = Hash(fid.data(), fid.size(), 0);
-    const uint32_t part = hash & part_mask_;
-    assert(part < num_parts_);
-    MutexLock ml(&mutex_);
-    status = io_[part]->Add(fid, data);
+    status = TryMakeEpoch();
+    if (status.ok()) {
+      num_epochs_++;
+    }
   }
-
   return status;
 }
 
-Status WriterImpl::Append(const Slice& fid, const Slice& data) {
-  Status status = TryAppend(fid, data);
-  if (status.IsBufferFull()) MaybeSlowdownCaller();
+Status DirWriterImpl::TryAppend(const Slice& fid, const Slice& data) {
+  mutex_.AssertHeld();
+  Status status;
+  const uint32_t hash = Hash(fid.data(), fid.size(), 0);
+  const uint32_t part = hash & part_mask_;
+  assert(part < num_parts_);
+  status = io_[part]->Add(fid, data);
   return status;
 }
 
-Status WriterImpl::Sync() {
+Status DirWriterImpl::Append(const Slice& fid, const Slice& data, int epoch) {
+  Status status;
+  MutexLock ml(&mutex_);
+  if (finished_) {
+    status = Status::AssertionFailed("Plfsdir already finished");
+  } else if (epoch != num_epochs_) {
+    status = Status::AssertionFailed("Bad epoch num");
+  } else {
+    status = TryAppend(fid, data);
+    if (status.IsBufferFull()) {
+      MaybeSlowdownCaller();
+    }
+  }
+  return status;
+}
+
+Status DirWriterImpl::Sync() {
   return Status::NotSupported(Slice());  // TODO
 }
 
@@ -497,7 +481,7 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
     env->CreateDir(name);
   }
 
-  WriterImpl* impl = new WriterImpl(options);
+  DirWriterImpl* impl = new DirWriterImpl(options);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all directory partitions
   status = NewLogSink(&data[0], DataFileName(name, my_rank), env,

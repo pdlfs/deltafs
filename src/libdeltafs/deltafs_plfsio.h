@@ -265,7 +265,7 @@ class Writer {
 
   // Append a piece of data to a specified file under a given plfs directory.
   // REQUIRES: Finish() has not been called.
-  virtual Status Append(const Slice& fid, const Slice& data) = 0;
+  virtual Status Append(const Slice& fid, const Slice& data, int epoch = 0) = 0;
 
   // Sync data to storage.  Not supported so far.
   // REQUIRES: Finish() has not been called.
@@ -273,7 +273,7 @@ class Writer {
 
   // Force a compaction and start a new epoch.
   // REQUIRES: Finish() has not been called.
-  virtual Status MakeEpoch() = 0;
+  virtual Status MakeEpoch(int epoch = 0) = 0;
 
   // Force a compaction and finalize all log files.
   // No further write operation is allowed after this call.

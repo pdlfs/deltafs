@@ -103,6 +103,7 @@ class PlfsIoTest {
     options_.env = TestEnv();
     writer_ = NULL;
     reader_ = NULL;
+    epoch_ = 0;
   }
 
   ~PlfsIoTest() {
@@ -134,12 +135,13 @@ class PlfsIoTest {
 
   void MakeEpoch() {
     if (writer_ == NULL) OpenWriter();
-    ASSERT_OK(writer_->MakeEpoch());
+    ASSERT_OK(writer_->MakeEpoch(epoch_));
+    epoch_++;
   }
 
   void Write(const Slice& key, const Slice& value) {
     if (writer_ == NULL) OpenWriter();
-    ASSERT_OK(writer_->Append(key, value));
+    ASSERT_OK(writer_->Append(key, value, epoch_));
   }
 
   std::string Read(const Slice& key) {
@@ -174,6 +176,7 @@ class PlfsIoTest {
   std::string dirname_;
   Writer* writer_;
   Reader* reader_;
+  int epoch_;
 };
 
 TEST(PlfsIoTest, Empty0) {
