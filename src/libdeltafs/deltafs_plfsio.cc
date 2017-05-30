@@ -194,6 +194,7 @@ class DirWriterImpl : public Writer {
   virtual Status Finish();
 
  private:
+  Status WaitForCompaction();
   Status TryFlush(bool epoch_flush = false, bool finalize = false);
   Status TryAppend(const Slice& fid, const Slice& data);
   Status EnsureDataPadding(LogSink* sink, char p = 0);
@@ -210,6 +211,7 @@ class DirWriterImpl : public Writer {
   uint32_t num_parts_;
   uint32_t part_mask_;
   Status finish_status_;
+  bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
   DirLogger** io_;
   LogSink* data_;
@@ -221,6 +223,7 @@ DirWriterImpl::DirWriterImpl(const DirOptions& options)
       num_epochs_(0),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
+      has_pending_flush_(false),
       finished_(false),
       io_(NULL),
       data_(NULL) {}
@@ -273,23 +276,39 @@ Status DirWriterImpl::CloseLogs() {
   return status;
 }
 
+Status DirWriterImpl::WaitForCompaction() {
+  mutex_.AssertHeld();
+  Status status;
+  for (size_t i = 0; i < num_parts_; i++) {
+    status = io_[i]->Wait();
+    if (!status.ok()) {
+      break;
+    }
+  }
+  return status;
+}
+
 Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
   mutex_.AssertHeld();
-  DirLogger::FlushOptions flush_options;
-  flush_options.epoch_flush = epoch_flush;
-  flush_options.finalize = finalize;
+  assert(has_pending_flush_);
   Status status;
   std::vector<DirLogger*> remaining;
   for (size_t i = 0; i < num_parts_; i++) remaining.push_back(io_[i]);
   std::vector<DirLogger*> waiting_list;
+
+  DirLogger::FlushOptions flush_options;
+  flush_options.epoch_flush = epoch_flush;
+  flush_options.finalize = finalize;
   while (!remaining.empty()) {
     waiting_list.clear();
     for (size_t i = 0; i < remaining.size(); i++) {
-      flush_options.dry_run = true;
+      flush_options.dry_run =
+          true;  // Avoid being blocked waiting for buffer space to reappear
       status = remaining[i]->Flush(flush_options);
       flush_options.dry_run = false;
+
       if (status.IsBufferFull()) {
-        waiting_list.push_back(remaining[i]);
+        waiting_list.push_back(remaining[i]);  // Try again later
         status = Status::OK();
       } else if (status.ok()) {
         remaining[i]->Flush(flush_options);
@@ -297,10 +316,12 @@ Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
         break;
       }
     }
+
     if (status.ok()) {
       if (remaining.size() != waiting_list.size()) {
         remaining.swap(waiting_list);
       } else {
+        // Waiting for buffer space
         cond_var_.Wait();
       }
     } else {
@@ -314,26 +335,25 @@ Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
 Status DirWriterImpl::Finish() {
   Status status;
   MutexLock ml(&mutex_);
-  if (finished_) {
-    status = finish_status_;
-  } else {
-    const bool epoch_flush = true;
-    const bool finalize = true;
-    status = TryFlush(epoch_flush, finalize);
-    // Wait for compaction
-    if (status.ok()) {
-      for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->Wait();
-        if (!status.ok()) {
-          break;
-        }
-      }
+  while (true) {
+    if (finished_) {
+      status = finish_status_;  // Return the cached result
+      break;
+    } else if (has_pending_flush_) {
+      cond_var_.Wait();
+    } else {
+      has_pending_flush_ = true;
+      const bool epoch_flush = true;
+      const bool finalize = true;
+      status = TryFlush(epoch_flush, finalize);
+      if (status.ok()) status = WaitForCompaction();
+      if (status.ok()) status = CloseLogs();
+      cond_var_.SignalAll();
+      has_pending_flush_ = false;
+      finish_status_ = status;
+      finished_ = true;
+      break;
     }
-    if (status.ok()) {
-      status = CloseLogs();
-    }
-    finish_status_ = status;
-    finished_ = true;
   }
   return status;
 }
@@ -341,24 +361,27 @@ Status DirWriterImpl::Finish() {
 Status DirWriterImpl::MakeEpoch(int epoch) {
   Status status;
   MutexLock ml(&mutex_);
-  if (finished_) {
-    status = Status::AssertionFailed("Plfsdir already finished");
-  } else if (epoch != num_epochs_) {
-    status = Status::AssertionFailed("Bad epoch num");
-  } else {
-    const bool epoch_flush = true;
-    status = TryFlush(epoch_flush);
-    // Wait for compaction
-    if (status.ok()) {
-      for (size_t i = 0; i < num_parts_; i++) {
-        status = io_[i]->Wait();
-        if (!status.ok()) {
-          break;
-        }
-      }
-    }
-    if (status.ok()) {
-      num_epochs_++;
+  while (true) {
+    if (finished_) {
+      status = Status::AssertionFailed("Plfsdir already finished");
+      break;
+    } else if (has_pending_flush_) {
+      cond_var_.Wait();
+    } else if (epoch < num_epochs_) {
+      status = Status::AlreadyExists(Slice());
+      break;
+    } else if (epoch > num_epochs_) {
+      status = Status::NotFound(Slice());
+      break;
+    } else {
+      has_pending_flush_ = true;
+      const bool epoch_flush = true;
+      status = TryFlush(epoch_flush);
+      if (status.ok()) status = WaitForCompaction();
+      if (status.ok()) num_epochs_++;
+      cond_var_.SignalAll();
+      has_pending_flush_ = false;
+      break;
     }
   }
   return status;
