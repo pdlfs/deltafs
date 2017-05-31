@@ -214,7 +214,7 @@ class DirWriterImpl : public Writer {
   Status finish_status_;
   bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
-  DirLogger** io_;
+  DirLogger** dpts;
   LogSink* data_;
 };
 
@@ -226,15 +226,15 @@ DirWriterImpl::DirWriterImpl(const DirOptions& options)
       part_mask_(~static_cast<uint32_t>(0)),
       has_pending_flush_(false),
       finished_(false),
-      io_(NULL),
+      dpts(NULL),
       data_(NULL) {}
 
 DirWriterImpl::~DirWriterImpl() {
   MutexLock l(&mutex_);
   for (size_t i = 0; i < num_parts_; i++) {
-    delete io_[i];
+    delete dpts[i];
   }
-  delete[] io_;
+  delete[] dpts;
   if (data_ != NULL) {
     data_->Unref();
   }
@@ -270,7 +270,7 @@ Status DirWriterImpl::CloseLogs() {
 
   if (status.ok()) {
     for (size_t i = 0; i < num_parts_; i++) {
-      status = io_[i]->PreClose();
+      status = dpts[i]->PreClose();
       if (!status.ok()) {
         break;
       }
@@ -284,7 +284,7 @@ Status DirWriterImpl::WaitForCompaction() {
   mutex_.AssertHeld();
   Status status;
   for (size_t i = 0; i < num_parts_; i++) {
-    status = io_[i]->Wait();
+    status = dpts[i]->Wait();
     if (!status.ok()) {
       break;
     }
@@ -303,7 +303,7 @@ Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
   assert(has_pending_flush_);
   Status status;
   std::vector<DirLogger*> remaining;
-  for (size_t i = 0; i < num_parts_; i++) remaining.push_back(io_[i]);
+  for (size_t i = 0; i < num_parts_; i++) remaining.push_back(dpts[i]);
   std::vector<DirLogger*> waiting_list;
 
   DirLogger::FlushOptions flush_options(epoch_flush, finalize);
@@ -460,7 +460,7 @@ Status DirWriterImpl::TryAppend(const Slice& fid, const Slice& data) {
   const uint32_t hash = Hash(fid.data(), fid.size(), 0);
   const uint32_t part = hash & part_mask_;
   assert(part < num_parts_);
-  status = io_[part]->Add(fid, data);
+  status = dpts[part]->Add(fid, data);
   return status;
 }
 
@@ -524,8 +524,8 @@ static Status NewLogSink(LogSink** ptr, const std::string& name, Env* env,
 }
 
 Status Writer::Open(const DirOptions& opts, const std::string& name,
-                    Writer** ptr) {
-  *ptr = NULL;
+                    Writer** result) {
+  *result = NULL;
   DirOptions options = SanitizeWriteOptions(opts);
   const uint32_t num_parts = static_cast<uint32_t>(1 << options.lg_parts);
   const int my_rank = options.rank;
@@ -580,17 +580,19 @@ Status Writer::Open(const DirOptions& opts, const std::string& name,
   }
 
   if (status.ok()) {
-    DirLogger** io = new DirLogger*[num_parts];
+    DirLogger** dpts = new DirLogger*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {
-      io[i] = new DirLogger(impl->options_, &impl->mutex_, &impl->cond_var_,
-                            data[0], index[i], &impl->stats_);
+      dpts[i] = new DirLogger(impl->options_, &impl->mutex_, &impl->cond_var_,
+                              data[0],   // Shared data object
+                              index[i],  // Partitioned index object
+                              &impl->stats_);
     }
     impl->data_ = data[0];
     impl->data_->Ref();
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
-    impl->io_ = io;
-    *ptr = impl;
+    impl->dpts = dpts;
+    *result = impl;
   } else {
     delete impl;
   }
