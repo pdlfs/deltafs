@@ -25,6 +25,8 @@ namespace pdlfs {
 // NOTE: implementation is not thread safe
 class UnsafeBufferedWritableFile : public WritableFile {
  public:
+  std::string* buffer_store() { return &buf_; }
+
   UnsafeBufferedWritableFile(WritableFile* base, size_t buf_size)
       : base_(base), max_buf_size_(buf_size) {
     buf_.reserve(max_buf_size_);
