@@ -241,10 +241,13 @@ DirWriterImpl::~DirWriterImpl() {
 }
 
 void DirWriterImpl::MaybeSlowdownCaller() {
+  mutex_.AssertHeld();
   Env* const env = options_.env;
   const uint64_t micros = options_.slowdown_micros;
   if (micros != 0) {
+    mutex_.Unlock();
     env->SleepForMicroseconds(micros);
+    mutex_.Lock();
   }
 }
 
