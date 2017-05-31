@@ -189,6 +189,7 @@ class DirWriterImpl : public DirWriter {
   DirWriterImpl(const DirOptions& options);
   virtual ~DirWriterImpl();
 
+  virtual size_t total_memory_usage() const;
   virtual CompactionStats stats() const {
     MutexLock ml(&mutex_);
     return stats_;
@@ -484,6 +485,15 @@ Status DirWriterImpl::Wait() {
     status = finish_status_;
   }
   return status;
+}
+
+size_t DirWriterImpl::total_memory_usage() const {
+  MutexLock ml(&mutex_);
+  size_t result = 0;
+  for (size_t i = 0; i < num_parts_; i++) {
+    result += dpts_[i]->memory_usage();
+  }
+  return result;
 }
 
 DirWriter::~DirWriter() {}

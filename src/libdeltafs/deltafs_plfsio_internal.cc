@@ -114,6 +114,8 @@ class BloomBlock {
     return space_;
   }
 
+  std::string* buffer_store() { return &space_; }
+
  private:
   // No copying allowed
   void operator=(const BloomBlock&);
@@ -247,6 +249,13 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
   PutLengthPrefixedSlice(&buffer_, value);
   offsets_.push_back(static_cast<uint32_t>(offset));
   num_entries_++;
+}
+
+size_t WriteBuffer::memory_usage() const {
+  size_t result = 0;
+  result += sizeof(uint32_t) * offsets_.capacity();
+  result += buffer_.capacity();
+  return result;
 }
 
 OutputStats::OutputStats()
@@ -581,7 +590,7 @@ DirLogger::DirLogger(const DirOptions& options, port::Mutex* mu,
       num_flush_requested_(0),
       num_flush_completed_(0),
       has_bg_compaction_(false),
-      table_logger_(options, data, indx),
+      table_logger_(new TableLogger(options, data, indx)),
       filter_(NULL),
       mem_buf_(NULL),
       imm_buf_(NULL),
@@ -660,6 +669,7 @@ DirLogger::~DirLogger() {
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
+  delete table_logger_;
   BloomBlock* bf = static_cast<BloomBlock*>(filter_);
   if (bf != NULL) {
     delete bf;
@@ -673,11 +683,11 @@ DirLogger::~DirLogger() {
 Status DirLogger::Wait() {
   mu_->AssertHeld();
   Status status;
-  while (table_logger_.ok() && has_bg_compaction_) {
+  while (table_logger_->ok() && has_bg_compaction_) {
     bg_cv_->Wait();
   }
-  if (!table_logger_.ok()) {
-    status = table_logger_.status();
+  if (!table_logger_->ok()) {
+    status = table_logger_->status();
   }
   return status;
 }
@@ -719,7 +729,7 @@ Status DirLogger::Flush(const FlushOptions& flush_options) {
 
   Status status;
   if (flush_options.dry_run) {
-    status = table_logger_.status();  // Status check only
+    status = table_logger_->status();  // Status check only
   } else {
     num_flush_requested_++;
     const uint32_t thres = num_flush_requested_;
@@ -749,8 +759,8 @@ Status DirLogger::Prepare(bool force, bool epoch_flush, bool finalize) {
   Status status;
   assert(mem_buf_ != NULL);
   while (true) {
-    if (!table_logger_.ok()) {
-      status = table_logger_.status();
+    if (!table_logger_->ok()) {
+      status = table_logger_->status();
       break;
     } else if (!force &&
                mem_buf_->CurrentBufferSize() <
@@ -827,7 +837,7 @@ void DirLogger::CompactMemtable() {
   assert(buffer != NULL);
   const bool is_final = imm_buf_is_final_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
-  TableLogger* const tb = &table_logger_;
+  TableLogger* const tb = table_logger_;
   BloomBlock* const bf = static_cast<BloomBlock*>(filter_);
   mu_->Unlock();
   const OutputStats start_stats = tb->output_stats_;
@@ -887,6 +897,17 @@ void DirLogger::CompactMemtable() {
       TotalDataSize(end_stats) - TotalDataSize(start_stats);
 
   num_flush_completed_++;
+}
+
+size_t DirLogger::memory_usage() const {
+  mu_->AssertHeld();
+  size_t result = 0;
+  result += table_logger_->data_block_.buffer_store()->capacity();
+  if (filter_ != NULL)
+    result += static_cast<BloomBlock*>(filter_)->buffer_store()->capacity();
+  result += buf0_.memory_usage();
+  result += buf1_.memory_usage();
+  return result;
 }
 
 template <typename T>

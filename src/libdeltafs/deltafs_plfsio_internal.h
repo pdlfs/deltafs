@@ -9,11 +9,11 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
-
 #include "deltafs_plfsio.h"
 #include "deltafs_plfsio_format.h"
+
+#include <string>
+#include <vector>
 
 namespace pdlfs {
 namespace plfsio {
@@ -24,8 +24,9 @@ class WriteBuffer {
   explicit WriteBuffer() : num_entries_(0), finished_(false) {}
   ~WriteBuffer() {}
 
+  size_t memory_usage() const;  // Report real memory usage
+
   void Reserve(uint32_t num_entries, size_t buffer_size);
-  size_t CurrentBufferCapacity() const { return buffer_.capacity(); }
   size_t CurrentBufferSize() const { return buffer_.size(); }
   uint32_t NumEntries() const { return num_entries_; }
   void Add(const Slice& key, const Slice& value);
@@ -142,6 +143,8 @@ class DirLogger {
             LogSink* indx, LogSink* data, CompactionStats* stats);
   ~DirLogger();
 
+  size_t memory_usage() const;  // Report real memory usage
+
   // REQUIRES: mutex_ has been locked
   Status Wait();  // Wait for all on-going compactions to finish
   // May trigger a new compaction
@@ -198,7 +201,7 @@ class DirLogger {
   uint32_t num_flush_requested_;
   uint32_t num_flush_completed_;
   bool has_bg_compaction_;
-  TableLogger table_logger_;
+  TableLogger* table_logger_;
   void* filter_;  // void* since different types of filter might be used
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;

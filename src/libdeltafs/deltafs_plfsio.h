@@ -259,7 +259,9 @@ class DirWriter {
   DirWriter() {}
   virtual ~DirWriter();
 
-  // Return a pointer to dir stats.
+  // Return the total memory reserved by this directory.
+  virtual size_t total_memory_usage() const = 0;
+  // Return directory compaction stats for debugging and benchmarking.
   virtual CompactionStats stats() const = 0;
 
   // Open an I/O writer against a specified plfs-style directory.
