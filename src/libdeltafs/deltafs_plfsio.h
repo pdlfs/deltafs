@@ -161,7 +161,10 @@ class LogSink {
   LogSink(const std::string& filename, WritableFile* f, port::Mutex* mu = NULL)
       : mu_(mu), filename_(filename), file_(f), offset_(0), refs_(0) {}
 
-  uint64_t Ltell() const { return offset_; }
+  uint64_t Ltell() const {
+    if (mu_ != NULL) mu_->AssertHeld();
+    return offset_;
+  }
 
   void Lock() {
     if (mu_ != NULL) {
@@ -202,7 +205,7 @@ class LogSink {
     }
   }
 
-  Status Lclose(bool sync = true);
+  Status Lclose(bool sync = false);
   void Ref() { refs_++; }
   void Unref();
 
@@ -211,8 +214,9 @@ class LogSink {
   // No copying allowed
   void operator=(const LogSink&);
   LogSink(const LogSink&);
+  Status Close();
 
-  port::Mutex* const mu_;  // Constant after construction
+  port::Mutex* mu_;  // Constant after construction
   const std::string filename_;
   WritableFile* file_;  // State protected by mu_
   uint64_t offset_;

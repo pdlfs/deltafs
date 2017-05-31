@@ -131,6 +131,7 @@ void LogSink::Unref() {
 }
 
 LogSink::~LogSink() {
+  mu_ = NULL;
   if (file_ != NULL) {
     Lclose();
   }
@@ -139,19 +140,20 @@ LogSink::~LogSink() {
 Status LogSink::Lclose(bool sync) {
   Status status;
   if (file_ != NULL) {
+    if (mu_ != NULL) mu_->AssertHeld();
     if (sync) status = file_->Sync();
     if (status.ok()) {
-      status = file_->Close();
+      status = Close();
     }
-    delete file_;
-    file_ = NULL;
   }
+  return status;
+}
 
-  if (!status.ok()) {
-    Error(__LOG_ARGS__, "Error closing %s: %s", filename_.c_str(),
-          status.ToString().c_str());
-  }
-
+Status LogSink::Close() {
+  assert(file_ != NULL);
+  Status status = file_->Close();
+  delete file_;
+  file_ = NULL;
   return status;
 }
 
@@ -214,7 +216,7 @@ class DirWriterImpl : public DirWriter {
   Status finish_status_;
   bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
-  DirLogger** dpts;
+  DirLogger** dpts_;
   LogSink* data_;
 };
 
@@ -226,15 +228,15 @@ DirWriterImpl::DirWriterImpl(const DirOptions& options)
       part_mask_(~static_cast<uint32_t>(0)),
       has_pending_flush_(false),
       finished_(false),
-      dpts(NULL),
+      dpts_(NULL),
       data_(NULL) {}
 
 DirWriterImpl::~DirWriterImpl() {
   MutexLock l(&mutex_);
   for (size_t i = 0; i < num_parts_; i++) {
-    delete dpts[i];
+    delete dpts_[i];
   }
-  delete[] dpts;
+  delete[] dpts_;
   if (data_ != NULL) {
     data_->Unref();
   }
@@ -252,17 +254,20 @@ void DirWriterImpl::MaybeSlowdownCaller() {
 }
 
 Status DirWriterImpl::EnsureDataPadding(LogSink* sink, char padding) {
+  Status status;
+  sink->Lock();
   const uint64_t total_size = sink->Ltell();
   const size_t overflow = total_size % options_.data_buffer;
   if (overflow != 0) {
     const size_t n = options_.data_buffer - overflow;
-    return sink->Lwrite(std::string(n, padding));
-  } else {
-    return Status::OK();
+    status = sink->Lwrite(std::string(n, padding));
   }
+  sink->Unlock();
+  return status;
 }
 
 Status DirWriterImpl::CloseLogs() {
+  mutex_.AssertHeld();
   Status status;
   if (options_.tail_padding) {
     status = EnsureDataPadding(data_);
@@ -270,7 +275,7 @@ Status DirWriterImpl::CloseLogs() {
 
   if (status.ok()) {
     for (size_t i = 0; i < num_parts_; i++) {
-      status = dpts[i]->PreClose();
+      status = dpts_[i]->PreClose();
       if (!status.ok()) {
         break;
       }
@@ -284,7 +289,7 @@ Status DirWriterImpl::WaitForCompaction() {
   mutex_.AssertHeld();
   Status status;
   for (size_t i = 0; i < num_parts_; i++) {
-    status = dpts[i]->Wait();
+    status = dpts_[i]->Wait();
     if (!status.ok()) {
       break;
     }
@@ -303,7 +308,7 @@ Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
   assert(has_pending_flush_);
   Status status;
   std::vector<DirLogger*> remaining;
-  for (size_t i = 0; i < num_parts_; i++) remaining.push_back(dpts[i]);
+  for (size_t i = 0; i < num_parts_; i++) remaining.push_back(dpts_[i]);
   std::vector<DirLogger*> waiting_list;
 
   DirLogger::FlushOptions flush_options(epoch_flush, finalize);
@@ -460,7 +465,7 @@ Status DirWriterImpl::TryAppend(const Slice& fid, const Slice& data) {
   const uint32_t hash = Hash(fid.data(), fid.size(), 0);
   const uint32_t part = hash & part_mask_;
   assert(part < num_parts_);
-  status = dpts[part]->Add(fid, data);
+  status = dpts_[part]->Add(fid, data);
   return status;
 }
 
@@ -583,15 +588,15 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
     DirLogger** dpts = new DirLogger*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {
       dpts[i] = new DirLogger(impl->options_, &impl->mutex_, &impl->cond_var_,
-                              data[0],   // Shared data object
                               index[i],  // Partitioned index object
+                              data[0],   // Shared data object
                               &impl->stats_);
     }
     impl->data_ = data[0];
     impl->data_->Ref();
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
-    impl->dpts = dpts;
+    impl->dpts_ = dpts;
     *result = impl;
   } else {
     delete impl;

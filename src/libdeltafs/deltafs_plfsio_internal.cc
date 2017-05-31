@@ -570,7 +570,7 @@ Status TableLogger::Finish() {
 }
 
 DirLogger::DirLogger(const DirOptions& options, port::Mutex* mu,
-                     port::CondVar* cv, LogSink* data, LogSink* indx,
+                     port::CondVar* cv, LogSink* indx, LogSink* data,
                      CompactionStats* stats)
     : options_(options),
       bg_cv_(cv),
@@ -684,16 +684,17 @@ Status DirLogger::Wait() {
 
 // Pre-close all linked log files.
 // Usually, log files are reference counted and are closed when
-// de-referenced by the last opener.
-// Optionally, caller may force the closing of all log files.
+// de-referenced by the last opener. Optionally, caller may force the
+// fsync and closing of all log files.
 Status DirLogger::PreClose() {
   mu_->AssertHeld();
-  mu_->Unlock();
-  Status status = data_->Lclose();
+  const bool sync = true;
+  data_->Lock();
+  Status status = data_->Lclose(sync);
+  data_->Unlock();
   if (status.ok()) {
-    status = indx_->Lclose();
+    status = indx_->Lclose(sync);
   }
-  mu_->Lock();
   return status;
 }
 

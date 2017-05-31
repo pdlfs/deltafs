@@ -139,7 +139,7 @@ class TableLogger {
 class DirLogger {
  public:
   DirLogger(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
-            LogSink* data, LogSink* indx, CompactionStats* stats);
+            LogSink* indx, LogSink* data, CompactionStats* stats);
   ~DirLogger();
 
   // REQUIRES: mutex_ has been locked
