@@ -552,7 +552,7 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
 static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   DirOptions result = options;
   if (result.env == NULL) result.env = Env::Default();
-  ClipToRange(&result.memtable_buffer, 2 << 20, 2 << 30);
+  ClipToRange(&result.memtable_buffer, 1 << 20, 1 << 30);
   ClipToRange(&result.memtable_util, 0.5, 1.0);
   ClipToRange(&result.block_size, 4 << 10, 4 << 20);
   ClipToRange(&result.block_util, 0.5, 1.0);
