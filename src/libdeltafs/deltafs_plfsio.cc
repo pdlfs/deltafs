@@ -223,6 +223,9 @@ class DirWriterImpl : public DirWriter {
   uint32_t num_parts_;
   uint32_t part_mask_;
   Status finish_status_;
+  // XXX: rather than using a global barrier, using a reference
+  // counted epoch object might slightly increase implementation
+  // concurrency, though largely not needed so far
   bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
   DirLogger** dpts_;
@@ -308,8 +311,73 @@ Status DirWriterImpl::WaitForCompaction() {
 
 Status DirWriterImpl::TryBatchWrites(BatchCursor* cursor) {
   mutex_.AssertHeld();
+  assert(has_pending_flush_);
   Status status;
-  // TODO
+  std::vector<std::vector<uint16_t> > waiting_list(num_parts_);
+  std::vector<std::vector<uint16_t> > queue(num_parts_);
+  cursor->Seek(0);
+  for (; cursor->Valid(); cursor->Next()) {
+    Slice fid = cursor->fid();
+    const uint32_t hash = Hash(fid.data(), fid.size(), 0);
+    const uint32_t part = hash & part_mask_;
+    assert(part < num_parts_);
+    status = dpts_[part]->Add(fid, cursor->data());
+
+    if (status.IsBufferFull()) {
+      // Try later
+      waiting_list[part].push_back(cursor->offset());
+      status = Status::OK();
+    } else if (status.ok()) {
+      // OK
+    } else {
+      break;
+    }
+  }
+
+  while (status.ok()) {
+    for (size_t i = 0; i < num_parts_; i++) {
+      waiting_list[i].swap(queue[i]);
+      waiting_list[i].clear();
+    }
+    bool has_more = false;  // If the entire batch is done
+    for (size_t i = 0; i < num_parts_; i++) {
+      if (!queue[i].empty()) {
+        std::vector<uint16_t>::iterator it = queue[i].begin();
+        for (; it != queue[i].end(); ++it) {
+          cursor->Seek(*it);
+          if (cursor->Valid()) {
+            status = dpts_[i]->Add(cursor->fid(), cursor->data());
+          } else {
+            status = cursor->status();
+          }
+
+          if (status.IsBufferFull()) {
+            // Try later
+            waiting_list[i].assign(it, queue[i].end());
+            status = Status::OK();
+            has_more = true;
+          } else if (status.ok()) {
+            // OK
+          } else {
+            break;
+          }
+        }
+
+        if (!status.ok()) {
+          break;
+        }
+      }
+    }
+
+    if (!status.ok()) {
+      break;
+    } else if (has_more) {
+      cond_var_.Wait();
+    } else {
+      break;
+    }
+  }
+
   return status;
 }
 
