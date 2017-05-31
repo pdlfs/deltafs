@@ -292,6 +292,12 @@ Status DirWriterImpl::WaitForCompaction() {
   return status;
 }
 
+// Attempt to force a  minor compaction on all directory partitions
+// simultaneously. If a partition cannot be compacted immediately due to a lack
+// of buffer space, skip it and add it to a waiting list so it can be
+// reattempted later. Return immediately as soon as all partitions have a minor
+// compaction scheduled. Will not wait for all compactions to finish.
+// Return OK on success, or a non-OK status on errors.
 Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
   mutex_.AssertHeld();
   assert(has_pending_flush_);
@@ -332,6 +338,12 @@ Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
   return status;
 }
 
+// Force a minor compaction, wait for it to complete, and finalize all log
+// objects. If there happens to be a concurrent minor compaction pending (to be
+// scheduled), wait until it is scheduled (but not necessarily completed) and
+// then go schedule this one. After this call, either success or error, no
+// further write operation will be allowed in future.
+// Return OK on success, or a non-OK status on errors.
 Status DirWriterImpl::Finish() {
   Status status;
   MutexLock ml(&mutex_);
@@ -358,6 +370,11 @@ Status DirWriterImpl::Finish() {
   return status;
 }
 
+// Force a minor compaction, start a new epoch, but return immediately without
+// waiting for the compaction to complete. If there happens to be a concurrent
+// minor compaction pending (to be scheduled), wait until it is scheduled
+// (but not necessarily completed) before validating and scheduling this one.
+// Return OK on success, or a non-OK status on errors.
 Status DirWriterImpl::EpochFlush(int epoch) {
   Status status;
   MutexLock ml(&mutex_);
@@ -386,6 +403,11 @@ Status DirWriterImpl::EpochFlush(int epoch) {
   return status;
 }
 
+// Force a minor compaction but return immediately without waiting for it
+// to complete. If there happens to be a concurrent minor compaction pending (to
+// be scheduled), wait until it is scheduled (but not necessarily completed)
+// before validating and scheduling this one.
+// Return OK on success, or a non-OK status on errors.
 Status DirWriterImpl::Flush(int epoch) {
   Status status;
   MutexLock ml(&mutex_);
@@ -442,6 +464,8 @@ Status DirWriterImpl::TryAppend(const Slice& fid, const Slice& data) {
   return status;
 }
 
+// Wait for all on-going compactions to finish.
+// Return OK on success, or a non-OK status on errors.
 Status DirWriterImpl::Wait() {
   Status status;
   MutexLock ml(&mutex_);
