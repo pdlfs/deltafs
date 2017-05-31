@@ -8,6 +8,7 @@
  */
 
 #include "deltafs_plfsio.h"
+#include "deltafs_plfsio_batch.h"
 #include "deltafs_plfsio_internal.h"
 
 #include "pdlfs-common/env_buf.h"
@@ -196,6 +197,7 @@ class DirWriterImpl : public DirWriter {
   }
 
   virtual Status Wait();
+  virtual Status Write(BatchCursor* cursor, int epoch);
   virtual Status Append(const Slice& fid, const Slice& data, int epoch);
   virtual Status Flush(int epoch);
   virtual Status EpochFlush(int epoch);
@@ -204,6 +206,7 @@ class DirWriterImpl : public DirWriter {
  private:
   Status WaitForCompaction();
   Status TryFlush(bool epoch_flush = false, bool finalize = false);
+  Status TryBatchWrites(BatchCursor* cursor);
   Status TryAppend(const Slice& fid, const Slice& data);
   Status EnsureDataPadding(LogSink* sink, char p = 0);
   Status CloseLogs();
@@ -303,7 +306,14 @@ Status DirWriterImpl::WaitForCompaction() {
   return status;
 }
 
-// Attempt to force a  minor compaction on all directory partitions
+Status DirWriterImpl::TryBatchWrites(BatchCursor* cursor) {
+  mutex_.AssertHeld();
+  Status status;
+  // TODO
+  return status;
+}
+
+// Attempt to force a minor compaction on all directory partitions
 // simultaneously. If a partition cannot be compacted immediately due to a lack
 // of buffer space, skip it and add it to a waiting list so it can be
 // reattempted later. Return immediately as soon as all partitions have a minor
@@ -350,10 +360,10 @@ Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
 }
 
 // Force a minor compaction, wait for it to complete, and finalize all log
-// objects. If there happens to be a concurrent minor compaction pending (to be
-// scheduled), wait until it is scheduled (but not necessarily completed) and
-// then go schedule this one. After this call, either success or error, no
-// further write operation will be allowed in future.
+// objects. If there happens to be another pending minor compaction currently
+// waiting to be scheduled, wait until it is scheduled (but not necessarily
+// completed) before processing this one. After this call, either success or
+// error, no further write operation will be allowed in future.
 // Return OK on success, or a non-OK status on errors.
 Status DirWriterImpl::Finish() {
   Status status;
@@ -381,11 +391,11 @@ Status DirWriterImpl::Finish() {
   return status;
 }
 
-// Force a minor compaction, start a new epoch, but return immediately without
-// waiting for the compaction to complete. If there happens to be a concurrent
-// minor compaction pending (to be scheduled), wait until it is scheduled
-// (but not necessarily completed) before validating and scheduling this one.
-// Return OK on success, or a non-OK status on errors.
+// Force a minor compaction to start a new epoch, but return immediately without
+// waiting for the compaction to complete. If there happens to be another
+// pending minor compaction currently waiting to be scheduled, wait until it is
+// scheduled (but not necessarily completed) before validating and submitting
+// this one. Return OK on success, or a non-OK status on errors.
 Status DirWriterImpl::EpochFlush(int epoch) {
   Status status;
   MutexLock ml(&mutex_);
@@ -415,9 +425,9 @@ Status DirWriterImpl::EpochFlush(int epoch) {
 }
 
 // Force a minor compaction but return immediately without waiting for it
-// to complete. If there happens to be a concurrent minor compaction pending (to
-// be scheduled), wait until it is scheduled (but not necessarily completed)
-// before validating and scheduling this one.
+// to complete. If there happens to be another pending minor compaction
+// currently waiting to be scheduled, wait until it is scheduled (but not
+// necessarily completed) before validating and submitting this one.
 // Return OK on success, or a non-OK status on errors.
 Status DirWriterImpl::Flush(int epoch) {
   Status status;
@@ -442,6 +452,30 @@ Status DirWriterImpl::Flush(int epoch) {
   return status;
 }
 
+Status DirWriterImpl::Write(BatchCursor* cursor, int epoch) {
+  Status status;
+  MutexLock ml(&mutex_);
+  while (true) {
+    if (finished_) {
+      status = Status::AssertionFailed("Plfsdir already finished");
+      break;
+    } else if (has_pending_flush_) {
+      cond_var_.Wait();
+    } else if (epoch != -1 && epoch != num_epochs_) {
+      status = Status::AssertionFailed("Bad epoch num");
+      break;
+    } else {
+      // Batch writes may trigger one or more flushes
+      has_pending_flush_ = true;
+      status = TryBatchWrites(cursor);
+      has_pending_flush_ = false;
+      cond_var_.SignalAll();
+      break;
+    }
+  }
+  return status;
+}
+
 Status DirWriterImpl::Append(const Slice& fid, const Slice& data, int epoch) {
   Status status;
   MutexLock ml(&mutex_);
@@ -455,7 +489,11 @@ Status DirWriterImpl::Append(const Slice& fid, const Slice& data, int epoch) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {
+      // Appends may also trigger flushes
+      has_pending_flush_ = true;
       status = TryAppend(fid, data);
+      has_pending_flush_ = false;
+      cond_var_.SignalAll();
       if (status.IsBufferFull()) {
         MaybeSlowdownCaller();
       }

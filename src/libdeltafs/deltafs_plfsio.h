@@ -9,8 +9,8 @@
 
 #pragma once
 
-#include <pdlfs-common/port.h>
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/port.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -253,6 +253,8 @@ class LogSource {
 // Be very careful using this method.
 extern Status DestroyDir(const std::string& dirname, const DirOptions& options);
 
+class BatchCursor;
+
 // Deltafs plfs-style N-1 I/O writer api.
 class DirWriter {
  public:
@@ -269,7 +271,11 @@ class DirWriter {
   static Status Open(const DirOptions& options, const std::string& dirname,
                      DirWriter** result);
 
-  // Append a piece of data to a specified file under a given plfs directory.
+  // Perform a batch of file appends in a single operation.
+  // REQUIRES: Finish() has not been called.
+  virtual Status Write(BatchCursor* cursor, int epoch = -1) = 0;
+
+  // Append a piece of data to a specific file under the directory.
   // Set epoch to -1 to disable epoch validation.
   // REQUIRES: Finish() has not been called.
   virtual Status Append(const Slice& fid, const Slice& data,
