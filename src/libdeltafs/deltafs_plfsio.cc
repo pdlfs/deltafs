@@ -211,6 +211,7 @@ class DirWriterImpl : public DirWriter {
   friend class DirWriter;
 
   CompactionStats stats_;
+  std::vector<std::string*> write_bufs_;
   const DirOptions options_;
   mutable port::Mutex io_mutex_;  // Protecting the shared data log
   mutable port::Mutex mutex_;
@@ -490,8 +491,9 @@ Status DirWriterImpl::Wait() {
 size_t DirWriterImpl::total_memory_usage() const {
   MutexLock ml(&mutex_);
   size_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += dpts_[i]->memory_usage();
+  for (size_t i = 0; i < num_parts_; i++) result += dpts_[i]->memory_usage();
+  for (size_t i = 0; i < write_bufs_.size(); i++) {
+    result += write_bufs_[i]->capacity();
   }
   return result;
 }
@@ -517,26 +519,33 @@ static void PrintLogInfo(const std::string& name, const size_t mem_size) {
 #endif
 }
 
-// Try opening a log file and store its handle in *ptr.
+// Try opening a writable log sink and store its handle in *result.
 // If mu is not NULL, return a LogSink associated with the mutex.
 // If buf_size is not zero, create a stacked UnsafeBufferedWritableFile to
 // ensure the write size. If bytes is not NULL, also create a stacked
 // MeasuredWritableFile to track the size of data written to the log.
-static Status NewLogSink(LogSink** ptr, const std::string& name, Env* env,
-                         const size_t buf_size, port::Mutex* mu = NULL,
+static Status NewLogSink(LogSink** result, const std::string& name, Env* env,
+                         const size_t buf_size, port::Mutex* io_mutex = NULL,
+                         std::vector<std::string*>* write_bufs = NULL,
                          uint64_t* bytes = NULL) {
+  *result = NULL;
+
   WritableFile* file = NULL;
   Status status = env->NewWritableFile(name, &file);
   if (status.ok()) {
     assert(file != NULL);
     if (bytes != NULL) file = new MeasuredWritableFile(file, bytes);
-    if (buf_size != 0) file = new UnsafeBufferedWritableFile(file, buf_size);
+    if (buf_size != 0) {
+      UnsafeBufferedWritableFile* buffered =
+          new UnsafeBufferedWritableFile(file, buf_size);
+      write_bufs->push_back(buffered->buffer_store());
+      file = buffered;
+    }
     PrintLogInfo(name, buf_size);
-    LogSink* sink = new LogSink(name, file, mu);
+    LogSink* sink = new LogSink(name, file, io_mutex);
     sink->Ref();
-    *ptr = sink;
-  } else {
-    *ptr = NULL;
+
+    *result = sink;
   }
 
   return status;
@@ -584,14 +593,15 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   DirWriterImpl* impl = new DirWriterImpl(options);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all directory partitions
+  std::vector<std::string*> write_bufs;
   status = NewLogSink(&data[0], DataFileName(name, my_rank), env,
-                      options.data_buffer, &impl->io_mutex_,
+                      options.data_buffer, &impl->io_mutex_, &write_bufs,
                       &impl->stats_.data_written);
   if (status.ok()) {
     for (size_t part = 0; part < num_parts; part++) {
       status = NewLogSink(
           &index[part], PartitionIndexFileName(name, my_rank, int(part)), env,
-          options.index_buffer, NULL, &impl->stats_.index_written);
+          options.index_buffer, NULL, &write_bufs, &impl->stats_.index_written);
       if (!status.ok()) {
         break;
       }
@@ -608,6 +618,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
     }
     impl->data_ = data[0];
     impl->data_->Ref();
+    impl->write_bufs_.swap(write_bufs);
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
     impl->dpts_ = dpts;
