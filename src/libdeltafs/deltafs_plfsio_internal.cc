@@ -304,7 +304,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   // Allocate memory
   const size_t estimated_index_size_per_table = 4 << 10;
   index_block_.Reserve(estimated_index_size_per_table);
-  const size_t estimated_meta_size = 16 << 10;
+  const size_t estimated_meta_size = 4 << 10;
   meta_block_.Reserve(estimated_meta_size);
 
   uncommitted_indexes_.reserve(1 << 10);
@@ -902,11 +902,18 @@ void DirLogger::CompactMemtable() {
 size_t DirLogger::memory_usage() const {
   mu_->AssertHeld();
   size_t result = 0;
-  result += table_logger_->data_block_.buffer_store()->capacity();
-  if (filter_ != NULL)
-    result += static_cast<BloomBlock*>(filter_)->buffer_store()->capacity();
   result += buf0_.memory_usage();
   result += buf1_.memory_usage();
+  std::vector<std::string*> stores;
+  stores.push_back(table_logger_->meta_block_.buffer_store());
+  stores.push_back(table_logger_->data_block_.buffer_store());
+  if (filter_ != NULL) {
+    stores.push_back(static_cast<BloomBlock*>(filter_)->buffer_store());
+  }
+  stores.push_back(table_logger_->index_block_.buffer_store());
+  for (size_t i = 0; i < stores.size(); i++) {
+    result += stores[i]->capacity();
+  }
   return result;
 }
 
