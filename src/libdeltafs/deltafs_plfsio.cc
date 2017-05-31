@@ -500,15 +500,25 @@ size_t DirWriterImpl::total_memory_usage() const {
 
 DirWriter::~DirWriter() {}
 
+template <class T, class V>
+static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
+  if (static_cast<V>(*ptr) > maxvalue) {
+    *ptr = maxvalue;
+  }
+  if (static_cast<V>(*ptr) < minvalue) {
+    *ptr = minvalue;
+  }
+}
+
+// Fix user-supplied options to be reasonable
 static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   DirOptions result = options;
   if (result.env == NULL) result.env = Env::Default();
-  if (result.memtable_util < 0.5) result.memtable_util = 0.5;
-  if (result.memtable_util > 1.0) result.memtable_util = 1.0;
-  if (result.block_util < 0.5) result.block_util = 0.5;
-  if (result.block_util > 1.0) result.block_util = 1.0;
-  if (result.lg_parts < 0) result.lg_parts = 0;
-  if (result.lg_parts > 8) result.lg_parts = 8;
+  ClipToRange(&result.memtable_buffer, 2 << 20, 2 << 30);
+  ClipToRange(&result.memtable_util, 0.5, 1.0);
+  ClipToRange(&result.block_size, 4 << 10, 4 << 20);
+  ClipToRange(&result.block_util, 0.5, 1.0);
+  ClipToRange(&result.lg_parts, 0, 8);
   return result;
 }
 
@@ -524,10 +534,11 @@ static void PrintLogInfo(const std::string& name, const size_t mem_size) {
 // If buf_size is not zero, create a stacked UnsafeBufferedWritableFile to
 // ensure the write size. If bytes is not NULL, also create a stacked
 // MeasuredWritableFile to track the size of data written to the log.
-static Status NewLogSink(LogSink** result, const std::string& name, Env* env,
-                         const size_t buf_size, port::Mutex* io_mutex = NULL,
-                         std::vector<std::string*>* write_bufs = NULL,
-                         uint64_t* bytes = NULL) {
+static Status OpenLogSink(LogSink** result, const std::string& name,
+                          Env* env = Env::Default(), const size_t buf_size = 0,
+                          port::Mutex* io_mutex = NULL,
+                          std::vector<std::string*>* write_bufs = NULL,
+                          uint64_t* bytes = NULL) {
   *result = NULL;
 
   WritableFile* file = NULL;
@@ -594,12 +605,12 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all directory partitions
   std::vector<std::string*> write_bufs;
-  status = NewLogSink(&data[0], DataFileName(name, my_rank), env,
-                      options.data_buffer, &impl->io_mutex_, &write_bufs,
-                      &impl->stats_.data_written);
+  status = OpenLogSink(&data[0], DataFileName(name, my_rank), env,
+                       options.data_buffer, &impl->io_mutex_, &write_bufs,
+                       &impl->stats_.data_written);
   if (status.ok()) {
     for (size_t part = 0; part < num_parts; part++) {
-      status = NewLogSink(
+      status = OpenLogSink(
           &index[part], PartitionIndexFileName(name, my_rank, int(part)), env,
           options.index_buffer, NULL, &write_bufs, &impl->stats_.index_written);
       if (!status.ok()) {
@@ -612,12 +623,14 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
     DirLogger** dpts = new DirLogger*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {
       dpts[i] = new DirLogger(impl->options_, &impl->mutex_, &impl->cond_var_,
-                              index[i],  // Partitioned index object
-                              data[0],   // Shared data object
+                              index[i],  // Partitioned index log object
+                              data[0],   // Shared data log object
                               &impl->stats_);
     }
     impl->data_ = data[0];
     impl->data_->Ref();
+    // Weak references to log buffers that must not be deleted
+    // during the lifetime of this directory.
     impl->write_bufs_.swap(write_bufs);
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
