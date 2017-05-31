@@ -250,10 +250,10 @@ class LogSource {
 extern Status DestroyDir(const std::string& dirname, const DirOptions& options);
 
 // Deltafs plfs-style N-1 I/O writer api.
-class Writer {
+class DirWriter {
  public:
-  Writer() {}
-  virtual ~Writer();
+  DirWriter() {}
+  virtual ~DirWriter();
 
   // Return a pointer to dir stats.
   virtual const CompactionStats* stats() const = 0;
@@ -261,7 +261,7 @@ class Writer {
   // Open an I/O writer against a specified plfs-style directory.
   // Return OK on success, or a non-OK status on errors.
   static Status Open(const DirOptions& options, const std::string& dirname,
-                     Writer** result);
+                     DirWriter** result);
 
   // Append a piece of data to a specified file under a given plfs directory.
   // Set epoch to -1 to disable epoch validation.
@@ -288,8 +288,8 @@ class Writer {
 
  private:
   // No copying allowed
-  void operator=(const Writer&);
-  Writer(const Writer&);
+  void operator=(const DirWriter&);
+  DirWriter(const DirWriter&);
 };
 
 // Deltafs plfs-style N-1 I/O reader api.

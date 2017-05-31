@@ -640,7 +640,7 @@ typedef pdlfs::plfsio::CompactionStats CompactionStats;
 typedef pdlfs::plfsio::DirOptions DirOptions;
 
 // Dir writer
-typedef pdlfs::plfsio::Writer Writer;
+typedef pdlfs::plfsio::DirWriter DirWriter;
 // Dir Reader
 typedef pdlfs::plfsio::Reader Reader;
 
@@ -709,7 +709,7 @@ struct deltafs_plfsdir {
   int key_size;
   int mode;
   union {
-    Writer* writer;
+    DirWriter* writer;
     Reader* reader;
   } io;
 };
@@ -770,7 +770,7 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
     options.key_size = __dir->key_size;
     options.env = __dir->env;
     if (__dir->mode == O_WRONLY) {
-      s = Writer::Open(options, __name, &__dir->io.writer);
+      s = DirWriter::Open(options, __name, &__dir->io.writer);
     } else {
       s = Reader::Open(options, __name, &__dir->io.reader);
     }

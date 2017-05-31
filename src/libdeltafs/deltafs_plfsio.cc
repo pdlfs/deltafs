@@ -182,7 +182,7 @@ static std::string DataFileName(const std::string& parent, int rank) {
   return parent + tmp;
 }
 
-class DirWriterImpl : public Writer {
+class DirWriterImpl : public DirWriter {
  public:
   DirWriterImpl(const DirOptions& options);
   virtual ~DirWriterImpl();
@@ -201,7 +201,7 @@ class DirWriterImpl : public Writer {
   Status EnsureDataPadding(LogSink* sink, char p = 0);
   Status CloseLogs();
   void MaybeSlowdownCaller();
-  friend class Writer;
+  friend class DirWriter;
 
   CompactionStats stats_;
   const DirOptions options_;
@@ -477,7 +477,7 @@ Status DirWriterImpl::Wait() {
   return status;
 }
 
-Writer::~Writer() {}
+DirWriter::~DirWriter() {}
 
 static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   DirOptions result = options;
@@ -523,8 +523,8 @@ static Status NewLogSink(LogSink** ptr, const std::string& name, Env* env,
   return status;
 }
 
-Status Writer::Open(const DirOptions& opts, const std::string& name,
-                    Writer** result) {
+Status DirWriter::Open(const DirOptions& opts, const std::string& name,
+                       DirWriter** result) {
   *result = NULL;
   DirOptions options = SanitizeWriteOptions(opts);
   const uint32_t num_parts = static_cast<uint32_t>(1 << options.lg_parts);

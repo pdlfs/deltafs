@@ -117,7 +117,7 @@ class PlfsIoTest {
 
   void OpenWriter() {
     DestroyDir(dirname_, options_);
-    Status s = Writer::Open(options_, dirname_, &writer_);
+    Status s = DirWriter::Open(options_, dirname_, &writer_);
     ASSERT_OK(s);
   }
 
@@ -174,7 +174,7 @@ class PlfsIoTest {
 
   DirOptions options_;
   std::string dirname_;
-  Writer* writer_;
+  DirWriter* writer_;
   Reader* reader_;
   int epoch_;
 };
@@ -264,7 +264,7 @@ TEST(PlfsIoTest, NoUniKeys0) {
 }
 
 static void BM_LogAndApply(size_t num_entries) {
-  Writer* writer;
+  DirWriter* writer;
   DirOptions options;
   options.verify_checksums = false;
   options.env = TestEnv();
@@ -273,7 +273,7 @@ static void BM_LogAndApply(size_t num_entries) {
   options.bf_bits_per_key = 10;
   std::string dirhome = test::TmpDir() + "/plfsio_test_benchmark";
   DestroyDir(dirhome, options);
-  ASSERT_OK(Writer::Open(options, dirhome, &writer));
+  ASSERT_OK(DirWriter::Open(options, dirhome, &writer));
 
   uint64_t start = Env::Default()->NowMicros();
 

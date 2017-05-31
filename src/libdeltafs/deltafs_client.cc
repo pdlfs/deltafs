@@ -132,7 +132,7 @@ class WritablePlfsDir {
 
  public:
   WritablePlfsDir() : refs(0), writer(NULL) {}
-  plfsio::Writer* writer;
+  plfsio::DirWriter* writer;
   void Ref() { refs++; }
 
   void Unref() {
@@ -408,7 +408,7 @@ static std::string ToPlfsDirName(const Fentry& fentry) {
 }
 
 static Status OpenPlfsIoWriter(const Fentry& fentry, Env* env,
-                               plfsio::Writer** result) {
+                               plfsio::DirWriter** result) {
   Status s;
   plfsio::DirOptions options;
   options.rank = 0;                // FIXME
@@ -419,7 +419,7 @@ static Status OpenPlfsIoWriter(const Fentry& fentry, Env* env,
   dirname += "/";
   dirname += ToPlfsDirName(fentry);
 
-  s = plfsio::Writer::Open(options, dirname, result);
+  s = plfsio::DirWriter::Open(options, dirname, result);
 
 #if VERBOSE >= 2
   std::string id = DirId(fentry.stat).DebugString();
@@ -565,7 +565,7 @@ Status Client::InternalOpen(const Slice& path, int flags, mode_t mode,
           }
         }
       } else if (S_ISDIR(my_file_mode)) {
-        plfsio::Writer* writer;
+        plfsio::DirWriter* writer;
         s = OpenPlfsIoWriter(fentry, env_, &writer);
         if (s.ok()) {
           WritablePlfsDir* d = new WritablePlfsDir;
@@ -737,7 +737,7 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
     file->refs++;  // Ref
     mutex_.Unlock();
     if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
-      plfsio::Writer* writer = ToWritablePlfsFile(file->fh)->parent->writer;
+      plfsio::DirWriter* writer = ToWritablePlfsFile(file->fh)->parent->writer;
       assert(writer != NULL);
       s = writer->Append(fentry.nhash, data);
     } else {
@@ -767,7 +767,7 @@ Status Client::Write(int fd, const Slice& data) {
     file->refs++;  // Ref
     mutex_.Unlock();
     if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
-      plfsio::Writer* writer = ToWritablePlfsFile(file->fh)->parent->writer;
+      plfsio::DirWriter* writer = ToWritablePlfsFile(file->fh)->parent->writer;
       assert(writer != NULL);
       s = writer->Append(fentry.nhash, data);
     } else {
@@ -821,7 +821,7 @@ Status Client::Fdatasync(int fd) {
   } else if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
     Status s;
     if (S_ISDIR(fentry.file_mode())) {
-      plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
+      plfsio::DirWriter* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       mutex_.Unlock();
       s = writer->Flush();
@@ -940,7 +940,7 @@ Status Client::Flush(int fd) {
   } else if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
     Status s;
     if (S_ISDIR(fentry.file_mode())) {
-      plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
+      plfsio::DirWriter* writer = ToWritablePlfsDir(file->fh)->writer;
       assert(writer != NULL);
       mutex_.Unlock();
       s = writer->EpochFlush();
@@ -992,7 +992,7 @@ Status Client::Close(int fd) {
   } else {
     if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
       if (S_ISDIR(fentry.file_mode())) {
-        plfsio::Writer* writer = ToWritablePlfsDir(file->fh)->writer;
+        plfsio::DirWriter* writer = ToWritablePlfsDir(file->fh)->writer;
         assert(writer != NULL);
         mutex_.Unlock();
         writer->Finish();
