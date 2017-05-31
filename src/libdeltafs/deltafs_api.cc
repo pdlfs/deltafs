@@ -874,23 +874,18 @@ static char* makechar(unsigned long long val) {
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
                                    const char* __key) {
   if (__dir != NULL && __key != NULL) {
-    if (__dir->mode == O_WRONLY) {
-      const CompactionStats* compaction_stats;
-      if (__dir->io.writer != NULL) {
-        compaction_stats = __dir->io.writer->stats();
-      }
-      if (compaction_stats != NULL) {
-        if (strcmp(__key, "compaction_time") == 0) {
-          return makechar(compaction_stats->write_micros);
-        } else if (strcmp(__key, "index_written") == 0) {
-          return makechar(compaction_stats->index_written);
-        } else if (strcmp(__key, "index_size") == 0) {
-          return makechar(compaction_stats->index_size);
-        } else if (strcmp(__key, "data_written") == 0) {
-          return makechar(compaction_stats->data_written);
-        } else if (strcmp(__key, "data_size") == 0) {
-          return makechar(compaction_stats->data_size);
-        }
+    if (__dir->mode == O_WRONLY && __dir->io.writer != NULL) {
+      const CompactionStats stats = __dir->io.writer->stats();
+      if (strcmp(__key, "compaction_time") == 0) {
+        return makechar(stats.write_micros);
+      } else if (strcmp(__key, "index_written") == 0) {
+        return makechar(stats.index_written);
+      } else if (strcmp(__key, "index_size") == 0) {
+        return makechar(stats.index_size);
+      } else if (strcmp(__key, "data_written") == 0) {
+        return makechar(stats.data_written);
+      } else if (strcmp(__key, "data_size") == 0) {
+        return makechar(stats.data_size);
       }
     } else if (__dir->mode == O_RDONLY) {
       // TODO

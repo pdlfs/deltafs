@@ -23,13 +23,13 @@ struct CompactionStats {
   // Total time spent on compaction.
   uint64_t write_micros;
 
-  // Total physical bytes written to the index log.
+  // Total bytes written as indexes (including padding and checksums)
   uint64_t index_written;
-  // Total size of the index log.
+  // Logic size of all indexes
   uint64_t index_size;
-  // Total physical bytes written to the data log.
+  // Total bytes written as data (including padding and checksums)
   uint64_t data_written;
-  // Total size of the data log.
+  // Logic size of data
   uint64_t data_size;
 };
 
@@ -260,7 +260,7 @@ class DirWriter {
   virtual ~DirWriter();
 
   // Return a pointer to dir stats.
-  virtual const CompactionStats* stats() const = 0;
+  virtual CompactionStats stats() const = 0;
 
   // Open an I/O writer against a specified plfs-style directory.
   // Return OK on success, or a non-OK status on errors.

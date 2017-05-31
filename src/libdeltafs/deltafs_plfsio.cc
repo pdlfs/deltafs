@@ -189,7 +189,11 @@ class DirWriterImpl : public DirWriter {
   DirWriterImpl(const DirOptions& options);
   virtual ~DirWriterImpl();
 
-  virtual const CompactionStats* stats() const { return &stats_; }
+  virtual CompactionStats stats() const {
+    MutexLock ml(&mutex_);
+    return stats_;
+  }
+
   virtual Status Wait();
   virtual Status Append(const Slice& fid, const Slice& data, int epoch);
   virtual Status Flush(int epoch);
@@ -207,8 +211,8 @@ class DirWriterImpl : public DirWriter {
 
   CompactionStats stats_;
   const DirOptions options_;
-  port::Mutex io_mutex_;  // Protecting the shared data log
-  port::Mutex mutex_;
+  mutable port::Mutex io_mutex_;  // Protecting the shared data log
+  mutable port::Mutex mutex_;
   port::CondVar cond_var_;
   int num_epochs_;
   uint32_t num_parts_;

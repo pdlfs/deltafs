@@ -154,20 +154,17 @@ class PlfsIoTest {
 
   void Stats() {
     char tmp[200];
-    const CompactionStats* stats = NULL;
     if (writer_ != NULL) {
-      stats = writer_->stats();
-    }
-    if (stats != NULL) {
+      CompactionStats stats = writer_->stats();
       snprintf(tmp, sizeof(tmp),
-               "isz=%8llu B, idu=%8llu B, "
-               "dsz=%8llu B, ddu=%8llu B, "
+               "isz=%8llu Bytes, idu=%8llu Bytes, "
+               "dsz=%8llu Bytes, ddu=%8llu Bytes, "
                "micros=%llu us",
-               static_cast<unsigned long long>(stats->index_size),
-               static_cast<unsigned long long>(stats->index_written),
-               static_cast<unsigned long long>(stats->data_size),
-               static_cast<unsigned long long>(stats->data_written),
-               static_cast<unsigned long long>(stats->write_micros));
+               static_cast<unsigned long long>(stats.index_size),
+               static_cast<unsigned long long>(stats.index_written),
+               static_cast<unsigned long long>(stats.data_size),
+               static_cast<unsigned long long>(stats.data_written),
+               static_cast<unsigned long long>(stats.write_micros));
       fprintf(stderr, "%s\n", tmp);
     }
   }
@@ -294,23 +291,17 @@ static void BM_LogAndApply(size_t num_entries) {
           double(num_entries * options.value_size) / double(end - start));
 
   char tmp[200];
-  const CompactionStats* stats = NULL;
-  if (writer != NULL) {
-    stats = writer->stats();
-  }
-  if (stats != NULL) {
-    snprintf(tmp, sizeof(tmp),
-             "isz=%12llu B, idu=%12llu B, "
-             "dsz=%12llu B, ddu=%12llu B, "
-             "micros=%llu us",
-             static_cast<unsigned long long>(stats->index_size),
-             static_cast<unsigned long long>(stats->index_written),
-             static_cast<unsigned long long>(stats->data_size),
-             static_cast<unsigned long long>(stats->data_written),
-             static_cast<unsigned long long>(stats->write_micros));
-    fprintf(stderr, "%s\n", tmp);
-  }
-
+  CompactionStats stats = writer->stats();
+  snprintf(tmp, sizeof(tmp),
+           "isz=%8llu Bytes, idu=%8llu Bytes, "
+           "dsz=%8llu Bytes, ddu=%8llu Bytes, "
+           "micros=%llu us",
+           static_cast<unsigned long long>(stats.index_size),
+           static_cast<unsigned long long>(stats.index_written),
+           static_cast<unsigned long long>(stats.data_size),
+           static_cast<unsigned long long>(stats.data_written),
+           static_cast<unsigned long long>(stats.write_micros));
+  fprintf(stderr, "%s\n", tmp);
   delete writer;
 }
 
