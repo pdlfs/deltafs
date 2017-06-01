@@ -94,15 +94,19 @@ Slice BlockBuilder::Finish() {
   return result;
 }
 
-Slice BlockBuilder::Finalize(uint64_t padding_target) {
+Slice BlockBuilder::Finalize(bool crc32c, uint32_t padding_target) {
   assert(finished_);
   Slice contents = buffer_;  // Contents without the trailer and padding
   contents.remove_prefix(buffer_start_);
   char trailer[kBlockTrailerSize];
   trailer[0] = kNoCompression;
-  uint32_t crc = crc32c::Value(contents.data(), contents.size());
-  crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
-  EncodeFixed32(trailer + 1, crc32c::Mask(crc));
+  if (crc32c) {
+    uint32_t crc = crc32c::Value(contents.data(), contents.size());
+    crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
+    EncodeFixed32(trailer + 1, crc32c::Mask(crc));
+  } else {
+    EncodeFixed32(trailer + 1, 0);
+  }
   buffer_.append(trailer, sizeof(trailer));
   if (padding_target != 0 && buffer_.size() < buffer_start_ + padding_target) {
     buffer_.resize(buffer_start_ + padding_target, 0);

@@ -10,10 +10,10 @@
 
 #pragma once
 
+#include "pdlfs-common/slice.h"
+
 #include <stdint.h>
 #include <vector>
-
-#include "pdlfs-common/slice.h"
 
 namespace pdlfs {
 
@@ -48,14 +48,14 @@ class BlockBuilder {
   // Finalize() is called
   Slice Finish();
 
-  // Put trailer to the buffer end which contains the block type and checksum.
-  // If "padding_target" is not 0, append zeros to the buffer
-  // until data length reaches the target.
+  // Put a trailer to the buffer that contains the block type and checksum.
+  // If "padding_target" is not 0, append zeros to the buffer until the block
+  // size reaches the target. Skip checksum if crc32c is false.
   // Return a slice that refers to the new raw block contents that includes
   // the trailer.  The returned slice will remain valid for the lifetime of
   // this builder or until Reset() is called.
   // REQUIRES: Finish() has been called since the last call to Reset().
-  Slice Finalize(uint64_t padding_target = 0);
+  Slice Finalize(bool crc32c = true, uint32_t padding_target = 0);
 
   // Returns an estimate of the current (uncompressed) size of the block
   // we are building.
