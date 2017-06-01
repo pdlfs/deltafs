@@ -324,13 +324,13 @@ Status DirWriterImpl::TryBatchWrites(BatchCursor* cursor) {
     status = dpts_[part]->Add(fid, cursor->data());
 
     if (status.IsBufferFull()) {
-      // Try later
+      // Try again later
       waiting_list[part].push_back(cursor->offset());
       status = Status::OK();
-    } else if (status.ok()) {
-      // OK
-    } else {
+    } else if (!status.ok()) {
       break;
+    } else {
+      // OK
     }
   }
 
@@ -352,14 +352,15 @@ Status DirWriterImpl::TryBatchWrites(BatchCursor* cursor) {
           }
 
           if (status.IsBufferFull()) {
-            // Try later
+            // Try again later
             waiting_list[i].assign(it, queue[i].end());
             status = Status::OK();
             has_more = true;
-          } else if (status.ok()) {
-            // OK
-          } else {
             break;
+          } else if (!status.ok()) {
+            break;
+          } else {
+            // OK
           }
         }
 
