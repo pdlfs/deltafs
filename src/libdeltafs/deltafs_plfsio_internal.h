@@ -135,8 +135,9 @@ class TableLogger {
   bool finished_;
 };
 
-// Sequentially format and write data as multiple sorted runs of indexed tables.
-// Implementation is thread-safe and uses background threads.
+// Sequentially format and write data as multiple sorted runs
+// of indexed tables. Implementation is thread-safe and
+// uses background threads.
 class DirLogger {
  public:
   DirLogger(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
@@ -152,7 +153,8 @@ class DirLogger {
 
   // Force a compaction and maybe wait for it
   struct FlushOptions {
-    FlushOptions(bool epoch_flush = false, bool finalize = false);
+    explicit FlushOptions(bool ef = false, bool fi = false)
+        : no_wait(true), dry_run(false), epoch_flush(ef), finalize(fi) {}
 
     // Do not wait for compaction to finish
     // Default: true
@@ -211,27 +213,20 @@ class DirLogger {
   WriteBuffer buf1_;
 };
 
-inline DirLogger::FlushOptions::FlushOptions(bool epoch_flush, bool finalize)
-    : no_wait(true),
-      dry_run(false),
-      epoch_flush(epoch_flush),
-      finalize(finalize) {}
-
-// Retrieve table contents from a set of indexed log files.
-class PlfsIoReader {
+// Retrieve directory contents from a pair of indexed log files.
+class Dir {
  public:
-  PlfsIoReader(const DirOptions&, LogSource* data, LogSource* index);
-  // Open a reader on top of a given set of log files.
+  // Open a reader on top of a given pair of log files.
   // Return OK on success, or a non-OK status on errors.
   static Status Open(const DirOptions& options, LogSource* data,
-                     LogSource* index, PlfsIoReader** result);
+                     LogSource* index, Dir** result);
 
-  // Obtain the value to a key from all epoches.
+  // Obtain the value to a key from all epochs.
   // All value found will be appended to "dst"
   // Return OK on success, or a non-OK status on errors.
   Status Gets(const Slice& key, std::string* dst);
 
-  ~PlfsIoReader();
+  ~Dir();
 
  private:
   typedef void (*Saver)(void* arg, const Slice& key, const Slice& value);
@@ -260,8 +255,10 @@ class PlfsIoReader {
   Status Get(const Slice& key, uint32_t epoch, std::string* dst);
 
   // No copying allowed
-  void operator=(const PlfsIoReader&);
-  PlfsIoReader(const PlfsIoReader&);
+  void operator=(const Dir&);
+  Dir(const Dir&);
+
+  Dir(const DirOptions&, LogSource* data, LogSource* indx);
   // Constant after construction
   const DirOptions& options_;
   uint32_t num_epoches_;

@@ -982,8 +982,8 @@ static Status ReadBlock(LogSource* file, const DirOptions& options,
 // call "saver" using the value found.
 // In addition, set *eok to true if a larger key has been observed.
 // Return OK on success and a non-OK status on errors.
-Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
-                         Saver saver, void* arg, bool* eok) {
+Status Dir::Get(const Slice& key, const BlockHandle& handle, Saver saver,
+                void* arg, bool* eok) {
   *eok = false;
   Status status;
   BlockContents contents;
@@ -1029,7 +1029,7 @@ Status PlfsIoReader::Get(const Slice& key, const BlockHandle& handle,
   return status;
 }
 
-bool PlfsIoReader::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
+bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
   Status status;
   BlockContents contents;
   status = ReadBlock(index_src_, options_, handle, &contents);
@@ -1054,8 +1054,8 @@ bool PlfsIoReader::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
 // Retrieve value from a given table and
 // call "saver" using the value found.
 // Return OK on success and a non-OK status on errors.
-Status PlfsIoReader::Get(const Slice& key, const TableHandle& handle,
-                         Saver saver, void* arg) {
+Status Dir::Get(const Slice& key, const TableHandle& handle, Saver saver,
+                void* arg) {
   Status status;
   // Check key range and filter
   if (key.compare(handle.smallest_key()) < 0 ||
@@ -1130,7 +1130,7 @@ static inline Iterator* NewEpochIterator(Block* epoch_index) {
 }
 }  // namespace
 
-Status PlfsIoReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
+Status Dir::Get(const Slice& key, uint32_t epoch, std::string* dst) {
   Status status;
   if (epoch_iter_ == NULL) {
     epoch_iter_ = NewEpochIterator(epoch_index_);
@@ -1173,7 +1173,7 @@ Status PlfsIoReader::Get(const Slice& key, uint32_t epoch, std::string* dst) {
   return status;
 }
 
-Status PlfsIoReader::Gets(const Slice& key, std::string* dst) {
+Status Dir::Gets(const Slice& key, std::string* dst) {
   Status status;
   if (num_epoches_ != 0) {
     if (epoch_iter_ == NULL) {
@@ -1193,7 +1193,7 @@ Status PlfsIoReader::Gets(const Slice& key, std::string* dst) {
   return status;
 }
 
-PlfsIoReader::PlfsIoReader(const DirOptions& o, LogSource* d, LogSource* i)
+Dir::Dir(const DirOptions& o, LogSource* d, LogSource* i)
     : options_(o),
       num_epoches_(0),
       epoch_iter_(NULL),
@@ -1205,15 +1205,15 @@ PlfsIoReader::PlfsIoReader(const DirOptions& o, LogSource* d, LogSource* i)
   data_src_->Ref();
 }
 
-PlfsIoReader::~PlfsIoReader() {
+Dir::~Dir() {
   delete epoch_iter_;
   delete epoch_index_;
   index_src_->Unref();
   data_src_->Unref();
 }
 
-Status PlfsIoReader::Open(const DirOptions& options, LogSource* data,
-                          LogSource* index, PlfsIoReader** result) {
+Status Dir::Open(const DirOptions& options, LogSource* data, LogSource* index,
+                 Dir** result) {
   *result = NULL;
   Status status;
   char space[Footer::kEncodeLength];
@@ -1255,7 +1255,7 @@ Status PlfsIoReader::Open(const DirOptions& options, LogSource* data,
     return status;
   }
 
-  PlfsIoReader* reader = new PlfsIoReader(options, data, index);
+  Dir* reader = new Dir(options, data, index);
   reader->num_epoches_ = footer.num_epoches();
   Block* block = new Block(contents);
   reader->epoch_index_ = block;

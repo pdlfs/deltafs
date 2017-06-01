@@ -859,7 +859,7 @@ static Status NewUnbufferedLogSrc(const std::string& fname, Env* env,
 
 Status ReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
   Status status;
-  PlfsIoReader* reader = NULL;
+  Dir* dir = NULL;
   LogSource* index = NULL;
   uint32_t hash = Hash(fname.data(), fname.size(), 0);
   uint32_t part = hash & part_mask_;
@@ -868,15 +868,15 @@ Status ReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
                        options_.env, &index);
     MutexLock ml(&mutex_);
     if (status.ok()) {
-      status = PlfsIoReader::Open(options_, data_, index, &reader);
+      status = Dir::Open(options_, data_, index, &dir);
       if (status.ok()) {
-        status = reader->Gets(fname, dst);
+        status = dir->Gets(fname, dst);
       }
     }
   }
 
-  if (reader != NULL) {
-    delete reader;
+  if (dir != NULL) {
+    delete dir;
   }
   if (index != NULL) {
     index->Unref();
