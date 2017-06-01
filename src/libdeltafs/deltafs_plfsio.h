@@ -75,6 +75,7 @@ struct DirOptions {
   double block_util;
 
   // Set to false to disable the zero padding of data blocks.
+  // Only relevant to data blocks.
   // Default: true
   bool block_padding;
 
@@ -129,6 +130,10 @@ struct DirOptions {
   // against the corresponding checksums stored.
   // Default: false
   bool verify_checksums;
+
+  // True if checksum calculation and verification are completely skipped.
+  // Default: false
+  bool skip_checksums;
 
   // Number of partitions to divide the data. Specified in logarithmic
   // number so each x will give 2**x partitions.

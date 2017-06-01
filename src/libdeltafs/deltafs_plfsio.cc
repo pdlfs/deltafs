@@ -49,6 +49,7 @@ DirOptions::DirOptions()
       slowdown_micros(0),
       unique_keys(true),
       verify_checksums(false),
+      skip_checksums(false),
       lg_parts(0),
       env(NULL),
       is_env_pfs(true),

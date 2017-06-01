@@ -362,8 +362,8 @@ void TableLogger::EndTable(T* filter_block) {
 
   Slice index_contents = index_block_.Finish();
   const size_t index_size = index_contents.size();
-  Slice final_index_contents =
-      index_block_.Finalize();  // No zero padding necessary for index blocks
+  Slice final_index_contents =  // No zero padding necessary for index blocks
+      index_block_.Finalize(!options_.skip_checksums);
   const size_t final_index_size = final_index_contents.size();
   const uint64_t index_offset = indx_sink_->Ltell();
   status_ = indx_sink_->Lwrite(final_index_contents);
@@ -378,7 +378,7 @@ void TableLogger::EndTable(T* filter_block) {
   if (filter_block != NULL) {
     Slice filer_contents = filter_block->Finish();
     filter_size = filer_contents.size();
-    final_filter_contents = filter_block->Finalize();
+    final_filter_contents = filter_block->Finalize(!options_.skip_checksums);
     const size_t final_filter_size = final_filter_contents.size();
     status_ = indx_sink_->Lwrite(final_filter_contents);
     output_stats_.final_filter_size += final_filter_size;
@@ -465,9 +465,10 @@ void TableLogger::EndBlock() {
   const size_t block_size = block_contents.size();
   Slice final_block_contents;
   if (options_.block_padding) {
-    final_block_contents = data_block_.Finalize(options_.block_size);
+    final_block_contents =
+        data_block_.Finalize(!options_.skip_checksums, options_.block_size);
   } else {
-    final_block_contents = data_block_.Finalize();
+    final_block_contents = data_block_.Finalize(!options_.skip_checksums);
   }
 
   const size_t final_block_size = final_block_contents.size();
@@ -543,8 +544,8 @@ Status TableLogger::Finish() {
   assert(!pending_meta_entry_);
   Slice meta_contents = meta_block_.Finish();
   const size_t meta_size = meta_contents.size();
-  Slice final_meta_contents =
-      meta_block_.Finalize();  // No padding is needed for the root meta block
+  Slice final_meta_contents =  // No padding is needed for the root meta block
+      meta_block_.Finalize(!options_.skip_checksums);
   const size_t final_meta_size = final_meta_contents.size();
   const uint64_t meta_offset = indx_sink_->Ltell();
   status_ = indx_sink_->Lwrite(final_meta_contents);
