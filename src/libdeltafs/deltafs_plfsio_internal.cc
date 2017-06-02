@@ -979,13 +979,13 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
   return status;
 }
 
-// Retrieve value from a given block and
-// call "saver" using the value found.
-// In addition, set *eok to true if a larger key has been observed.
+// Retrieve value to a specific key from a given block and call "saver"
+// using the value found. In addition, set *exhausted to true if a larger key
+// has been observed so there is no need to check further.
 // Return OK on success and a non-OK status on errors.
-Status Dir::Get(const Slice& key, const BlockHandle& handle, Saver saver,
-                void* arg, bool* eok) {
-  *eok = false;
+Status Dir::Fetch(const Slice& key, const BlockHandle& handle, Saver saver,
+                  void* arg, bool* exhausted) {
+  *exhausted = false;
   Status status;
   BlockContents contents;
   status = ReadBlock(data_, options_, handle, &contents);
@@ -996,24 +996,27 @@ Status Dir::Get(const Slice& key, const BlockHandle& handle, Saver saver,
   Block* block = new Block(contents);
   Iterator* const iter = block->NewIterator(BytewiseComparator());
   if (options_.unique_keys) {
-    iter->Seek(key);
+    iter->Seek(key);  // Binary search
   } else {
     iter->SeekToFirst();
     while (iter->Valid() && key.compare(iter->key()) > 0) {
       iter->Next();
     }
   }
-  while (!(*eok) && iter->Valid()) {
+
+  for (; iter->Valid(); iter->Next()) {
     if (iter->key() == key) {
       saver(arg, key, iter->value());
+      // If keys are unique, we are done
       if (options_.unique_keys) {
-        *eok = true;
+        *exhausted = true;
+        break;
       }
     } else {
-      *eok = true;
+      assert(iter->key() > key);
+      *exhausted = true;
+      break;
     }
-
-    iter->Next();
   }
 
   status = iter->status();
@@ -1023,6 +1026,8 @@ Status Dir::Get(const Slice& key, const BlockHandle& handle, Saver saver,
   return status;
 }
 
+// Check if a specific key may or must not exist in one or more blocks
+// indexed by the given filter.
 bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
   Status status;
   BlockContents contents;
@@ -1038,32 +1043,32 @@ bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
   }
 }
 
-// Retrieve value from a given table and
-// call "saver" using the value found.
+// Retrieve value to a specific key from a given table and call "saver" using
+// the value found. Use filter to reduce block reads if available.
 // Return OK on success and a non-OK status on errors.
-Status Dir::Get(const Slice& key, const TableHandle& handle, Saver saver,
-                void* arg) {
+Status Dir::Fetch(const Slice& key, const TableHandle& handle, Saver saver,
+                  void* arg) {
   Status status;
   // Check key range and filter
   if (key.compare(handle.smallest_key()) < 0 ||
       key.compare(handle.largest_key()) > 0) {
     return status;
   } else {
-    BlockHandle filter;
-    filter.set_offset(handle.filter_offset());
-    filter.set_size(handle.filter_size());
-    if (filter.size() != 0 && !KeyMayMatch(key, filter)) {
+    BlockHandle filter_handle;
+    filter_handle.set_offset(handle.filter_offset());
+    filter_handle.set_size(handle.filter_size());
+    if (filter_handle.size() != 0 && !KeyMayMatch(key, filter_handle)) {
       return status;
     }
   }
 
+  // Load the index block
   BlockContents contents;
   status = ReadBlock(indx_, options_, handle, &contents);
   if (!status.ok()) {
     return status;
   }
 
-  bool eok = false;
   Block* block = new Block(contents);
   Iterator* const iter = block->NewIterator(BytewiseComparator());
   if (options_.unique_keys) {
@@ -1074,15 +1079,21 @@ Status Dir::Get(const Slice& key, const TableHandle& handle, Saver saver,
       iter->Next();
     }
   }
-  while (status.ok() && !eok && iter->Valid()) {
+
+  bool exhausted = false;
+  for (; iter->Valid(); iter->Next()) {
     BlockHandle h;
     Slice input = iter->value();
     status = h.DecodeFrom(&input);
     if (status.ok()) {
-      status = Get(key, h, saver, arg, &eok);
+      status = Fetch(key, h, saver, arg, &exhausted);
     }
 
-    iter->Next();
+    if (!status.ok()) {
+      break;
+    } else if (exhausted) {
+      break;
+    }
   }
 
   if (status.ok()) {
@@ -1136,7 +1147,7 @@ Status Dir::Get(const Slice& key, uint32_t epoch, std::string* dst) {
     Slice handle_encoding = epoch_iter_->value();
     status = handle.DecodeFrom(&handle_encoding);
     if (status.ok()) {
-      status = Get(key, handle, SaveValue, &state);
+      status = Fetch(key, handle, SaveValue, &state);
       if (status.ok() && state.found) {
         if (options_.unique_keys) {
           break;

@@ -231,24 +231,24 @@ class Dir {
  private:
   typedef void (*Saver)(void* arg, const Slice& key, const Slice& value);
 
-  // Obtain the value to a key from a specific block.
-  // If key is found, "saver" will be called. Set *eok to true if keys
+  // Obtain the value to a specific key from a given data block.
+  // If key is found, "saver" will be called. Set *exhausted to true if keys
   // larger than the given one have been seen.
   // NOTE: "saver" may be called multiple times.
   // Return OK on success, or a non-OK status on errors.
-  Status Get(const Slice& key, const BlockHandle& handle, Saver saver, void*,
-             bool* eok /* end-of-key */);
+  Status Fetch(const Slice& key, const BlockHandle& handle, Saver saver, void*,
+               bool* exhausted);
 
   // Return true if the given key matches a specific filter block.
   bool KeyMayMatch(const Slice& key, const BlockHandle& handle);
 
-  // Obtain the value to a key from a specific table.
+  // Obtain the value to a specific key from a given table.
   // If key is found, "saver" will be called.
   // NOTE: "saver" may be called multiple times.
   // Return OK on success, or a non-OK status on errors.
-  Status Get(const Slice& key, const TableHandle& handle, Saver saver, void*);
+  Status Fetch(const Slice& key, const TableHandle& handle, Saver saver, void*);
 
-  // Obtain the value to a key in a specific epoch.
+  // Obtain the value to a specific key within a given epoch.
   // If key is found, value is appended to "dst".
   // NOTE: a key may appear multiple times within a single epoch.
   // Return OK on success, and a non-OK status on errors.
