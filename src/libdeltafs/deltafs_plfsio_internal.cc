@@ -811,8 +811,10 @@ void DirLogger::MaybeScheduleCompaction() {
 
   if (options_.compaction_pool != NULL) {
     options_.compaction_pool->Schedule(DirLogger::BGWork, this);
-  } else {
+  } else if (options_.allow_env_threads) {
     Env::Default()->Schedule(DirLogger::BGWork, this);
+  } else {
+    DoCompaction();
   }
 }
 

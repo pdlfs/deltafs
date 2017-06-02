@@ -104,10 +104,18 @@ struct DirOptions {
   // Default: false
   bool tail_padding;
 
-  // Thread pool used to run background compaction jobs.
-  // If set to NULL, Env::Default() will be used to schedule jobs.
+  // Thread pool used to run concurrent background compaction jobs.
+  // If set to NULL, Env::Default() may be used to schedule jobs if permitted.
+  // Otherwise, the caller's thread context will be used directly to serve
+  // compactions.
   // Default: NULL
   ThreadPool* compaction_pool;
+
+  // Thread pool used to run concurrent background reads.
+  // If set to NULL, Env::Default() may be used to schedule reads if permitted.
+  // Otherwise, the caller's thread context will be used directly.
+  // Default: NULL
+  ThreadPool* reader_pool;
 
   // True if write operations should be performed in a non-blocking manner,
   // in which case a special status is returned instead of blocking the
@@ -145,6 +153,10 @@ struct DirOptions {
   // storage system. If NULL, Env::Default() will be used.
   // Default: NULL
   Env* env;
+
+  // If the env context may be used to run background jobs.
+  // Default: false
+  bool allow_env_threads;
 
   // True if the underlying storage is implemented as a parallel
   // file system rather than an object storage.

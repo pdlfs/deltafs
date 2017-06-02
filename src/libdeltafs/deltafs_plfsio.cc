@@ -45,6 +45,7 @@ DirOptions::DirOptions()
       index_buffer(4 << 20),
       tail_padding(false),
       compaction_pool(NULL),
+      reader_pool(NULL),
       non_blocking(false),
       slowdown_micros(0),
       unique_keys(true),
@@ -52,6 +53,7 @@ DirOptions::DirOptions()
       skip_checksums(false),
       lg_parts(0),
       env(NULL),
+      allow_env_threads(false),
       is_env_pfs(true),
       rank(0) {}
 
