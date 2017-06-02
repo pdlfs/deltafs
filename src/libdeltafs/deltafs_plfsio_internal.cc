@@ -1117,87 +1117,108 @@ static void SaveValue(void* arg, const Slice& key, const Slice& value) {
   state->found = true;
 }
 
+struct ParaSaverState : public SaverState {
+  uint32_t epoch;
+  std::vector<uint16_t>* offset;
+  std::string* buffer;
+  port::Mutex* mu;
+};
+
+static void ParaSaveValue(void* arg, const Slice& key, const Slice& value) {
+  ParaSaverState* state = reinterpret_cast<ParaSaverState*>(arg);
+  MutexLock ml(state->mu);
+  state->offset->push_back(static_cast<uint16_t>(state->buffer->size()));
+  PutVarint32(state->buffer, state->epoch);
+  PutLengthPrefixedSlice(state->buffer, value);
+  state->found = true;
+}
+
 static inline Iterator* NewEpochIterator(Block* epoch_index) {
   return epoch_index->NewIterator(BytewiseComparator());
 }
+
 }  // namespace
 
-Status Dir::Get(const Slice& key, uint32_t epoch, std::string* dst) {
+Status Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
+  mutex_.AssertHeld();
   Status status;
-  if (epoch_iter_ == NULL) {
-    epoch_iter_ = NewEpochIterator(epochs_);
-  }
   std::string epoch_key;
   uint32_t table = 0;
-  while (status.ok()) {
+  for (; status.ok(); table++) {
     epoch_key = EpochKey(epoch, table);
-    // Reuse current iter cursor if possible
-    if (!epoch_iter_->Valid() || epoch_iter_->key() != epoch_key) {
-      epoch_iter_->Seek(epoch_key);
-      if (!epoch_iter_->Valid()) {
-        break;
-      } else if (epoch_iter_->key() != epoch_key) {
-        break;
+    // Reuse current iterator position if possible
+    if (!ctx->epoch_iter->Valid() || ctx->epoch_iter->key() != epoch_key) {
+      ctx->epoch_iter->Seek(epoch_key);
+      if (!ctx->epoch_iter->Valid()) {
+        break;  // EOF
+      } else if (ctx->epoch_iter->key() != epoch_key) {
+        break;  // No such table
       }
     }
     SaverState state;
+    state.dst = ctx->dst;
     state.found = false;
-    state.dst = dst;
-    TableHandle handle;
-    Slice handle_encoding = epoch_iter_->value();
-    status = handle.DecodeFrom(&handle_encoding);
+    TableHandle h;
+    Slice handle_encoding = ctx->epoch_iter->value();
+    status = h.DecodeFrom(&handle_encoding);
+    ctx->epoch_iter->Next();
     if (status.ok()) {
-      status = Fetch(key, handle, SaveValue, &state);
+      status = Fetch(key, h, SaveValue, &state);
       if (status.ok() && state.found) {
         if (options_.unique_keys) {
           break;
         }
       }
     }
-
-    epoch_iter_->Next();
-    table++;
   }
 
   if (status.ok()) {
-    status = epoch_iter_->status();
+    status = ctx->epoch_iter->status();
   }
 
   return status;
 }
 
-Status Dir::Gets(const Slice& key, std::string* dst) {
+Status Dir::Read(const Slice& key, std::string* dst) {
   Status status;
+  assert(epochs_ != NULL);
+  MutexLock ml(&mutex_);
+  GetContext ctx;
+  ctx.num_outstanding_reads = 0;
+  ctx.epoch_iter = NewEpochIterator(epochs_);
+  ctx.dst = dst;
   if (num_epoches_ != 0) {
-    if (epoch_iter_ == NULL) {
-      epoch_iter_ = NewEpochIterator(epochs_);
-    }
     uint32_t ep = 0;
     for (; ep < num_epoches_; ep++) {
-      status = Get(key, ep, dst);
+      status = Get(key, ep, &ctx);
       if (!status.ok()) {
         break;
       }
     }
   }
 
+  while (ctx.num_outstanding_reads > 0) {
+    cond_var_.Wait();
+  }
+
+  delete ctx.epoch_iter;
   return status;
 }
 
 Dir::Dir(const DirOptions& options, LogSource* data, LogSource* indx)
     : options_(options),
       num_epoches_(0),
-      epoch_iter_(NULL),
-      epochs_(NULL),
       indx_(indx),
-      data_(data) {
+      data_(data),
+      cond_var_(&mutex_),
+      num_bg_reads_(0),
+      epochs_(NULL) {
   assert(indx_ != NULL && data_ != NULL);
   indx_->Ref();
   data_->Ref();
 }
 
 Dir::~Dir() {
-  delete epoch_iter_;
   delete epochs_;
   indx_->Unref();
   data_->Unref();

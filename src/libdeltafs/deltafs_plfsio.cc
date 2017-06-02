@@ -872,7 +872,7 @@ Status ReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
     if (status.ok()) {
       status = Dir::Open(options_, data_, index, &dir);
       if (status.ok()) {
-        status = dir->Gets(fname, dst);
+        status = dir->Read(fname, dst);
       }
     }
   }

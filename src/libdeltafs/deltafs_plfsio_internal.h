@@ -224,7 +224,7 @@ class Dir {
   // Obtain the value to a key from all epochs.
   // All value found will be appended to "dst"
   // Return OK on success, or a non-OK status on errors.
-  Status Gets(const Slice& key, std::string* dst);
+  Status Read(const Slice& key, std::string* dst);
 
   ~Dir();
 
@@ -249,10 +249,17 @@ class Dir {
   Status Fetch(const Slice& key, const TableHandle& handle, Saver saver, void*);
 
   // Obtain the value to a specific key within a given epoch.
-  // If key is found, value is appended to "dst".
+  // If key is found, value is appended to *ctx->dst.
   // NOTE: a key may appear multiple times within a single epoch.
   // Return OK on success, and a non-OK status on errors.
-  Status Get(const Slice& key, uint32_t epoch, std::string* dst);
+  struct GetContext {
+    Iterator* epoch_iter;
+    std::string* dst;
+    int num_outstanding_reads;
+    std::vector<uint32_t> offsets;
+    std::string buffer;
+  };
+  Status Get(const Slice& key, uint32_t epoch, GetContext* ctx);
 
   // No copying allowed
   void operator=(const Dir&);
@@ -262,11 +269,13 @@ class Dir {
   // Constant after construction
   const DirOptions& options_;
   uint32_t num_epoches_;
-
-  Iterator* epoch_iter_;
-  Block* epochs_;
   LogSource* indx_;
   LogSource* data_;
+
+  port::Mutex mutex_;
+  port::CondVar cond_var_;
+  int num_bg_reads_;
+  Block* epochs_;
 };
 
 }  // namespace plfsio
