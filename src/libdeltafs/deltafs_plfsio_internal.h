@@ -219,7 +219,7 @@ class Dir {
   // Open a reader on top of a given pair of log files.
   // Return OK on success, or a non-OK status on errors.
   static Status Open(const DirOptions& options, LogSource* data,
-                     LogSource* index, Dir** result);
+                     LogSource* indx, Dir** dirptr);
 
   // Obtain the value to a key from all epochs.
   // All value found will be appended to "dst"
@@ -264,9 +264,9 @@ class Dir {
   uint32_t num_epoches_;
 
   Iterator* epoch_iter_;
-  Block* epoch_index_;
-  LogSource* index_src_;
-  LogSource* data_src_;
+  Block* epochs_;
+  LogSource* indx_;
+  LogSource* data_;
 };
 
 }  // namespace plfsio

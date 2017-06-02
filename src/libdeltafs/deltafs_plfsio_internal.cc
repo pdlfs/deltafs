@@ -925,46 +925,45 @@ size_t DirLogger::memory_usage() const {
 }
 
 template <typename T>
-static Status ReadBlock(LogSource* file, const DirOptions& options,
-                        const T& handle, BlockContents* result,
-                        bool has_checksums = true) {
+static Status ReadBlock(LogSource* source, const DirOptions& options,
+                        const T& handle, BlockContents* result) {
   result->data = Slice();
   result->heap_allocated = false;
   result->cachable = false;
 
-  assert(file != NULL);
+  assert(source != NULL);
   size_t n = static_cast<size_t>(handle.size());
   size_t m = n;
-  if (has_checksums) {
+  if (!options.skip_checksums) {
     m += kBlockTrailerSize;
   }
   char* buf = new char[m];
   Slice contents;
-  Status s = file->Read(handle.offset(), m, &contents, buf);
-  if (s.ok()) {
+  Status status = source->Read(handle.offset(), m, &contents, buf);
+  if (status.ok()) {
     if (contents.size() != m) {
-      s = Status::Corruption("truncated block read");
+      status = Status::Corruption("Truncated block read");
     }
   }
-  if (!s.ok()) {
+  if (!status.ok()) {
     delete[] buf;
-    return s;
+    return status;
   }
 
   // CRC checks
   const char* data = contents.data();  // Pointer to where read put the data
-  if (has_checksums && options.verify_checksums) {
+  if (!options.skip_checksums && options.verify_checksums) {
     const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
     const uint32_t actual = crc32c::Value(data, n + 1);
     if (actual != crc) {
       delete[] buf;
-      s = Status::Corruption("block checksum mismatch");
-      return s;
+      status = Status::Corruption("Block checksum mismatch");
+      return status;
     }
   }
 
   if (data != buf) {
-    // File implementation gave us pointer to some other data.
+    // File implementation has given us pointer to some other data.
     // Use it directly under the assumption that it will be live
     // while the file is open.
     delete[] buf;
@@ -977,7 +976,7 @@ static Status ReadBlock(LogSource* file, const DirOptions& options,
     result->cachable = true;
   }
 
-  return s;
+  return status;
 }
 
 // Retrieve value from a given block and
@@ -989,14 +988,7 @@ Status Dir::Get(const Slice& key, const BlockHandle& handle, Saver saver,
   *eok = false;
   Status status;
   BlockContents contents;
-  status = ReadBlock(data_src_, options_, handle, &contents);
-#if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "[DBLK] read: (offset=%llu, size=%llu) %s",
-          static_cast<unsigned long long>(handle.offset()),
-          static_cast<unsigned long long>(handle.size()),
-          status.ToString().c_str());
-#endif
-
+  status = ReadBlock(data_, options_, handle, &contents);
   if (!status.ok()) {
     return status;
   }
@@ -1034,14 +1026,7 @@ Status Dir::Get(const Slice& key, const BlockHandle& handle, Saver saver,
 bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
   Status status;
   BlockContents contents;
-  status = ReadBlock(index_src_, options_, handle, &contents);
-#if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "[FBLK] read: (offset=%llu, size=%llu) %s",
-          static_cast<unsigned long long>(handle.offset()),
-          static_cast<unsigned long long>(handle.size()),
-          status.ToString().c_str());
-#endif
-
+  status = ReadBlock(indx_, options_, handle, &contents);
   if (status.ok()) {
     bool r = BloomKeyMayMatch(key, contents.data);
     if (contents.heap_allocated) {
@@ -1073,13 +1058,7 @@ Status Dir::Get(const Slice& key, const TableHandle& handle, Saver saver,
   }
 
   BlockContents contents;
-  status = ReadBlock(index_src_, options_, handle, &contents);
-#if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "[IBLK] read: (offset=%llu, size=%llu) %s",
-          static_cast<unsigned long long>(handle.offset()),
-          static_cast<unsigned long long>(handle.size()),
-          status.ToString().c_str());
-#endif
+  status = ReadBlock(indx_, options_, handle, &contents);
   if (!status.ok()) {
     return status;
   }
@@ -1135,16 +1114,13 @@ static inline Iterator* NewEpochIterator(Block* epoch_index) {
 Status Dir::Get(const Slice& key, uint32_t epoch, std::string* dst) {
   Status status;
   if (epoch_iter_ == NULL) {
-    epoch_iter_ = NewEpochIterator(epoch_index_);
+    epoch_iter_ = NewEpochIterator(epochs_);
   }
   std::string epoch_key;
   uint32_t table = 0;
   while (status.ok()) {
-    SaverState state;
-    state.found = false;
-    state.dst = dst;
-    TableHandle handle;
     epoch_key = EpochKey(epoch, table);
+    // Reuse current iter cursor if possible
     if (!epoch_iter_->Valid() || epoch_iter_->key() != epoch_key) {
       epoch_iter_->Seek(epoch_key);
       if (!epoch_iter_->Valid()) {
@@ -1153,6 +1129,10 @@ Status Dir::Get(const Slice& key, uint32_t epoch, std::string* dst) {
         break;
       }
     }
+    SaverState state;
+    state.found = false;
+    state.dst = dst;
+    TableHandle handle;
     Slice handle_encoding = epoch_iter_->value();
     status = handle.DecodeFrom(&handle_encoding);
     if (status.ok()) {
@@ -1179,14 +1159,12 @@ Status Dir::Gets(const Slice& key, std::string* dst) {
   Status status;
   if (num_epoches_ != 0) {
     if (epoch_iter_ == NULL) {
-      epoch_iter_ = NewEpochIterator(epoch_index_);
+      epoch_iter_ = NewEpochIterator(epochs_);
     }
-    uint32_t epoch = 0;
-    while (status.ok()) {
-      status = Get(key, epoch, dst);
-      if (epoch < num_epoches_ - 1) {
-        epoch++;
-      } else {
+    uint32_t ep = 0;
+    for (; ep < num_epoches_; ep++) {
+      status = Get(key, ep, dst);
+      if (!status.ok()) {
         break;
       }
     }
@@ -1195,43 +1173,37 @@ Status Dir::Gets(const Slice& key, std::string* dst) {
   return status;
 }
 
-Dir::Dir(const DirOptions& o, LogSource* d, LogSource* i)
-    : options_(o),
+Dir::Dir(const DirOptions& options, LogSource* data, LogSource* indx)
+    : options_(options),
       num_epoches_(0),
       epoch_iter_(NULL),
-      epoch_index_(NULL),
-      index_src_(i),
-      data_src_(d) {
-  assert(index_src_ != NULL && data_src_ != NULL);
-  index_src_->Ref();
-  data_src_->Ref();
+      epochs_(NULL),
+      indx_(indx),
+      data_(data) {
+  assert(indx_ != NULL && data_ != NULL);
+  indx_->Ref();
+  data_->Ref();
 }
 
 Dir::~Dir() {
   delete epoch_iter_;
-  delete epoch_index_;
-  index_src_->Unref();
-  data_src_->Unref();
+  delete epochs_;
+  indx_->Unref();
+  data_->Unref();
 }
 
-Status Dir::Open(const DirOptions& options, LogSource* data, LogSource* index,
-                 Dir** result) {
-  *result = NULL;
+Status Dir::Open(const DirOptions& options, LogSource* data, LogSource* indx,
+                 Dir** dirptr) {
+  *dirptr = NULL;
   Status status;
   char space[Footer::kEncodeLength];
   Slice input;
-  if (index->Size() >= sizeof(space)) {
-    status = index->Read(index->Size() - sizeof(space), sizeof(space), &input,
-                         space);
+  if (indx->Size() >= sizeof(space)) {
+    status =
+        indx->Read(indx->Size() - sizeof(space), sizeof(space), &input, space);
   } else {
-    status = Status::Corruption("index too short to be valid");
+    status = Status::Corruption("Dir index too short to be valid");
   }
-
-#if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "[TAIL] read: (size=%llu) %s",
-          static_cast<unsigned long long>(sizeof(space)),
-          status.ToString().c_str());
-#endif
 
   if (!status.ok()) {
     return status;
@@ -1245,24 +1217,17 @@ Status Dir::Open(const DirOptions& options, LogSource* data, LogSource* index,
 
   BlockContents contents;
   const BlockHandle& handle = footer.epoch_index_handle();
-  status = ReadBlock(index, options, handle, &contents);
-#if VERBOSE >= 6
-  Verbose(__LOG_ARGS__, 6, "[EIDX] read: (offset=%llu, size=%llu) %s",
-          static_cast<unsigned long long>(handle.offset()),
-          static_cast<unsigned long long>(handle.size()),
-          status.ToString().c_str());
-#endif
-
+  status = ReadBlock(indx, options, handle, &contents);
   if (!status.ok()) {
     return status;
   }
 
-  Dir* reader = new Dir(options, data, index);
-  reader->num_epoches_ = footer.num_epoches();
+  Dir* dir = new Dir(options, data, indx);
+  dir->num_epoches_ = footer.num_epoches();
   Block* block = new Block(contents);
-  reader->epoch_index_ = block;
+  dir->epochs_ = block;
 
-  *result = reader;
+  *dirptr = dir;
   return status;
 }
 
