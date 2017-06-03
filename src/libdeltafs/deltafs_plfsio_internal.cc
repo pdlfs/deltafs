@@ -1131,8 +1131,8 @@ static void ParaSaveValue(void* arg, const Slice& key, const Slice& value) {
   state->found = true;
 }
 
-static inline Iterator* NewEpochIterator(Block* epoch_index) {
-  return epoch_index->NewIterator(BytewiseComparator());
+static inline Iterator* NewEpochIterator(Block* block) {
+  return block->NewIterator(BytewiseComparator());
 }
 
 }  // namespace
@@ -1237,9 +1237,13 @@ void Dir::Merge(GetContext* ctx) {
   for (it = ctx->offsets->begin(); it != ctx->offsets->end(); ++it) {
     Slice input = *ctx->buffer;
     input.remove_prefix(*it);
-    GetVarint32(&input, &ignored);
-    GetLengthPrefixedSlice(&input, &value);
-    ctx->dst->append(value.data(), value.size());
+    bool r1 = GetVarint32(&input, &ignored);
+    bool r2 = GetLengthPrefixedSlice(&input, &value);
+    if (r1 && r2) {
+      ctx->dst->append(value.data(), value.size());
+    } else {
+      assert(false);
+    }
   }
 }
 
