@@ -1117,7 +1117,7 @@ static void SaveValue(void* arg, const Slice& key, const Slice& value) {
 
 struct ParaSaverState : public SaverState {
   uint32_t epoch;
-  std::vector<uint16_t>* offset;
+  std::vector<uint32_t>* offsets;
   std::string* buffer;
   port::Mutex* mu;
 };
@@ -1125,7 +1125,7 @@ struct ParaSaverState : public SaverState {
 static void ParaSaveValue(void* arg, const Slice& key, const Slice& value) {
   ParaSaverState* state = reinterpret_cast<ParaSaverState*>(arg);
   MutexLock ml(state->mu);
-  state->offset->push_back(static_cast<uint16_t>(state->buffer->size()));
+  state->offsets->push_back(static_cast<uint32_t>(state->buffer->size()));
   PutVarint32(state->buffer, state->epoch);
   PutLengthPrefixedSlice(state->buffer, value);
   state->found = true;
@@ -1158,7 +1158,11 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
         break;  // No such table
       }
     }
-    SaverState state;
+    ParaSaverState state;
+    state.epoch = epoch;
+    state.offsets = ctx->offsets;
+    state.buffer = ctx->buffer;
+    state.mu = &mutex_;
     state.dst = ctx->dst;
     state.found = false;
     TableHandle h;
@@ -1166,7 +1170,11 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
     status = h.DecodeFrom(&handle_encoding);
     epoch_iter->Next();
     if (status.ok()) {
-      status = Fetch(key, h, SaveValue, &state);
+      if (options_.parallel_reads) {
+        status = Fetch(key, h, ParaSaveValue, &state);
+      } else {
+        status = Fetch(key, h, SaveValue, &state);
+      }
       if (status.ok() && state.found) {
         if (options_.unique_keys) {
           break;
@@ -1180,6 +1188,9 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   }
 
   mutex_.Lock();
+  if (epoch_iter != ctx->epoch_iter) {
+    delete epoch_iter;
+  }
   assert(ctx->num_open_reads > 0);
   ctx->num_open_reads--;
   cond_var_.SignalAll();
@@ -1188,13 +1199,58 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   }
 }
 
+struct Dir::STLLessThan {
+  Slice buffer_;
+
+  explicit STLLessThan(const Slice& buffer) : buffer_(buffer) {}
+
+  bool operator()(uint32_t a, uint32_t b) {
+    const uint32_t epoch_a = GetEpoch(a);
+    const uint32_t epoch_b = GetEpoch(b);
+    return epoch_a < epoch_b;
+  }
+
+  uint32_t GetEpoch(uint32_t off) {
+    uint32_t e = 0;
+    const char* p = GetVarint32Ptr(  // Decode epoch number
+        buffer_.data() + off, buffer_.data() + buffer_.size(), &e);
+    if (p != NULL) {
+      return e;
+    } else {
+      assert(false);
+      return e;
+    }
+  }
+};
+
+void Dir::Merge(GetContext* ctx) {
+  std::vector<uint32_t>::iterator begin = ctx->offsets->begin();
+  std::vector<uint32_t>::iterator end = ctx->offsets->end();
+  std::sort(begin, end, STLLessThan(*ctx->buffer));
+
+  std::vector<uint32_t>::iterator it;
+  uint32_t ignored;
+  Slice value;
+  for (it = ctx->offsets->begin(); it != ctx->offsets->end(); ++it) {
+    Slice input = *ctx->buffer;
+    input.remove_prefix(*it);
+    GetVarint32(&input, &ignored);
+    GetLengthPrefixedSlice(&input, &value);
+    ctx->dst->append(value.data(), value.size());
+  }
+}
+
 Status Dir::Read(const Slice& key, std::string* dst) {
-  Status status;
   assert(epochs_ != NULL);
+  std::vector<uint32_t> offsets;
+  std::string buffer;
+
   MutexLock ml(&mutex_);
   num_bg_reads_++;
   GetContext ctx;
   ctx.num_open_reads = 0;  // Number of outstanding epoch reads
+  ctx.offsets = &offsets;
+  ctx.buffer = &buffer;
   if (!options_.parallel_reads) {
     // Pre-create the epoch iterator for serial reads
     ctx.epoch_iter = NewEpochIterator(epochs_);
@@ -1226,12 +1282,19 @@ Status Dir::Read(const Slice& key, std::string* dst) {
     }
   }
 
-  // Wait for all outstanding reads to finish
+  // Wait for all outstanding read operations to conclude
   while (ctx.num_open_reads > 0) {
     cond_var_.Wait();
   }
 
   delete ctx.epoch_iter;
+  // Merge read results
+  if (ctx.status.ok()) {
+    if (options_.parallel_reads) {
+      Merge(&ctx);
+    }
+  }
+
   assert(num_bg_reads_ > 0);
   num_bg_reads_--;
   cond_var_.SignalAll();

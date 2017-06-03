@@ -257,11 +257,13 @@ class Dir {
     Iterator* epoch_iter;
     std::string* dst;
     int num_open_reads;
-    std::vector<uint32_t> offsets;
-    std::string buffer;
+    std::vector<uint32_t>* offsets;
+    std::string* buffer;
     Status status;
   };
   void Get(const Slice& key, uint32_t epoch, GetContext* ctx);
+
+  static void Merge(GetContext* ctx);
 
   struct BGItem {
     GetContext* ctx;
@@ -275,6 +277,7 @@ class Dir {
   void operator=(const Dir&);
   Dir(const Dir&);
 
+  struct STLLessThan;
   Dir(const DirOptions&, LogSource* data, LogSource* indx);
   // Constant after construction
   const DirOptions& options_;
