@@ -1047,16 +1047,19 @@ bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
 Status Dir::Fetch(const Slice& key, const TableHandle& handle, Saver saver,
                   void* arg) {
   Status status;
-  // Check key range and filter
+  // Check table key range and the paired filter
   if (key.compare(handle.smallest_key()) < 0 ||
       key.compare(handle.largest_key()) > 0) {
     return status;
-  } else {
+  } else if (!options_.ignore_filters) {
     BlockHandle filter_handle;
     filter_handle.set_offset(handle.filter_offset());
     filter_handle.set_size(handle.filter_size());
-    if (filter_handle.size() != 0 && !KeyMayMatch(key, filter_handle)) {
-      return status;
+    if (filter_handle.size() != 0) {  // Filter detected
+      if (!KeyMayMatch(key, filter_handle)) {
+        // Assuming no false negatives
+        return status;
+      }
     }
   }
 

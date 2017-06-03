@@ -50,6 +50,7 @@ DirOptions::DirOptions()
       non_blocking(false),
       slowdown_micros(0),
       unique_keys(true),
+      ignore_filters(false),
       verify_checksums(false),
       skip_checksums(false),
       lg_parts(0),

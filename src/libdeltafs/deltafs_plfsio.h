@@ -141,6 +141,10 @@ struct DirOptions {
   // Default: true
   bool unique_keys;
 
+  // Ignore all filters during reads.
+  // Default: false
+  bool ignore_filters;
+
   // True if all data read from underlying storage will be verified
   // against the corresponding checksums stored.
   // Default: false
