@@ -114,8 +114,15 @@ struct DirOptions {
   // Thread pool used to run concurrent background reads.
   // If set to NULL, Env::Default() may be used to schedule reads if permitted.
   // Otherwise, the caller's thread context will be used directly.
+  // Consider setting parallel_reads to true to take full advantage
+  // of this thread pool.
   // Default: NULL
   ThreadPool* reader_pool;
+
+  // Set to true to enable parallel reading across different epochs.
+  // Otherwise, reads progress serially over all epochs.
+  // Default: false
+  bool parallel_reads;
 
   // True if write operations should be performed in a non-blocking manner,
   // in which case a special status is returned instead of blocking the

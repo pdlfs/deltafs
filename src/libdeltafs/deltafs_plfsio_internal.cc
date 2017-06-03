@@ -1137,19 +1137,24 @@ static inline Iterator* NewEpochIterator(Block* epoch_index) {
 
 }  // namespace
 
-Status Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
+void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   mutex_.AssertHeld();
+  Iterator* epoch_iter = ctx->epoch_iter;
+  if (epoch_iter == NULL) {
+    epoch_iter = NewEpochIterator(epochs_);
+  }
+  mutex_.Unlock();
   Status status;
   std::string epoch_key;
   uint32_t table = 0;
   for (; status.ok(); table++) {
     epoch_key = EpochKey(epoch, table);
-    // Reuse current iterator position if possible
-    if (!ctx->epoch_iter->Valid() || ctx->epoch_iter->key() != epoch_key) {
-      ctx->epoch_iter->Seek(epoch_key);
-      if (!ctx->epoch_iter->Valid()) {
+    // Try reusing current iterator position if possible
+    if (!epoch_iter->Valid() || epoch_iter->key() != epoch_key) {
+      epoch_iter->Seek(epoch_key);
+      if (!epoch_iter->Valid()) {
         break;  // EOF
-      } else if (ctx->epoch_iter->key() != epoch_key) {
+      } else if (epoch_iter->key() != epoch_key) {
         break;  // No such table
       }
     }
@@ -1157,9 +1162,9 @@ Status Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
     state.dst = ctx->dst;
     state.found = false;
     TableHandle h;
-    Slice handle_encoding = ctx->epoch_iter->value();
+    Slice handle_encoding = epoch_iter->value();
     status = h.DecodeFrom(&handle_encoding);
-    ctx->epoch_iter->Next();
+    epoch_iter->Next();
     if (status.ok()) {
       status = Fetch(key, h, SaveValue, &state);
       if (status.ok() && state.found) {
@@ -1171,36 +1176,72 @@ Status Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   }
 
   if (status.ok()) {
-    status = ctx->epoch_iter->status();
+    status = epoch_iter->status();
   }
 
-  return status;
+  mutex_.Lock();
+  assert(ctx->num_open_reads > 0);
+  ctx->num_open_reads--;
+  cond_var_.SignalAll();
+  if (ctx->status.ok()) {
+    ctx->status = status;
+  }
 }
 
 Status Dir::Read(const Slice& key, std::string* dst) {
   Status status;
   assert(epochs_ != NULL);
   MutexLock ml(&mutex_);
+  num_bg_reads_++;
   GetContext ctx;
-  ctx.num_outstanding_reads = 0;
-  ctx.epoch_iter = NewEpochIterator(epochs_);
+  ctx.num_open_reads = 0;  // Number of outstanding epoch reads
+  if (!options_.parallel_reads) {
+    // Pre-create the epoch iterator for serial reads
+    ctx.epoch_iter = NewEpochIterator(epochs_);
+  } else {
+    ctx.epoch_iter = NULL;
+  }
   ctx.dst = dst;
   if (num_epoches_ != 0) {
-    uint32_t ep = 0;
-    for (; ep < num_epoches_; ep++) {
-      status = Get(key, ep, &ctx);
-      if (!status.ok()) {
+    uint32_t epoch = 0;
+    for (; epoch < num_epoches_; epoch++) {
+      ctx.num_open_reads++;
+      BGItem item;
+      item.epoch = epoch;
+      item.dir = this;
+      item.ctx = &ctx;
+      item.key = key;
+      if (!options_.parallel_reads) {
+        Get(item.key, item.epoch, item.ctx);
+      } else if (options_.reader_pool != NULL) {
+        options_.reader_pool->Schedule(Dir::BGWork, &item);
+      } else if (options_.allow_env_threads) {
+        Env::Default()->Schedule(Dir::BGWork, &item);
+      } else {
+        Get(item.key, item.epoch, item.ctx);
+      }
+      if (!ctx.status.ok()) {
         break;
       }
     }
   }
 
-  while (ctx.num_outstanding_reads > 0) {
+  // Wait for all outstanding reads to finish
+  while (ctx.num_open_reads > 0) {
     cond_var_.Wait();
   }
 
   delete ctx.epoch_iter;
-  return status;
+  assert(num_bg_reads_ > 0);
+  num_bg_reads_--;
+  cond_var_.SignalAll();
+  return ctx.status;
+}
+
+void Dir::BGWork(void* arg) {
+  BGItem* item = reinterpret_cast<BGItem*>(arg);
+  MutexLock ml(&item->dir->mutex_);
+  item->dir->Get(item->key, item->epoch, item->ctx);
 }
 
 Dir::Dir(const DirOptions& options, LogSource* data, LogSource* indx)
@@ -1217,6 +1258,12 @@ Dir::Dir(const DirOptions& options, LogSource* data, LogSource* indx)
 }
 
 Dir::~Dir() {
+  mutex_.Lock();
+  while (num_bg_reads_ != 0) {
+    cond_var_.Wait();
+  }
+  mutex_.Unlock();
+
   delete epochs_;
   indx_->Unref();
   data_->Unref();

@@ -46,6 +46,7 @@ DirOptions::DirOptions()
       tail_padding(false),
       compaction_pool(NULL),
       reader_pool(NULL),
+      parallel_reads(false),
       non_blocking(false),
       slowdown_micros(0),
       unique_keys(true),

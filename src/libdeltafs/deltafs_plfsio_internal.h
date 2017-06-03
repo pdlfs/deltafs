@@ -256,11 +256,20 @@ class Dir {
   struct GetContext {
     Iterator* epoch_iter;
     std::string* dst;
-    int num_outstanding_reads;
+    int num_open_reads;
     std::vector<uint32_t> offsets;
     std::string buffer;
+    Status status;
   };
-  Status Get(const Slice& key, uint32_t epoch, GetContext* ctx);
+  void Get(const Slice& key, uint32_t epoch, GetContext* ctx);
+
+  struct BGItem {
+    GetContext* ctx;
+    uint32_t epoch;
+    Slice key;
+    Dir* dir;
+  };
+  static void BGWork(void*);
 
   // No copying allowed
   void operator=(const Dir&);
