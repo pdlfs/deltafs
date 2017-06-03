@@ -197,11 +197,11 @@ Iterator* WriteBuffer::NewIterator() const {
   return new Iter(this);
 }
 
-namespace {
-struct STLLessThan {
+struct WriteBuffer::STLLessThan {
   Slice buffer_;
 
-  STLLessThan(const std::string& buffer) : buffer_(buffer) {}
+  explicit STLLessThan(const Slice& buffer) : buffer_(buffer) {}
+
   bool operator()(uint32_t a, uint32_t b) {
     Slice key_a = GetKey(a);
     Slice key_b = GetKey(b);
@@ -211,10 +211,9 @@ struct STLLessThan {
 
   Slice GetKey(uint32_t offset) {
     Slice result;
-    bool ok = GetLengthPrefixedSlice(buffer_.data() + offset,
-                                     buffer_.data() + buffer_.size(),  // Limit
-                                     &result);
-    if (ok) {
+    const char* p = GetLengthPrefixedSlice(
+        buffer_.data() + offset, buffer_.data() + buffer_.size(), &result);
+    if (p != NULL) {
       return result;
     } else {
       assert(false);
@@ -222,7 +221,6 @@ struct STLLessThan {
     }
   }
 };
-}  // namespace
 
 void WriteBuffer::FinishAndSort() {
   // Sort entries

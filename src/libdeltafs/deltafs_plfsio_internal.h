@@ -35,6 +35,7 @@ class WriteBuffer {
   void Reset();
 
  private:
+  struct STLLessThan;
   // Starting offsets of inserted entries
   std::vector<uint32_t> offsets_;
   std::string buffer_;
