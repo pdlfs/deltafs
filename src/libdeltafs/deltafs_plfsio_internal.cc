@@ -463,8 +463,8 @@ void TableLogger::EndBlock() {
   const size_t block_size = block_contents.size();
   Slice final_block_contents;
   if (options_.block_padding) {
-    final_block_contents =
-        data_block_.Finalize(!options_.skip_checksums, options_.block_size);
+    final_block_contents = data_block_.Finalize(
+        !options_.skip_checksums, static_cast<uint32_t>(options_.block_size));
   } else {
     final_block_contents = data_block_.Finalize(!options_.skip_checksums);
   }
