@@ -1139,6 +1139,9 @@ static inline Iterator* NewEpochIterator(Block* epoch_index) {
 
 void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   mutex_.AssertHeld();
+  if (!ctx->status->ok()) {
+    return;
+  }
   Iterator* epoch_iter = ctx->epoch_iter;
   if (epoch_iter == NULL) {
     epoch_iter = NewEpochIterator(epochs_);
@@ -1194,8 +1197,8 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   assert(ctx->num_open_reads > 0);
   ctx->num_open_reads--;
   cond_var_.SignalAll();
-  if (ctx->status.ok()) {
-    ctx->status = status;
+  if (ctx->status->ok()) {
+    *ctx->status = status;
   }
 }
 
@@ -1228,9 +1231,9 @@ void Dir::Merge(GetContext* ctx) {
   std::vector<uint32_t>::iterator end = ctx->offsets->end();
   std::sort(begin, end, STLLessThan(*ctx->buffer));
 
-  std::vector<uint32_t>::iterator it;
   uint32_t ignored;
   Slice value;
+  std::vector<uint32_t>::const_iterator it;
   for (it = ctx->offsets->begin(); it != ctx->offsets->end(); ++it) {
     Slice input = *ctx->buffer;
     input.remove_prefix(*it);
@@ -1241,6 +1244,7 @@ void Dir::Merge(GetContext* ctx) {
 }
 
 Status Dir::Read(const Slice& key, std::string* dst) {
+  Status status;
   assert(epochs_ != NULL);
   std::vector<uint32_t> offsets;
   std::string buffer;
@@ -1249,6 +1253,7 @@ Status Dir::Read(const Slice& key, std::string* dst) {
   num_bg_reads_++;
   GetContext ctx;
   ctx.num_open_reads = 0;  // Number of outstanding epoch reads
+  ctx.status = &status;
   ctx.offsets = &offsets;
   ctx.buffer = &buffer;
   if (!options_.parallel_reads) {
@@ -1276,7 +1281,7 @@ Status Dir::Read(const Slice& key, std::string* dst) {
       } else {
         Get(item.key, item.epoch, item.ctx);
       }
-      if (!ctx.status.ok()) {
+      if (!status.ok()) {
         break;
       }
     }
@@ -1289,7 +1294,7 @@ Status Dir::Read(const Slice& key, std::string* dst) {
 
   delete ctx.epoch_iter;
   // Merge read results
-  if (ctx.status.ok()) {
+  if (status.ok()) {
     if (options_.parallel_reads) {
       Merge(&ctx);
     }
@@ -1298,7 +1303,7 @@ Status Dir::Read(const Slice& key, std::string* dst) {
   assert(num_bg_reads_ > 0);
   num_bg_reads_--;
   cond_var_.SignalAll();
-  return ctx.status;
+  return status;
 }
 
 void Dir::BGWork(void* arg) {
@@ -1321,6 +1326,7 @@ Dir::Dir(const DirOptions& options, LogSource* data, LogSource* indx)
 }
 
 Dir::~Dir() {
+  // Wait for all on-going reads to finish
   mutex_.Lock();
   while (num_bg_reads_ != 0) {
     cond_var_.Wait();

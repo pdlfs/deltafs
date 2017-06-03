@@ -252,14 +252,15 @@ class Dir {
   // Obtain the value to a specific key within a given epoch.
   // If key is found, value is appended to *ctx->dst.
   // NOTE: a key may appear multiple times within a single epoch.
-  // Return OK on success, and a non-OK status on errors.
+  // Store an OK status in *ctx->status on success, and a non-OK status on
+  // errors.
   struct GetContext {
     Iterator* epoch_iter;
     std::string* dst;
     int num_open_reads;
-    std::vector<uint32_t>* offsets;
+    std::vector<uint32_t>* offsets;  // Only used during parallel reads
     std::string* buffer;
-    Status status;
+    Status* status;
   };
   void Get(const Slice& key, uint32_t epoch, GetContext* ctx);
 
