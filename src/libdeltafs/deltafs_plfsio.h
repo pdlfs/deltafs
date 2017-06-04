@@ -344,7 +344,7 @@ class DirReader {
                      DirReader** result);
 
   // Fetch the entire data from a specific file under a given plfs directory.
-  virtual Status ReadAll(const Slice& fname, std::string* dst) = 0;
+  virtual Status ReadAll(const Slice& fid, std::string* dst) = 0;
 
  private:
   // No copying allowed

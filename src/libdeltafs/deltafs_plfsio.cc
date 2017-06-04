@@ -646,7 +646,7 @@ static void PrintLogInfo(const std::string& name, const size_t mem_size) {
 // If buf_size is not zero, create a stacked UnsafeBufferedWritableFile to
 // ensure the write size. If bytes is not NULL, also create a stacked
 // MeasuredWritableFile to track the size of data written to the log.
-static Status OpenSink(LogSink** result, const std::string& name,
+static Status OpenSink(LogSink** result, const std::string& fname,
                        Env* env = Env::Default(), const size_t buf_size = 0,
                        port::Mutex* io_mutex = NULL,
                        std::vector<std::string*>* write_bufs = NULL,
@@ -654,7 +654,7 @@ static Status OpenSink(LogSink** result, const std::string& name,
   *result = NULL;
 
   WritableFile* file = NULL;
-  Status status = env->NewWritableFile(name, &file);
+  Status status = env->NewWritableFile(fname, &file);
   if (status.ok()) {
     assert(file != NULL);
   } else {
@@ -670,8 +670,8 @@ static Status OpenSink(LogSink** result, const std::string& name,
     // No writer buffer?
   }
 
-  PrintLogInfo(name, buf_size);
-  LogSink* sink = new LogSink(name, file, io_mutex);
+  PrintLogInfo(fname, buf_size);
+  LogSink* sink = new LogSink(fname, file, io_mutex);
   sink->Ref();
 
   *result = sink;
@@ -776,45 +776,58 @@ class DirReaderImpl : public DirReader {
                 LogSource* data);
   virtual ~DirReaderImpl();
 
-  virtual void List(std::vector<std::string>* names);
-  virtual Status ReadAll(const Slice& fname, std::string* dst);
-  virtual bool Exists(const Slice& fname);
+  virtual void List(std::vector<std::string>* fids);
+  virtual Status ReadAll(const Slice& fid, std::string* dst);
+  virtual bool Exists(const Slice& fid);
 
  private:
   friend class DirReader;
 
-  const DirOptions options_;
-  const std::string dirname_;
-  port::Mutex mutex_;
-  size_t num_parts_;
+  DirOptions options_;
+  const std::string name_;
+  uint32_t num_parts_;
   uint32_t part_mask_;
+
+  port::Mutex mutex_;
+  Dir** dpts_;  // Lasily initialized directory partitions
   LogSource* data_;
 };
 
 DirReaderImpl::DirReaderImpl(const DirOptions& opts, const std::string& name,
                              LogSource* data)
     : options_(opts),
-      dirname_(name),
+      name_(name),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
+      dpts_(NULL),
       data_(data) {
+  dpts_ = new Dir*[num_parts_];
+  for (size_t i = 0; i < num_parts_; i++) dpts_[i] = NULL;
   assert(data_ != NULL);
   data_->Ref();
 }
 
-DirReaderImpl::~DirReaderImpl() { data_->Unref(); }
+DirReaderImpl::~DirReaderImpl() {
+  MutexLock ml(&mutex_);
+  for (size_t i = 0; i < num_parts_; i++) {
+    delete dpts_[i];
+  }
+  delete dpts_;
+  data_->Unref();
+}
 
-void DirReaderImpl::List(std::vector<std::string>* names) {
+void DirReaderImpl::List(std::vector<std::string>*) {
   // TODO
 }
 
-bool DirReaderImpl::Exists(const Slice& fname) {
+bool DirReaderImpl::Exists(const Slice&) {
   // TODO
   return true;
 }
 
-static Status NewLogSrc(const std::string& fname, Env* env, LogSource** ptr) {
-  *ptr = NULL;
+static Status LoadSource(LogSource** result, const std::string& fname,
+                         Env* env = Env::Default()) {
+  *result = NULL;
   SequentialFile* file;
   uint64_t size;
   Status status = env->NewSequentialFile(fname, &file);
@@ -835,15 +848,16 @@ static Status NewLogSrc(const std::string& fname, Env* env, LogSource** ptr) {
       PrintLogInfo(fname, size);
       LogSource* src = new LogSource(buffered_file, size);
       src->Ref();
-      *ptr = src;
+      *result = src;
     }
   }
 
   return status;
 }
 
-static Status NewUnbufferedLogSrc(const std::string& fname, Env* env,
-                                  LogSource** ptr) {
+static Status OpenSource(LogSource** result, const std::string& fname,
+                         Env* env = Env::Default()) {
+  *result = NULL;
   RandomAccessFile* file;
   uint64_t size;
   Status status = env->NewRandomAccessFile(fname, &file);
@@ -857,40 +871,47 @@ static Status NewUnbufferedLogSrc(const std::string& fname, Env* env,
     PrintLogInfo(fname, 0);
     LogSource* src = new LogSource(file, size);
     src->Ref();
-    *ptr = src;
-  } else {
-    *ptr = NULL;
+    *result = src;
   }
 
   return status;
 }
 
-Status DirReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
+Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
   Status status;
-  Dir* dir = NULL;
-  LogSource* index = NULL;
-  uint32_t hash = Hash(fname.data(), fname.size(), 0);
+  uint32_t hash = Hash(fid.data(), fid.size(), 0);
   uint32_t part = hash & part_mask_;
-  if (part < num_parts_) {
-    status = NewLogSrc(PartitionIndexFileName(dirname_, options_.rank, part),
-                       options_.env, &index);
-    MutexLock ml(&mutex_);
+  assert(part < num_parts_);
+  MutexLock ml(&mutex_);
+  if (dpts_[part] == NULL) {
+    mutex_.Unlock();  // Unlock when load indexes
+    LogSource* indx = NULL;
+    Dir* dir = NULL;
+    status =
+        LoadSource(&indx, PartitionIndexFileName(name_, options_.rank, part),
+                   options_.env);
     if (status.ok()) {
-      status = Dir::Open(options_, data_, index, &dir);
-      if (status.ok()) {
-        status = dir->Read(fname, dst);
+      status = Dir::Open(options_, data_, indx, &dir);
+    }
+    mutex_.Lock();
+    if (status.ok()) {
+      if (dpts_[part] == NULL) {
+        dpts_[part] = dir;
+      } else {
+        delete dir;
       }
+    }
+    if (indx != NULL) {
+      indx->Unref();
     }
   }
 
-  if (dir != NULL) {
-    delete dir;
+  if (status.ok()) {
+    assert(dpts_[part] != NULL);
+    return dpts_[part]->Read(fid, dst);
+  } else {
+    return status;
   }
-  if (index != NULL) {
-    index->Unref();
-  }
-
-  return status;
 }
 
 DirReader::~DirReader() {}
@@ -904,30 +925,32 @@ static DirOptions SanitizeReadOptions(const DirOptions& options) {
 }
 
 Status DirReader::Open(const DirOptions& opts, const std::string& name,
-                       DirReader** ptr) {
-  *ptr = NULL;
+                       DirReader** result) {
+  *result = NULL;
   DirOptions options = SanitizeReadOptions(opts);
   const uint32_t num_parts = 1u << options.lg_parts;
   const int my_rank = options.rank;
   Env* const env = options.env;
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "plfsdir.name -> %s", name.c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.verify_checksums -> %d",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.name -> %s (mode=read)", name.c_str());
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.ignore_filters -> %d",
+          int(options.ignore_filters));
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.verify_checksums -> %d",
           int(options.verify_checksums));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.unique_keys -> %d",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.unique_keys -> %d",
           int(options.unique_keys));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.num_parts_per_rank -> %u",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.num_sub_parts -> %u (per rank)",
           static_cast<unsigned>(num_parts));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", my_rank);
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.my_rank -> %d", my_rank);
 #endif
   Status status;
   LogSource* data = NULL;
-  status = NewUnbufferedLogSrc(DataFileName(name, my_rank), env, &data);
+  status = OpenSource(&data, DataFileName(name, my_rank), env);
   if (status.ok()) {
     DirReaderImpl* impl = new DirReaderImpl(options, name, data);
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
-    *ptr = impl;
+    *result = impl;
   }
 
   if (data != NULL) {
