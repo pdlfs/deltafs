@@ -221,7 +221,7 @@ class Dir {
   // Open a reader on top of a given pair of log files.
   // Return OK on success, or a non-OK status on errors.
   static Status Open(const DirOptions& options, port::Mutex* mu,
-                     port::CondVar* cv, LogSource* indx, LogSource* data,
+                     port::CondVar* bg_cv, LogSource* indx, LogSource* data,
                      Dir** result);
 
   // Obtain the value to a key from all epochs.
@@ -299,7 +299,7 @@ class Dir {
 
   port::Mutex* mu_;
   port::CondVar* bg_cv_;
-  Block* epochs_;
+  Block* rt_;
   int refs_;
 };
 

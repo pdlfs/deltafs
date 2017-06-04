@@ -1153,7 +1153,7 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   }
   Iterator* epoch_iter = ctx->epoch_iter;
   if (epoch_iter == NULL) {
-    epoch_iter = NewEpochIterator(epochs_);
+    epoch_iter = NewEpochIterator(rt_);
   }
   mu_->Unlock();
   Status status;
@@ -1259,7 +1259,7 @@ void Dir::Merge(GetContext* ctx) {
 Status Dir::Read(const Slice& key, std::string* dst) {
   mu_->AssertHeld();
   Status status;
-  assert(epochs_ != NULL);
+  assert(rt_ != NULL);
   std::vector<uint32_t> offsets;
   std::string buffer;
 
@@ -1270,7 +1270,7 @@ Status Dir::Read(const Slice& key, std::string* dst) {
   ctx.buffer = &buffer;
   if (!options_.parallel_reads) {
     // Pre-create the epoch iterator for serial reads
-    ctx.epoch_iter = NewEpochIterator(epochs_);
+    ctx.epoch_iter = NewEpochIterator(rt_);
   } else {
     ctx.epoch_iter = NULL;
   }
@@ -1326,7 +1326,7 @@ Dir::Dir(const DirOptions& options)
       num_epoches_(0),
       mu_(NULL),
       bg_cv_(NULL),
-      epochs_(NULL),
+      rt_(NULL),
       refs_(0) {}
 
 Dir::~Dir() {
@@ -1335,11 +1335,27 @@ Dir::~Dir() {
   assert(data_ != NULL);
   data_->Unref();
 
-  delete epochs_;
+  delete rt_;
 }
 
-Status Dir::Open(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
-                 LogSource* indx, LogSource* data, Dir** result) {
+template <typename U, typename V>
+static inline bool UnMatch(U a, V b) {
+  return a != static_cast<U>(b);
+}
+
+static Status VerifyOptions(const DirOptions& options, const Footer& footer) {
+  if (UnMatch(options.lg_parts, footer.lg_parts()) ||
+      UnMatch(options.skip_checksums, footer.skip_checksums()) ||
+      UnMatch(options.unique_keys, footer.unique_keys())) {
+    return Status::AssertionFailed("Option does not match footer");
+  } else {
+    return Status::OK();
+  }
+}
+
+Status Dir::Open(const DirOptions& options, port::Mutex* mu,
+                 port::CondVar* bg_cv, LogSource* indx, LogSource* data,
+                 Dir** result) {
   *result = NULL;
   Status status;
   char space[Footer::kEncodeLength];
@@ -1359,8 +1375,11 @@ Status Dir::Open(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
   status = footer.DecodeFrom(&input);
   if (!status.ok()) {
     return status;
-  } else {
-    // Paranoid checks
+  } else if (options.paranoid_checks) {
+    status = VerifyOptions(options, footer);
+    if (!status.ok()) {
+      return status;
+    }
   }
 
   BlockContents contents;
@@ -1372,9 +1391,9 @@ Status Dir::Open(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
 
   Dir* dir = new Dir(options);
   dir->num_epoches_ = footer.num_epoches();
-  Block* block = new Block(contents);
-  dir->epochs_ = block;
-  dir->bg_cv_ = cv;
+  Block* epoch_block = new Block(contents);
+  dir->rt_ = epoch_block;
+  dir->bg_cv_ = bg_cv;
   dir->mu_ = mu;
   dir->data_ = data;
   dir->data_->Ref();
