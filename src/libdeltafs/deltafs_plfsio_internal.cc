@@ -1251,13 +1251,13 @@ void Dir::Merge(GetContext* ctx) {
 }
 
 Status Dir::Read(const Slice& key, std::string* dst) {
+  mu_->AssertHeld();
   Status status;
   assert(epochs_ != NULL);
   std::vector<uint32_t> offsets;
   std::string buffer;
-
-  MutexLock ml(mu_);
   num_bg_reads_++;
+
   GetContext ctx;
   ctx.num_open_reads = 0;  // Number of outstanding epoch reads
   ctx.status = &status;
