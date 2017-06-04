@@ -61,7 +61,7 @@ class ReadablePlfsDir {
 
  public:
   ReadablePlfsDir() : refs(0), reader(NULL) {}
-  plfsio::Reader* reader;
+  plfsio::DirReader* reader;
   void Ref() { refs++; }
 
   void Unref() {
@@ -907,7 +907,7 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
     if (!DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
       s = fio_->Read(fentry, file->fh, result, size, scratch);
     } else {
-      plfsio::Reader* reader = ToReadablePlfsFile(file->fh)->parent->reader;
+      plfsio::DirReader* reader = ToReadablePlfsFile(file->fh)->parent->reader;
       assert(reader != NULL);
       std::string buf;
       s = reader->ReadAll(fentry.nhash, &buf);

@@ -642,7 +642,7 @@ typedef pdlfs::plfsio::DirOptions DirOptions;
 // Dir writer
 typedef pdlfs::plfsio::DirWriter DirWriter;
 // Dir Reader
-typedef pdlfs::plfsio::Reader Reader;
+typedef pdlfs::plfsio::DirReader Reader;
 
 // Dir Env
 typedef pdlfs::Env Env;

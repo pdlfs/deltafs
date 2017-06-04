@@ -646,31 +646,35 @@ static void PrintLogInfo(const std::string& name, const size_t mem_size) {
 // If buf_size is not zero, create a stacked UnsafeBufferedWritableFile to
 // ensure the write size. If bytes is not NULL, also create a stacked
 // MeasuredWritableFile to track the size of data written to the log.
-static Status OpenLogSink(LogSink** result, const std::string& name,
-                          Env* env = Env::Default(), const size_t buf_size = 0,
-                          port::Mutex* io_mutex = NULL,
-                          std::vector<std::string*>* write_bufs = NULL,
-                          uint64_t* bytes = NULL) {
+static Status OpenSink(LogSink** result, const std::string& name,
+                       Env* env = Env::Default(), const size_t buf_size = 0,
+                       port::Mutex* io_mutex = NULL,
+                       std::vector<std::string*>* write_bufs = NULL,
+                       uint64_t* bytes = NULL) {
   *result = NULL;
 
   WritableFile* file = NULL;
   Status status = env->NewWritableFile(name, &file);
   if (status.ok()) {
     assert(file != NULL);
-    if (bytes != NULL) file = new MeasuredWritableFile(file, bytes);
-    if (buf_size != 0) {
-      UnsafeBufferedWritableFile* buffered =
-          new UnsafeBufferedWritableFile(file, buf_size);
-      write_bufs->push_back(buffered->buffer_store());
-      file = buffered;
-    }
-    PrintLogInfo(name, buf_size);
-    LogSink* sink = new LogSink(name, file, io_mutex);
-    sink->Ref();
-
-    *result = sink;
+  } else {
+    return status;
+  }
+  if (bytes != NULL) file = new MeasuredWritableFile(file, bytes);
+  if (buf_size != 0) {
+    UnsafeBufferedWritableFile* buffered =
+        new UnsafeBufferedWritableFile(file, buf_size);
+    write_bufs->push_back(buffered->buffer_store());
+    file = buffered;
+  } else {
+    // No writer buffer?
   }
 
+  PrintLogInfo(name, buf_size);
+  LogSink* sink = new LogSink(name, file, io_mutex);
+  sink->Ref();
+
+  *result = sink;
   return status;
 }
 
@@ -717,12 +721,12 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all directory partitions
   std::vector<std::string*> write_bufs;
-  status = OpenLogSink(&data[0], DataFileName(name, my_rank), env,
-                       options.data_buffer, &impl->io_mutex_, &write_bufs,
-                       &impl->stats_.data_written);
+  status =
+      OpenSink(&data[0], DataFileName(name, my_rank), env, options.data_buffer,
+               &impl->io_mutex_, &write_bufs, &impl->stats_.data_written);
   if (status.ok()) {
     for (size_t part = 0; part < num_parts; part++) {
-      status = OpenLogSink(
+      status = OpenSink(
           &index[part], PartitionIndexFileName(name, my_rank, int(part)), env,
           options.index_buffer, NULL, &write_bufs, &impl->stats_.index_written);
       if (!status.ok()) {
@@ -766,18 +770,18 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   return status;
 }
 
-class ReaderImpl : public Reader {
+class DirReaderImpl : public DirReader {
  public:
-  ReaderImpl(const DirOptions& options, const std::string& dirname,
-             LogSource* data);
-  virtual ~ReaderImpl();
+  DirReaderImpl(const DirOptions& opts, const std::string& name,
+                LogSource* data);
+  virtual ~DirReaderImpl();
 
   virtual void List(std::vector<std::string>* names);
   virtual Status ReadAll(const Slice& fname, std::string* dst);
   virtual bool Exists(const Slice& fname);
 
  private:
-  friend class Reader;
+  friend class DirReader;
 
   const DirOptions options_;
   const std::string dirname_;
@@ -787,10 +791,10 @@ class ReaderImpl : public Reader {
   LogSource* data_;
 };
 
-ReaderImpl::ReaderImpl(const DirOptions& options, const std::string& dirname,
-                       LogSource* data)
-    : options_(options),
-      dirname_(dirname),
+DirReaderImpl::DirReaderImpl(const DirOptions& opts, const std::string& name,
+                             LogSource* data)
+    : options_(opts),
+      dirname_(name),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
       data_(data) {
@@ -798,13 +802,13 @@ ReaderImpl::ReaderImpl(const DirOptions& options, const std::string& dirname,
   data_->Ref();
 }
 
-ReaderImpl::~ReaderImpl() { data_->Unref(); }
+DirReaderImpl::~DirReaderImpl() { data_->Unref(); }
 
-void ReaderImpl::List(std::vector<std::string>* names) {
+void DirReaderImpl::List(std::vector<std::string>* names) {
   // TODO
 }
 
-bool ReaderImpl::Exists(const Slice& fname) {
+bool DirReaderImpl::Exists(const Slice& fname) {
   // TODO
   return true;
 }
@@ -861,7 +865,7 @@ static Status NewUnbufferedLogSrc(const std::string& fname, Env* env,
   return status;
 }
 
-Status ReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
+Status DirReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
   Status status;
   Dir* dir = NULL;
   LogSource* index = NULL;
@@ -889,7 +893,7 @@ Status ReaderImpl::ReadAll(const Slice& fname, std::string* dst) {
   return status;
 }
 
-Reader::~Reader() {}
+DirReader::~DirReader() {}
 
 static DirOptions SanitizeReadOptions(const DirOptions& options) {
   DirOptions result = options;
@@ -899,15 +903,15 @@ static DirOptions SanitizeReadOptions(const DirOptions& options) {
   return result;
 }
 
-Status Reader::Open(const DirOptions& opts, const std::string& dirname,
-                    Reader** ptr) {
+Status DirReader::Open(const DirOptions& opts, const std::string& name,
+                       DirReader** ptr) {
   *ptr = NULL;
   DirOptions options = SanitizeReadOptions(opts);
-  const size_t num_parts = 1u << options.lg_parts;
+  const uint32_t num_parts = 1u << options.lg_parts;
   const int my_rank = options.rank;
   Env* const env = options.env;
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "plfsdir.name -> %s", dirname.c_str());
+  Verbose(__LOG_ARGS__, 2, "plfsdir.name -> %s", name.c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.verify_checksums -> %d",
           int(options.verify_checksums));
   Verbose(__LOG_ARGS__, 2, "plfsdir.unique_keys -> %d",
@@ -918,9 +922,9 @@ Status Reader::Open(const DirOptions& opts, const std::string& dirname,
 #endif
   Status status;
   LogSource* data = NULL;
-  status = NewUnbufferedLogSrc(DataFileName(dirname, my_rank), env, &data);
+  status = NewUnbufferedLogSrc(DataFileName(name, my_rank), env, &data);
   if (status.ok()) {
-    ReaderImpl* impl = new ReaderImpl(options, dirname, data);
+    DirReaderImpl* impl = new DirReaderImpl(options, name, data);
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
     *ptr = impl;

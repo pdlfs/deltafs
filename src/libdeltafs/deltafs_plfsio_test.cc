@@ -129,7 +129,7 @@ class PlfsIoTest {
   }
 
   void OpenReader() {
-    Status s = Reader::Open(options_, dirname_, &reader_);
+    Status s = DirReader::Open(options_, dirname_, &reader_);
     ASSERT_OK(s);
   }
 
@@ -172,7 +172,7 @@ class PlfsIoTest {
   DirOptions options_;
   std::string dirname_;
   DirWriter* writer_;
-  Reader* reader_;
+  DirReader* reader_;
   int epoch_;
 };
 

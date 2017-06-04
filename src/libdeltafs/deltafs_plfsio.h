@@ -283,7 +283,7 @@ extern Status DestroyDir(const std::string& dirname, const DirOptions& options);
 
 class BatchCursor;
 
-// Deltafs plfs-style N-1 I/O writer api.
+// Deltafs Plfs Dir Writer
 class DirWriter {
  public:
   DirWriter() {}
@@ -332,31 +332,24 @@ class DirWriter {
   DirWriter(const DirWriter&);
 };
 
-// Deltafs plfs-style N-1 I/O reader api.
-class Reader {
+// Deltafs Plfs Dir Reader
+class DirReader {
  public:
-  Reader() {}
-  virtual ~Reader();
+  DirReader() {}
+  virtual ~DirReader();
 
   // Open an I/O reader against a specific plfs-style directory.
   // Return OK on success, or a non-OK status on errors.
-  static Status Open(const DirOptions& options, const std::string& dirname,
-                     Reader** result);
-
-  // List files under a given plfs directory.  Not supported so far.
-  virtual void List(std::vector<std::string>* names) = 0;
+  static Status Open(const DirOptions& options, const std::string& name,
+                     DirReader** result);
 
   // Fetch the entire data from a specific file under a given plfs directory.
   virtual Status ReadAll(const Slice& fname, std::string* dst) = 0;
 
-  // Return true iff a specific file exists under a given plfs directory.
-  // Not supported so far.
-  virtual bool Exists(const Slice& fname) = 0;
-
  private:
   // No copying allowed
-  void operator=(const Reader&);
-  Reader(const Reader&);
+  void operator=(const DirReader&);
+  DirReader(const DirReader&);
 };
 
 }  // namespace plfsio
