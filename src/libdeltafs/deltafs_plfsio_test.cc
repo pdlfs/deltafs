@@ -100,6 +100,7 @@ class PlfsIoTest {
   PlfsIoTest() {
     dirname_ = test::TmpDir() + "/plfsio_test";
     options_.verify_checksums = true;
+    options_.paranoid_checks = true;
     options_.env = TestEnv();
     writer_ = NULL;
     reader_ = NULL;

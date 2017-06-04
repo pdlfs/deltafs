@@ -49,6 +49,7 @@ DirOptions::DirOptions()
       parallel_reads(false),
       non_blocking(false),
       slowdown_micros(0),
+      paranoid_checks(false),
       unique_keys(true),
       ignore_filters(false),
       verify_checksums(false),
@@ -968,8 +969,28 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.my_rank -> %d", my_rank);
 #endif
   status = OpenSource(&data, DataFileName(name, my_rank), env);
-  if (status.ok()) {
-    // Paranoid checks
+  char space[Footer::kEncodeLength];
+  Footer footer;
+  Slice input;
+  if (!status.ok()) {
+    // Error
+  } else if (data->Size() < sizeof(space)) {
+    status = Status::Corruption("Dir data too short to be valid");
+  } else if (options.paranoid_checks) {
+    status =
+        data->Read(data->Size() - sizeof(space), sizeof(space), &input, space);
+    if (status.ok()) {
+      status = footer.DecodeFrom(&input);
+    }
+  }
+
+  // Reset options
+  if (options.paranoid_checks) {
+    if (status.ok()) {
+      options.lg_parts = static_cast<int>(footer.lg_parts());
+      options.skip_checksums = static_cast<bool>(footer.skip_checksums());
+      options.unique_keys = static_cast<bool>(footer.unique_keys());
+    }
   }
 
   if (status.ok()) {

@@ -135,6 +135,12 @@ struct DirOptions {
   // Default: 0
   uint64_t slowdown_micros;
 
+  // If true, the implementation will do aggressive checking of the
+  // data it is processing and will stop early if it detects any
+  // errors.
+  // Default: false
+  bool paranoid_checks;
+
   // True if keys are unique within each epoch.
   // Keys are unique if each key appears no more than once within
   // each epoch.
