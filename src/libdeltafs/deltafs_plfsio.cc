@@ -772,8 +772,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
 
 class DirReaderImpl : public DirReader {
  public:
-  DirReaderImpl(const DirOptions& opts, const std::string& name,
-                LogSource* data);
+  DirReaderImpl(const DirOptions& opts, const std::string& name);
   virtual ~DirReaderImpl();
 
   virtual void List(std::vector<std::string>* fids);
@@ -793,19 +792,13 @@ class DirReaderImpl : public DirReader {
   LogSource* data_;
 };
 
-DirReaderImpl::DirReaderImpl(const DirOptions& opts, const std::string& name,
-                             LogSource* data)
+DirReaderImpl::DirReaderImpl(const DirOptions& opts, const std::string& name)
     : options_(opts),
       name_(name),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
       dpts_(NULL),
-      data_(data) {
-  dpts_ = new Dir*[num_parts_];
-  for (size_t i = 0; i < num_parts_; i++) dpts_[i] = NULL;
-  assert(data_ != NULL);
-  data_->Ref();
-}
+      data_(NULL) {}
 
 DirReaderImpl::~DirReaderImpl() {
   MutexLock ml(&mutex_);
@@ -931,6 +924,8 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   const uint32_t num_parts = 1u << options.lg_parts;
   const int my_rank = options.rank;
   Env* const env = options.env;
+  LogSource* data = NULL;
+  Status status;
 #if VERBOSE >= 2
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.name -> %s (mode=read)", name.c_str());
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.ignore_filters -> %d",
@@ -943,13 +938,20 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
           static_cast<unsigned>(num_parts));
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.my_rank -> %d", my_rank);
 #endif
-  Status status;
-  LogSource* data = NULL;
   status = OpenSource(&data, DataFileName(name, my_rank), env);
   if (status.ok()) {
-    DirReaderImpl* impl = new DirReaderImpl(options, name, data);
+    // Paranoid checks
+  }
+
+  if (status.ok()) {
+    Dir** dpts = new Dir*[num_parts]();
+    DirReaderImpl* impl = new DirReaderImpl(options, name);
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
+    impl->dpts_ = dpts;
+    impl->data_ = data;
+    data->Ref();
+
     *result = impl;
   }
 
