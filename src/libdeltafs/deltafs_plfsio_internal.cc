@@ -1256,7 +1256,6 @@ Status Dir::Read(const Slice& key, std::string* dst) {
   assert(epochs_ != NULL);
   std::vector<uint32_t> offsets;
   std::string buffer;
-  num_bg_reads_++;
 
   GetContext ctx;
   ctx.num_open_reads = 0;  // Number of outstanding epoch reads
@@ -1307,9 +1306,6 @@ Status Dir::Read(const Slice& key, std::string* dst) {
     }
   }
 
-  assert(num_bg_reads_ > 0);
-  num_bg_reads_--;
-  bg_cv_->SignalAll();
   return status;
 }
 
@@ -1324,24 +1320,21 @@ Dir::Dir(const DirOptions& options)
       num_epoches_(0),
       mu_(NULL),
       bg_cv_(NULL),
-      num_bg_reads_(0),
-      epochs_(NULL) {}
+      epochs_(NULL),
+      refs_(0) {}
 
 Dir::~Dir() {
-  // Wait for all on-going reads to finish
-  mu_->AssertHeld();
-  while (num_bg_reads_ != 0) {
-    bg_cv_->Wait();
-  }
+  assert(indx_ != NULL);
+  indx_->Unref();
+  assert(data_ != NULL);
+  data_->Unref();
 
   delete epochs_;
-  indx_->Unref();
-  data_->Unref();
 }
 
 Status Dir::Open(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
-                 LogSource* indx, LogSource* data, Dir** dirptr) {
-  *dirptr = NULL;
+                 LogSource* indx, LogSource* data, Dir** result) {
+  *result = NULL;
   Status status;
   char space[Footer::kEncodeLength];
   Slice input;
@@ -1360,6 +1353,8 @@ Status Dir::Open(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
   status = footer.DecodeFrom(&input);
   if (!status.ok()) {
     return status;
+  } else {
+    // Paranoid checks
   }
 
   BlockContents contents;
@@ -1379,8 +1374,9 @@ Status Dir::Open(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
   dir->data_->Ref();
   dir->indx_ = indx;
   dir->indx_->Ref();
+  dir->Ref();
 
-  *dirptr = dir;
+  *result = dir;
   return status;
 }
 

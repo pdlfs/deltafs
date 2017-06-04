@@ -805,7 +805,9 @@ DirReaderImpl::DirReaderImpl(const DirOptions& opts, const std::string& name)
 DirReaderImpl::~DirReaderImpl() {
   MutexLock ml(&mutex_);
   for (size_t i = 0; i < num_parts_; i++) {
-    delete dpts_[i];
+    if (dpts_[i] != NULL) {
+      dpts_[i]->Unref();
+    }
   }
   delete dpts_;
   data_->Unref();
@@ -893,7 +895,7 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
       if (dpts_[part] == NULL) {
         dpts_[part] = dir;
       } else {
-        delete dir;
+        dir->Unref();
       }
     }
     if (indx != NULL) {
@@ -952,7 +954,7 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
     impl->num_parts_ = num_parts;
     impl->dpts_ = dpts;
     impl->data_ = data;
-    data->Ref();
+    impl->data_->Ref();
 
     *result = impl;
   }

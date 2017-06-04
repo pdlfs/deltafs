@@ -221,14 +221,22 @@ class Dir {
   // Return OK on success, or a non-OK status on errors.
   static Status Open(const DirOptions& options, port::Mutex* mu,
                      port::CondVar* cv, LogSource* indx, LogSource* data,
-                     Dir** dirptr);
+                     Dir** result);
 
   // Obtain the value to a key from all epochs.
   // All value found will be appended to "dst"
   // Return OK on success, or a non-OK status on errors.
   Status Read(const Slice& key, std::string* dst);
 
-  ~Dir();
+  void Ref() { refs_++; }
+
+  void Unref() {
+    assert(refs_ > 0);
+    refs_--;
+    if (refs_ == 0) {
+      delete this;
+    }
+  }
 
  private:
   typedef void (*Saver)(void* arg, const Slice& key, const Slice& value);
@@ -275,12 +283,13 @@ class Dir {
   };
   static void BGWork(void*);
 
+  ~Dir();
   // No copying allowed
   void operator=(const Dir&);
   Dir(const Dir&);
 
   struct STLLessThan;
-  Dir(const DirOptions& opts);
+  Dir(const DirOptions& options);
   // Constant after construction
   const DirOptions& options_;
   uint32_t num_epoches_;
@@ -289,8 +298,8 @@ class Dir {
 
   port::Mutex* mu_;
   port::CondVar* bg_cv_;
-  int num_bg_reads_;
   Block* epochs_;
+  int refs_;
 };
 
 }  // namespace plfsio
