@@ -213,8 +213,8 @@ class DirWriterImpl : public DirWriter {
   Status TryFlush(bool epoch_flush = false, bool finalize = false);
   Status TryBatchWrites(BatchCursor* cursor);
   Status TryAppend(const Slice& fid, const Slice& data);
-  Status EnsureDataPadding(LogSink* sink, char p = 0);
-  Status CloseLogs();
+  Status EnsureDataPadding(LogSink* sink, size_t footer_size);
+  Status Finalize();
   void MaybeSlowdownCaller();
   friend class DirWriter;
 
@@ -270,29 +270,54 @@ void DirWriterImpl::MaybeSlowdownCaller() {
   }
 }
 
-Status DirWriterImpl::EnsureDataPadding(LogSink* sink, char padding) {
+Status DirWriterImpl::EnsureDataPadding(LogSink* sink, size_t footer_size) {
   Status status;
   sink->Lock();
-  const uint64_t total_size = sink->Ltell();
+  // Add enough padding to ensure the final size of the index log
+  // is some multiple of the physical write size.
+  const uint64_t total_size = sink->Ltell() + footer_size;
   const size_t overflow = total_size % options_.data_buffer;
   if (overflow != 0) {
     const size_t n = options_.data_buffer - overflow;
-    status = sink->Lwrite(std::string(n, padding));
+    status = sink->Lwrite(std::string(n, 0));
+  } else {
+    // No need to pad
   }
   sink->Unlock();
   return status;
 }
 
-Status DirWriterImpl::CloseLogs() {
+Status DirWriterImpl::Finalize() {
   mutex_.AssertHeld();
+  BlockHandle dummy_handle;
+  Footer footer;
+
+  dummy_handle.set_offset(0);
+  dummy_handle.set_size(0);
+  footer.set_epoch_index_handle(dummy_handle);
+
+  footer.set_num_epoches(0);
+  footer.set_lg_parts(static_cast<uint32_t>(options_.lg_parts));
+  footer.set_unique_keys(static_cast<unsigned char>(options_.unique_keys));
+  footer.set_skip_checksums(
+      static_cast<unsigned char>(options_.skip_checksums));
+
   Status status;
+  std::string footer_buf;
+  footer.EncodeTo(&footer_buf);
   if (options_.tail_padding) {
-    status = EnsureDataPadding(data_);
+    status = EnsureDataPadding(data_, footer_buf.size());
+  }
+
+  if (status.ok()) {
+    data_->Lock();
+    status = data_->Lwrite(footer_buf);
+    data_->Unlock();
   }
 
   if (status.ok()) {
     for (size_t i = 0; i < num_parts_; i++) {
-      status = dpts_[i]->PreClose();
+      status = dpts_[i]->SyncAndClose();
       if (!status.ok()) {
         break;
       }
@@ -454,7 +479,7 @@ Status DirWriterImpl::Finish() {
       const bool finalize = true;
       status = TryFlush(epoch_flush, finalize);
       if (status.ok()) status = WaitForCompaction();
-      if (status.ok()) status = CloseLogs();
+      if (status.ok()) status = Finalize();
       has_pending_flush_ = false;
       cond_var_.SignalAll();
       finish_status_ = status;

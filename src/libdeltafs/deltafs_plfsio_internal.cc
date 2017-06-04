@@ -303,6 +303,12 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   indx_sink_->Ref();
   data_sink_->Ref();
 
+  // Initialize footer template
+  footer_.set_lg_parts(static_cast<uint32_t>(options_.lg_parts));
+  footer_.set_unique_keys(static_cast<unsigned char>(options_.unique_keys));
+  footer_.set_skip_checksums(
+      static_cast<unsigned char>(options_.skip_checksums));
+
   // Allocate memory
   const size_t estimated_index_size_per_table = 4 << 10;
   index_block_.Reserve(estimated_index_size_per_table);
@@ -537,7 +543,7 @@ Status TableLogger::Finish() {
   if (!ok()) return status_;
   BlockHandle epoch_index_handle;
   std::string footer_buf;
-  Footer footer;
+  Footer footer(footer_);
 
   assert(!pending_meta_entry_);
   Slice meta_contents = meta_block_.Finish();
@@ -696,10 +702,10 @@ Status DirLogger::Wait() {
 }
 
 // Pre-close all linked log files.
-// Usually, log files are reference counted and are closed when
+// By default, log files are reference counted and are implicitly closed when
 // de-referenced by the last opener. Optionally, caller may force the
 // fsync and closing of all log files.
-Status DirLogger::PreClose() {
+Status DirLogger::SyncAndClose() {
   mu_->AssertHeld();
   const bool sync = true;
   data_->Lock();

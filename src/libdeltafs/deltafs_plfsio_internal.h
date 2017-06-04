@@ -116,6 +116,7 @@ class TableLogger {
   TableLogger(const TableLogger&);
 
   Status status_;
+  Footer footer_;  // Footer template
   std::string smallest_key_;
   std::string largest_key_;
   std::string last_key_;
@@ -172,8 +173,8 @@ class DirLogger {
   };
   Status Flush(const FlushOptions& options);
 
-  // Pre-close all log files before de-referencing them
-  Status PreClose();
+  // Sync and pre-close log files before de-referencing them
+  Status SyncAndClose();
 
  private:
   Status Prepare(bool force = false, bool epoch_flush = false,

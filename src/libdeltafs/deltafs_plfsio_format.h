@@ -82,6 +82,16 @@ class Footer {
  public:
   Footer();
 
+  // Important options
+  uint32_t lg_parts() const { return lg_parts_; }
+  void set_lg_parts(uint32_t lg) { lg_parts_ = lg; }
+
+  unsigned char skip_checksums() const { return skip_checksums_; }
+  void set_skip_checksums(unsigned char skip) { skip_checksums_ = skip; }
+
+  unsigned char unique_keys() const { return unique_keys_; }
+  void set_unique_keys(unsigned char uni) { unique_keys_ = uni; }
+
   // The block handle for the epoch index.
   const BlockHandle& epoch_index_handle() const { return epoch_index_handle_; }
   void set_epoch_index_handle(const BlockHandle& h) { epoch_index_handle_ = h; }
@@ -93,11 +103,14 @@ class Footer {
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* input);
 
-  enum { kEncodeLength = BlockHandle::kMaxEncodedLength + 4 };
+  enum { kEncodeLength = BlockHandle::kMaxEncodedLength + 10 };
 
  private:
   BlockHandle epoch_index_handle_;
   uint32_t num_epoches_;
+  uint32_t lg_parts_;
+  unsigned char skip_checksums_;
+  unsigned char unique_keys_;
 };
 
 inline TableHandle::TableHandle()
@@ -109,7 +122,10 @@ inline TableHandle::TableHandle()
 }
 
 inline Footer::Footer()
-    : num_epoches_(~static_cast<uint32_t>(0) /* Invalid num */) {
+    : num_epoches_(~static_cast<uint32_t>(0) /* Invalid */),
+      lg_parts_(~static_cast<uint32_t>(0) /* Invalid */),
+      skip_checksums_(~static_cast<unsigned char>(0) /* Invalid */),
+      unique_keys_(~static_cast<unsigned char>(0) /* Invalid */) {
   // Empty
 }
 
