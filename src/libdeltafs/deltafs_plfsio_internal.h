@@ -219,8 +219,9 @@ class Dir {
  public:
   // Open a reader on top of a given pair of log files.
   // Return OK on success, or a non-OK status on errors.
-  static Status Open(const DirOptions& options, LogSource* data,
-                     LogSource* indx, Dir** dirptr);
+  static Status Open(const DirOptions& options, port::Mutex* mu,
+                     port::CondVar* cv, LogSource* indx, LogSource* data,
+                     Dir** dirptr);
 
   // Obtain the value to a key from all epochs.
   // All value found will be appended to "dst"
@@ -279,15 +280,15 @@ class Dir {
   Dir(const Dir&);
 
   struct STLLessThan;
-  Dir(const DirOptions&, LogSource* data, LogSource* indx);
+  Dir(const DirOptions& opts);
   // Constant after construction
   const DirOptions& options_;
   uint32_t num_epoches_;
   LogSource* indx_;
   LogSource* data_;
 
-  port::Mutex mutex_;
-  port::CondVar cond_var_;
+  port::Mutex* mu_;
+  port::CondVar* bg_cv_;
   int num_bg_reads_;
   Block* epochs_;
 };

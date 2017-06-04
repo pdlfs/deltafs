@@ -788,6 +788,7 @@ class DirReaderImpl : public DirReader {
   uint32_t part_mask_;
 
   port::Mutex mutex_;
+  port::CondVar cond_cv_;
   Dir** dpts_;  // Lasily initialized directory partitions
   LogSource* data_;
 };
@@ -797,6 +798,7 @@ DirReaderImpl::DirReaderImpl(const DirOptions& opts, const std::string& name)
       name_(name),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
+      cond_cv_(&mutex_),
       dpts_(NULL),
       data_(NULL) {}
 
@@ -884,7 +886,7 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
         LoadSource(&indx, PartitionIndexFileName(name_, options_.rank, part),
                    options_.env);
     if (status.ok()) {
-      status = Dir::Open(options_, data_, indx, &dir);
+      status = Dir::Open(options_, &mutex_, &cond_cv_, indx, data_, &dir);
     }
     mutex_.Lock();
     if (status.ok()) {

@@ -1141,7 +1141,7 @@ static inline Iterator* NewEpochIterator(Block* block) {
 }  // namespace
 
 void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
-  mutex_.AssertHeld();
+  mu_->AssertHeld();
   if (!ctx->status->ok()) {
     return;
   }
@@ -1149,7 +1149,7 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   if (epoch_iter == NULL) {
     epoch_iter = NewEpochIterator(epochs_);
   }
-  mutex_.Unlock();
+  mu_->Unlock();
   Status status;
   std::string epoch_key;
   uint32_t table = 0;
@@ -1168,7 +1168,7 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
     state.epoch = epoch;
     state.offsets = ctx->offsets;
     state.buffer = ctx->buffer;
-    state.mu = &mutex_;
+    state.mu = mu_;
     state.dst = ctx->dst;
     state.found = false;
     TableHandle h;
@@ -1193,13 +1193,13 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
     status = epoch_iter->status();
   }
 
-  mutex_.Lock();
+  mu_->Lock();
   if (epoch_iter != ctx->epoch_iter) {
     delete epoch_iter;
   }
   assert(ctx->num_open_reads > 0);
   ctx->num_open_reads--;
-  cond_var_.SignalAll();
+  bg_cv_->SignalAll();
   if (ctx->status->ok()) {
     *ctx->status = status;
   }
@@ -1256,7 +1256,7 @@ Status Dir::Read(const Slice& key, std::string* dst) {
   std::vector<uint32_t> offsets;
   std::string buffer;
 
-  MutexLock ml(&mutex_);
+  MutexLock ml(mu_);
   num_bg_reads_++;
   GetContext ctx;
   ctx.num_open_reads = 0;  // Number of outstanding epoch reads
@@ -1296,7 +1296,7 @@ Status Dir::Read(const Slice& key, std::string* dst) {
 
   // Wait for all outstanding read operations to conclude
   while (ctx.num_open_reads > 0) {
-    cond_var_.Wait();
+    bg_cv_->Wait();
   }
 
   delete ctx.epoch_iter;
@@ -1309,44 +1309,38 @@ Status Dir::Read(const Slice& key, std::string* dst) {
 
   assert(num_bg_reads_ > 0);
   num_bg_reads_--;
-  cond_var_.SignalAll();
+  bg_cv_->SignalAll();
   return status;
 }
 
 void Dir::BGWork(void* arg) {
   BGItem* item = reinterpret_cast<BGItem*>(arg);
-  MutexLock ml(&item->dir->mutex_);
+  MutexLock ml(item->dir->mu_);
   item->dir->Get(item->key, item->epoch, item->ctx);
 }
 
-Dir::Dir(const DirOptions& options, LogSource* data, LogSource* indx)
+Dir::Dir(const DirOptions& options)
     : options_(options),
       num_epoches_(0),
-      indx_(indx),
-      data_(data),
-      cond_var_(&mutex_),
+      mu_(NULL),
+      bg_cv_(NULL),
       num_bg_reads_(0),
-      epochs_(NULL) {
-  assert(indx_ != NULL && data_ != NULL);
-  indx_->Ref();
-  data_->Ref();
-}
+      epochs_(NULL) {}
 
 Dir::~Dir() {
   // Wait for all on-going reads to finish
-  mutex_.Lock();
+  mu_->AssertHeld();
   while (num_bg_reads_ != 0) {
-    cond_var_.Wait();
+    bg_cv_->Wait();
   }
-  mutex_.Unlock();
 
   delete epochs_;
   indx_->Unref();
   data_->Unref();
 }
 
-Status Dir::Open(const DirOptions& options, LogSource* data, LogSource* indx,
-                 Dir** dirptr) {
+Status Dir::Open(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
+                 LogSource* indx, LogSource* data, Dir** dirptr) {
   *dirptr = NULL;
   Status status;
   char space[Footer::kEncodeLength];
@@ -1375,10 +1369,16 @@ Status Dir::Open(const DirOptions& options, LogSource* data, LogSource* indx,
     return status;
   }
 
-  Dir* dir = new Dir(options, data, indx);
+  Dir* dir = new Dir(options);
   dir->num_epoches_ = footer.num_epoches();
   Block* block = new Block(contents);
   dir->epochs_ = block;
+  dir->bg_cv_ = cv;
+  dir->mu_ = mu;
+  dir->data_ = data;
+  dir->data_->Ref();
+  dir->indx_ = indx;
+  dir->indx_->Ref();
 
   *dirptr = dir;
   return status;
