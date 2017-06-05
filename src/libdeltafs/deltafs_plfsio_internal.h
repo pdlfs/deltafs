@@ -229,6 +229,8 @@ class Dir {
   // Return OK on success, or a non-OK status on errors.
   Status Read(const Slice& key, std::string* dst);
 
+  void ResetDataSource(LogSource* data);
+
   void Ref() { refs_++; }
 
   void Unref() {

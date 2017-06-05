@@ -914,10 +914,11 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
         LoadSource(&indx, PartitionIndexFileName(name_, options_.rank, part),
                    options_.env);
     if (status.ok()) {
-      status = Dir::Open(options_, &mutex_, &cond_cv_, indx, data_, &dir);
+      status = Dir::Open(options_, &mutex_, &cond_cv_, indx, NULL, &dir);
     }
     mutex_.Lock();
     if (status.ok()) {
+      dir->ResetDataSource(data_);
       if (dpts_[part] == NULL) {
         dpts_[part] = dir;
       } else {

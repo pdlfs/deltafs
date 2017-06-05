@@ -1324,18 +1324,28 @@ void Dir::BGWork(void* arg) {
 Dir::Dir(const DirOptions& options)
     : options_(options),
       num_epoches_(0),
+      data_(NULL),
+      indx_(NULL),
       mu_(NULL),
       bg_cv_(NULL),
       rt_(NULL),
       refs_(0) {}
 
 Dir::~Dir() {
+  if (data_ != NULL) data_->Unref();
   assert(indx_ != NULL);
   indx_->Unref();
-  assert(data_ != NULL);
-  data_->Unref();
-
   delete rt_;
+}
+
+void Dir::ResetDataSource(LogSource* data) {
+  if (data != data_) {
+    if (data_ != NULL) data_->Unref();
+    data_ = data;
+    if (data_ != NULL) {
+      data_->Ref();
+    }
+  }
 }
 
 template <typename U, typename V>
@@ -1392,13 +1402,13 @@ Status Dir::Open(const DirOptions& options, port::Mutex* mu,
   Dir* dir = new Dir(options);
   dir->num_epoches_ = footer.num_epoches();
   Block* epoch_block = new Block(contents);
+  dir->data_ = data;
+  if (data != NULL) dir->data_->Ref();
+  dir->indx_ = indx;
+  dir->indx_->Ref();
   dir->rt_ = epoch_block;
   dir->bg_cv_ = bg_cv;
   dir->mu_ = mu;
-  dir->data_ = data;
-  dir->data_->Ref();
-  dir->indx_ = indx;
-  dir->indx_->Ref();
   dir->Ref();
 
   *result = dir;
