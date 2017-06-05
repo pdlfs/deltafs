@@ -20,22 +20,17 @@ Status WholeFileBufferedRandomAccessFile::Load() {
     if (n > max_buf_size_ - buf_size_) {
       n = max_buf_size_ - buf_size_;
     }
-    Slice slice;
+    Slice sli;
     char* p = buf_ + buf_size_;
-    status = base_->Read(n, &slice, p);
-    if (!status.ok()) {
-      break;  // Error
-    } else if (slice.empty()) {
-      break;  // EOF
-    } else {
+    status = base_->Read(n, &sli, p);
+    if (!status.ok()) break;  // Error
+    if (sli.empty()) break;   // EOF
+    if (sli.data() != p) {
       // File implementation gave us pointer to some other data.
       // Explicitly copy it into our buffer.
-      if (slice.data() != p) {
-        memcpy(p, slice.data(), slice.size());
-      }
-
-      buf_size_ += slice.size();
+      memcpy(p, sli.data(), sli.size());
     }
+    buf_size_ += sli.size();
   }
 
   delete base_;

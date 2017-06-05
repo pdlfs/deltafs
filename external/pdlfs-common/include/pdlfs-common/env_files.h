@@ -126,12 +126,34 @@ class MeasuredWritableFile : public WritableFile {
   uint64_t* bytes_;
 };
 
-// Convert a sequential file to a random access file by pre-loading all
-// its contents into memory and use that to serve all future read requests
-// to the file. At most "max_buf_size_" worth of data will be loaded and
-// buffered in memory. When reading from the buffered file, the returned
-// Slices will remain valid until the file is deleted. Callers must
-// explicitly call Load() to populate the file contents.
+// Measure the I/O activity accessing an underlying random access file
+// and store the results in a set of atomic counters.
+class AtomicMeasuredRandomAccessFile : public RandomAccessFile {
+ public:
+  explicit AtomicMeasuredRandomAccessFile(RandomAccessFile* base);
+  virtual ~AtomicMeasuredRandomAccessFile();
+
+  // Safe for concurrent use by multiple threads.
+  virtual Status Read(uint64_t offset, size_t n, Slice* result,
+                      char* scratch) const;
+
+  // Total number of bytes read out.
+  uint64_t TotalBytes() const;
+
+  // Total number of read operations witnessed.
+  uint64_t TotalOps() const;
+
+ private:
+  class Rep;
+  RandomAccessFile* base_;
+  Rep* rep_;
+};
+
+// Convert a sequential file into a fully buffered random access file by
+// pre-fetching all file contents into memory and use that to serve all future
+// read requests to the underlying file. At most "max_buf_size_" worth of data
+// will be fetched and buffered in memory. Callers must explicitly call Load()
+// to pre-populate the file contents in memory.
 class WholeFileBufferedRandomAccessFile : public RandomAccessFile {
  public:
   WholeFileBufferedRandomAccessFile(SequentialFile* base, size_t buf_size,
@@ -148,6 +170,7 @@ class WholeFileBufferedRandomAccessFile : public RandomAccessFile {
     }
   }
 
+  // The returned slice will remain valid as long as the file is not deleted.
   // Safe for concurrent use by multiple threads.
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
