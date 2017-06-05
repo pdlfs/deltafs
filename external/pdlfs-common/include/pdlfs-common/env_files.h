@@ -144,7 +144,7 @@ class AtomicMeasuredRandomAccessFile : public RandomAccessFile {
   uint64_t TotalOps() const;
 
  private:
-  class Rep;
+  struct Rep;
   RandomAccessFile* base_;
   Rep* rep_;
 };
