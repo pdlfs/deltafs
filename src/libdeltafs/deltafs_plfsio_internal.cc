@@ -1011,10 +1011,8 @@ Status Dir::Fetch(const Slice& key, const BlockHandle& handle, Saver saver,
   for (; iter->Valid(); iter->Next()) {
     if (iter->key() == key) {
       saver(arg, key, iter->value());
-      // If keys are unique, we are done
       if (options_.unique_keys) {
-        *exhausted = true;
-        break;
+        break;  // If keys are unique, we are done
       }
     } else {
       assert(iter->key() > key);
@@ -1079,7 +1077,7 @@ Status Dir::Fetch(const Slice& key, const TableHandle& handle, Saver saver,
   Block* block = new Block(contents);
   Iterator* const iter = block->NewIterator(BytewiseComparator());
   if (options_.unique_keys) {
-    iter->Seek(key);
+    iter->Seek(key);  // Binary search
   } else {
     iter->SeekToFirst();
     while (iter->Valid() && key.compare(iter->key()) > 0) {
@@ -1097,6 +1095,8 @@ Status Dir::Fetch(const Slice& key, const TableHandle& handle, Saver saver,
     }
 
     if (!status.ok()) {
+      break;
+    } else if (options_.unique_keys) {
       break;
     } else if (exhausted) {
       break;
