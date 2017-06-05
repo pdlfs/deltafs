@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2017 Carnegie Mellon University.
@@ -10,7 +8,9 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#ifdef PDLFS_PLATFORM_ATOMIC_PRESENT
+#pragma once
+
+#if __cplusplus >= 201103L
 #include <atomic>
 #endif
 #ifdef PDLFS_OS_WIN
@@ -136,7 +136,7 @@ class AtomicPointer {
 };
 
 // AtomicPointer based on <cstdatomic>
-#elif defined(PDLFS_PLATFORM_ATOMIC_PRESENT)
+#elif __cplusplus >= 201103L
 class AtomicPointer {
  private:
   std::atomic<void*> rep_;
