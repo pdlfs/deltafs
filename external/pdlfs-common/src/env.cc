@@ -11,7 +11,7 @@
 #include <stdio.h>
 
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/env_buf.h"
+#include "pdlfs-common/env_files.h"
 #include "pdlfs-common/env_lazy.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"

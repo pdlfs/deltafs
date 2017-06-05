@@ -11,7 +11,7 @@
 #include "deltafs_plfsio_batch.h"
 #include "deltafs_plfsio_internal.h"
 
-#include "pdlfs-common/env_buf.h"
+#include "pdlfs-common/env_files.h"
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
