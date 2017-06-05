@@ -296,8 +296,8 @@ class Dir {
   // Constant after construction
   const DirOptions& options_;
   uint32_t num_epoches_;
-  LogSource* indx_;
   LogSource* data_;
+  LogSource* indx_;
 
   port::Mutex* mu_;
   port::CondVar* bg_cv_;
