@@ -131,29 +131,29 @@ class MeasuredWritableFile : public WritableFile {
 // to the file. At most "max_buf_size_" worth of data will be loaded and
 // buffered in memory. When reading from the buffered file, the returned
 // Slices will remain valid until the file is deleted. Callers must
-// explicitly call Load() to load the file contents.
-// NOTE: implementation is not thread safe
+// explicitly call Load() to populate the file contents.
 class WholeFileBufferedRandomAccessFile : public RandomAccessFile {
  public:
   WholeFileBufferedRandomAccessFile(SequentialFile* base, size_t buf_size,
                                     size_t io_size = 4096)
       : base_(base), max_buf_size_(buf_size), io_size_(io_size) {
-    buf_.reserve(max_buf_size_);
+    buf_ = new char[max_buf_size_];
+    buf_size_ = 0;
   }
 
   virtual ~WholeFileBufferedRandomAccessFile() {
+    delete[] buf_;
     if (base_ != NULL) {
       delete base_;
     }
   }
 
+  // Safe for concurrent use by multiple threads.
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
-    if (offset < buf_.size()) {
-      if (n > buf_.size() - offset) {
-        n = buf_.size() - offset;
-      }
-      *result = Slice(buf_.data() + offset, n);
+    if (offset < buf_size_) {
+      if (n > buf_size_ - offset) n = buf_size_ - offset;
+      *result = Slice(buf_ + offset, n);
     } else {
       *result = Slice();
     }
@@ -161,37 +161,15 @@ class WholeFileBufferedRandomAccessFile : public RandomAccessFile {
     return Status::OK();
   }
 
-  Status Load() {
-    Status s;
-    buf_.clear();
-    char* tmp = new char[io_size_];
-    while (buf_.size() < max_buf_size_) {
-      Slice fragment;
-      s = base_->Read(io_size_, &fragment, tmp);
-      if (!s.ok()) {
-        break;
-      } else if (fragment.empty()) {
-        break;
-      }
-      if (buf_.size() + fragment.size() <= max_buf_size_) {
-        buf_.append(fragment.data(), fragment.size());
-      } else {
-        size_t left = max_buf_size_ - buf_.size();
-        buf_.append(fragment.data(), left);
-      }
-    }
-
-    delete[] tmp;
-    delete base_;
-    base_ = NULL;
-    return s;
-  }
+  // REQUIRES: Load() has not been called before.
+  Status Load();
 
  private:
   SequentialFile* base_;
   const size_t max_buf_size_;
   const size_t io_size_;
-  std::string buf_;
+  size_t buf_size_;
+  char* buf_;
 };
 
 }  // namespace pdlfs
