@@ -932,7 +932,11 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
 
   if (status.ok()) {
     assert(dpts_[part] != NULL);
-    return dpts_[part]->Read(fid, dst);
+    Dir* const dir = dpts_[part];
+    dir->Ref();
+    status = dpts_[part]->Read(fid, dst);
+    dir->Unref();
+    return status;
   } else {
     return status;
   }
