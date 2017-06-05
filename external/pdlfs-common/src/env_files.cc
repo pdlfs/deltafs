@@ -71,10 +71,12 @@ struct AtomicMeasuredRandomAccessFile::Rep {
 #endif
 
 uint64_t AtomicMeasuredRandomAccessFile::TotalBytes() const {
-  return rep_->bytes;
+  return static_cast<uint64_t>(rep_->bytes);
 }
 
-uint64_t AtomicMeasuredRandomAccessFile::TotalOps() const { return rep_->ops; }
+uint64_t AtomicMeasuredRandomAccessFile::TotalOps() const {
+  return static_cast<uint64_t>(rep_->ops);
+}
 
 Status AtomicMeasuredRandomAccessFile::Read(uint64_t offset, size_t n,
                                             Slice* result,
