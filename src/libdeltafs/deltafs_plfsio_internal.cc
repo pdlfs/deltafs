@@ -1008,6 +1008,16 @@ Status Dir::Fetch(const Slice& key, const BlockHandle& handle, Saver saver,
     }
   }
 
+  // The target key is strictly larger than all keys in the
+  // current block, and is also known to be strictly smaller than
+  // all keys in the next block.
+  if (!iter->Valid()) {
+    // Special case for some non-existent keys
+    // that happen to locate in the gap between two
+    // adjacent data blocks
+    *exhausted = true;
+  }
+
   for (; iter->Valid(); iter->Next()) {
     if (iter->key() == key) {
       saver(arg, key, iter->value());
