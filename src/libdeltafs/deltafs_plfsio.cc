@@ -835,7 +835,7 @@ DirReaderImpl::~DirReaderImpl() {
       dpts_[i]->Unref();
     }
   }
-  delete dpts_;
+  delete[] dpts_;
   data_->Unref();
 }
 
