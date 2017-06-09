@@ -1041,7 +1041,7 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   Status status;
 #if VERBOSE >= 2
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.name -> %s (mode=read)", name.c_str());
-  Verbose(__LOG_ARGS__, 2, "FS, plfsdir.paranoid_checks -> %d",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.paranoid_checks -> %d",
           int(options.paranoid_checks));
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.verify_checksums -> %d",
           int(options.verify_checksums));
