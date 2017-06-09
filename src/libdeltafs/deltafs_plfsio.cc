@@ -1071,38 +1071,38 @@ Status DestroyDir(const std::string& dirname, const DirOptions& opts) {
   Status status;
   DirOptions options = SanitizeReadOptions(opts);
   Env* const env = options.env;
-#if 0
-  std::vector<std::string> names;
-  status = env->GetChildren(dirname, &names);
-  if (status.ok()) {
-    for (size_t i = 0; i < names.size(); i++) {
-      if (!Slice(names[i]).starts_with(".")) {
-        status = DeleteLogStream(dirname + "/" + names[i], env);
+  if (options.is_env_pfs) {
+    std::vector<std::string> names;
+    status = env->GetChildren(dirname, &names);
+    if (status.ok()) {
+      for (size_t i = 0; i < names.size(); i++) {
+        if (!Slice(names[i]).starts_with(".")) {
+          status = DeleteLogStream(dirname + "/" + names[i], env);
+          if (!status.ok()) {
+            break;
+          }
+        }
+      }
+
+      env->DeleteDir(dirname);
+    }
+  } else {
+    const size_t num_parts = 1u << options.lg_parts;
+    const int my_rank = options.rank;
+    std::vector<std::string> names;
+    names.push_back(DataFileName(dirname, my_rank));
+    for (size_t part = 0; part < num_parts; part++) {
+      names.push_back(PartitionIndexFileName(dirname, my_rank, part));
+    }
+    if (status.ok()) {
+      for (size_t i = 0; i < names.size(); i++) {
+        status = DeleteLogStream(names[i], env);
         if (!status.ok()) {
           break;
         }
       }
     }
-
-    env->DeleteDir(dirname);
   }
-#else
-  const size_t num_parts = 1u << options.lg_parts;
-  const int my_rank = options.rank;
-  std::vector<std::string> names;
-  names.push_back(DataFileName(dirname, my_rank));
-  for (size_t part = 0; part < num_parts; part++) {
-    names.push_back(PartitionIndexFileName(dirname, my_rank, part));
-  }
-  if (status.ok()) {
-    for (size_t i = 0; i < names.size(); i++) {
-      status = DeleteLogStream(names[i], env);
-      if (!status.ok()) {
-        break;
-      }
-    }
-  }
-#endif
   return status;
 }
 
