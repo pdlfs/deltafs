@@ -1331,24 +1331,25 @@ void Dir::BGWork(void* arg) {
   item->dir->Get(item->key, item->epoch, item->ctx);
 }
 
-Dir::Dir(const DirOptions& options)
+Dir::Dir(const DirOptions& options, port::Mutex* mu, port::CondVar* bg_cv)
     : options_(options),
       num_epoches_(0),
       data_(NULL),
       indx_(NULL),
-      mu_(NULL),
-      bg_cv_(NULL),
+      mu_(mu),
+      bg_cv_(bg_cv),
+      iostats_(NULL),
       rt_(NULL),
       refs_(0) {}
 
 Dir::~Dir() {
+  mu_->AssertHeld();
   if (data_ != NULL) data_->Unref();
-  assert(indx_ != NULL);
-  indx_->Unref();
+  if (indx_ != NULL) indx_->Unref();
   delete rt_;
 }
 
-void Dir::ResetDataSource(LogSource* data) {
+void Dir::RebindDataSource(LogSource* data) {
   if (data != data_) {
     if (data_ != NULL) data_->Unref();
     data_ = data;
@@ -1373,10 +1374,7 @@ static Status VerifyOptions(const DirOptions& options, const Footer& footer) {
   }
 }
 
-Status Dir::Open(const DirOptions& options, port::Mutex* mu,
-                 port::CondVar* bg_cv, LogSource* indx, LogSource* data,
-                 Dir** result) {
-  *result = NULL;
+Status Dir::Open(LogSource* indx) {
   Status status;
   char space[Footer::kEncodeLength];
   Slice input;
@@ -1395,8 +1393,8 @@ Status Dir::Open(const DirOptions& options, port::Mutex* mu,
   status = footer.DecodeFrom(&input);
   if (!status.ok()) {
     return status;
-  } else if (options.paranoid_checks) {
-    status = VerifyOptions(options, footer);
+  } else if (options_.paranoid_checks) {
+    status = VerifyOptions(options_, footer);
     if (!status.ok()) {
       return status;
     }
@@ -1404,24 +1402,16 @@ Status Dir::Open(const DirOptions& options, port::Mutex* mu,
 
   BlockContents contents;
   const BlockHandle& handle = footer.epoch_index_handle();
-  status = ReadBlock(indx, options, handle, &contents);
+  status = ReadBlock(indx, options_, handle, &contents);
   if (!status.ok()) {
     return status;
   }
 
-  Dir* dir = new Dir(options);
-  dir->num_epoches_ = footer.num_epoches();
-  Block* epoch_block = new Block(contents);
-  dir->data_ = data;
-  if (data != NULL) dir->data_->Ref();
-  dir->indx_ = indx;
-  dir->indx_->Ref();
-  dir->rt_ = epoch_block;
-  dir->bg_cv_ = bg_cv;
-  dir->mu_ = mu;
-  dir->Ref();
+  num_epoches_ = footer.num_epoches();
+  rt_ = new Block(contents);
+  indx_ = indx;
+  indx_->Ref();
 
-  *result = dir;
   return status;
 }
 

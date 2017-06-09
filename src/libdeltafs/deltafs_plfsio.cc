@@ -945,22 +945,25 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
   if (dpts_[part] == NULL) {
     mutex_.Unlock();  // Unlock when load indexes
     LogSource* indx = NULL;
-    Dir* dir = NULL;
+    Dir* dir = new Dir(options_, &mutex_, &cond_cv_);
+    dir->Ref();
     status =
         LoadSource(&indx, PartitionIndexFileName(name_, options_.rank, part),
                    options_.env);
     if (status.ok()) {
-      status = Dir::Open(options_, &mutex_, &cond_cv_, indx, NULL, &dir);
+      status = dir->Open(indx);
     }
     mutex_.Lock();
     if (status.ok()) {
-      dir->ResetDataSource(data_);
+      dir->RebindDataSource(data_);
       if (dpts_[part] == NULL) {
         dpts_[part] = dir;
+        dpts_[part]->Ref();
       } else {
-        dir->Unref();
+        // Loaded by another thread
       }
     }
+    dir->Unref();
     if (indx != NULL) {
       indx->Unref();
     }

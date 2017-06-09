@@ -12,6 +12,9 @@
 #include "deltafs_plfsio.h"
 #include "deltafs_plfsio_format.h"
 
+#include "pdlfs-common/env_files.h"
+#include "pdlfs-common/port.h"
+
 #include <string>
 #include <vector>
 
@@ -218,18 +221,18 @@ class DirLogger {
 // Retrieve directory contents from a pair of indexed log files.
 class Dir {
  public:
-  // Open a reader on top of a given pair of log files.
+  Dir(const DirOptions& options, port::Mutex*, port::CondVar*);
+
+  // Open a directory reader on top of a given directory index partition.
   // Return OK on success, or a non-OK status on errors.
-  static Status Open(const DirOptions& options, port::Mutex* mu,
-                     port::CondVar* bg_cv, LogSource* indx, LogSource* data,
-                     Dir** result);
+  Status Open(LogSource* indx);
 
   // Obtain the value to a key from all epochs.
   // All value found will be appended to "dst"
   // Return OK on success, or a non-OK status on errors.
   Status Read(const Slice& key, std::string* dst);
 
-  void ResetDataSource(LogSource* data);
+  void RebindDataSource(LogSource *data);
 
   void Ref() { refs_++; }
 
@@ -292,7 +295,6 @@ class Dir {
   Dir(const Dir&);
 
   struct STLLessThan;
-  Dir(const DirOptions& options);
   // Constant after construction
   const DirOptions& options_;
   uint32_t num_epoches_;
@@ -301,6 +303,7 @@ class Dir {
 
   port::Mutex* mu_;
   port::CondVar* bg_cv_;
+  MeasuredSequentialFile iostats_;
   Block* rt_;
   int refs_;
 };
