@@ -126,6 +126,41 @@ class MeasuredWritableFile : public WritableFile {
   uint64_t* bytes_;
 };
 
+// Measure the I/O activity accessing an underlying sequential readable
+// file and store the results in a set of local counters.
+// Implementation is not thread-safe and external synchronization
+// is required for use by multiple threads.
+class MeasuredSequentialFile : public SequentialFile {
+ public:
+  explicit MeasuredSequentialFile(SequentialFile* base)
+      : base_(base), bytes_(0), ops_(0) {}
+  virtual ~MeasuredSequentialFile() { delete base_; }
+
+  // REQUIRES: External synchronization
+  virtual Status Read(size_t n, Slice* result, char* scratch) {
+    Status status = base_->Read(n, result, scratch);
+    if (status.ok()) {
+      bytes_ += result->size();
+      ops_ += 1;
+    }
+    return status;
+  }
+
+  // REQUIRES: External synchronization
+  virtual Status Skip(uint64_t n) { return base_->Skip(n); }
+
+  // Total number of bytes read out.
+  uint64_t TotalBytes() const { return bytes_; }
+
+  // Total number of read operations witnessed.
+  uint64_t TotalOps() const { return ops_; }
+
+ private:
+  SequentialFile* base_;
+  uint64_t bytes_;
+  uint64_t ops_;
+};
+
 // Measure the I/O activity accessing an underlying random access file
 // and store the results in a set of atomic counters.
 class AtomicMeasuredRandomAccessFile : public RandomAccessFile {
