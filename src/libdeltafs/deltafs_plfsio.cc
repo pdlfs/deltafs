@@ -815,6 +815,7 @@ class DirReaderImpl : public DirReader {
 
   port::Mutex mutex_;
   port::CondVar cond_cv_;
+  AtomicMeasuredRandomAccessFile iostats_;
   Dir** dpts_;  // Lasily initialized directory partitions
   LogSource* data_;
 };
@@ -825,6 +826,7 @@ DirReaderImpl::DirReaderImpl(const DirOptions& opts, const std::string& name)
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
       cond_cv_(&mutex_),
+      iostats_(NULL),
       dpts_(NULL),
       data_(NULL) {}
 
@@ -836,7 +838,9 @@ DirReaderImpl::~DirReaderImpl() {
     }
   }
   delete[] dpts_;
-  data_->Unref();
+  if (data_ != NULL) {
+    data_->Unref();
+  }
 }
 
 void DirReaderImpl::List(std::vector<std::string>*) {
@@ -878,11 +882,33 @@ static Status LoadSource(LogSource** result, const std::string& fname,
   return status;
 }
 
+namespace {
+template <typename F>
+class RandomAccessFileRef : public RandomAccessFile {
+ public:
+  explicit RandomAccessFileRef(RandomAccessFile* base, F* dec)
+      : base_(base), dec_(dec) {
+    dec_->Reset(base);
+  }
+  virtual ~RandomAccessFileRef() { delete base_; }
+
+  virtual Status Read(uint64_t offset, size_t n, Slice* result,
+                      char* scratch) const {
+    return dec_->Read(offset, n, result, scratch);
+  }
+
+ private:
+  RandomAccessFile* base_;
+  F* dec_;  // Owned by external code
+};
+}  // namespace
+
+template <typename F = AtomicMeasuredRandomAccessFile>
 static Status OpenSource(LogSource** result, const std::string& fname,
-                         Env* env = Env::Default()) {
+                         Env* env = Env::Default(), F* dec = NULL) {
   *result = NULL;
-  RandomAccessFile* file;
-  uint64_t size;
+  RandomAccessFile* file = NULL;
+  uint64_t size = 0;
   Status status = env->NewRandomAccessFile(fname, &file);
   if (status.ok()) {
     status = env->GetFileSize(fname, &size);
@@ -891,9 +917,15 @@ static Status OpenSource(LogSource** result, const std::string& fname,
     }
   }
   if (status.ok()) {
+    // Bind to an external decorator
+    if (dec != NULL) {
+      RandomAccessFile* ref = new RandomAccessFileRef<F>(file, dec);
+      file = ref;
+    }
     PrintLogInfo(fname, 0);
     LogSource* src = new LogSource(file, size);
     src->Ref();
+
     *result = src;
   }
 
@@ -973,7 +1005,13 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
           static_cast<unsigned>(num_parts));
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.my_rank -> %d", my_rank);
 #endif
-  status = OpenSource(&data, DataFileName(name, my_rank), env);
+  DirReaderImpl* impl = new DirReaderImpl(options, name);
+  if (true) {
+    status =
+        OpenSource(&data, DataFileName(name, my_rank), env, &impl->iostats_);
+  } else {
+    status = OpenSource(&data, DataFileName(name, my_rank), env);
+  }
   char space[Footer::kEncodeLength];
   Footer footer;
   Slice input;
@@ -989,25 +1027,26 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
     }
   }
 
-  // Reset options
+  // Update options
   if (options.paranoid_checks) {
     if (status.ok()) {
-      options.lg_parts = static_cast<int>(footer.lg_parts());
-      options.skip_checksums = static_cast<bool>(footer.skip_checksums());
-      options.unique_keys = static_cast<bool>(footer.unique_keys());
+      impl->options_.lg_parts = static_cast<int>(footer.lg_parts());
+      impl->options_.skip_checksums =
+          static_cast<bool>(footer.skip_checksums());
+      impl->options_.unique_keys = static_cast<bool>(footer.unique_keys());
     }
   }
 
   if (status.ok()) {
-    Dir** dpts = new Dir*[num_parts]();
-    DirReaderImpl* impl = new DirReaderImpl(options, name);
+    impl->dpts_ = new Dir*[num_parts]();
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
-    impl->dpts_ = dpts;
     impl->data_ = data;
     impl->data_->Ref();
 
     *result = impl;
+  } else {
+    delete impl;
   }
 
   if (data != NULL) {
