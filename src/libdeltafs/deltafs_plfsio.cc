@@ -853,19 +853,51 @@ bool DirReaderImpl::Exists(const Slice&) {
   return true;
 }
 
-static Status LoadSource(LogSource** result, const std::string& fname,
-                         Env* env = Env::Default()) {
+namespace {
+template <typename F>
+class SequentialFileRef : public SequentialFile {
+ public:
+  SequentialFileRef(SequentialFile* base, F* dec) : base_(base), dec_(dec) {
+    dec_->Reset(base);
+  }
+  virtual ~SequentialFileRef() { delete base_; }
+
+  // REQUIRES: External synchronization
+  virtual Status Read(size_t n, Slice* result, char* scratch) {
+    return dec_->Read(n, result, scratch);
+  }
+
+  // REQUIRES: External synchronization
+  virtual Status Skip(uint64_t n) { return dec_->Skip(n); }
+
+ private:
+  SequentialFile* base_;
+  F* dec_;  // Owned by external code
+};
+}  // namespace
+
+template <typename F = MeasuredSequentialFile>
+static Status LoadSource(LogSource** result, const std::string& fname, Env* env,
+                         F* decorator = NULL) {
   *result = NULL;
-  SequentialFile* file;
-  uint64_t size;
-  Status status = env->NewSequentialFile(fname, &file);
+  SequentialFile* base = NULL;
+  uint64_t size = 0;
+  Status status = env->NewSequentialFile(fname, &base);
   if (status.ok()) {
     status = env->GetFileSize(fname, &size);
     if (!status.ok()) {
-      delete file;
+      delete base;
     }
   }
   if (status.ok()) {
+    SequentialFile* file;
+    // Bind to an external decorator
+    if (decorator != NULL) {
+      SequentialFile* ref = new SequentialFileRef<F>(base, decorator);
+      file = ref;
+    } else {
+      file = base;
+    }
     const size_t io_size = 8 << 20;  // Less physical I/O ops
     WholeFileBufferedRandomAccessFile* buffered_file =
         new WholeFileBufferedRandomAccessFile(file, size, io_size);
@@ -876,6 +908,7 @@ static Status LoadSource(LogSource** result, const std::string& fname,
       PrintLogInfo(fname, size);
       LogSource* src = new LogSource(buffered_file, size);
       src->Ref();
+
       *result = src;
     }
   }
@@ -947,9 +980,15 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
     LogSource* indx = NULL;
     Dir* dir = new Dir(options_, &mutex_, &cond_cv_);
     dir->Ref();
-    status =
-        LoadSource(&indx, PartitionIndexFileName(name_, options_.rank, part),
-                   options_.env);
+    if (options_.measure_reads) {
+      status =
+          LoadSource(&indx, PartitionIndexFileName(name_, options_.rank, part),
+                     options_.env, &dir->iostats_);
+    } else {
+      status =
+          LoadSource(&indx, PartitionIndexFileName(name_, options_.rank, part),
+                     options_.env);
+    };
     if (status.ok()) {
       status = dir->Open(indx);
     }
