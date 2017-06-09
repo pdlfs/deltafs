@@ -908,20 +908,23 @@ template <typename F = AtomicMeasuredRandomAccessFile>
 static Status OpenSource(LogSource** result, const std::string& fname, Env* env,
                          F* decorator = NULL) {
   *result = NULL;
-  RandomAccessFile* file = NULL;
+  RandomAccessFile* base = NULL;
   uint64_t size = 0;
-  Status status = env->NewRandomAccessFile(fname, &file);
+  Status status = env->NewRandomAccessFile(fname, &base);
   if (status.ok()) {
     status = env->GetFileSize(fname, &size);
     if (!status.ok()) {
-      delete file;
+      delete base;
     }
   }
   if (status.ok()) {
+    RandomAccessFile* file;
     // Bind to an external decorator
     if (decorator != NULL) {
-      RandomAccessFile* ref = new RandomAccessFileRef<F>(file, decorator);
+      RandomAccessFile* ref = new RandomAccessFileRef<F>(base, decorator);
       file = ref;
+    } else {
+      file = base;
     }
     PrintLogInfo(fname, 0);
     LogSource* src = new LogSource(file, size);
@@ -996,14 +999,14 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   Status status;
 #if VERBOSE >= 2
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.name -> %s (mode=read)", name.c_str());
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.ignore_filters -> %d",
-          int(options.ignore_filters));
+  Verbose(__LOG_ARGS__, 2, "FS, plfsdir.paranoid_checks -> %d",
+          int(options.paranoid_checks));
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.verify_checksums -> %d",
           int(options.verify_checksums));
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.unique_keys -> %d",
-          int(options.unique_keys));
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.num_sub_parts -> %u (per rank)",
-          static_cast<unsigned>(num_parts));
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.measure_reads -> %d",
+          int(options.measure_reads));
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.ignore_filters -> %d",
+          int(options.ignore_filters));
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.my_rank -> %d", my_rank);
 #endif
   DirReaderImpl* impl = new DirReaderImpl(options, name);
