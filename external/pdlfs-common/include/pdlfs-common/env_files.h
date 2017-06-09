@@ -11,6 +11,7 @@
 
 #include "pdlfs-common/env.h"
 
+#include <assert.h>
 #include <string>
 
 namespace pdlfs {
@@ -132,12 +133,12 @@ class MeasuredWritableFile : public WritableFile {
 // is required for use by multiple threads.
 class MeasuredSequentialFile : public SequentialFile {
  public:
-  explicit MeasuredSequentialFile(SequentialFile* base)
-      : base_(base), bytes_(0), ops_(0) {}
-  virtual ~MeasuredSequentialFile() { delete base_; }
+  explicit MeasuredSequentialFile(SequentialFile* base) { Reset(base); }
+  virtual ~MeasuredSequentialFile() {}
 
-  // REQUIRES: External synchronization
+  // REQUIRES: External synchronization.
   virtual Status Read(size_t n, Slice* result, char* scratch) {
+    assert(base_ != NULL);
     Status status = base_->Read(n, result, scratch);
     if (status.ok()) {
       bytes_ += result->size();
@@ -146,8 +147,11 @@ class MeasuredSequentialFile : public SequentialFile {
     return status;
   }
 
-  // REQUIRES: External synchronization
-  virtual Status Skip(uint64_t n) { return base_->Skip(n); }
+  // REQUIRES: External synchronization.
+  virtual Status Skip(uint64_t n) {
+    assert(base_ != NULL);
+    return base_->Skip(n);
+  }
 
   // Total number of bytes read out.
   uint64_t TotalBytes() const { return bytes_; }
@@ -155,8 +159,14 @@ class MeasuredSequentialFile : public SequentialFile {
   // Total number of read operations witnessed.
   uint64_t TotalOps() const { return ops_; }
 
+  // Reset state and the base target.
+  void Reset(SequentialFile* base) {
+    bytes_ = ops_ = 0;
+    base_ = base;
+  }
+
  private:
-  SequentialFile* base_;
+  SequentialFile* base_;  // Weak ref
   uint64_t bytes_;
   uint64_t ops_;
 };
@@ -167,6 +177,9 @@ class AtomicMeasuredRandomAccessFile : public RandomAccessFile {
  public:
   explicit AtomicMeasuredRandomAccessFile(RandomAccessFile* base);
   virtual ~AtomicMeasuredRandomAccessFile();
+
+  // Reset state and the base target.
+  void Reset(RandomAccessFile* base);
 
   // Safe for concurrent use by multiple threads.
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
@@ -180,7 +193,7 @@ class AtomicMeasuredRandomAccessFile : public RandomAccessFile {
 
  private:
   struct Rep;
-  RandomAccessFile* base_;
+  RandomAccessFile* base_;  // Weak ref
   Rep* rep_;
 };
 

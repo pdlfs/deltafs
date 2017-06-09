@@ -70,6 +70,11 @@ struct AtomicMeasuredRandomAccessFile::Rep {
 };
 #endif
 
+void AtomicMeasuredRandomAccessFile::Reset(RandomAccessFile* base) {
+  rep_->bytes = rep_->ops = 0;
+  base_ = base;
+}
+
 uint64_t AtomicMeasuredRandomAccessFile::TotalBytes() const {
   return static_cast<uint64_t>(rep_->bytes);
 }
@@ -81,6 +86,7 @@ uint64_t AtomicMeasuredRandomAccessFile::TotalOps() const {
 Status AtomicMeasuredRandomAccessFile::Read(uint64_t offset, size_t n,
                                             Slice* result,
                                             char* scratch) const {
+  assert(base_ != NULL);
   Status status = base_->Read(offset, n, result, scratch);
   if (status.ok()) {
     rep_->AcceptRead(result->size());
