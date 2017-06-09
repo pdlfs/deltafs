@@ -54,6 +54,7 @@ DirOptions::DirOptions()
       ignore_filters(false),
       verify_checksums(false),
       skip_checksums(false),
+      measure_reads(true),
       lg_parts(0),
       env(NULL),
       allow_env_threads(false),
@@ -886,12 +887,12 @@ namespace {
 template <typename F>
 class RandomAccessFileRef : public RandomAccessFile {
  public:
-  explicit RandomAccessFileRef(RandomAccessFile* base, F* dec)
-      : base_(base), dec_(dec) {
+  RandomAccessFileRef(RandomAccessFile* base, F* dec) : base_(base), dec_(dec) {
     dec_->Reset(base);
   }
   virtual ~RandomAccessFileRef() { delete base_; }
 
+  // Safe for concurrent use by multiple threads
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
     return dec_->Read(offset, n, result, scratch);
@@ -904,8 +905,8 @@ class RandomAccessFileRef : public RandomAccessFile {
 }  // namespace
 
 template <typename F = AtomicMeasuredRandomAccessFile>
-static Status OpenSource(LogSource** result, const std::string& fname,
-                         Env* env = Env::Default(), F* dec = NULL) {
+static Status OpenSource(LogSource** result, const std::string& fname, Env* env,
+                         F* decorator = NULL) {
   *result = NULL;
   RandomAccessFile* file = NULL;
   uint64_t size = 0;
@@ -918,8 +919,8 @@ static Status OpenSource(LogSource** result, const std::string& fname,
   }
   if (status.ok()) {
     // Bind to an external decorator
-    if (dec != NULL) {
-      RandomAccessFile* ref = new RandomAccessFileRef<F>(file, dec);
+    if (decorator != NULL) {
+      RandomAccessFile* ref = new RandomAccessFileRef<F>(file, decorator);
       file = ref;
     }
     PrintLogInfo(fname, 0);
@@ -1006,7 +1007,7 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.my_rank -> %d", my_rank);
 #endif
   DirReaderImpl* impl = new DirReaderImpl(options, name);
-  if (true) {
+  if (options.measure_reads) {
     status =
         OpenSource(&data, DataFileName(name, my_rank), env, &impl->iostats_);
   } else {

@@ -160,6 +160,10 @@ struct DirOptions {
   // Default: false
   bool skip_checksums;
 
+  // True if read I/O should be measured.
+  // Default: true
+  bool measure_reads;
+
   // Number of partitions to divide the data. Specified in logarithmic
   // number so each x will give 2**x partitions.
   // REQUIRES: 0 <= lg_parts <= 8
