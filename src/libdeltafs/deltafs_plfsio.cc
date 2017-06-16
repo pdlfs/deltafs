@@ -1058,7 +1058,7 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   } else {
     status = OpenSource(&data, DataFileName(name, my_rank), env);
   }
-  char space[Footer::kEncodeLength];
+  char space[Footer::kEncodedLength];
   Footer footer;
   Slice input;
   if (!status.ok()) {

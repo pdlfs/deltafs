@@ -76,8 +76,7 @@ class TableHandle {
   uint64_t size_;
 };
 
-// Fixed information stored at the tail end
-// of every log file.
+// Fixed information stored at the end of every log file.
 class Footer {
  public:
   Footer();
@@ -103,7 +102,9 @@ class Footer {
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* input);
 
-  enum { kEncodeLength = BlockHandle::kMaxEncodedLength + 10 };
+  // Encoded length of a Footer. It consists of one encoded block
+  // handle, a couple of options, and a magic number.
+  enum { kEncodedLength = BlockHandle::kMaxEncodedLength + 10 + 8 };
 
  private:
   BlockHandle epoch_index_handle_;

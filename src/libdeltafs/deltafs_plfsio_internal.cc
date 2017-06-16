@@ -1376,7 +1376,7 @@ static Status VerifyOptions(const DirOptions& options, const Footer& footer) {
 
 Status Dir::Open(LogSource* indx) {
   Status status;
-  char space[Footer::kEncodeLength];
+  char space[Footer::kEncodedLength];
   Slice input;
   if (indx->Size() >= sizeof(space)) {
     status =

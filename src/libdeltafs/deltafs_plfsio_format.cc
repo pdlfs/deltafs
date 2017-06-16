@@ -75,7 +75,9 @@ void Footer::EncodeTo(std::string* dst) const {
   assert(unique_keys_ != ~static_cast<unsigned char>(0));
 
   epoch_index_handle_.EncodeTo(dst);
-  dst->resize(BlockHandle::kMaxEncodedLength, 0);
+  dst->resize(BlockHandle::kMaxEncodedLength, 0);  // Padding
+  PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber & 0xFFFFFFFFU));
+  PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber >> 32));
   PutFixed32(dst, num_epoches_);
   PutFixed32(dst, lg_parts_);
   dst->push_back(static_cast<char>(skip_checksums_));
@@ -85,11 +87,20 @@ void Footer::EncodeTo(std::string* dst) const {
 Status Footer::DecodeFrom(Slice* input) {
   const char* start = input->data();
   size_t size = input->size();
-  if (size >= kEncodeLength) {
-    num_epoches_ = DecodeFixed32(start + kEncodeLength - 10);
-    lg_parts_ = DecodeFixed32(start + kEncodeLength - 6);
-    skip_checksums_ = static_cast<unsigned char>(start[kEncodeLength - 2]);
-    unique_keys_ = static_cast<unsigned char>(start[kEncodeLength - 1]);
+  if (size >= kEncodedLength) {
+    const char* magic_ptr = start + kEncodedLength - 18;
+    const uint32_t magic_lo = DecodeFixed32(magic_ptr);
+    const uint32_t magic_hi = DecodeFixed32(magic_ptr + 4);
+    const uint64_t magic = ((static_cast<uint64_t>(magic_hi) << 32) |
+                            (static_cast<uint64_t>(magic_lo)));
+    if (magic != kTableMagicNumber) {
+      return Status::Corruption("Bad magic number");
+    } else {
+      num_epoches_ = DecodeFixed32(start + kEncodedLength - 10);
+      lg_parts_ = DecodeFixed32(start + kEncodedLength - 6);
+      skip_checksums_ = static_cast<unsigned char>(start[kEncodedLength - 2]);
+      unique_keys_ = static_cast<unsigned char>(start[kEncodedLength - 1]);
+    }
   } else {
     return Status::Corruption("Bad footer");
   }
@@ -97,7 +108,7 @@ Status Footer::DecodeFrom(Slice* input) {
   Status result = epoch_index_handle_.DecodeFrom(input);
   if (result.ok()) {
     Slice source(start, size);
-    source.remove_prefix(kEncodeLength);
+    source.remove_prefix(kEncodedLength);
     // This skips over any leftover data
     *input = source;
   }
