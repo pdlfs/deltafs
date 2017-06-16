@@ -221,7 +221,6 @@ class DirWriterImpl : public DirWriter {
   friend class DirWriter;
 
   CompactionStats stats_;
-  std::vector<std::string*> write_bufs_;
   const DirOptions options_;
   mutable port::Mutex io_mutex_;  // Protecting the shared data log
   mutable port::Mutex mutex_;
@@ -235,6 +234,8 @@ class DirWriterImpl : public DirWriter {
   // concurrency, though largely not needed so far
   bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
+  MeasuredWritableFile iostats_;
+  std::vector<std::string*> write_bufs_;
   DirLogger** dpts_;
   LogSink* data_;
 };
@@ -247,6 +248,7 @@ DirWriterImpl::DirWriterImpl(const DirOptions& options)
       part_mask_(~static_cast<uint32_t>(0)),
       has_pending_flush_(false),
       finished_(false),
+      iostats_(NULL),
       dpts_(NULL),
       data_(NULL) {}
 
@@ -668,26 +670,53 @@ static void PrintLogInfo(const std::string& name, const size_t mem_size) {
 #endif
 }
 
+namespace {
+template <typename F>
+class WritableFileRef : public WritableFile {
+ public:
+  WritableFileRef(WritableFile* base, F* dec) : base_(base), dec_(dec) {
+    dec_->Reset(base);
+  }
+  virtual ~WritableFileRef() { delete base_; }
+
+  // REQUIRES: External synchronization
+  virtual Status Append(const Slice& data) { return dec_->Append(data); }
+  virtual Status Close() { return dec_->Close(); }
+  virtual Status Flush() { return dec_->Flush(); }
+  virtual Status Sync() { return dec_->Sync(); }
+
+ private:
+  WritableFile* base_;
+  F* dec_;  // Owned by external code
+};
+}  // namespace
+
 // Try opening a writable log sink and store its handle in *result.
 // If mu is not NULL, return a LogSink associated with the mutex.
 // If buf_size is not zero, create a stacked UnsafeBufferedWritableFile to
-// ensure the write size. If bytes is not NULL, also create a stacked
-// MeasuredWritableFile to track the size of data written to the log.
-static Status OpenSink(LogSink** result, const std::string& fname,
-                       Env* env = Env::Default(), const size_t buf_size = 0,
-                       port::Mutex* io_mutex = NULL,
+// ensure the write size.
+template <typename F = MeasuredWritableFile>
+static Status OpenSink(LogSink** result, const std::string& fname, Env* env,
+                       size_t buf_size = 0, port::Mutex* io_mutex = NULL,
                        std::vector<std::string*>* write_bufs = NULL,
-                       uint64_t* bytes = NULL) {
+                       F* decorator = NULL) {
   *result = NULL;
 
-  WritableFile* file = NULL;
-  Status status = env->NewWritableFile(fname, &file);
+  WritableFile* base = NULL;
+  Status status = env->NewWritableFile(fname, &base);
   if (status.ok()) {
-    assert(file != NULL);
+    assert(base != NULL);
   } else {
     return status;
   }
-  if (bytes != NULL) file = new MeasuredWritableFile(file, bytes);
+
+  WritableFile* file;
+  // Bind to an external decorator
+  if (decorator != NULL) {
+    file = new WritableFileRef<F>(base, decorator);
+  } else {
+    file = base;
+  }
   if (buf_size != 0) {
     UnsafeBufferedWritableFile* buffered =
         new UnsafeBufferedWritableFile(file, buf_size);
@@ -750,12 +779,12 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   std::vector<std::string*> write_bufs;
   status =
       OpenSink(&data[0], DataFileName(name, my_rank), env, options.data_buffer,
-               &impl->io_mutex_, &write_bufs, &impl->stats_.data_written);
+               &impl->io_mutex_, &write_bufs, &impl->iostats_);
   if (status.ok()) {
     for (size_t part = 0; part < num_parts; part++) {
       status = OpenSink(
           &index[part], PartitionIndexFileName(name, my_rank, int(part)), env,
-          options.index_buffer, NULL, &write_bufs, &impl->stats_.index_written);
+          options.index_buffer, NULL, &write_bufs, &impl->iostats_);
       if (!status.ok()) {
         break;
       }
