@@ -87,22 +87,25 @@ void Footer::EncodeTo(std::string* dst) const {
 Status Footer::DecodeFrom(Slice* input) {
   const char* start = input->data();
   size_t size = input->size();
-  if (size >= kEncodedLength) {
+  uint64_t magic;
+
+  if (size < kEncodedLength) {
+    return Status::Corruption("Truncated log footer");
+  } else {
     const char* magic_ptr = start + kEncodedLength - 18;
     const uint32_t magic_lo = DecodeFixed32(magic_ptr);
     const uint32_t magic_hi = DecodeFixed32(magic_ptr + 4);
-    const uint64_t magic = ((static_cast<uint64_t>(magic_hi) << 32) |
-                            (static_cast<uint64_t>(magic_lo)));
-    if (magic != kTableMagicNumber) {
-      return Status::Corruption("Bad magic number");
-    } else {
-      num_epoches_ = DecodeFixed32(start + kEncodedLength - 10);
-      lg_parts_ = DecodeFixed32(start + kEncodedLength - 6);
-      skip_checksums_ = static_cast<unsigned char>(start[kEncodedLength - 2]);
-      unique_keys_ = static_cast<unsigned char>(start[kEncodedLength - 1]);
-    }
+    magic = ((static_cast<uint64_t>(magic_hi) << 32) |
+             (static_cast<uint64_t>(magic_lo)));
+  }
+
+  if (magic != kTableMagicNumber) {
+    return Status::Corruption("Bad magic number");
   } else {
-    return Status::Corruption("Bad footer");
+    num_epoches_ = DecodeFixed32(start + kEncodedLength - 10);
+    lg_parts_ = DecodeFixed32(start + kEncodedLength - 6);
+    skip_checksums_ = static_cast<unsigned char>(start[kEncodedLength - 2]);
+    unique_keys_ = static_cast<unsigned char>(start[kEncodedLength - 1]);
   }
 
   Status result = epoch_index_handle_.DecodeFrom(input);
@@ -112,6 +115,7 @@ Status Footer::DecodeFrom(Slice* input) {
     // This skips over any leftover data
     *input = source;
   }
+
   return result;
 }
 
