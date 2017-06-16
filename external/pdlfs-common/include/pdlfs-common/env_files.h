@@ -41,7 +41,7 @@ class UnsafeBufferedWritableFile : public WritableFile {
   }
 
   virtual Status Close() {
-    Status s = FFlush();
+    Status s = EmptyBuffer();
     base_->Close();
     delete base_;
     base_ = NULL;
@@ -54,21 +54,26 @@ class UnsafeBufferedWritableFile : public WritableFile {
     while (buf_.size() + chunk.size() >= max_buf_size_) {
       size_t left = max_buf_size_ - buf_.size();
       buf_.append(chunk.data(), left);
-      s = FFlush();
+      s = EmptyBuffer();
       if (s.ok()) {
         chunk.remove_prefix(left);
       } else {
         break;
       }
     }
-    if (s.ok() && chunk.size() != 0) {
+    if (!s.ok()) {
+      return s;
+    } else if (chunk.size() != 0) {
       buf_.append(chunk.data(), chunk.size());
+      assert(buf_.size() <= max_buf_size_);
+      return s;
+    } else {
+      return s;
     }
-    return s;
   }
 
   virtual Status Sync() {
-    Status s = FFlush();
+    Status s = EmptyBuffer();
     if (s.ok()) {
       s = base_->Sync();
     }
@@ -81,7 +86,7 @@ class UnsafeBufferedWritableFile : public WritableFile {
     return s;
   }
 
-  Status FFlush() {
+  Status EmptyBuffer() {
     Status s;
     assert(buf_.size() <= max_buf_size_);
     if (!buf_.empty()) {
@@ -99,58 +104,59 @@ class UnsafeBufferedWritableFile : public WritableFile {
   std::string buf_;
 };
 
-// Measure the total amount of data written into *base and store
-// the result in an external counter.
-// NOTE: *base will be deleted when this wrapper is deleted
-// NOTE: implementation is not thread safe
+// Measure the I/O activity accessing an underlying append-only writable
+// file and store the results in a set of local counters.
+// Implementation is not thread-safe and requires external
+// synchronization for use by multiple threads.
 class MeasuredWritableFile : public WritableFile {
  public:
-  MeasuredWritableFile(WritableFile* base, uint64_t* dst)
-      : base_(base), bytes_(dst) {}
+  explicit MeasuredWritableFile(WritableFile* base) { Reset(base); }
+  virtual ~MeasuredWritableFile() {}  // base_ not owned by us
 
-  virtual ~MeasuredWritableFile() { delete base_; }
+  // REQUIRES: External synchronization.
+  virtual Status Flush() {
+    if (base_ == NULL) {
+      return Status::Disconnected(Slice());
+    } else {
+      Status status = base_->Flush();
+      if (status.ok()) {
+        num_flushes_++;
+      }
+      return status;
+    }
+  }
 
-  virtual Status Close() { return base_->Close(); }
-  virtual Status Flush() { return base_->Flush(); }
-  virtual Status Sync() { return base_->Sync(); }
+  // REQUIRES: External synchronization.
+  virtual Status Sync() {
+    if (base_ == NULL) {
+      return Status::Disconnected(Slice());
+    } else {
+      Status status = base_->Sync();
+      if (status.ok()) {
+        num_syncs_++;
+      }
+      return status;
+    }
+  }
 
+  // Total number of flushes
+  uint32_t NumFlushes() { return num_flushes_; }
+
+  // Total number of fsyncs.
+  uint32_t NumSyncs() { return num_syncs_; }
+
+  // REQUIRES: External synchronization.
   virtual Status Append(const Slice& data) {
-    Status s = base_->Append(data);
-    if (s.ok()) {
-      *bytes_ += data.size();
+    if (base_ == NULL) {
+      return Status::Disconnected(Slice());
+    } else {
+      Status status = base_->Append(data);
+      if (status.ok()) {
+        bytes_ += data.size();
+        ops_ += 1;
+      }
+      return status;
     }
-    return s;
-  }
-
- private:
-  WritableFile* base_;
-  uint64_t* bytes_;
-};
-
-// Measure the I/O activity accessing an underlying sequential readable
-// file and store the results in a set of local counters.
-// Implementation is not thread-safe and external synchronization
-// is required for use by multiple threads.
-class MeasuredSequentialFile : public SequentialFile {
- public:
-  explicit MeasuredSequentialFile(SequentialFile* base) { Reset(base); }
-  virtual ~MeasuredSequentialFile() {}
-
-  // REQUIRES: External synchronization.
-  virtual Status Read(size_t n, Slice* result, char* scratch) {
-    assert(base_ != NULL);
-    Status status = base_->Read(n, result, scratch);
-    if (status.ok()) {
-      bytes_ += result->size();
-      ops_ += 1;
-    }
-    return status;
-  }
-
-  // REQUIRES: External synchronization.
-  virtual Status Skip(uint64_t n) {
-    assert(base_ != NULL);
-    return base_->Skip(n);
   }
 
   // Total number of bytes read out.
@@ -159,14 +165,78 @@ class MeasuredSequentialFile : public SequentialFile {
   // Total number of read operations witnessed.
   uint64_t TotalOps() const { return ops_; }
 
-  // Reset state and the base target.
+  // Reset the counters and the base target.
+  void Reset(WritableFile* base) {
+    num_syncs_ = num_flushes_ = 0;
+    bytes_ = ops_ = 0;
+    base_ = base;
+  }
+
+  // REQUIRES: External synchronization.
+  virtual Status Close() {
+    if (base_ != NULL) {
+      Status status = base_->Close();
+      base_ = NULL;
+      return status;
+    } else {
+      return Status::OK();
+    }
+  }
+
+ private:
+  WritableFile* base_;  // Weak reference
+  uint32_t num_syncs_;
+  uint32_t num_flushes_;
+  uint64_t bytes_;
+  uint64_t ops_;
+};
+
+// Measure the I/O activity accessing an underlying sequential readable
+// file and store the results in a set of local counters.
+// Implementation is not thread-safe and requires external
+// synchronization for use by multiple threads.
+class MeasuredSequentialFile : public SequentialFile {
+ public:
+  explicit MeasuredSequentialFile(SequentialFile* base) { Reset(base); }
+  virtual ~MeasuredSequentialFile() {}  // base_ not owned by us
+
+  // REQUIRES: External synchronization.
+  virtual Status Read(size_t n, Slice* result, char* scratch) {
+    if (base_ == NULL) {
+      return Status::Disconnected(Slice());
+    } else {
+      Status status = base_->Read(n, result, scratch);
+      if (status.ok()) {
+        bytes_ += result->size();
+        ops_ += 1;
+      }
+      return status;
+    }
+  }
+
+  // REQUIRES: External synchronization.
+  virtual Status Skip(uint64_t n) {
+    if (base_ == NULL) {
+      return Status::Disconnected(Slice());
+    } else {
+      return base_->Skip(n);
+    }
+  }
+
+  // Total number of bytes read out.
+  uint64_t TotalBytes() const { return bytes_; }
+
+  // Total number of read operations witnessed.
+  uint64_t TotalOps() const { return ops_; }
+
+  // Reset the counters and the base target.
   void Reset(SequentialFile* base) {
     bytes_ = ops_ = 0;
     base_ = base;
   }
 
  private:
-  SequentialFile* base_;  // Weak ref
+  SequentialFile* base_;  // Weak reference
   uint64_t bytes_;
   uint64_t ops_;
 };
@@ -176,9 +246,9 @@ class MeasuredSequentialFile : public SequentialFile {
 class AtomicMeasuredRandomAccessFile : public RandomAccessFile {
  public:
   explicit AtomicMeasuredRandomAccessFile(RandomAccessFile* base);
-  virtual ~AtomicMeasuredRandomAccessFile();
+  virtual ~AtomicMeasuredRandomAccessFile();  // base_ not owned by us
 
-  // Reset state and the base target.
+  // Reset the counters and the base target.
   void Reset(RandomAccessFile* base);
 
   // Safe for concurrent use by multiple threads.
@@ -193,7 +263,7 @@ class AtomicMeasuredRandomAccessFile : public RandomAccessFile {
 
  private:
   struct Rep;
-  RandomAccessFile* base_;  // Weak ref
+  RandomAccessFile* base_;  // Weak reference
   Rep* rep_;
 };
 

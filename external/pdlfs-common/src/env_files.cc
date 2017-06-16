@@ -86,13 +86,16 @@ uint64_t AtomicMeasuredRandomAccessFile::TotalOps() const {
 Status AtomicMeasuredRandomAccessFile::Read(uint64_t offset, size_t n,
                                             Slice* result,
                                             char* scratch) const {
-  assert(base_ != NULL);
-  Status status = base_->Read(offset, n, result, scratch);
-  if (status.ok()) {
-    rep_->AcceptRead(result->size());
-    return status;
+  if (base_ == NULL) {
+    return Status::Disconnected(Slice());
   } else {
-    return status;
+    Status status = base_->Read(offset, n, result, scratch);
+    if (status.ok()) {
+      rep_->AcceptRead(result->size());
+      return status;
+    } else {
+      return status;
+    }
   }
 }
 
