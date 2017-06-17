@@ -274,7 +274,7 @@ static void BM_LogAndApply(size_t num_entries) {
           double(num_entries * options.value_size) / double(end - start));
 
   char tmp[200];
-  CompactionStats stats = writer->compaction_stats();
+  IoStats stats = writer->io_stats();
   snprintf(tmp, sizeof(tmp), ".dat: %lld bytes (%lld ops, %.3f bytes/op)",
            static_cast<long long>(stats.data_bytes),
            static_cast<long long>(stats.data_ops),

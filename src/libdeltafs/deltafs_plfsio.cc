@@ -24,8 +24,7 @@
 namespace pdlfs {
 namespace plfsio {
 
-CompactionStats::CompactionStats()
-    : index_bytes(0), index_ops(0), data_bytes(0), data_ops(0) {}
+IoStats::IoStats() : index_bytes(0), index_ops(0), data_bytes(0), data_ops(0) {}
 
 DirOptions::DirOptions()
     : memtable_buffer(32 << 20),
@@ -194,7 +193,7 @@ class DirWriterImpl : public DirWriter {
   DirWriterImpl(const DirOptions& options);
   virtual ~DirWriterImpl();
 
-  virtual CompactionStats compaction_stats() const;
+  virtual IoStats io_stats() const;
   virtual size_t total_memory_usage() const;
   virtual off_t index_size() const;
   virtual off_t filter_size() const;
@@ -627,15 +626,15 @@ Status DirWriterImpl::Wait() {
   return status;
 }
 
-CompactionStats DirWriterImpl::compaction_stats() const {
+IoStats DirWriterImpl::io_stats() const {
   MutexLock ml(&mutex_);
-  CompactionStats result;
-  result.data_bytes = io_stats_.TotalBytes();
-  result.data_ops = io_stats_.TotalOps();
+  IoStats result;
   for (size_t i = 0; i < num_parts_; i++) {
     result.index_bytes += dpts_[i]->io_stats()->TotalBytes();
     result.index_ops += dpts_[i]->io_stats()->TotalOps();
   }
+  result.data_bytes = io_stats_.TotalBytes();
+  result.data_ops = io_stats_.TotalOps();
   return result;
 }
 
@@ -877,9 +876,9 @@ class DirReaderImpl : public DirReader {
   DirReaderImpl(const DirOptions& opts, const std::string& name);
   virtual ~DirReaderImpl();
 
-  virtual void List(std::vector<std::string>* fids);
   virtual Status ReadAll(const Slice& fid, std::string* dst);
-  virtual bool Exists(const Slice& fid);
+
+  virtual IoStats io_stats() const;
 
  private:
   friend class DirReader;
@@ -891,7 +890,7 @@ class DirReaderImpl : public DirReader {
 
   port::Mutex mutex_;
   port::CondVar cond_cv_;
-  AtomicMeasuredRandomAccessFile iostats_;
+  AtomicMeasuredRandomAccessFile io_stats_;
   Dir** dpts_;  // Lazily initialized directory partitions
   LogSource* data_;
 };
@@ -902,7 +901,7 @@ DirReaderImpl::DirReaderImpl(const DirOptions& opts, const std::string& name)
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
       cond_cv_(&mutex_),
-      iostats_(NULL),
+      io_stats_(NULL),
       dpts_(NULL),
       data_(NULL) {}
 
@@ -917,15 +916,6 @@ DirReaderImpl::~DirReaderImpl() {
   if (data_ != NULL) {
     data_->Unref();
   }
-}
-
-void DirReaderImpl::List(std::vector<std::string>*) {
-  // TODO
-}
-
-bool DirReaderImpl::Exists(const Slice&) {
-  // TODO
-  return true;
 }
 
 namespace {
@@ -1057,7 +1047,7 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
     dir->Ref();
     if (options_.measure_reads) {
       status = LoadSource(&indx, IndexFileName(name_, options_.rank, part),
-                          options_.env, &dir->iostats_);
+                          options_.env, &dir->io_stats_);
     } else {
       status = LoadSource(&indx, IndexFileName(name_, options_.rank, part),
                           options_.env);
@@ -1091,6 +1081,18 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
   } else {
     return status;
   }
+}
+
+IoStats DirReaderImpl::io_stats() const {
+  MutexLock ml(&mutex_);
+  IoStats result;
+  for (size_t i = 0; i < num_parts_; i++) {
+    result.index_bytes += dpts_[i]->io_stats()->TotalBytes();
+    result.index_ops += dpts_[i]->io_stats()->TotalOps();
+  }
+  result.data_bytes = io_stats_.TotalBytes();
+  result.data_ops = io_stats_.TotalOps();
+  return result;
 }
 
 DirReader::~DirReader() {}
@@ -1127,7 +1129,7 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   DirReaderImpl* impl = new DirReaderImpl(options, name);
   if (options.measure_reads) {
     status =
-        OpenSource(&data, DataFileName(name, my_rank), env, &impl->iostats_);
+        OpenSource(&data, DataFileName(name, my_rank), env, &impl->io_stats_);
   } else {
     status = OpenSource(&data, DataFileName(name, my_rank), env);
   }

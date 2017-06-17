@@ -241,7 +241,7 @@ class Dir {
   Dir(const DirOptions& options, port::Mutex*, port::CondVar*);
 
   // Report I/O stats
-  const MeasuredSequentialFile* iostats() const { return &iostats_; }
+  const MeasuredSequentialFile* io_stats() const { return &io_stats_; }
 
   // Open a directory reader on top of a given directory index partition.
   // Return OK on success, or a non-OK status on errors.
@@ -324,7 +324,7 @@ class Dir {
   port::Mutex* mu_;
   port::CondVar* bg_cv_;
   friend class DirReaderImpl;
-  MeasuredSequentialFile iostats_;
+  MeasuredSequentialFile io_stats_;
   Block* rt_;
   int refs_;
 };

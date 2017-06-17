@@ -18,16 +18,16 @@
 namespace pdlfs {
 namespace plfsio {
 
-struct CompactionStats {
-  CompactionStats();
+struct IoStats {
+  IoStats();
 
-  // Total bytes written as indexes (including padding and checksums)
+  // Total bytes accessed as indexes (including padding and checksums)
   uint64_t index_bytes;
-  // Total number of write operations for indexes
+  // Total number of I/O operations for indexes
   uint64_t index_ops;
-  // Total bytes written as data (including padding and checksums)
+  // Total bytes accessed as data (including padding and checksums)
   uint64_t data_bytes;
-  // Total number of write operations for data
+  // Total number of I/O operations for data
   uint64_t data_ops;
 };
 
@@ -301,11 +301,11 @@ class DirWriter {
   DirWriter() {}
   virtual ~DirWriter();
 
-  // Return the total memory reserved by this directory.
+  // Return the total amount of memory reserved by this directory.
   virtual size_t total_memory_usage() const = 0;
 
-  // Return directory compaction stats for debugging and benchmarking.
-  virtual CompactionStats compaction_stats() const = 0;
+  // Return the aggregated I/O stats accumulated so far.
+  virtual IoStats io_stats() const = 0;
 
   // Return the aggregate size of all index blocks.
   // Excluding padding and checksums.
@@ -370,6 +370,9 @@ class DirReader {
 
   // Fetch the entire data from a specific file under a given plfs directory.
   virtual Status ReadAll(const Slice& fid, std::string* dst) = 0;
+
+  // Return the aggregated I/O stats accumulated so far.
+  virtual IoStats io_stats() const = 0;
 
  private:
   // No copying allowed

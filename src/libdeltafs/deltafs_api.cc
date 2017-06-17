@@ -635,7 +635,7 @@ int deltafs_version_patch() { return PDLFS_COMMON_VERSION_PATCH; }
 namespace {
 
 // Dir stats
-typedef pdlfs::plfsio::CompactionStats CompactionStats;
+typedef pdlfs::plfsio::IoStats CompactionStats;
 // Dir options
 typedef pdlfs::plfsio::DirOptions DirOptions;
 
