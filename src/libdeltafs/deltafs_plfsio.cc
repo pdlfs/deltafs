@@ -888,7 +888,7 @@ class DirReaderImpl : public DirReader {
   uint32_t num_parts_;
   uint32_t part_mask_;
 
-  port::Mutex mutex_;
+  mutable port::Mutex mutex_;
   port::CondVar cond_cv_;
   AtomicMeasuredRandomAccessFile io_stats_;
   Dir** dpts_;  // Lazily initialized directory partitions

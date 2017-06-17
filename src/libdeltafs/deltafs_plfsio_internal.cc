@@ -862,6 +862,7 @@ void DirLogger::CompactMemtable() {
   mu_->Unlock();
   uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
+  OutputStats start_stats = tb->output_stats_;
   Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes) ...",
           static_cast<int>(buffer->CurrentBufferSize()),
           static_cast<int>(tb_bytes_));
@@ -900,10 +901,16 @@ void DirLogger::CompactMemtable() {
   }
 
   uint64_t end = Env::Default()->NowMicros();
-
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Compaction done: %d entries (%d us)",
-          static_cast<int>(buffer->NumEntries()),
+  OutputStats end_stats = tb->output_stats_;
+  unsigned long long ix = static_cast<unsigned long long>(
+      TotalIndexSize(end_stats) - TotalIndexSize(start_stats));
+  unsigned long long dt = static_cast<unsigned long long>(
+      TotalDataSize(end_stats) - TotalDataSize(start_stats));
+  Verbose(__LOG_ARGS__, 3,
+          "Compaction done: %d kv pairs, data blks %llu bytes, "
+          "non-data blks %llu bytes, %d us",
+          static_cast<int>(buffer->NumEntries()), dt, ix,
           static_cast<int>(end - start));
 #endif
 
