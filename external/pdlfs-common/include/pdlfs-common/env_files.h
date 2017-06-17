@@ -140,10 +140,9 @@ class MeasuredWritableFile : public WritableFile {
   }
 
   // Total number of flushes
-  uint32_t NumFlushes() { return num_flushes_; }
-
+  uint32_t NumFlushes() const { return num_flushes_; }
   // Total number of fsyncs.
-  uint32_t NumSyncs() { return num_syncs_; }
+  uint32_t NumSyncs() const { return num_syncs_; }
 
   // REQUIRES: External synchronization.
   virtual Status Append(const Slice& data) {
