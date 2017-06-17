@@ -55,6 +55,7 @@ DirOptions::DirOptions()
       verify_checksums(false),
       skip_checksums(false),
       measure_reads(true),
+      measure_writes(true),
       lg_parts(0),
       env(NULL),
       allow_env_threads(false),
@@ -780,17 +781,21 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
   std::vector<std::string*> write_bufs;
+  MeasuredWritableFile* decorator =
+      options.measure_writes ? &impl->iostats_ : NULL;
   status =
       OpenSink(&data[0], DataFileName(name, my_rank), env, options.data_buffer,
-               &impl->iomutex_, &write_bufs, &impl->iostats_);
+               &impl->iomutex_, &write_bufs, decorator);
   if (status.ok()) {
-    port::Mutex* const mtx = NULL;
+    port::Mutex* const mtx = NULL;  // No synchronization needed for index files
     for (size_t i = 0; i < num_parts; i++) {
       tmp_dpts[i] =
           new DirLogger(impl->options_, &impl->mutex_, &impl->cond_var_);
-      status = OpenSink(&index[i], IndexFileName(name, my_rank, int(i)), env,
-                        options.index_buffer, mtx, &write_bufs,
-                        &tmp_dpts[i]->iostats_);
+      MeasuredWritableFile* index_decorator =
+          options.measure_writes ? &tmp_dpts[i]->iostats_ : NULL;
+      status =
+          OpenSink(&index[i], IndexFileName(name, my_rank, int(i)), env,
+                   options.index_buffer, mtx, &write_bufs, index_decorator);
       tmp_dpts[i]->Ref();
       if (status.ok()) {
         tmp_dpts[i]->Open(data[0], index[i]);
