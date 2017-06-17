@@ -124,7 +124,6 @@ class PlfsIoTest {
 
   void Finish() {
     ASSERT_OK(writer_->Finish());
-    Stats();
     delete writer_;
     writer_ = NULL;
   }
@@ -151,23 +150,6 @@ class PlfsIoTest {
     if (reader_ == NULL) OpenReader();
     ASSERT_OK(reader_->ReadAll(key, &tmp));
     return tmp;
-  }
-
-  void Stats() {
-    char tmp[200];
-    if (writer_ != NULL) {
-      CompactionStats stats = writer_->stats();
-      snprintf(tmp, sizeof(tmp),
-               "isz=%8llu Bytes, idu=%8llu Bytes, "
-               "dsz=%8llu Bytes, ddu=%8llu Bytes, "
-               "micros=%llu us",
-               static_cast<unsigned long long>(stats.index_size),
-               static_cast<unsigned long long>(stats.index_written),
-               static_cast<unsigned long long>(stats.data_size),
-               static_cast<unsigned long long>(stats.data_written),
-               static_cast<unsigned long long>(stats.write_micros));
-      fprintf(stderr, "%s\n", tmp);
-    }
   }
 
   DirOptions options_;
@@ -292,16 +274,7 @@ static void BM_LogAndApply(size_t num_entries) {
           double(num_entries * options.value_size) / double(end - start));
 
   char tmp[200];
-  CompactionStats stats = writer->stats();
-  snprintf(tmp, sizeof(tmp),
-           "isz=%8llu Bytes, idu=%8llu Bytes, "
-           "dsz=%8llu Bytes, ddu=%8llu Bytes, "
-           "micros=%llu us",
-           static_cast<unsigned long long>(stats.index_size),
-           static_cast<unsigned long long>(stats.index_written),
-           static_cast<unsigned long long>(stats.data_size),
-           static_cast<unsigned long long>(stats.data_written),
-           static_cast<unsigned long long>(stats.write_micros));
+  snprintf(tmp, sizeof(tmp), "TODO");
   fprintf(stderr, "%s\n", tmp);
   delete writer;
 }

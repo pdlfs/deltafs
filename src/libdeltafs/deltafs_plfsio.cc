@@ -25,11 +25,7 @@ namespace pdlfs {
 namespace plfsio {
 
 CompactionStats::CompactionStats()
-    : write_micros(0),
-      index_written(0),
-      index_size(0),
-      data_written(0),
-      data_size(0) {}
+    : index_bytes(0), index_ops(0), data_bytes(0), data_ops(0) {}
 
 DirOptions::DirOptions()
     : memtable_buffer(32 << 20),

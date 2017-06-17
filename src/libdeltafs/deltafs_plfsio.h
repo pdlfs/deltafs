@@ -20,17 +20,15 @@ namespace plfsio {
 
 struct CompactionStats {
   CompactionStats();
-  // Total time spent on compaction.
-  uint64_t write_micros;
 
   // Total bytes written as indexes (including padding and checksums)
-  uint64_t index_written;
-  // Logic size of all indexes
-  uint64_t index_size;
+  uint64_t index_bytes;
+  // Total number of write operations for indexes
+  uint64_t index_ops;
   // Total bytes written as data (including padding and checksums)
-  uint64_t data_written;
-  // Logic size of data
-  uint64_t data_size;
+  uint64_t data_bytes;
+  // Total number of write operations for data
+  uint64_t data_ops;
 };
 
 struct DirOptions {
