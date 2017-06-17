@@ -274,7 +274,11 @@ static void BM_LogAndApply(size_t num_entries) {
           double(num_entries * options.value_size) / double(end - start));
 
   char tmp[200];
-  snprintf(tmp, sizeof(tmp), "TODO");
+  CompactionStats stats = writer->compaction_stats();
+  snprintf(tmp, sizeof(tmp), ".dat: %lld bytes (%lld ops, %.3f bytes/op)",
+           static_cast<long long>(stats.data_bytes),
+           static_cast<long long>(stats.data_ops),
+           static_cast<double>(stats.data_bytes) / stats.data_ops);
   fprintf(stderr, "%s\n", tmp);
   delete writer;
 }
@@ -283,7 +287,8 @@ static void BM_LogAndApply(size_t num_entries) {
 }  // namespace pdlfs
 
 int main(int argc, char* argv[]) {
-  if (argc > 1 && std::string(argv[1]) == "--benchmark") {
+  if (argc > 1 && std::string(argv[argc - 1]) == "--benchmark") {
+    ::pdlfs::plfsio::BM_LogAndApply(1 << 20);
     ::pdlfs::plfsio::BM_LogAndApply(2 << 20);
     ::pdlfs::plfsio::BM_LogAndApply(4 << 20);
     ::pdlfs::plfsio::BM_LogAndApply(8 << 20);
