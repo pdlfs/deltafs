@@ -145,9 +145,9 @@ class TableLogger {
 // uses background threads.
 class DirLogger {
  public:
-  DirLogger(const DirOptions& options, port::Mutex* mu, port::CondVar* cv,
-            LogSink* indx, LogSink* data, CompactionStats* stats);
-  ~DirLogger();
+  DirLogger(const DirOptions& options, port::Mutex* mu, port::CondVar* cv);
+
+  Status Open(LogSink* data, LogSink* indx);
 
   size_t memory_usage() const;  // Report real memory usage
 
@@ -179,7 +179,19 @@ class DirLogger {
   // Sync and pre-close log files before de-referencing them
   Status SyncAndClose();
 
+  void Ref() { refs_++; }
+
+  void Unref() {
+    assert(refs_ > 0);
+    refs_--;
+    if (refs_ == 0) {
+      delete this;
+    }
+  }
+
  private:
+  ~DirLogger();
+  friend class DirWriter;
   Status Prepare(bool force = false, bool epoch_flush = false,
                  bool finalize = false);
 
@@ -202,13 +214,9 @@ class DirLogger {
   size_t tb_bytes_;          // Target table size
 
   // State below is protected by mutex_
-  LogSink* data_;
-  LogSink* indx_;
-  CompactionStats* compaction_stats_;
   uint32_t num_flush_requested_;
   uint32_t num_flush_completed_;
   bool has_bg_compaction_;
-  TableLogger* table_logger_;
   void* filter_;  // void* since different types of filter might be used
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;
@@ -216,6 +224,12 @@ class DirLogger {
   bool imm_buf_is_final_;
   WriteBuffer buf0_;
   WriteBuffer buf1_;
+  MeasuredWritableFile iostats_;
+  TableLogger* tb_;
+  LogSink* data_;
+  LogSink* indx_;
+  bool opened_;
+  int refs_;
 };
 
 // Retrieve directory contents from a pair of indexed log files.

@@ -588,30 +588,24 @@ Status TableLogger::Finish() {
 }
 
 DirLogger::DirLogger(const DirOptions& options, port::Mutex* mu,
-                     port::CondVar* cv, LogSink* indx, LogSink* data,
-                     CompactionStats* stats)
+                     port::CondVar* cv)
     : options_(options),
       bg_cv_(cv),
       mu_(mu),
-      data_(data),
-      indx_(indx),
-      compaction_stats_(stats),
       num_flush_requested_(0),
       num_flush_completed_(0),
       has_bg_compaction_(false),
-      table_logger_(new TableLogger(options, data, indx)),
       filter_(NULL),
       mem_buf_(NULL),
       imm_buf_(NULL),
       imm_buf_is_epoch_flush_(false),
-      imm_buf_is_final_(false) {
-  // Sanity checks
-  assert(mu != NULL && cv != NULL);
-  assert(data_ != NULL && indx_ != NULL);
-
-  data_->Ref();
-  indx_->Ref();
-
+      imm_buf_is_final_(false),
+      iostats_(NULL),
+      tb_(NULL),
+      data_(NULL),
+      indx_(NULL),
+      opened_(false),
+      refs_(0) {
   // Determine the right table size and bloom filter size.
   // Works best when the key and value sizes are fixed.
   //
@@ -678,25 +672,37 @@ DirLogger::~DirLogger() {
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
-  delete table_logger_;
+  delete tb_;
+  if (data_ != NULL) data_->Unref();
+  if (indx_ != NULL) indx_->Unref();
   BloomBlock* bf = static_cast<BloomBlock*>(filter_);
   if (bf != NULL) {
     delete bf;
   }
-  data_->Unref();
-  indx_->Unref();
+}
+
+Status DirLogger::Open(LogSink* data, LogSink* indx) {
+  assert(!opened_);
+  data_ = data;
+  indx_ = indx;
+  tb_ = new TableLogger(options_, data_, indx_);
+  opened_ = true;
+  data_->Ref();
+  indx_->Ref();
+  return Status::OK();
 }
 
 // Block until compaction finishes and return the
 // latest compaction status.
 Status DirLogger::Wait() {
   mu_->AssertHeld();
+  assert(opened_);
   Status status;
-  while (table_logger_->ok() && has_bg_compaction_) {
+  while (tb_->ok() && has_bg_compaction_) {
     bg_cv_->Wait();
   }
-  if (!table_logger_->ok()) {
-    status = table_logger_->status();
+  if (!tb_->ok()) {
+    status = tb_->status();
   }
   return status;
 }
@@ -707,6 +713,7 @@ Status DirLogger::Wait() {
 // fsync and closing of all log files.
 Status DirLogger::SyncAndClose() {
   mu_->AssertHeld();
+  assert(opened_);
   const bool sync = true;
   data_->Lock();
   Status status = data_->Lclose(sync);
@@ -727,6 +734,7 @@ Status DirLogger::SyncAndClose() {
 // **wait** until it finishes unless no_wait has been set.
 Status DirLogger::Flush(const FlushOptions& flush_options) {
   mu_->AssertHeld();
+  assert(opened_);
   // Wait for buffer space
   while (imm_buf_ != NULL) {
     if (flush_options.dry_run || options_.non_blocking) {
@@ -738,7 +746,7 @@ Status DirLogger::Flush(const FlushOptions& flush_options) {
 
   Status status;
   if (flush_options.dry_run) {
-    status = table_logger_->status();  // Status check only
+    status = tb_->status();  // Status check only
   } else {
     num_flush_requested_++;
     const uint32_t thres = num_flush_requested_;
@@ -758,6 +766,7 @@ Status DirLogger::Flush(const FlushOptions& flush_options) {
 
 Status DirLogger::Add(const Slice& key, const Slice& value) {
   mu_->AssertHeld();
+  assert(opened_);
   Status status = Prepare();
   if (status.ok()) mem_buf_->Add(key, value);
   return status;
@@ -768,8 +777,8 @@ Status DirLogger::Prepare(bool force, bool epoch_flush, bool finalize) {
   Status status;
   assert(mem_buf_ != NULL);
   while (true) {
-    if (!table_logger_->ok()) {
-      status = table_logger_->status();
+    if (!tb_->ok()) {
+      status = tb_->status();
       break;
     } else if (!force &&
                mem_buf_->CurrentBufferSize() <
@@ -848,10 +857,9 @@ void DirLogger::CompactMemtable() {
   assert(buffer != NULL);
   const bool is_final = imm_buf_is_final_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
-  TableLogger* const tb = table_logger_;
+  TableLogger* const tb = tb_;
   BloomBlock* const bf = static_cast<BloomBlock*>(filter_);
   mu_->Unlock();
-  const OutputStats start_stats = tb->output_stats_;
   uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes) ...",
@@ -891,7 +899,6 @@ void DirLogger::CompactMemtable() {
     }
   }
 
-  const OutputStats end_stats = tb->output_stats_;
   uint64_t end = Env::Default()->NowMicros();
 
 #if VERBOSE >= 3
@@ -902,30 +909,30 @@ void DirLogger::CompactMemtable() {
 
   delete iter;
   mu_->Lock();
-  compaction_stats_->index_size +=
-      TotalIndexSize(end_stats) - TotalIndexSize(start_stats);
-  compaction_stats_->data_size +=
-      TotalDataSize(end_stats) - TotalDataSize(start_stats);
-
   num_flush_completed_++;
+  return;
 }
 
 size_t DirLogger::memory_usage() const {
   mu_->AssertHeld();
-  size_t result = 0;
-  result += buf0_.memory_usage();
-  result += buf1_.memory_usage();
-  std::vector<std::string*> stores;
-  stores.push_back(table_logger_->meta_block_.buffer_store());
-  stores.push_back(table_logger_->data_block_.buffer_store());
-  if (filter_ != NULL) {
-    stores.push_back(static_cast<BloomBlock*>(filter_)->buffer_store());
+  if (opened_) {
+    size_t result = 0;
+    result += buf0_.memory_usage();
+    result += buf1_.memory_usage();
+    std::vector<std::string*> stores;
+    stores.push_back(tb_->meta_block_.buffer_store());
+    stores.push_back(tb_->data_block_.buffer_store());
+    if (filter_ != NULL) {
+      stores.push_back(static_cast<BloomBlock*>(filter_)->buffer_store());
+    }
+    stores.push_back(tb_->index_block_.buffer_store());
+    for (size_t i = 0; i < stores.size(); i++) {
+      result += stores[i]->capacity();
+    }
+    return result;
+  } else {
+    return 0;
   }
-  stores.push_back(table_logger_->index_block_.buffer_store());
-  for (size_t i = 0; i < stores.size(); i++) {
-    result += stores[i]->capacity();
-  }
-  return result;
 }
 
 template <typename T>

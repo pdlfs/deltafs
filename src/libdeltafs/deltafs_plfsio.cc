@@ -179,8 +179,8 @@ LogSource::~LogSource() {
   }
 }
 
-static std::string PartitionIndexFileName(const std::string& parent, int rank,
-                                          int partition) {
+static std::string IndexFileName(const std::string& parent, int rank,
+                                 int partition) {
   char tmp[30];
   snprintf(tmp, sizeof(tmp), "/L-%08x.idx.%02x", rank, partition);
   return parent + tmp;
@@ -222,7 +222,7 @@ class DirWriterImpl : public DirWriter {
 
   CompactionStats stats_;
   const DirOptions options_;
-  mutable port::Mutex io_mutex_;  // Protecting the shared data log
+  mutable port::Mutex iomutex_;  // Protecting the shared data log
   mutable port::Mutex mutex_;
   port::CondVar cond_var_;
   int num_epochs_;
@@ -255,7 +255,9 @@ DirWriterImpl::DirWriterImpl(const DirOptions& options)
 DirWriterImpl::~DirWriterImpl() {
   MutexLock l(&mutex_);
   for (size_t i = 0; i < num_parts_; i++) {
-    delete dpts_[i];
+    if (dpts_[i] != NULL) {
+      dpts_[i]->Unref();
+    }
   }
   delete[] dpts_;
   if (data_ != NULL) {
@@ -774,18 +776,25 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   }
 
   DirWriterImpl* impl = new DirWriterImpl(options);
+  std::vector<DirLogger*> tmp_dpts(num_parts, NULL);
   std::vector<LogSink*> index(num_parts, NULL);
-  std::vector<LogSink*> data(1, NULL);  // Shared among all directory partitions
+  std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
   std::vector<std::string*> write_bufs;
   status =
       OpenSink(&data[0], DataFileName(name, my_rank), env, options.data_buffer,
-               &impl->io_mutex_, &write_bufs, &impl->iostats_);
+               &impl->iomutex_, &write_bufs, &impl->iostats_);
   if (status.ok()) {
-    for (size_t part = 0; part < num_parts; part++) {
-      status = OpenSink(
-          &index[part], PartitionIndexFileName(name, my_rank, int(part)), env,
-          options.index_buffer, NULL, &write_bufs, &impl->iostats_);
-      if (!status.ok()) {
+    port::Mutex* const mtx = NULL;
+    for (size_t i = 0; i < num_parts; i++) {
+      tmp_dpts[i] =
+          new DirLogger(impl->options_, &impl->mutex_, &impl->cond_var_);
+      status = OpenSink(&index[i], IndexFileName(name, my_rank, int(i)), env,
+                        options.index_buffer, mtx, &write_bufs,
+                        &tmp_dpts[i]->iostats_);
+      tmp_dpts[i]->Ref();
+      if (status.ok()) {
+        tmp_dpts[i]->Open(data[0], index[i]);
+      } else {
         break;
       }
     }
@@ -794,10 +803,9 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   if (status.ok()) {
     DirLogger** dpts = new DirLogger*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {
-      dpts[i] = new DirLogger(impl->options_, &impl->mutex_, &impl->cond_var_,
-                              index[i],  // Partitioned index log object
-                              data[0],   // Shared data log object
-                              &impl->stats_);
+      assert(tmp_dpts[i] != NULL);
+      dpts[i] = tmp_dpts[i];
+      dpts[i]->Ref();
     }
     impl->data_ = data[0];
     impl->data_->Ref();
@@ -812,14 +820,13 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
     delete impl;
   }
 
-  for (size_t i = 0; i < index.size(); i++) {
-    if (index[i] != NULL) {
-      index[i]->Unref();
-    }
-  }
-  for (size_t i = 0; i < data.size(); i++) {
-    if (data[i] != NULL) {
-      data[i]->Unref();
+  for (size_t i = 0; i < num_parts; i++) {
+    if (tmp_dpts[i] != NULL) tmp_dpts[i]->Unref();
+    if (index[i] != NULL) index[i]->Unref();
+    if (i < data.size()) {
+      if (data[i] != NULL) {
+        data[i]->Unref();
+      }
     }
   }
 
@@ -846,7 +853,7 @@ class DirReaderImpl : public DirReader {
   port::Mutex mutex_;
   port::CondVar cond_cv_;
   AtomicMeasuredRandomAccessFile iostats_;
-  Dir** dpts_;  // Lasily initialized directory partitions
+  Dir** dpts_;  // Lazily initialized directory partitions
   LogSource* data_;
 };
 
@@ -1010,13 +1017,11 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
     Dir* dir = new Dir(options_, &mutex_, &cond_cv_);
     dir->Ref();
     if (options_.measure_reads) {
-      status =
-          LoadSource(&indx, PartitionIndexFileName(name_, options_.rank, part),
-                     options_.env, &dir->iostats_);
+      status = LoadSource(&indx, IndexFileName(name_, options_.rank, part),
+                          options_.env, &dir->iostats_);
     } else {
-      status =
-          LoadSource(&indx, PartitionIndexFileName(name_, options_.rank, part),
-                     options_.env);
+      status = LoadSource(&indx, IndexFileName(name_, options_.rank, part),
+                          options_.env);
     };
     if (status.ok()) {
       status = dir->Open(indx);
@@ -1163,7 +1168,7 @@ Status DestroyDir(const std::string& dirname, const DirOptions& opts) {
     std::vector<std::string> names;
     names.push_back(DataFileName(dirname, my_rank));
     for (size_t part = 0; part < num_parts; part++) {
-      names.push_back(PartitionIndexFileName(dirname, my_rank, part));
+      names.push_back(IndexFileName(dirname, my_rank, part));
     }
     if (status.ok()) {
       for (size_t i = 0; i < names.size(); i++) {
