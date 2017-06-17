@@ -194,11 +194,8 @@ class DirWriterImpl : public DirWriter {
   DirWriterImpl(const DirOptions& options);
   virtual ~DirWriterImpl();
 
+  virtual CompactionStats compaction_stats() const;
   virtual size_t total_memory_usage() const;
-  virtual CompactionStats stats() const {
-    MutexLock ml(&mutex_);
-    return stats_;
-  }
 
   virtual Status Wait();
   virtual Status Write(BatchCursor* cursor, int epoch);
@@ -217,7 +214,6 @@ class DirWriterImpl : public DirWriter {
   void MaybeSlowdownCaller();
   friend class DirWriter;
 
-  CompactionStats stats_;
   const DirOptions options_;
   mutable port::Mutex iomutex_;  // Protecting the shared data log
   mutable port::Mutex mutex_;
@@ -626,6 +622,18 @@ Status DirWriterImpl::Wait() {
     status = finish_status_;
   }
   return status;
+}
+
+CompactionStats DirWriterImpl::compaction_stats() const {
+  MutexLock ml(&mutex_);
+  CompactionStats result;
+  result.data_bytes = iostats_.TotalBytes();
+  result.data_ops = iostats_.TotalOps();
+  for (size_t i = 0; i < num_parts_; i++) {
+    result.index_bytes += dpts_[i]->iostats()->TotalBytes();
+    result.index_ops += dpts_[i]->iostats()->TotalOps();
+  }
+  return result;
 }
 
 size_t DirWriterImpl::total_memory_usage() const {

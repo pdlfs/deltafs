@@ -149,6 +149,8 @@ class DirLogger {
 
   Status Open(LogSink* data, LogSink* indx);
 
+  // Report I/O stats
+  const MeasuredWritableFile* iostats() const { return &iostats_; }
   size_t memory_usage() const;  // Report real memory usage
 
   // REQUIRES: mutex_ has been locked
@@ -237,6 +239,9 @@ class Dir {
  public:
   Dir(const DirOptions& options, port::Mutex*, port::CondVar*);
 
+  // Report I/O stats
+  const MeasuredSequentialFile* iostats() const { return &iostats_; }
+
   // Open a directory reader on top of a given directory index partition.
   // Return OK on success, or a non-OK status on errors.
   Status Open(LogSource* indx);
@@ -304,7 +309,6 @@ class Dir {
   static void BGWork(void*);
 
   ~Dir();
-  friend class DirReaderImpl;
   // No copying allowed
   void operator=(const Dir&);
   Dir(const Dir&);
@@ -318,6 +322,7 @@ class Dir {
 
   port::Mutex* mu_;
   port::CondVar* bg_cv_;
+  friend class DirReaderImpl;
   MeasuredSequentialFile iostats_;
   Block* rt_;
   int refs_;
