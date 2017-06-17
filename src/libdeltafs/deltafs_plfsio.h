@@ -303,8 +303,21 @@ class DirWriter {
 
   // Return the total memory reserved by this directory.
   virtual size_t total_memory_usage() const = 0;
+
   // Return directory compaction stats for debugging and benchmarking.
   virtual CompactionStats compaction_stats() const = 0;
+
+  // Return the aggregate size of all index blocks.
+  // Excluding padding and checksums.
+  virtual off_t index_size() const = 0;
+
+  // Return the aggregate size of all filter blocks.
+  // Excluding padding and checksums.
+  virtual off_t filter_size() const = 0;
+
+  // Return the aggregate size of all data blocks.
+  // Excluding padding and checksums.
+  virtual off_t data_size() const = 0;
 
   // Open an I/O writer against a specified plfs-style directory.
   // Return OK on success, or a non-OK status on errors.

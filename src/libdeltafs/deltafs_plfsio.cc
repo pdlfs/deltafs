@@ -196,6 +196,9 @@ class DirWriterImpl : public DirWriter {
 
   virtual CompactionStats compaction_stats() const;
   virtual size_t total_memory_usage() const;
+  virtual off_t index_size() const;
+  virtual off_t filter_size() const;
+  virtual off_t data_size() const;
 
   virtual Status Wait();
   virtual Status Write(BatchCursor* cursor, int epoch);
@@ -215,7 +218,7 @@ class DirWriterImpl : public DirWriter {
   friend class DirWriter;
 
   const DirOptions options_;
-  mutable port::Mutex iomutex_;  // Protecting the shared data log
+  mutable port::Mutex io_mutex_;  // Protecting the shared data log
   mutable port::Mutex mutex_;
   port::CondVar cond_var_;
   int num_epochs_;
@@ -227,7 +230,7 @@ class DirWriterImpl : public DirWriter {
   // concurrency, though largely not needed so far
   bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
-  MeasuredWritableFile iostats_;
+  MeasuredWritableFile io_stats_;
   std::vector<std::string*> write_bufs_;
   DirLogger** dpts_;
   LogSink* data_;
@@ -241,7 +244,7 @@ DirWriterImpl::DirWriterImpl(const DirOptions& options)
       part_mask_(~static_cast<uint32_t>(0)),
       has_pending_flush_(false),
       finished_(false),
-      iostats_(NULL),
+      io_stats_(NULL),
       dpts_(NULL),
       data_(NULL) {}
 
@@ -261,7 +264,7 @@ DirWriterImpl::~DirWriterImpl() {
 void DirWriterImpl::MaybeSlowdownCaller() {
   mutex_.AssertHeld();
   Env* const env = options_.env;
-  const uint64_t micros = options_.slowdown_micros;
+  const int micros = static_cast<int>(options_.slowdown_micros);
   if (micros != 0) {
     mutex_.Unlock();
     env->SleepForMicroseconds(micros);
@@ -627,11 +630,11 @@ Status DirWriterImpl::Wait() {
 CompactionStats DirWriterImpl::compaction_stats() const {
   MutexLock ml(&mutex_);
   CompactionStats result;
-  result.data_bytes = iostats_.TotalBytes();
-  result.data_ops = iostats_.TotalOps();
+  result.data_bytes = io_stats_.TotalBytes();
+  result.data_ops = io_stats_.TotalOps();
   for (size_t i = 0; i < num_parts_; i++) {
-    result.index_bytes += dpts_[i]->iostats()->TotalBytes();
-    result.index_ops += dpts_[i]->iostats()->TotalOps();
+    result.index_bytes += dpts_[i]->io_stats()->TotalBytes();
+    result.index_ops += dpts_[i]->io_stats()->TotalOps();
   }
   return result;
 }
@@ -642,6 +645,33 @@ size_t DirWriterImpl::total_memory_usage() const {
   for (size_t i = 0; i < num_parts_; i++) result += dpts_[i]->memory_usage();
   for (size_t i = 0; i < write_bufs_.size(); i++) {
     result += write_bufs_[i]->capacity();
+  }
+  return result;
+}
+
+off_t DirWriterImpl::index_size() const {
+  MutexLock ml(&mutex_);
+  size_t result = 0;
+  for (size_t i = 0; i < num_parts_; i++) {
+    result += dpts_[i]->output_stats()->index_size;
+  }
+  return result;
+}
+
+off_t DirWriterImpl::filter_size() const {
+  MutexLock ml(&mutex_);
+  size_t result = 0;
+  for (size_t i = 0; i < num_parts_; i++) {
+    result += dpts_[i]->output_stats()->filter_size;
+  }
+  return result;
+}
+
+off_t DirWriterImpl::data_size() const {
+  MutexLock ml(&mutex_);
+  size_t result = 0;
+  for (size_t i = 0; i < num_parts_; i++) {
+    result += dpts_[i]->output_stats()->data_size;
   }
   return result;
 }
@@ -786,17 +816,17 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
   std::vector<std::string*> write_bufs;
   MeasuredWritableFile* decorator =
-      options.measure_writes ? &impl->iostats_ : NULL;
+      options.measure_writes ? &impl->io_stats_ : NULL;
   status =
       OpenSink(&data[0], DataFileName(name, my_rank), env, options.data_buffer,
-               &impl->iomutex_, &write_bufs, decorator);
+               &impl->io_mutex_, &write_bufs, decorator);
   if (status.ok()) {
     port::Mutex* const mtx = NULL;  // No synchronization needed for index files
     for (size_t i = 0; i < num_parts; i++) {
       tmp_dpts[i] =
           new DirLogger(impl->options_, &impl->mutex_, &impl->cond_var_);
       MeasuredWritableFile* index_decorator =
-          options.measure_writes ? &tmp_dpts[i]->iostats_ : NULL;
+          options.measure_writes ? &tmp_dpts[i]->io_stats_ : NULL;
       status =
           OpenSink(&index[i], IndexFileName(name, my_rank, int(i)), env,
                    options.index_buffer, mtx, &write_bufs, index_decorator);

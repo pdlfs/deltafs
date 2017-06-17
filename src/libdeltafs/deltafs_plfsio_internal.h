@@ -150,7 +150,8 @@ class DirLogger {
   Status Open(LogSink* data, LogSink* indx);
 
   // Report I/O stats
-  const MeasuredWritableFile* iostats() const { return &iostats_; }
+  const MeasuredWritableFile* io_stats() const { return &io_stats_; }
+  const OutputStats* output_stats() const { return &tb_->output_stats_; }
   size_t memory_usage() const;  // Report real memory usage
 
   // REQUIRES: mutex_ has been locked
@@ -226,7 +227,7 @@ class DirLogger {
   bool imm_buf_is_final_;
   WriteBuffer buf0_;
   WriteBuffer buf1_;
-  MeasuredWritableFile iostats_;
+  MeasuredWritableFile io_stats_;
   TableLogger* tb_;
   LogSink* data_;
   LogSink* indx_;
