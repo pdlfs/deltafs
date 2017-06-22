@@ -942,9 +942,8 @@ size_t DirLogger::memory_usage() const {
   }
 }
 
-template <typename T>
 static Status ReadBlock(LogSource* source, const DirOptions& options,
-                        const T& handle, BlockContents* result) {
+                        const BlockHandle& handle, BlockContents* result) {
   result->data = Slice();
   result->heap_allocated = false;
   result->cachable = false;
@@ -1092,14 +1091,17 @@ Status Dir::Fetch(const Slice& key, const TableHandle& handle, Saver saver,
   }
 
   // Load the index block
-  BlockContents contents;
-  status = ReadBlock(indx_, options_, handle, &contents);
+  BlockContents index_contents;
+  BlockHandle index_handle;
+  index_handle.set_offset(handle.offset());
+  index_handle.set_size(handle.size());
+  status = ReadBlock(indx_, options_, index_handle, &index_contents);
   if (!status.ok()) {
     return status;
   }
 
-  Block* block = new Block(contents);
-  Iterator* const iter = block->NewIterator(BytewiseComparator());
+  Block* index_block = new Block(index_contents);
+  Iterator* const iter = index_block->NewIterator(BytewiseComparator());
   if (options_.unique_keys) {
     iter->Seek(key);  // Binary search
   } else {
@@ -1132,7 +1134,7 @@ Status Dir::Fetch(const Slice& key, const TableHandle& handle, Saver saver,
   }
 
   delete iter;
-  delete block;
+  delete index_block;
   return status;
 }
 
