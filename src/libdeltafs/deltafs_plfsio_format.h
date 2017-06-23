@@ -26,7 +26,7 @@ namespace plfsio {
 static const uint32_t kMaxTableNo = 9999;
 static const uint32_t kMaxEpochNo = 9999;
 
-// Formats used by keys in the epoch index block.
+// Formats used by keys in the meta index blocks.
 extern std::string EpochKey(uint32_t epoch);
 extern std::string EpochTableKey(uint32_t epoch, uint32_t table);
 extern Status ParseEpochKey(const Slice& input, uint32_t* epoch,
@@ -92,7 +92,7 @@ class Footer {
   unsigned char unique_keys() const { return unique_keys_; }
   void set_unique_keys(unsigned char uni) { unique_keys_ = uni; }
 
-  // The block handle for the epoch index.
+  // The block handle for the root index.
   const BlockHandle& epoch_index_handle() const { return epoch_index_handle_; }
   void set_epoch_index_handle(const BlockHandle& h) { epoch_index_handle_ = h; }
 

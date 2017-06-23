@@ -642,9 +642,9 @@ Status TableLogger::Finish() {
 
   if (ok()) {
     const uint64_t root_index_size = root_index_contents.size();
-    const uint64_t root_epoch_index_size =
+    const uint64_t final_root_index_size =
         root_index_handle.size() + kBlockTrailerSize;
-    output_stats_.final_meta_index_size += root_epoch_index_size;
+    output_stats_.final_meta_index_size += final_root_index_size;
     output_stats_.meta_index_size += root_index_size;
   } else {
     return status_;
