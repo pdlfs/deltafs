@@ -102,22 +102,6 @@ class BloomBlock {
     return space_;
   }
 
-  Slice Finalize(bool crc32c = true) {
-    assert(finished_);
-    Slice contents = space_;  // Contents without the trailer
-    char trailer[kBlockTrailerSize];
-    trailer[0] = kNoCompression;
-    if (crc32c) {
-      uint32_t crc = crc32c::Value(contents.data(), contents.size());
-      crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
-      EncodeFixed32(trailer + 1, crc32c::Mask(crc));
-    } else {
-      EncodeFixed32(trailer + 1, 0);
-    }
-    space_.append(trailer, sizeof(trailer));
-    return space_;
-  }
-
   std::string* buffer_store() { return &space_; }
 
  private:
