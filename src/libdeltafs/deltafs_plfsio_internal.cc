@@ -1260,33 +1260,36 @@ static void ParaSaveValue(void* arg, const Slice& key, const Slice& value) {
   state->found = true;
 }
 
-static inline Iterator* NewEpochIterator(Block* block) {
-  return block->NewIterator(BytewiseComparator());
+static inline Iterator* NewRtIterator(Block* block) {
+  Iterator* iter = block->NewIterator(BytewiseComparator());
+  iter->SeekToFirst();
+  return iter;
 }
 
 }  // namespace
 
-void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
-  mu_->AssertHeld();
-  if (!ctx->status->ok()) {
-    return;
-  }
-  Iterator* epoch_iter = ctx->epoch_iter;
-  if (epoch_iter == NULL) {
-    epoch_iter = NewEpochIterator(rt_);
-  }
-  mu_->Unlock();
+Status Dir::InternalGet(const Slice& key, const BlockHandle& handle,
+                        uint32_t epoch, GetContext* ctx) {
   Status status;
-  std::string epoch_key;
+  // Load the meta index for the epoch
+  BlockContents meta_index_contents;
+  status = ReadBlock(indx_, options_, handle, &meta_index_contents);
+  if (!status.ok()) {
+    return status;
+  }
+  Block* meta_index_block = new Block(meta_index_contents);
+  Iterator* const iter = meta_index_block->NewIterator(BytewiseComparator());
+  iter->SeekToFirst();
+  std::string epoch_table_key;
   uint32_t table = 0;
   for (; status.ok(); table++) {
-    epoch_key = EpochTableKey(epoch, table);
+    epoch_table_key = EpochTableKey(epoch, table);
     // Try reusing current iterator position if possible
-    if (!epoch_iter->Valid() || epoch_iter->key() != epoch_key) {
-      epoch_iter->Seek(epoch_key);
-      if (!epoch_iter->Valid()) {
+    if (!iter->Valid() || iter->key() != epoch_table_key) {
+      iter->Seek(epoch_table_key);
+      if (!iter->Valid()) {
         break;  // EOF
-      } else if (epoch_iter->key() != epoch_key) {
+      } else if (iter->key() != epoch_table_key) {
         break;  // No such table
       }
     }
@@ -1298,9 +1301,9 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
     state.dst = ctx->dst;
     state.found = false;
     TableHandle h;
-    Slice handle_encoding = epoch_iter->value();
+    Slice handle_encoding = iter->value();
     status = h.DecodeFrom(&handle_encoding);
-    epoch_iter->Next();
+    iter->Next();
     if (status.ok()) {
       if (options_.parallel_reads) {
         status = Fetch(key, h, ParaSaveValue, &state);
@@ -1316,12 +1319,55 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   }
 
   if (status.ok()) {
-    status = epoch_iter->status();
+    status = iter->status();
+  }
+
+  delete iter;
+  delete meta_index_block;
+  return status;
+}
+
+void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
+  mu_->AssertHeld();
+  if (!ctx->status->ok()) {
+    return;
+  }
+  Iterator* rt_iter = ctx->rt_iter;
+  if (rt_iter == NULL) {
+    rt_iter = NewRtIterator(rt_);
+  }
+  mu_->Unlock();
+  Status status;
+  std::string epoch_key = EpochKey(epoch);
+  bool found = true;
+  // Tru reusing current iterator position if possible
+  if (!rt_iter->Valid() || rt_iter->key() != epoch_key) {
+    rt_iter->Seek(epoch_key);
+    if (!rt_iter->Valid()) {
+      found = false;  // EOF
+    } else if (rt_iter->key() != epoch_key) {
+      found = false;  // No such epoch
+    }
+  }
+
+  // DOIT
+  if (found) {
+    BlockHandle h;
+    Slice handle_encoding = rt_iter->value();
+    status = h.DecodeFrom(&handle_encoding);
+    rt_iter->Next();
+    if (status.ok()) {
+      status = InternalGet(key, h, epoch, ctx);
+    }
+  }
+
+  if (status.ok()) {
+    status = rt_iter->status();
   }
 
   mu_->Lock();
-  if (epoch_iter != ctx->epoch_iter) {
-    delete epoch_iter;
+  if (rt_iter != ctx->rt_iter) {
+    delete rt_iter;
   }
   assert(ctx->num_open_reads > 0);
   ctx->num_open_reads--;
@@ -1389,10 +1435,10 @@ Status Dir::Read(const Slice& key, std::string* dst) {
   ctx.offsets = &offsets;
   ctx.buffer = &buffer;
   if (!options_.parallel_reads) {
-    // Pre-create the epoch iterator for serial reads
-    ctx.epoch_iter = NewEpochIterator(rt_);
+    // Pre-create the root iterator for serial reads
+    ctx.rt_iter = NewRtIterator(rt_);
   } else {
-    ctx.epoch_iter = NULL;
+    ctx.rt_iter = NULL;
   }
   ctx.dst = dst;
   if (num_epoches_ != 0) {
@@ -1424,7 +1470,7 @@ Status Dir::Read(const Slice& key, std::string* dst) {
     bg_cv_->Wait();
   }
 
-  delete ctx.epoch_iter;
+  delete ctx.rt_iter;
   // Merge read results
   if (status.ok()) {
     if (options_.parallel_reads) {
