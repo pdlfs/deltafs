@@ -248,8 +248,8 @@ OutputStats::OutputStats()
     : footer_size(0),
       final_data_size(0),
       data_size(0),
-      final_meta_size(0),
-      meta_size(0),
+      final_meta_index_size(0),
+      meta_index_size(0),
       final_index_size(0),
       index_size(0),
       final_filter_size(0),
@@ -258,7 +258,7 @@ OutputStats::OutputStats()
       key_size(0) {}
 
 static size_t TotalIndexSize(const OutputStats& stats) {
-  return stats.filter_size + stats.index_size + stats.meta_size +
+  return stats.filter_size + stats.index_size + stats.meta_index_size +
          stats.footer_size;
 }
 
@@ -338,6 +338,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
       root_block_(1),
       pending_indx_entry_(false),
       pending_meta_entry_(false),
+      pending_root_entry_(false),
       num_tables_(0),
       num_epochs_(0),
       data_sink_(data),
@@ -381,9 +382,45 @@ void TableLogger::MakeEpoch() {
     return;  // Abort
   } else if (num_tables_ == 0) {
     return;  // Empty epoch
-  } else if (num_epochs_ >= kMaxEpoches) {
+  } else if (num_epochs_ >= kMaxEpochNo) {
     status_ = Status::AssertionFailed("Too many epochs");
+    return;
+  }
+
+  BlockHandle meta_index_handle;
+  Slice meta_index_contents = meta_block_.Finish();
+  status_ = indx_logger_.Write(meta_index_contents, &meta_index_handle);
+
+  if (ok()) {
+    const uint64_t meta_index_size = meta_index_contents.size();
+    const uint64_t final_meta_index_size =
+        meta_index_handle.size() + kBlockTrailerSize;
+    output_stats_.final_meta_index_size += final_meta_index_size;
+    output_stats_.meta_index_size += meta_index_size;
   } else {
+    return;  // Abort
+  }
+
+  if (ok()) {
+    meta_block_.Reset();
+    pending_root_handle_.set_offset(meta_index_handle.offset());
+    pending_root_handle_.set_size(meta_index_handle.size());
+    assert(!pending_root_entry_);
+    pending_root_entry_ = true;
+  } else {
+    return;  // Abort
+  }
+
+  if (num_epochs_ > kMaxEpochNo) {
+    status_ = Status::AssertionFailed("Too many epochs");
+  } else if (pending_root_entry_) {
+    std::string handle_encoding;
+    pending_root_handle_.EncodeTo(&handle_encoding);
+    root_block_.Add(EpochKey(num_epochs_), handle_encoding);
+    pending_root_entry_ = false;
+  }
+
+  if (ok()) {
     num_tables_ = 0;
     num_epochs_++;
   }
@@ -411,13 +448,13 @@ void TableLogger::EndTable(T* filter_block) {
     return;  // Empty table
   }
 
-  BlockHandle indx_handle;
-  Slice indx_contents = indx_block_.Finish();
-  status_ = indx_logger_.Write(indx_contents, &indx_handle);
+  BlockHandle index_handle;
+  Slice index_contents = indx_block_.Finish();
+  status_ = indx_logger_.Write(index_contents, &index_handle);
 
   if (ok()) {
-    const uint64_t index_size = indx_contents.size();
-    const uint64_t final_index_size = indx_handle.size() + kBlockTrailerSize;
+    const uint64_t index_size = index_contents.size();
+    const uint64_t final_index_size = index_handle.size() + kBlockTrailerSize;
     output_stats_.final_index_size += final_index_size;
     output_stats_.index_size += index_size;
   } else {
@@ -446,15 +483,15 @@ void TableLogger::EndTable(T* filter_block) {
     indx_block_.Reset();
     pending_meta_handle_.set_filter_offset(filter_handle.offset());
     pending_meta_handle_.set_filter_size(filter_handle.size());
-    pending_meta_handle_.set_offset(indx_handle.offset());
-    pending_meta_handle_.set_size(indx_handle.size());
+    pending_meta_handle_.set_index_offset(index_handle.offset());
+    pending_meta_handle_.set_index_size(index_handle.size());
     assert(!pending_meta_entry_);
     pending_meta_entry_ = true;
   } else {
     return;  // Abort
   }
 
-  if (num_tables_ >= kMaxTablesPerEpoch) {
+  if (num_tables_ > kMaxTableNo) {
     status_ = Status::AssertionFailed("Too many tables");
   } else if (pending_meta_entry_) {
     pending_meta_handle_.set_smallest_key(smallest_key_);
@@ -462,7 +499,7 @@ void TableLogger::EndTable(T* filter_block) {
     pending_meta_handle_.set_largest_key(largest_key_);
     std::string handle_encoding;
     pending_meta_handle_.EncodeTo(&handle_encoding);
-    meta_block_.Add(EpochKey(num_epochs_, num_tables_), handle_encoding);
+    meta_block_.Add(EpochTableKey(num_epochs_, num_tables_), handle_encoding);
     pending_meta_entry_ = false;
   }
 
@@ -592,27 +629,28 @@ Status TableLogger::Finish() {
   MakeEpoch();
   finished_ = true;
   if (!ok()) return status_;
-  BlockHandle epoch_index_handle;
   std::string footer_buf;
   Footer footer(footer_);
 
+  assert(!pending_indx_entry_);
   assert(!pending_meta_entry_);
-  BlockHandle meta_handle;
-  Slice meta_contents = meta_block_.Finish();
-  status_ = indx_logger_.Write(meta_contents, &meta_handle);
+  assert(!pending_root_entry_);
+
+  BlockHandle root_index_handle;
+  Slice root_index_contents = root_block_.Finish();
+  status_ = indx_logger_.Write(root_index_contents, &root_index_handle);
 
   if (ok()) {
-    const uint64_t meta_size = meta_contents.size();
-    const uint64_t final_meta_size = meta_handle.size() + kBlockTrailerSize;
-    output_stats_.final_meta_size += final_meta_size;
-    output_stats_.meta_size += meta_size;
+    const uint64_t root_index_size = root_index_contents.size();
+    const uint64_t root_epoch_index_size =
+        root_index_handle.size() + kBlockTrailerSize;
+    output_stats_.final_meta_index_size += root_epoch_index_size;
+    output_stats_.meta_index_size += root_index_size;
   } else {
     return status_;
   }
 
-  epoch_index_handle.set_size(meta_handle.size());
-  epoch_index_handle.set_offset(meta_handle.offset());
-  footer.set_epoch_index_handle(epoch_index_handle);
+  footer.set_epoch_index_handle(root_index_handle);
   footer.set_num_epoches(num_epochs_);
   footer.EncodeTo(&footer_buf);
 
@@ -1149,8 +1187,8 @@ Status Dir::Fetch(const Slice& key, const TableHandle& handle, Saver saver,
   // Load the index block
   BlockContents index_contents;
   BlockHandle index_handle;
-  index_handle.set_offset(handle.offset());
-  index_handle.set_size(handle.size());
+  index_handle.set_offset(handle.index_offset());
+  index_handle.set_size(handle.index_size());
   status = ReadBlock(indx_, options_, index_handle, &index_contents);
   if (!status.ok()) {
     return status;
@@ -1242,7 +1280,7 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   std::string epoch_key;
   uint32_t table = 0;
   for (; status.ok(); table++) {
-    epoch_key = EpochKey(epoch, table);
+    epoch_key = EpochTableKey(epoch, table);
     // Try reusing current iterator position if possible
     if (!epoch_iter->Valid() || epoch_iter->key() != epoch_key) {
       epoch_iter->Seek(epoch_key);

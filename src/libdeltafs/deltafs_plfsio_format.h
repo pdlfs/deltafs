@@ -23,11 +23,12 @@
 
 namespace pdlfs {
 namespace plfsio {
-static const uint32_t kMaxTablesPerEpoch = 9999;
-static const uint32_t kMaxEpoches = 9999;
+static const uint32_t kMaxTableNo = 9999;
+static const uint32_t kMaxEpochNo = 9999;
 
 // Formats used by keys in the epoch index block.
-extern std::string EpochKey(uint32_t epoch, uint32_t table);
+extern std::string EpochKey(uint32_t epoch);
+extern std::string EpochTableKey(uint32_t epoch, uint32_t table);
 extern Status ParseEpochKey(const Slice& input, uint32_t* epoch,
                             uint32_t* table);
 
@@ -47,12 +48,12 @@ class TableHandle {
   void set_filter_size(uint64_t size) { filter_size_ = size; }
 
   // The offset of the index block in a file.
-  uint64_t offset() const { return offset_; }
-  void set_offset(uint64_t offset) { offset_ = offset; }
+  uint64_t index_offset() const { return index_offset_; }
+  void set_index_offset(uint64_t offset) { index_offset_ = offset; }
 
   // The size of the index block.
-  uint64_t size() const { return size_; }
-  void set_size(uint64_t size) { size_ = size; }
+  uint64_t index_size() const { return index_size_; }
+  void set_index_size(uint64_t size) { index_size_ = size; }
 
   // The smallest key within the table.
   Slice smallest_key() const { return smallest_key_; }
@@ -72,8 +73,8 @@ class TableHandle {
   // Handle to the filter and the index block
   uint64_t filter_offset_;
   uint64_t filter_size_;
-  uint64_t offset_;
-  uint64_t size_;
+  uint64_t index_offset_;
+  uint64_t index_size_;
 };
 
 // Fixed information stored at the end of every log file.
@@ -117,8 +118,8 @@ class Footer {
 inline TableHandle::TableHandle()
     : filter_offset_(~static_cast<uint64_t>(0) /* Invalid offset */),
       filter_size_(~static_cast<uint64_t>(0) /* Invalid size */),
-      offset_(~static_cast<uint64_t>(0) /* Invalid offset */),
-      size_(~static_cast<uint64_t>(0) /* Invalid size */) {
+      index_offset_(~static_cast<uint64_t>(0) /* Invalid offset */),
+      index_size_(~static_cast<uint64_t>(0) /* Invalid size */) {
   // Empty
 }
 

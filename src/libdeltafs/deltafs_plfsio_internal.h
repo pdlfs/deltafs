@@ -52,19 +52,19 @@ class WriteBuffer {
   class Iter;
 };
 
-struct OutputStats {
+struct OutputStats {  // All final sizes include padding and block trailers
   OutputStats();
 
   // Footer
   size_t footer_size;
 
   // Total size of data blocks
-  size_t final_data_size;  // Including padding and block trailers
+  size_t final_data_size;
   size_t data_size;
 
-  // Total size of the root meta block
-  size_t final_meta_size;
-  size_t meta_size;
+  // Total size of meta index blocks and the root meta index block
+  size_t final_meta_index_size;
+  size_t meta_index_size;
 
   // Total size of index blocks
   size_t final_index_size;
@@ -156,6 +156,8 @@ class TableLogger {
   BlockHandle pending_indx_handle_;
   bool pending_meta_entry_;
   TableHandle pending_meta_handle_;
+  bool pending_root_entry_;
+  BlockHandle pending_root_handle_;
   uint32_t num_tables_;  // Number of tables generated within the current epoch
   uint32_t num_epochs_;  // Number of epochs generated
   std::string uncommitted_indexes_;

@@ -28,19 +28,26 @@ Status ParseEpochKey(const Slice& input, uint32_t* epoch, uint32_t* table) {
   }
 }
 
-std::string EpochKey(uint32_t epoch, uint32_t table) {
-  assert(epoch <= kMaxEpoches);
-  assert(table <= kMaxTablesPerEpoch);
+std::string EpochTableKey(uint32_t epoch, uint32_t table) {
+  assert(epoch <= kMaxEpochNo);
+  assert(table <= kMaxTableNo);
   char tmp[10];
   snprintf(tmp, sizeof(tmp), "%04d-%04d", int(epoch), int(table));
+  return tmp;
+}
+
+std::string EpochKey(uint32_t epoch) {
+  assert(epoch <= kMaxEpochNo);
+  char tmp[5];
+  snprintf(tmp, sizeof(tmp), "%04d", int(epoch));
   return tmp;
 }
 
 void TableHandle::EncodeTo(std::string* dst) const {
   assert(filter_offset_ != ~static_cast<uint64_t>(0));
   assert(filter_size_ != ~static_cast<uint64_t>(0));
-  assert(offset_ != ~static_cast<uint64_t>(0));
-  assert(size_ != ~static_cast<uint64_t>(0));
+  assert(index_offset_ != ~static_cast<uint64_t>(0));
+  assert(index_size_ != ~static_cast<uint64_t>(0));
   assert(!smallest_key_.empty());
   assert(!largest_key_.empty());
 
@@ -48,8 +55,8 @@ void TableHandle::EncodeTo(std::string* dst) const {
   PutLengthPrefixedSlice(dst, largest_key_);
   PutVarint64(dst, filter_offset_);
   PutVarint64(dst, filter_size_);
-  PutVarint64(dst, offset_);
-  PutVarint64(dst, size_);
+  PutVarint64(dst, index_offset_);
+  PutVarint64(dst, index_size_);
 }
 
 Status TableHandle::DecodeFrom(Slice* input) {
@@ -58,8 +65,9 @@ Status TableHandle::DecodeFrom(Slice* input) {
   if (!GetLengthPrefixedSlice(input, &smallest_key) ||
       !GetLengthPrefixedSlice(input, &largest_key) ||
       !GetVarint64(input, &filter_offset_) ||
-      !GetVarint64(input, &filter_size_) || !GetVarint64(input, &offset_) ||
-      !GetVarint64(input, &size_)) {
+      !GetVarint64(input, &filter_size_) ||
+      !GetVarint64(input, &index_offset_) ||
+      !GetVarint64(input, &index_size_)) {
     return Status::Corruption("Bad table handle");
   } else {
     smallest_key_ = smallest_key.ToString();
