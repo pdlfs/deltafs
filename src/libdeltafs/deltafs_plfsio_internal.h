@@ -326,8 +326,8 @@ class Dir {
   };
   void Get(const Slice& key, uint32_t epoch, GetContext* ctx);
 
-  Status InternalGet(const Slice& key, const BlockHandle& handle, uint32_t epoch,
-                   GetContext* ctx);
+  Status InternalGet(const Slice& key, const BlockHandle& handle,
+                     uint32_t epoch, GetContext* ctx);
 
   static void Merge(GetContext* ctx);
 

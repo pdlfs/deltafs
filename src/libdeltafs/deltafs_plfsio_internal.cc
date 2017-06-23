@@ -1338,20 +1338,19 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   }
   mu_->Unlock();
   Status status;
-  std::string epoch_key = EpochKey(epoch);
-  bool found = true;
-  // Tru reusing current iterator position if possible
-  if (!rt_iter->Valid() || rt_iter->key() != epoch_key) {
-    rt_iter->Seek(epoch_key);
-    if (!rt_iter->Valid()) {
-      found = false;  // EOF
-    } else if (rt_iter->key() != epoch_key) {
-      found = false;  // No such epoch
+  std::string epoch_key;
+  uint32_t e = epoch;
+  for (; e == epoch; e++) {
+    epoch_key = EpochKey(e);
+    // Tru reusing current iterator position if possible
+    if (!rt_iter->Valid() || rt_iter->key() != epoch_key) {
+      rt_iter->Seek(epoch_key);
+      if (!rt_iter->Valid()) {
+        break;  // EOF
+      } else if (rt_iter->key() != epoch_key) {
+        break;  // No such epoch
+      }
     }
-  }
-
-  // DOIT
-  if (found) {
     BlockHandle h;
     Slice handle_encoding = rt_iter->value();
     status = h.DecodeFrom(&handle_encoding);
