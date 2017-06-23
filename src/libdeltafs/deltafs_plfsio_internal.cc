@@ -282,8 +282,69 @@ static size_t TotalDataSize(const OutputStats& stats) {
   return stats.data_size;
 }
 
+IndexLogger::IndexLogger(const DirOptions& options, LogSink* sink)
+    : options_(options), sink_(sink) {
+  // Sanity Check
+  assert(sink_ != NULL);
+  sink_->Ref();
+}
+
+IndexLogger::~IndexLogger() { sink_->Unref(); }
+
+Status IndexLogger::Write(const Slice& block_contents, BlockHandle* handle) {
+  Status status;
+  Slice raw_contents;
+  CompressionType type = kNoCompression;
+  switch (type) {
+    case kNoCompression:
+      raw_contents = block_contents;
+      break;
+
+    case kSnappyCompression:
+      if (port::Snappy_Compress(block_contents.data(), block_contents.size(),
+                                &compressed_) &&
+          compressed_.size() <
+              block_contents.size() - (block_contents.size() / 8u)) {
+        raw_contents = compressed_;
+      } else {
+        // Snappy not supported, or compressed less than 12.5%, so just
+        // store uncompressed form
+        raw_contents = block_contents;
+        type = kNoCompression;
+      }
+      break;
+  }
+  status = WriteRaw(raw_contents, type, handle);
+  compressed_.clear();
+  return status;
+}
+
+Status IndexLogger::WriteRaw(const Slice& contents, CompressionType type,
+                             BlockHandle* handle) {
+  Status status;
+  char trailer[kBlockTrailerSize];
+  trailer[0] = type;
+  if (!options_.skip_checksums) {
+    uint32_t crc = crc32c::Value(contents.data(), contents.size());
+    crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
+    EncodeFixed32(trailer + 1, crc32c::Mask(crc));
+  } else {
+    EncodeFixed32(trailer + 1, 0);
+  }
+  const uint64_t offset = sink_->Ltell();
+  status = sink_->Lwrite(contents);
+  if (status.ok()) {
+    status = sink_->Lwrite(Slice(trailer, sizeof(trailer)));
+  }
+  if (status.ok()) {
+    handle->set_size(contents.size());
+    handle->set_offset(offset);
+  }
+  return status;
+}
+
 TableLogger::TableLogger(const DirOptions& options, LogSink* data,
-                         LogSink* indx)
+                         LogSink* idxf)
     : options_(options),
       num_uncommitted_index_(0),
       num_uncommitted_data_(0),
@@ -295,12 +356,13 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
       num_tables_(0),
       num_epochs_(0),
       data_sink_(data),
-      indx_sink_(indx),
+      idxf_logger_(options, idxf),
+      idxf_sink_(idxf),
       finished_(false) {
   // Sanity checks
-  assert(indx_sink_ != NULL && data_sink_ != NULL);
+  assert(idxf_sink_ != NULL && data_sink_ != NULL);
 
-  indx_sink_->Ref();
+  idxf_sink_->Ref();
   data_sink_->Ref();
 
   // Initialize footer template
@@ -323,7 +385,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
 }
 
 TableLogger::~TableLogger() {
-  indx_sink_->Unref();
+  idxf_sink_->Unref();
   data_sink_->Unref();
 }
 
@@ -364,39 +426,43 @@ void TableLogger::EndTable(T* filter_block) {
     return;  // Empty table
   }
 
+  BlockHandle index_handle;
   Slice index_contents = index_block_.Finish();
-  const size_t index_size = index_contents.size();
-  Slice final_index_contents =  // No zero padding necessary for index blocks
-      index_block_.Finalize(!options_.skip_checksums);
-  const size_t final_index_size = final_index_contents.size();
-  const uint64_t index_offset = indx_sink_->Ltell();
-  status_ = indx_sink_->Lwrite(final_index_contents);
-  output_stats_.final_index_size += final_index_size;
-  output_stats_.index_size += index_size;
-  if (!ok()) return;  // Abort
+  status_ = idxf_logger_.Write(index_contents, &index_handle);
 
-  size_t filter_size = 0;
-  const uint64_t filter_offset = indx_sink_->Ltell();
-  Slice final_filter_contents;
+  if (ok()) {
+    const uint64_t index_size = index_contents.size();
+    const uint64_t final_index_size = index_handle.size() + kBlockTrailerSize;
+    output_stats_.final_index_size += final_index_size;
+    output_stats_.index_size += index_size;
+  } else {
+    return;  // Abort
+  }
 
+  BlockHandle filter_handle;
   if (filter_block != NULL) {
     Slice filer_contents = filter_block->Finish();
-    filter_size = filer_contents.size();
-    final_filter_contents = filter_block->Finalize(!options_.skip_checksums);
-    const size_t final_filter_size = final_filter_contents.size();
-    status_ = indx_sink_->Lwrite(final_filter_contents);
-    output_stats_.final_filter_size += final_filter_size;
-    output_stats_.filter_size += filter_size;
+    status_ = idxf_logger_.Write(filer_contents, &filter_handle);
+    if (ok()) {
+      const uint64_t filter_size = filer_contents.size();
+      const uint64_t final_filter_size =
+          filter_handle.size() + kBlockTrailerSize;
+      output_stats_.final_filter_size += final_filter_size;
+      output_stats_.filter_size += filter_size;
+    } else {
+      return;  // Abort
+    }
   } else {
-    // No filter configured
+    filter_handle.set_offset(0);  // No filter configured
+    filter_handle.set_size(0);
   }
 
   if (ok()) {
     index_block_.Reset();
-    pending_meta_handle_.set_filter_offset(filter_offset);
-    pending_meta_handle_.set_filter_size(filter_size);
-    pending_meta_handle_.set_offset(index_offset);
-    pending_meta_handle_.set_size(index_size);
+    pending_meta_handle_.set_filter_offset(filter_handle.offset());
+    pending_meta_handle_.set_filter_size(filter_handle.size());
+    pending_meta_handle_.set_offset(index_handle.offset());
+    pending_meta_handle_.set_size(index_handle.size());
     assert(!pending_meta_entry_);
     pending_meta_entry_ = true;
   } else {
@@ -546,19 +612,21 @@ Status TableLogger::Finish() {
   Footer footer(footer_);
 
   assert(!pending_meta_entry_);
+  BlockHandle meta_handle;
   Slice meta_contents = meta_block_.Finish();
-  const size_t meta_size = meta_contents.size();
-  Slice final_meta_contents =  // No padding is needed for the root meta block
-      meta_block_.Finalize(!options_.skip_checksums);
-  const size_t final_meta_size = final_meta_contents.size();
-  const uint64_t meta_offset = indx_sink_->Ltell();
-  status_ = indx_sink_->Lwrite(final_meta_contents);
-  output_stats_.final_meta_size += final_meta_size;
-  output_stats_.meta_size += meta_size;
-  if (!ok()) return status_;
+  status_ = idxf_logger_.Write(meta_contents, &meta_handle);
 
-  epoch_index_handle.set_size(meta_size);
-  epoch_index_handle.set_offset(meta_offset);
+  if (ok()) {
+    const uint64_t meta_size = meta_contents.size();
+    const uint64_t final_meta_size = meta_handle.size() + kBlockTrailerSize;
+    output_stats_.final_meta_size += final_meta_size;
+    output_stats_.meta_size += meta_size;
+  } else {
+    return status_;
+  }
+
+  epoch_index_handle.set_size(meta_handle.size());
+  epoch_index_handle.set_offset(meta_handle.offset());
   footer.set_epoch_index_handle(epoch_index_handle);
   footer.set_num_epoches(num_epochs_);
   footer.EncodeTo(&footer_buf);
@@ -568,18 +636,18 @@ Status TableLogger::Finish() {
   if (options_.tail_padding) {
     // Add enough padding to ensure the final size of the index log
     // is some multiple of the physical write size.
-    const uint64_t total_size = indx_sink_->Ltell() + footer_size;
+    const uint64_t total_size = idxf_sink_->Ltell() + footer_size;
     const size_t overflow = total_size % options_.index_buffer;
     if (overflow != 0) {
       const size_t n = options_.index_buffer - overflow;
-      status_ = indx_sink_->Lwrite(std::string(n, 0));
+      status_ = idxf_sink_->Lwrite(std::string(n, 0));
     } else {
       // No need to pad
     }
   }
 
   if (ok()) {
-    status_ = indx_sink_->Lwrite(footer_buf);
+    status_ = idxf_sink_->Lwrite(footer_buf);
     output_stats_.footer_size += footer_size;
     return status_;
   } else {

@@ -79,10 +79,31 @@ struct OutputStats {
   size_t key_size;
 };
 
-// Write table contents into a set of log files.
+// Write index blocks as log chunks.
+class IndexLogger {
+ public:
+  IndexLogger(const DirOptions& options, LogSink* sink);
+  ~IndexLogger();
+
+  Status Write(const Slice& block_contents, BlockHandle* handle);
+
+ private:
+  const DirOptions& options_;
+
+  Status WriteRaw(const Slice& raw, CompressionType type, BlockHandle* handle);
+
+  // No copying allowed
+  void operator=(const IndexLogger&);
+  IndexLogger(const IndexLogger&);
+
+  std::string compressed_;
+  LogSink* sink_;
+};
+
+// Write sorted table contents into a pair of log files.
 class TableLogger {
  public:
-  TableLogger(const DirOptions& options, LogSink* data, LogSink* indx);
+  TableLogger(const DirOptions& options, LogSink* data, LogSink* idxf);
   ~TableLogger();
 
   bool ok() const { return status_.ok(); }
@@ -136,7 +157,8 @@ class TableLogger {
   uint32_t num_epochs_;  // Number of epochs generated
   std::string uncommitted_indexes_;
   LogSink* data_sink_;
-  LogSink* indx_sink_;
+  IndexLogger idxf_logger_;
+  LogSink* idxf_sink_;
   bool finished_;
 };
 
