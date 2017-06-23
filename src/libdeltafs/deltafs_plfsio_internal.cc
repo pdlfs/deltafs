@@ -294,7 +294,7 @@ IndexLogger::~IndexLogger() { sink_->Unref(); }
 Status IndexLogger::Write(const Slice& block_contents, BlockHandle* handle) {
   Status status;
   Slice raw_contents;
-  CompressionType type = kNoCompression;
+  CompressionType type = options_.compression;
   switch (type) {
     case kNoCompression:
       raw_contents = block_contents;
@@ -344,25 +344,26 @@ Status IndexLogger::WriteRaw(const Slice& contents, CompressionType type,
 }
 
 TableLogger::TableLogger(const DirOptions& options, LogSink* data,
-                         LogSink* idxf)
+                         LogSink* indx)
     : options_(options),
-      num_uncommitted_index_(0),
+      num_uncommitted_indx_(0),
       num_uncommitted_data_(0),
       data_block_(16),
-      index_block_(1),
+      indx_block_(1),
       meta_block_(1),
-      pending_index_entry_(false),
+      root_block_(1),
+      pending_indx_entry_(false),
       pending_meta_entry_(false),
       num_tables_(0),
       num_epochs_(0),
       data_sink_(data),
-      idxf_logger_(options, idxf),
-      idxf_sink_(idxf),
+      indx_logger_(options, indx),
+      indx_sink_(indx),
       finished_(false) {
   // Sanity checks
-  assert(idxf_sink_ != NULL && data_sink_ != NULL);
+  assert(indx_sink_ != NULL && data_sink_ != NULL);
 
-  idxf_sink_->Ref();
+  indx_sink_->Ref();
   data_sink_->Ref();
 
   // Initialize footer template
@@ -373,7 +374,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
 
   // Allocate memory
   const size_t estimated_index_size_per_table = 4 << 10;
-  index_block_.Reserve(estimated_index_size_per_table);
+  indx_block_.Reserve(estimated_index_size_per_table);
   const size_t estimated_meta_size = 4 << 10;
   meta_block_.Reserve(estimated_meta_size);
 
@@ -385,7 +386,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
 }
 
 TableLogger::~TableLogger() {
-  idxf_sink_->Unref();
+  indx_sink_->Unref();
   data_sink_->Unref();
 }
 
@@ -411,28 +412,28 @@ void TableLogger::EndTable(T* filter_block) {
   EndBlock();
   if (!ok()) {
     return;
-  } else if (pending_index_entry_) {
+  } else if (pending_indx_entry_) {
     BytewiseComparator()->FindShortSuccessor(&last_key_);
     PutLengthPrefixedSlice(&uncommitted_indexes_, last_key_);
-    pending_index_handle_.EncodeTo(&uncommitted_indexes_);
-    pending_index_entry_ = false;
-    num_uncommitted_index_++;
+    pending_indx_handle_.EncodeTo(&uncommitted_indexes_);
+    pending_indx_entry_ = false;
+    num_uncommitted_indx_++;
   }
 
   Commit();
   if (!ok()) {
     return;
-  } else if (index_block_.empty()) {
+  } else if (indx_block_.empty()) {
     return;  // Empty table
   }
 
-  BlockHandle index_handle;
-  Slice index_contents = index_block_.Finish();
-  status_ = idxf_logger_.Write(index_contents, &index_handle);
+  BlockHandle indx_handle;
+  Slice indx_contents = indx_block_.Finish();
+  status_ = indx_logger_.Write(indx_contents, &indx_handle);
 
   if (ok()) {
-    const uint64_t index_size = index_contents.size();
-    const uint64_t final_index_size = index_handle.size() + kBlockTrailerSize;
+    const uint64_t index_size = indx_contents.size();
+    const uint64_t final_index_size = indx_handle.size() + kBlockTrailerSize;
     output_stats_.final_index_size += final_index_size;
     output_stats_.index_size += index_size;
   } else {
@@ -442,7 +443,7 @@ void TableLogger::EndTable(T* filter_block) {
   BlockHandle filter_handle;
   if (filter_block != NULL) {
     Slice filer_contents = filter_block->Finish();
-    status_ = idxf_logger_.Write(filer_contents, &filter_handle);
+    status_ = indx_logger_.Write(filer_contents, &filter_handle);
     if (ok()) {
       const uint64_t filter_size = filer_contents.size();
       const uint64_t final_filter_size =
@@ -458,11 +459,11 @@ void TableLogger::EndTable(T* filter_block) {
   }
 
   if (ok()) {
-    index_block_.Reset();
+    indx_block_.Reset();
     pending_meta_handle_.set_filter_offset(filter_handle.offset());
     pending_meta_handle_.set_filter_size(filter_handle.size());
-    pending_meta_handle_.set_offset(index_handle.offset());
-    pending_meta_handle_.set_size(index_handle.size());
+    pending_meta_handle_.set_offset(indx_handle.offset());
+    pending_meta_handle_.set_size(indx_handle.size());
     assert(!pending_meta_entry_);
     pending_meta_entry_ = true;
   } else {
@@ -495,7 +496,7 @@ void TableLogger::Commit() {
   if (!ok()) return;                                // Abort
 
   data_sink_->Lock();
-  assert(num_uncommitted_data_ == num_uncommitted_index_);
+  assert(num_uncommitted_data_ == num_uncommitted_indx_);
   const size_t offset = data_sink_->Ltell();
   status_ = data_sink_->Lwrite(*data_block_.buffer_store());
   data_sink_->Unlock();
@@ -511,15 +512,15 @@ void TableLogger::Commit() {
       handle.DecodeFrom(&input);
       handle.set_offset(offset + handle.offset());
       handle.EncodeTo(&handle_encoding);
-      index_block_.Add(key, handle_encoding);
+      indx_block_.Add(key, handle_encoding);
       num_index_committed++;
     } else {
       break;
     }
   }
 
-  assert(num_index_committed == num_uncommitted_index_);
-  num_uncommitted_data_ = num_uncommitted_index_ = 0;
+  assert(num_index_committed == num_uncommitted_indx_);
+  num_uncommitted_data_ = num_uncommitted_indx_ = 0;
   uncommitted_indexes_.clear();
   data_block_.buffer_store()->clear();
   data_block_.SwitchBuffer(NULL);
@@ -550,10 +551,10 @@ void TableLogger::EndBlock() {
   if (ok()) {
     data_block_.SwitchBuffer(NULL);
     data_block_.Reset();
-    pending_index_handle_.set_size(block_size);
-    pending_index_handle_.set_offset(block_offset);
-    assert(!pending_index_entry_);
-    pending_index_entry_ = true;
+    pending_indx_handle_.set_size(block_size);
+    pending_indx_handle_.set_offset(block_offset);
+    assert(!pending_indx_entry_);
+    pending_indx_entry_ = true;
     num_uncommitted_data_++;
   }
 }
@@ -577,12 +578,12 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   largest_key_ = key.ToString();
 
   // Add an index entry if there is one pending insertion
-  if (pending_index_entry_) {
+  if (pending_indx_entry_) {
     BytewiseComparator()->FindShortestSeparator(&last_key_, key);
     PutLengthPrefixedSlice(&uncommitted_indexes_, last_key_);
-    pending_index_handle_.EncodeTo(&uncommitted_indexes_);
-    pending_index_entry_ = false;
-    num_uncommitted_index_++;
+    pending_indx_handle_.EncodeTo(&uncommitted_indexes_);
+    pending_indx_entry_ = false;
+    num_uncommitted_indx_++;
   }
 
   // Flush block buffer if it is about to full
@@ -614,7 +615,7 @@ Status TableLogger::Finish() {
   assert(!pending_meta_entry_);
   BlockHandle meta_handle;
   Slice meta_contents = meta_block_.Finish();
-  status_ = idxf_logger_.Write(meta_contents, &meta_handle);
+  status_ = indx_logger_.Write(meta_contents, &meta_handle);
 
   if (ok()) {
     const uint64_t meta_size = meta_contents.size();
@@ -636,18 +637,18 @@ Status TableLogger::Finish() {
   if (options_.tail_padding) {
     // Add enough padding to ensure the final size of the index log
     // is some multiple of the physical write size.
-    const uint64_t total_size = idxf_sink_->Ltell() + footer_size;
+    const uint64_t total_size = indx_sink_->Ltell() + footer_size;
     const size_t overflow = total_size % options_.index_buffer;
     if (overflow != 0) {
       const size_t n = options_.index_buffer - overflow;
-      status_ = idxf_sink_->Lwrite(std::string(n, 0));
+      status_ = indx_sink_->Lwrite(std::string(n, 0));
     } else {
       // No need to pad
     }
   }
 
   if (ok()) {
-    status_ = idxf_sink_->Lwrite(footer_buf);
+    status_ = indx_sink_->Lwrite(footer_buf);
     output_stats_.footer_size += footer_size;
     return status_;
   } else {
@@ -996,12 +997,14 @@ size_t DirLogger::memory_usage() const {
     result += buf0_.memory_usage();
     result += buf1_.memory_usage();
     std::vector<std::string*> stores;
+    stores.push_back(tb_->root_block_.buffer_store());
     stores.push_back(tb_->meta_block_.buffer_store());
+    stores.push_back(tb_->indx_block_.buffer_store());
     stores.push_back(tb_->data_block_.buffer_store());
     if (filter_ != NULL) {
       stores.push_back(static_cast<BloomBlock*>(filter_)->buffer_store());
     }
-    stores.push_back(tb_->index_block_.buffer_store());
+    stores.push_back(tb_->indx_logger_.buffer_store());
     for (size_t i = 0; i < stores.size(); i++) {
       result += stores[i]->capacity();
     }

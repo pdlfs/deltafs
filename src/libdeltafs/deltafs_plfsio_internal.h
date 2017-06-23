@@ -87,6 +87,8 @@ class IndexLogger {
 
   Status Write(const Slice& block_contents, BlockHandle* handle);
 
+  std::string* buffer_store() { return &compressed_; }
+
  private:
   const DirOptions& options_;
 
@@ -103,7 +105,7 @@ class IndexLogger {
 // Write sorted table contents into a pair of log files.
 class TableLogger {
  public:
-  TableLogger(const DirOptions& options, LogSink* data, LogSink* idxf);
+  TableLogger(const DirOptions& options, LogSink* data, LogSink* indx);
   ~TableLogger();
 
   bool ok() const { return status_.ok(); }
@@ -144,21 +146,22 @@ class TableLogger {
   std::string smallest_key_;
   std::string largest_key_;
   std::string last_key_;
-  uint32_t num_uncommitted_index_;  // Number of uncommitted index entries
-  uint32_t num_uncommitted_data_;   // Number of uncommitted data blocks
+  uint32_t num_uncommitted_indx_;  // Number of uncommitted index entries
+  uint32_t num_uncommitted_data_;  // Number of uncommitted data blocks
   BlockBuilder data_block_;
-  BlockBuilder index_block_;
-  BlockBuilder meta_block_;
-  bool pending_index_entry_;
-  BlockHandle pending_index_handle_;
+  BlockBuilder indx_block_;  // Locate the data blocks within a table
+  BlockBuilder meta_block_;  // Locate the tables within an epoch
+  BlockBuilder root_block_;  // Locate each epoch
+  bool pending_indx_entry_;
+  BlockHandle pending_indx_handle_;
   bool pending_meta_entry_;
   TableHandle pending_meta_handle_;
-  uint32_t num_tables_;  // Number of tables within an epoch
+  uint32_t num_tables_;  // Number of tables generated within the current epoch
   uint32_t num_epochs_;  // Number of epochs generated
   std::string uncommitted_indexes_;
   LogSink* data_sink_;
-  IndexLogger idxf_logger_;
-  LogSink* idxf_sink_;
+  IndexLogger indx_logger_;
+  LogSink* indx_sink_;
   bool finished_;
 };
 
