@@ -1268,8 +1268,8 @@ static inline Iterator* NewRtIterator(Block* block) {
 
 }  // namespace
 
-Status Dir::InternalGet(const Slice& key, const BlockHandle& handle,
-                        uint32_t epoch, GetContext* ctx) {
+Status Dir::TryGet(const Slice& key, const BlockHandle& handle, uint32_t epoch,
+                   GetContext* ctx) {
   Status status;
   // Load the meta index for the epoch
   BlockContents meta_index_contents;
@@ -1301,8 +1301,8 @@ Status Dir::InternalGet(const Slice& key, const BlockHandle& handle,
     state.dst = ctx->dst;
     state.found = false;
     TableHandle h;
-    Slice handle_encoding = iter->value();
-    status = h.DecodeFrom(&handle_encoding);
+    Slice input = iter->value();
+    status = h.DecodeFrom(&input);
     iter->Next();
     if (status.ok()) {
       if (options_.parallel_reads) {
@@ -1338,10 +1338,8 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   }
   mu_->Unlock();
   Status status;
-  std::string epoch_key;
-  uint32_t e = epoch;
-  for (; e == epoch; e++) {
-    epoch_key = EpochKey(e);
+  for (uint32_t dummy = epoch; dummy == epoch; dummy++) {
+    std::string epoch_key = EpochKey(epoch);
     // Tru reusing current iterator position if possible
     if (!rt_iter->Valid() || rt_iter->key() != epoch_key) {
       rt_iter->Seek(epoch_key);
@@ -1352,12 +1350,15 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
       }
     }
     BlockHandle h;
-    Slice handle_encoding = rt_iter->value();
-    status = h.DecodeFrom(&handle_encoding);
+    Slice input = rt_iter->value();
+    status = h.DecodeFrom(&input);
     rt_iter->Next();
     if (status.ok()) {
-      status = InternalGet(key, h, epoch, ctx);
+      status = TryGet(key, h, epoch, ctx);
+    } else {
+      // Skip the epoch
     }
+    break;
   }
 
   if (status.ok()) {
