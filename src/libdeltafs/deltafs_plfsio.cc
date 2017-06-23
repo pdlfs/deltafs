@@ -27,7 +27,7 @@ namespace plfsio {
 IoStats::IoStats() : index_bytes(0), index_ops(0), data_bytes(0), data_ops(0) {}
 
 DirOptions::DirOptions()
-    : memtable_buffer(32 << 20),
+    : total_memtable_budget(32 << 20),
       memtable_util(1.0),
       key_size(8),
       value_size(32),
@@ -35,7 +35,7 @@ DirOptions::DirOptions()
       block_size(128 << 10),
       block_util(0.999),
       block_padding(true),
-      block_buffer(2 << 20),
+      block_batch_size(2 << 20),
       data_buffer(4 << 20),
       index_buffer(4 << 20),
       tail_padding(false),
@@ -47,6 +47,7 @@ DirOptions::DirOptions()
       paranoid_checks(false),
       unique_keys(true),
       ignore_filters(false),
+      compression(kNoCompression),
       verify_checksums(false),
       skip_checksums(false),
       measure_reads(true),
@@ -82,11 +83,11 @@ DirOptions ParseDirOptions(const char* input) {
       }
     } else if (conf_key == "memtable_size") {
       if (ParsePrettyNumber(conf_value, &num)) {
-        options.memtable_buffer = num;
+        options.total_memtable_budget = num;
       }
     } else if (conf_key == "memtable_buffer") {
       if (ParsePrettyNumber(conf_value, &num)) {
-        options.memtable_buffer = num;
+        options.total_memtable_budget = num;
       }
     } else if (conf_key == "data_buffer") {
       if (ParsePrettyNumber(conf_value, &num)) {
@@ -691,7 +692,7 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
 static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   DirOptions result = options;
   if (result.env == NULL) result.env = Env::Default();
-  ClipToRange(&result.memtable_buffer, 1 << 20, 1 << 30);
+  ClipToRange(&result.total_memtable_budget, 1 << 20, 1 << 30);
   ClipToRange(&result.memtable_util, 0.5, 1.0);
   ClipToRange(&result.block_size, 4 << 10, 4 << 20);
   ClipToRange(&result.block_util, 0.5, 1.0);
@@ -780,7 +781,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
 #if VERBOSE >= 2
   Verbose(__LOG_ARGS__, 2, "plfsdir.name -> %s", name.c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.memtable_size -> %s",
-          PrettySize(options.memtable_buffer).c_str());
+          PrettySize(options.total_memtable_budget).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.key_size -> %s",
           PrettySize(options.key_size).c_str());
   Verbose(__LOG_ARGS__, 2, "plfsdir.value_size -> %s",

@@ -10,6 +10,7 @@
 #pragma once
 
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/port.h"
 
 #include <stddef.h>
@@ -34,13 +35,13 @@ struct IoStats {
 struct DirOptions {
   DirOptions();
 
-  // Total memory reserved for creating memory tables.
-  // This includes both the buffer space for writing and sorting tables and the
-  // buffer space for creating the data and filter blocks of each table.
-  // This, however, does *not* include the buffer space for accumulating
-  // writes to ensure an optimized write size.
+  // Total memory reserved for write buffering.
+  // This includes both the buffer space for creating and sorting memtables and
+  // the memory space for constructing the data blocks and filter blocks of each
+  // table. This, however, does *not* include the buffer space for accumulating
+  // block writes to ensure an optimized write size.
   // Default: 32MB
-  size_t memtable_buffer;
+  size_t total_memtable_budget;
 
   // Flush memtable as soon as it reaches the specified utilization target.
   // Default: 1 (100%)
@@ -82,7 +83,7 @@ struct DirOptions {
   // contention among multiple concurrent compaction threads that compete
   // for access to a shared data log.
   // Default: 2MB
-  size_t block_buffer;
+  size_t block_batch_size;
 
   // Write buffer size for each physical data log.
   // Set to zero to disable buffering and each data block flush
@@ -148,6 +149,11 @@ struct DirOptions {
   // Ignore all filters during reads.
   // Default: false
   bool ignore_filters;
+
+  // Compression type to be applied to index blocks.
+  // Data blocks are never compressed.
+  // Default: kNoCompression
+  CompressionType compression;
 
   // True if all data read from underlying storage will be verified
   // against the corresponding checksums stored.

@@ -378,7 +378,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   meta_block_.Reserve(estimated_meta_size);
 
   uncommitted_indexes_.reserve(1 << 10);
-  data_block_.buffer_store()->reserve(options_.block_buffer);
+  data_block_.buffer_store()->reserve(options_.block_batch_size);
   data_block_.buffer_store()->clear();
   data_block_.SwitchBuffer(NULL);
   data_block_.Reset();
@@ -587,7 +587,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 
   // Flush block buffer if it is about to full
   if (data_block_.buffer_store()->size() + options_.block_size >
-      options_.block_buffer) {
+      options_.block_batch_size) {
     Commit();
   }
 
@@ -698,8 +698,9 @@ DirLogger::DirLogger(const DirOptions& options, port::Mutex* mu,
       options_.bf_bits_per_key + 2 * bits_per_entry;  // Due to double buffering
 
   size_t table_buffer =  // Total write buffer for each memtable partition
-      options_.memtable_buffer / static_cast<uint32_t>(1 << options_.lg_parts) -
-      options_.block_buffer;  // Reserved for compaction
+      options_.total_memtable_budget /
+          static_cast<uint32_t>(1 << options_.lg_parts) -
+      options_.block_batch_size;  // Reserved for compaction
 
   // Estimated amount of entries per table
   entries_per_tb_ = static_cast<uint32_t>(
