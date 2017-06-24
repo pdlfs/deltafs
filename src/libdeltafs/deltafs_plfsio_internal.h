@@ -56,9 +56,6 @@ class WriteBuffer {
 struct OutputStats {  // All final sizes include padding and block trailers
   OutputStats();
 
-  // Footer
-  size_t footer_size;
-
   // Total size of data blocks
   size_t final_data_size;
   size_t data_size;

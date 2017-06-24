@@ -244,8 +244,7 @@ size_t WriteBuffer::memory_usage() const {
 }
 
 OutputStats::OutputStats()
-    : footer_size(0),
-      final_data_size(0),
+    : final_data_size(0),
       data_size(0),
       final_meta_index_size(0),
       meta_index_size(0),
@@ -315,6 +314,7 @@ void TableLogger::MakeEpoch() {
     status_ = Status::AssertionFailed("Too many epochs");
     return;
   }
+  EpochStone stone;
 
   BlockHandle meta_index_handle;
   Slice meta_index_contents = meta_block_.Finish();
@@ -348,6 +348,17 @@ void TableLogger::MakeEpoch() {
     pending_root_handle_.EncodeTo(&handle_encoding);
     root_block_.Add(EpochKey(num_epochs_), handle_encoding);
     pending_root_entry_ = false;
+  }
+
+  // Insert an epoch seal
+  if (ok()) {
+    stone.set_handle(meta_index_handle);
+    stone.set_id(num_epochs_);
+    std::string epoch_stone;
+    stone.EncodeTo(&epoch_stone);
+    status_ = indx_logger_.SealEpoch(epoch_stone);
+  } else {
+    return;  // Abort
   }
 
   if (ok()) {
@@ -581,32 +592,13 @@ Status TableLogger::Finish() {
     return status_;
   }
 
+  // Write the final footer
   footer.set_epoch_index_handle(root_index_handle);
   footer.set_num_epoches(num_epochs_);
   footer.EncodeTo(&footer_buf);
+  status_ = indx_logger_.Finish(footer_buf);
 
-  const size_t footer_size = footer_buf.size();
-
-  if (options_.tail_padding) {
-    // Add enough padding to ensure the final size of the index log
-    // is some multiple of the physical write size.
-    const uint64_t total_size = indx_sink_->Ltell() + footer_size;
-    const size_t overflow = total_size % options_.index_buffer;
-    if (overflow != 0) {
-      const size_t n = options_.index_buffer - overflow;
-      status_ = indx_sink_->Lwrite(std::string(n, 0));
-    } else {
-      // No need to pad
-    }
-  }
-
-  if (ok()) {
-    status_ = indx_sink_->Lwrite(footer_buf);
-    output_stats_.footer_size += footer_size;
-    return status_;
-  } else {
-    return status_;
-  }
+  return status_;
 }
 
 DirLogger::DirLogger(const DirOptions& options, port::Mutex* mu,

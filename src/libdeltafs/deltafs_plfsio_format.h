@@ -94,9 +94,9 @@ class TableHandle {
 };
 
 // A special marker representing the completion of an epoch.
-class EpochSeal {
+class EpochStone {
  public:
-  EpochSeal();
+  EpochStone();
 
   const BlockHandle& handle() const { return handle_; }
   void set_handle(const BlockHandle& handle) { handle_ = handle; }
@@ -159,7 +159,7 @@ inline TableHandle::TableHandle()
   // Empty
 }
 
-inline EpochSeal::EpochSeal()
+inline EpochStone::EpochStone()
     : id_(~static_cast<uint32_t>(0) /* Invalid id */) {
   // Empty
 }

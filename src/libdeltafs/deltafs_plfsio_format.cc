@@ -76,13 +76,13 @@ Status TableHandle::DecodeFrom(Slice* input) {
   }
 }
 
-void EpochSeal::EncodeTo(std::string* dst) const {
+void EpochStone::EncodeTo(std::string* dst) const {
   assert(id_ != ~static_cast<uint32_t>(0));
   handle_.EncodeTo(dst);
   PutVarint32(dst, id_);
 }
 
-Status EpochSeal::DecodeFrom(Slice* input) {
+Status EpochStone::DecodeFrom(Slice* input) {
   Status result = handle_.DecodeFrom(input);
   if (result.ok()) {
     if (!GetVarint32(input, &id_)) {
