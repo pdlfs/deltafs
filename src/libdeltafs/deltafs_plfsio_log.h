@@ -22,16 +22,6 @@ static const size_t kChunkHeaderSize = 5;
 // Fixed number of bytes for chunk trailers
 static const size_t kChunkTrailerSize = 4;
 
-enum ChunkType {
-  kUnknown = 0x00,  // Useless padding that should be ignored
-  kIndexChunk = 0x01,
-  kFilterChunk = 0x02,
-  kMetaChunk = 0x03,
-  kRootChunk = 0x04,
-  kEpochSeal = 0x11,
-  kFooter = 0xff
-};
-
 // Write blocks as log chunks that can be repaired and replayed
 // by a future reader. Each log chunk has the following format:
 //  - header (5 bytes)

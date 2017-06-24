@@ -306,7 +306,7 @@ TableLogger::~TableLogger() {
 
 void TableLogger::MakeEpoch() {
   assert(!finished_);  // Finish() has not been called
-  EndTable(static_cast<BloomBlock*>(NULL));
+  EndTable(static_cast<BloomBlock*>(NULL), kUnknown);
   if (!ok()) {
     return;  // Abort
   } else if (num_tables_ == 0) {
@@ -357,7 +357,7 @@ void TableLogger::MakeEpoch() {
 }
 
 template <typename T>
-void TableLogger::EndTable(T* filter_block) {
+void TableLogger::EndTable(T* filter_block, ChunkType filter_type) {
   assert(!finished_);  // Finish() has not been called
 
   EndBlock();
@@ -380,7 +380,7 @@ void TableLogger::EndTable(T* filter_block) {
 
   BlockHandle index_handle;
   Slice index_contents = indx_block_.Finish();
-  status_ = indx_logger_.Write(kIndexChunk, index_contents, &index_handle);
+  status_ = indx_logger_.Write(kIdxChunk, index_contents, &index_handle);
 
   if (ok()) {
     const uint64_t index_size = index_contents.size();
@@ -394,7 +394,7 @@ void TableLogger::EndTable(T* filter_block) {
   BlockHandle filter_handle;
   if (filter_block != NULL) {
     Slice filer_contents = filter_block->Finish();
-    status_ = indx_logger_.Write(kFilterChunk, filer_contents, &filter_handle);
+    status_ = indx_logger_.Write(filter_type, filer_contents, &filter_handle);
     if (ok()) {
       const uint64_t filter_size = filer_contents.size();
       const uint64_t final_filter_size =
@@ -569,7 +569,7 @@ Status TableLogger::Finish() {
   BlockHandle root_index_handle;
   Slice root_index_contents = root_block_.Finish();
   status_ =
-      indx_logger_.Write(kRootChunk, root_index_contents, &root_index_handle);
+      indx_logger_.Write(kRtChunk, root_index_contents, &root_index_handle);
 
   if (ok()) {
     const uint64_t root_index_size = root_index_contents.size();
@@ -912,7 +912,7 @@ void DirLogger::CompactMemtable() {
   if (tb->ok()) {
     // Paranoid checks
     assert(num_keys == buffer->NumEntries());
-    tb->EndTable(bf);  // Inject the filter into the table
+    tb->EndTable(bf, kSbfChunk);  // Inject the filter into the table
 
     if (is_epoch_flush) {
       tb->MakeEpoch();

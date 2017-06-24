@@ -33,6 +33,21 @@ extern std::string EpochTableKey(uint32_t epoch, uint32_t table);
 extern Status ParseEpochKey(const Slice& input, uint32_t* epoch,
                             uint32_t* table);
 
+// Type definition for write ahead log chunks
+enum ChunkType {
+  kUnknown = 0x00,  // Useless padding that should be ignored
+
+  // Standard block types for data indexing
+  kIdxChunk = 0x01,
+  kSbfChunk = 0x02,   // Standard bloom filters
+  kMetaChunk = 0x03,  // Meta indexes for each epoch
+  kRtChunk = 0x04,    // One per directory
+
+  // Special types for durability
+  kEpochSeal = 0x11,
+  kFooter = 0xff
+};
+
 // Table handle is a pointer to extends of a file that store the index and
 // filter data of a table. In addition, table handle also stores
 // the key range.
@@ -78,14 +93,24 @@ class TableHandle {
   uint64_t index_size_;
 };
 
+// A special marker representing the completion of an epoch.
 class EpochSeal {
  public:
   EpochSeal();
 
+  const BlockHandle& handle() const { return handle_; }
+  void set_handle(const BlockHandle& handle) { handle_ = handle; }
+
+  uint32_t id() const { return id_; }
+  void set_id(uint32_t id) { id_ = id; }
+
+  void EncodeTo(std::string* dst) const;
+  Status DecodeFrom(Slice* input);
+
  private:
-  BlockHandle handle;
-  uint64_t prev;
-  uint32_t id;
+  BlockHandle handle_;  // Meta index for the epoch
+
+  uint32_t id_;  // Seal Id
 };
 
 // Fixed information stored at the end of every log file.
@@ -131,6 +156,11 @@ inline TableHandle::TableHandle()
       filter_size_(~static_cast<uint64_t>(0) /* Invalid size */),
       index_offset_(~static_cast<uint64_t>(0) /* Invalid offset */),
       index_size_(~static_cast<uint64_t>(0) /* Invalid size */) {
+  // Empty
+}
+
+inline EpochSeal::EpochSeal()
+    : id_(~static_cast<uint32_t>(0) /* Invalid id */) {
   // Empty
 }
 

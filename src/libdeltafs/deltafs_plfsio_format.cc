@@ -7,10 +7,10 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "deltafs_plfsio_format.h"
+
 #include <stdio.h>
 #include <string.h>
-
-#include "deltafs_plfsio_format.h"
 
 namespace pdlfs {
 namespace plfsio {
@@ -73,6 +73,25 @@ Status TableHandle::DecodeFrom(Slice* input) {
     smallest_key_ = smallest_key.ToString();
     largest_key_ = largest_key.ToString();
     return Status::OK();
+  }
+}
+
+void EpochSeal::EncodeTo(std::string* dst) const {
+  assert(id_ != ~static_cast<uint32_t>(0));
+  handle_.EncodeTo(dst);
+  PutVarint32(dst, id_);
+}
+
+Status EpochSeal::DecodeFrom(Slice* input) {
+  Status result = handle_.DecodeFrom(input);
+  if (result.ok()) {
+    if (!GetVarint32(input, &id_)) {
+      return Status::Corruption("Bad epoch seal");
+    } else {
+      return Status::OK();
+    }
+  } else {
+    return result;
   }
 }
 

@@ -104,7 +104,7 @@ class TableLogger {
   // Caller may optionally specify a corresponding filter block.
   // REQUIRES: Finish() has not been called.
   template <typename T>
-  void EndTable(T* filter);
+  void EndTable(T* filter, ChunkType filter_type);
 
   // Force the start of a new epoch.
   // REQUIRES: Finish() has not been called.
