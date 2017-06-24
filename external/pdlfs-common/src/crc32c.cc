@@ -1,5 +1,3 @@
-#include "pdlfs-common/crc32c.h"
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2017 Carnegie Mellon University.
@@ -10,6 +8,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/crc32c.h"
 #include "pdlfs-common/coding.h"
 
 // A portable implementation of crc32c, optimized to handle
@@ -248,6 +247,16 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
 #undef STEP4
 #undef STEP1
   return l ^ 0xffffffffu;
+}
+
+extern uint32_t crc32c_xx(uint32_t, const void*, size_t);
+
+uint32_t ExtendHW(uint32_t init_crc, const char* data, size_t n) {
+#ifdef PDLFS_PLATFORM_POSIX
+  return crc32c_xx(init_crc, data, n);
+#else
+  return Extend(init_crc, data, n);
+#endif
 }
 
 }  // namespace crc32c

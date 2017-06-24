@@ -14,7 +14,7 @@
 
 # main directory sources and tests
 set (pdlfs-common-srcs arena.cc blkdb.cc cache.cc coding.cc crc32c.cc
-     dbfiles.cc dcntl.cc ect.cc ectrie/bit_vector.cc
+     crc32c_xx.cc dbfiles.cc dcntl.cc ect.cc ectrie/bit_vector.cc
      ectrie/twolevel_bucketing.cc env.cc env_files.cc fio.cc fstypes.cc gigaplus.cc
      hash.cc histogram.cc index_cache.cc lease.cc log_reader.cc log_writer.cc
      logging.cc lookup_cache.cc mdb.cc murmur.cc osd.cc osd_internal.cc
