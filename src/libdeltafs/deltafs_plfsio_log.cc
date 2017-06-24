@@ -9,8 +9,6 @@
 
 #include "deltafs_plfsio_log.h"
 
-#include "pdlfs-common/crc32c.h"
-
 namespace pdlfs {
 namespace plfsio {
 

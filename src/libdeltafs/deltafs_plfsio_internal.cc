@@ -9,7 +9,6 @@
 
 #include "deltafs_plfsio_internal.h"
 
-#include "pdlfs-common/crc32c.h"
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
@@ -257,67 +256,6 @@ OutputStats::OutputStats()
       value_size(0),
       key_size(0) {}
 
-IndexLogger::IndexLogger(const DirOptions& options, LogSink* sink)
-    : options_(options), sink_(sink) {
-  // Sanity Check
-  assert(sink_ != NULL);
-  sink_->Ref();
-}
-
-IndexLogger::~IndexLogger() { sink_->Unref(); }
-
-Status IndexLogger::Write(const Slice& block_contents, BlockHandle* handle) {
-  Status status;
-  Slice raw_contents;
-  CompressionType type = options_.compression;
-  switch (type) {
-    case kNoCompression:
-      raw_contents = block_contents;
-      break;
-
-    case kSnappyCompression:
-      if (port::Snappy_Compress(block_contents.data(), block_contents.size(),
-                                &compressed_) &&
-          compressed_.size() <
-              block_contents.size() - (block_contents.size() / 8u)) {
-        raw_contents = compressed_;
-      } else {
-        // Snappy not supported, or compressed less than 12.5%, so just
-        // store uncompressed form
-        raw_contents = block_contents;
-        type = kNoCompression;
-      }
-      break;
-  }
-  status = WriteRaw(raw_contents, type, handle);
-  compressed_.clear();
-  return status;
-}
-
-Status IndexLogger::WriteRaw(const Slice& contents, CompressionType type,
-                             BlockHandle* handle) {
-  Status status;
-  char trailer[kBlockTrailerSize];
-  trailer[0] = type;
-  if (!options_.skip_checksums) {
-    uint32_t crc = crc32c::Value(contents.data(), contents.size());
-    crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
-    EncodeFixed32(trailer + 1, crc32c::Mask(crc));
-  } else {
-    EncodeFixed32(trailer + 1, 0);
-  }
-  const uint64_t offset = sink_->Ltell();
-  status = sink_->Lwrite(contents);
-  if (status.ok()) {
-    status = sink_->Lwrite(Slice(trailer, sizeof(trailer)));
-  }
-  if (status.ok()) {
-    handle->set_size(contents.size());
-    handle->set_offset(offset);
-  }
-  return status;
-}
-
 TableLogger::TableLogger(const DirOptions& options, LogSink* data,
                          LogSink* indx)
     : options_(options),
@@ -380,7 +318,8 @@ void TableLogger::MakeEpoch() {
 
   BlockHandle meta_index_handle;
   Slice meta_index_contents = meta_block_.Finish();
-  status_ = indx_logger_.Write(meta_index_contents, &meta_index_handle);
+  status_ =
+      indx_logger_.Write(kMetaChunk, meta_index_contents, &meta_index_handle);
 
   if (ok()) {
     const uint64_t meta_index_size = meta_index_contents.size();
@@ -441,7 +380,7 @@ void TableLogger::EndTable(T* filter_block) {
 
   BlockHandle index_handle;
   Slice index_contents = indx_block_.Finish();
-  status_ = indx_logger_.Write(index_contents, &index_handle);
+  status_ = indx_logger_.Write(kIndexChunk, index_contents, &index_handle);
 
   if (ok()) {
     const uint64_t index_size = index_contents.size();
@@ -455,7 +394,7 @@ void TableLogger::EndTable(T* filter_block) {
   BlockHandle filter_handle;
   if (filter_block != NULL) {
     Slice filer_contents = filter_block->Finish();
-    status_ = indx_logger_.Write(filer_contents, &filter_handle);
+    status_ = indx_logger_.Write(kFilterChunk, filer_contents, &filter_handle);
     if (ok()) {
       const uint64_t filter_size = filer_contents.size();
       const uint64_t final_filter_size =
@@ -629,7 +568,8 @@ Status TableLogger::Finish() {
 
   BlockHandle root_index_handle;
   Slice root_index_contents = root_block_.Finish();
-  status_ = indx_logger_.Write(root_index_contents, &root_index_handle);
+  status_ =
+      indx_logger_.Write(kRootChunk, root_index_contents, &root_index_handle);
 
   if (ok()) {
     const uint64_t root_index_size = root_index_contents.size();

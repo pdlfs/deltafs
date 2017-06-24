@@ -11,6 +11,7 @@
 
 #include "deltafs_plfsio.h"
 #include "deltafs_plfsio_format.h"
+#include "deltafs_plfsio_log.h"
 
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/port.h"
@@ -79,29 +80,6 @@ struct OutputStats {  // All final sizes include padding and block trailers
   size_t key_size;
 };
 
-// Write index blocks as log chunks.
-class IndexLogger {
- public:
-  IndexLogger(const DirOptions& options, LogSink* sink);
-  ~IndexLogger();
-
-  Status Write(const Slice& block_contents, BlockHandle* handle);
-
-  std::string* buffer_store() { return &compressed_; }
-
- private:
-  const DirOptions& options_;
-
-  Status WriteRaw(const Slice& raw, CompressionType type, BlockHandle* handle);
-
-  // No copying allowed
-  void operator=(const IndexLogger&);
-  IndexLogger(const IndexLogger&);
-
-  std::string compressed_;
-  LogSink* sink_;
-};
-
 // Write sorted table contents into a pair of log files.
 class TableLogger {
  public:
@@ -162,7 +140,7 @@ class TableLogger {
   uint32_t num_epochs_;  // Number of epochs generated
   std::string uncommitted_indexes_;
   LogSink* data_sink_;
-  IndexLogger indx_logger_;
+  LogWriter indx_logger_;
   LogSink* indx_sink_;
   bool finished_;
 };

@@ -24,10 +24,10 @@ static const size_t kChunkTrailerSize = 4;
 
 enum ChunkType {
   kUnknown = 0x00,  // Useless padding that should be ignored
-  kIndexBlock = 0x01,
-  kFilterBlock = 0x02,
-  kMetaIndexBlock = 0x03,
-  kRootBlock = 0x04,
+  kIndexChunk = 0x01,
+  kFilterChunk = 0x02,
+  kMetaChunk = 0x03,
+  kRootChunk = 0x04,
   kEpochSeal = 0x11,
   kFooter = 0xff
 };

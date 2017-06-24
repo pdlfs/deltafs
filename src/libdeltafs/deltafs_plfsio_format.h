@@ -19,6 +19,7 @@
 #include "pdlfs-common/leveldb/iterator.h"
 
 #include "pdlfs-common/coding.h"
+#include "pdlfs-common/crc32c.h"
 #include "pdlfs-common/env.h"
 
 namespace pdlfs {
@@ -75,6 +76,16 @@ class TableHandle {
   uint64_t filter_size_;
   uint64_t index_offset_;
   uint64_t index_size_;
+};
+
+class EpochSeal {
+ public:
+  EpochSeal();
+
+ private:
+  BlockHandle handle;
+  uint64_t prev;
+  uint32_t id;
 };
 
 // Fixed information stored at the end of every log file.
