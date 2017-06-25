@@ -196,10 +196,11 @@ class DirWriterImpl : public DirWriter {
 
   virtual IoStats GetIoStats() const;
 
-  virtual size_t total_memory_usage() const;
-  virtual off_t index_size() const;
-  virtual off_t filter_size() const;
-  virtual off_t data_size() const;
+  virtual uint64_t TEST_total_memory_usage() const;
+
+  virtual uint64_t TEST_index_size() const;
+  virtual uint64_t TEST_filter_size() const;
+  virtual uint64_t TEST_data_size() const;
 
   virtual Status Wait();
   virtual Status Write(BatchCursor* cursor, int epoch);
@@ -639,9 +640,9 @@ IoStats DirWriterImpl::GetIoStats() const {
   return result;
 }
 
-size_t DirWriterImpl::total_memory_usage() const {
+uint64_t DirWriterImpl::TEST_total_memory_usage() const {
   MutexLock ml(&mutex_);
-  size_t result = 0;
+  uint64_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) result += dirs_[i]->memory_usage();
   for (size_t i = 0; i < write_bufs_.size(); i++) {
     result += write_bufs_[i]->capacity();
@@ -649,27 +650,27 @@ size_t DirWriterImpl::total_memory_usage() const {
   return result;
 }
 
-off_t DirWriterImpl::index_size() const {
+uint64_t DirWriterImpl::TEST_index_size() const {
   MutexLock ml(&mutex_);
-  size_t result = 0;
+  uint64_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
     result += dirs_[i]->output_stats()->index_size;
   }
   return result;
 }
 
-off_t DirWriterImpl::filter_size() const {
+uint64_t DirWriterImpl::TEST_filter_size() const {
   MutexLock ml(&mutex_);
-  size_t result = 0;
+  uint64_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
     result += dirs_[i]->output_stats()->filter_size;
   }
   return result;
 }
 
-off_t DirWriterImpl::data_size() const {
+uint64_t DirWriterImpl::TEST_data_size() const {
   MutexLock ml(&mutex_);
-  size_t result = 0;
+  uint64_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
     result += dirs_[i]->output_stats()->data_size;
   }
