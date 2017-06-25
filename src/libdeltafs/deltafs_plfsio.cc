@@ -233,6 +233,7 @@ class DirWriterImpl : public DirWriter {
   bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
   WritableFileStats io_stats_;
+  std::vector<const OutputStats*> compaction_stats_;
   std::vector<std::string*> write_bufs_;
   DirLogger** dirs_;
   LogSink* data_;
@@ -653,8 +654,8 @@ uint64_t DirWriterImpl::TEST_total_memory_usage() const {
 uint64_t DirWriterImpl::TEST_index_size() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += dirs_[i]->output_stats()->index_size;
+  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+    result += compaction_stats_[i]->index_size;
   }
   return result;
 }
@@ -662,8 +663,8 @@ uint64_t DirWriterImpl::TEST_index_size() const {
 uint64_t DirWriterImpl::TEST_filter_size() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += dirs_[i]->output_stats()->filter_size;
+  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+    result += compaction_stats_[i]->filter_size;
   }
   return result;
 }
@@ -671,8 +672,8 @@ uint64_t DirWriterImpl::TEST_filter_size() const {
 uint64_t DirWriterImpl::TEST_data_size() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += dirs_[i]->output_stats()->data_size;
+  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+    result += compaction_stats_[i]->data_size;
   }
   return result;
 }
@@ -758,30 +759,30 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   const int my_rank = options.rank;
   Env* const env = options.env;
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "plfsdir.name -> %s", name.c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.memtable_size -> %s",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.name -> %s (mode=write)", name.c_str());
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.memtable_budget -> %s",
           PrettySize(options.total_memtable_budget).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.key_size -> %s",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.key_size -> %s",
           PrettySize(options.key_size).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.value_size -> %s",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.value_size -> %s",
           PrettySize(options.value_size).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.bf_bits_per_key -> %d",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.bf_bits_per_key -> %d",
           int(options.bf_bits_per_key));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.block_size -> %s",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.block_size -> %s",
           PrettySize(options.block_size).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.block_util -> %.2f%%",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.block_util -> %.2f%%",
           100 * options.block_util);
-  Verbose(__LOG_ARGS__, 2, "plfsdir.data_buffer -> %s",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.data_buffer -> %s",
           PrettySize(options.data_buffer).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.index_buffer -> %s",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.index_buffer -> %s",
           PrettySize(options.index_buffer).c_str());
-  Verbose(__LOG_ARGS__, 2, "plfsdir.tail_padding -> %d",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.tail_padding -> %d",
           int(options.tail_padding));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.unique_keys -> %d",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.unique_keys -> %d",
           int(options.unique_keys));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.num_parts_per_rank -> %u",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.num_parts_per_rank -> %u",
           static_cast<unsigned>(num_parts));
-  Verbose(__LOG_ARGS__, 2, "plfsdir.my_rank -> %d", my_rank);
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.my_rank -> %d", my_rank);
 #endif
   Status status;
   if (options.is_env_pfs) {
@@ -793,6 +794,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   std::vector<DirLogger*> tmp_dirs(num_parts, NULL);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
+  std::vector<const OutputStats*> compaction_stats;
   std::vector<std::string*> write_bufs;
   WritableFileStats* io_stats =
       options.measure_writes ? &impl->io_stats_ : NULL;
@@ -812,6 +814,8 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
       tmp_dirs[i]->Ref();
       if (status.ok()) {
         tmp_dirs[i]->Open(data[0], index[i]);
+        const OutputStats* os = tmp_dirs[i]->output_stats();
+        compaction_stats.push_back(os);
       } else {
         break;
       }
@@ -827,6 +831,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
     }
     impl->data_ = data[0];
     impl->data_->Ref();
+    impl->compaction_stats_.swap(compaction_stats);
     // Weak references to log buffers that must not be deleted
     // during the lifetime of this directory.
     impl->write_bufs_.swap(write_bufs);

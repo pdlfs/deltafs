@@ -664,9 +664,9 @@ DirLogger::DirLogger(const DirOptions& options, port::Mutex* mu,
   bf_bits_ = bf_bytes_ * 8;
 
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "OPT: plfsdir.memtable.tb_size -> %d x %s",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.memtable.tb_size -> %d x %s",
           2 * (1 << options_.lg_parts), PrettySize(tb_bytes_).c_str());
-  Verbose(__LOG_ARGS__, 2, "OPT: plfsdir.memtable.bf_size -> %d x %s",
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.memtable.bf_size -> %d x %s",
           2 * (1 << options_.lg_parts), PrettySize(bf_bytes_).c_str());
 #endif
 
