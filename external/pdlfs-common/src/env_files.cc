@@ -20,6 +20,13 @@ namespace pdlfs {
 
 SynchronizableFile::~SynchronizableFile() {}
 
+void WritableFileStats::Reset() {
+  num_syncs_ = 0;
+  num_flushes_ = 0;
+  bytes_ = 0;
+  ops_ = 0;
+}
+
 Status WholeFileBufferedRandomAccessFile::Load() {
   Status status;
   assert(base_ != NULL);

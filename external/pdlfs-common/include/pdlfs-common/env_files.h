@@ -132,14 +132,45 @@ class UnsafeBufferedWritableFile : public SynchronizableFile {
   std::string buf_;
 };
 
-// Measure the I/O activity accessing an underlying append-only writable
-// file and store the results in a set of local counters.
-// Implementation is not thread-safe and requires external
-// synchronization for use by multiple threads.
+// Measurements used by a MeasuredWritableFile.
+class WritableFileStats {
+ public:
+  WritableFileStats() { Reset(); }
+
+  // Total number of bytes written out.
+  uint64_t TotalBytes() const { return bytes_; }
+
+  // Total number of write operations witnessed.
+  uint64_t TotalOps() const { return ops_; }
+
+ private:
+  friend class MeasuredWritableFile;
+  void Reset();
+
+  uint32_t num_syncs_;
+  uint32_t num_flushes_;
+  uint64_t bytes_;
+  uint64_t ops_;
+};
+
+// Measure the I/O activity accessing an underlying writable file and store the
+// results in an external stats object.
+// Implementation is not thread-safe and requires external synchronization for
+// use by multiple threads.
 class MeasuredWritableFile : public WritableFile {
  public:
-  explicit MeasuredWritableFile(WritableFile* base) { Reset(base); }
-  virtual ~MeasuredWritableFile() {}  // base_ not owned by us
+  // *base must remain alive during the lifetime of this class and will be
+  // closed and deleted when the destructor of this class is called.
+  MeasuredWritableFile(WritableFileStats* stats, WritableFile* base)
+      : stats_(stats) {
+    Reset(base);
+  }
+  virtual ~MeasuredWritableFile() {
+    if (base_ != NULL) {
+      base_->Close();
+      delete base_;
+    }
+  }
 
   // REQUIRES: External synchronization.
   virtual Status Flush() {
@@ -148,7 +179,7 @@ class MeasuredWritableFile : public WritableFile {
     } else {
       Status status = base_->Flush();
       if (status.ok()) {
-        num_flushes_++;
+        stats_->num_flushes_++;
       }
       return status;
     }
@@ -161,16 +192,11 @@ class MeasuredWritableFile : public WritableFile {
     } else {
       Status status = base_->Sync();
       if (status.ok()) {
-        num_syncs_++;
+        stats_->num_syncs_++;
       }
       return status;
     }
   }
-
-  // Total number of flushes
-  uint32_t NumFlushes() const { return num_flushes_; }
-  // Total number of fsyncs.
-  uint32_t NumSyncs() const { return num_syncs_; }
 
   // REQUIRES: External synchronization.
   virtual Status Append(const Slice& data) {
@@ -179,23 +205,16 @@ class MeasuredWritableFile : public WritableFile {
     } else {
       Status status = base_->Append(data);
       if (status.ok()) {
-        bytes_ += data.size();
-        ops_ += 1;
+        stats_->bytes_ += data.size();
+        stats_->ops_ += 1;
       }
       return status;
     }
   }
 
-  // Total number of bytes read out.
-  uint64_t TotalBytes() const { return bytes_; }
-
-  // Total number of read operations witnessed.
-  uint64_t TotalOps() const { return ops_; }
-
   // Reset the counters and the base target.
   void Reset(WritableFile* base) {
-    num_syncs_ = num_flushes_ = 0;
-    bytes_ = ops_ = 0;
+    stats_->Reset();
     base_ = base;
   }
 
@@ -203,6 +222,7 @@ class MeasuredWritableFile : public WritableFile {
   virtual Status Close() {
     if (base_ != NULL) {
       Status status = base_->Close();
+      delete base_;
       base_ = NULL;
       return status;
     } else {
@@ -211,11 +231,8 @@ class MeasuredWritableFile : public WritableFile {
   }
 
  private:
-  WritableFile* base_;  // Weak reference
-  uint32_t num_syncs_;
-  uint32_t num_flushes_;
-  uint64_t bytes_;
-  uint64_t ops_;
+  WritableFileStats* stats_;
+  WritableFile* base_;
 };
 
 // Measure the I/O activity accessing an underlying sequential readable
