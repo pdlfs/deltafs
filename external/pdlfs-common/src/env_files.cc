@@ -11,11 +11,14 @@
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 
+// If c++11 or newer, directly use c++ std atomic counters.
 #if __cplusplus >= 201103L
 #include <atomic>
 #endif
 
 namespace pdlfs {
+
+SynchronizableFile::~SynchronizableFile() {}
 
 Status WholeFileBufferedRandomAccessFile::Load() {
   Status status;

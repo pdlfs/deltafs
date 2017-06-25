@@ -16,20 +16,39 @@
 
 namespace pdlfs {
 
-// Buffer a certain amount of data before eventually writing to *base.
-// Ignore flush calls and only sync calls are respected.
-// May lose data for clients that rely on flushes to ensure data durability.
-// To avoid losing data, clients may call sync at a certain time interval,
-// or call FFlush() to force data flush.
-// NOTE: *base will be deleted when this wrapper is deleted
-// NOTE: using write buffer will cause an extra copy of data in memory
-// NOTE: implementation is not thread safe
-class UnsafeBufferedWritableFile : public WritableFile {
+// An enhanced WritableFile abstraction with richer semantics
+// on durability control.
+class SynchronizableFile : public WritableFile {
+ public:
+  SynchronizableFile() {}
+  virtual ~SynchronizableFile();
+
+  // Force file data [0, offset) to be flushed to the underlying storage
+  // hardware. After this call, file data at [offset, ...) may still be buffered
+  // in memory.
+  virtual Status SyncBefore(uint64_t offset) = 0;
+
+  // Flush file buffering and force data to be sent to the underlying storage
+  // software, but not necessarily the hardware.
+  virtual Status EmptyBuffer() = 0;
+};
+
+// Passively buffer a certain amount of data before eventually flushing data to
+// a given *base. Ignore all explicit Flush() calls, but EmptyBuffer(), Sync(),
+// and SyncBefore() calls are respected. May lose data for clients that only
+// use Flush() calls to ensure data durability. To avoid losing data, clients
+// may choose to call Sync() at a certain time interval, or use EmptyBuffer()
+// calls to force data flush.
+// Implementation is not thread-safe and requires external synchronization for
+// use by multiple threads.
+// Write buffering will cause an extra copy of data in memory
+class UnsafeBufferedWritableFile : public SynchronizableFile {
  public:
   std::string* buffer_store() { return &buf_; }
 
+  // *base will be deleted when this wrapper is deleted
   UnsafeBufferedWritableFile(WritableFile* base, size_t buf_size)
-      : base_(base), max_buf_size_(buf_size) {
+      : base_(base), offset_(0), max_buf_size_(buf_size) {
     buf_.reserve(max_buf_size_);
   }
 
@@ -62,13 +81,21 @@ class UnsafeBufferedWritableFile : public WritableFile {
       }
     }
     if (!s.ok()) {
-      return s;
+      return s;  // Error
     } else if (chunk.size() != 0) {
       buf_.append(chunk.data(), chunk.size());
       assert(buf_.size() <= max_buf_size_);
       return s;
     } else {
       return s;
+    }
+  }
+
+  virtual Status SyncBefore(uint64_t offset) {
+    if (offset_ >= offset) {
+      return Status::OK();  // Data already flushed out
+    } else {
+      return EmptyBuffer();
     }
   }
 
@@ -81,25 +108,26 @@ class UnsafeBufferedWritableFile : public WritableFile {
   }
 
   virtual Status Flush() {
-    Status s;
-    assert(buf_.size() <= max_buf_size_);
-    return s;
+    return Status::OK();  // Ignore all Flush() calls
   }
 
-  Status EmptyBuffer() {
-    Status s;
-    assert(buf_.size() <= max_buf_size_);
-    if (!buf_.empty()) {
-      s = base_->Append(buf_);
-      if (s.ok()) {
+  virtual Status EmptyBuffer() {
+    Status status;
+    const size_t buf_size = buf_.size();
+    assert(buf_size <= max_buf_size_);
+    if (buf_size != 0) {
+      status = base_->Append(buf_);
+      if (status.ok()) {
+        offset_ += buf_size;
         buf_.clear();
       }
     }
-    return s;
+    return status;
   }
 
  private:
   WritableFile* base_;
+  uint64_t offset_;  // Number of bytes flushed
   const size_t max_buf_size_;
   std::string buf_;
 };
