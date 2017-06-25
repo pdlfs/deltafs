@@ -27,6 +27,11 @@ void WritableFileStats::Reset() {
   ops_ = 0;
 }
 
+void SequentialFileStats::Reset() {
+  bytes_ = 0;
+  ops_ = 0;
+}
+
 Status WholeFileBufferedRandomAccessFile::Load() {
   Status status;
   assert(base_ != NULL);
