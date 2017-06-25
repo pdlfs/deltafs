@@ -151,8 +151,7 @@ class DirLogger {
 
   Status Open(LogSink* data, LogSink* indx);
 
-  // Report I/O stats
-  const MeasuredWritableFile* io_stats() const { return &io_stats_; }
+  // Report compaction stats
   const OutputStats* output_stats() const { return &tb_->output_stats_; }
   size_t memory_usage() const;  // Report real memory usage
 
@@ -196,6 +195,8 @@ class DirLogger {
 
  private:
   ~DirLogger();
+  WritableFileStats io_stats_;
+  friend class DirWriterImpl;
   friend class DirWriter;
   Status Prepare(bool force = false, bool epoch_flush = false,
                  bool finalize = false);
@@ -229,7 +230,6 @@ class DirLogger {
   bool imm_buf_is_final_;
   WriteBuffer buf0_;
   WriteBuffer buf1_;
-  MeasuredWritableFile io_stats_;
   TableLogger* tb_;
   LogSink* data_;
   LogSink* indx_;
