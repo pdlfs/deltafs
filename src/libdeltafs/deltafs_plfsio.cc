@@ -194,7 +194,8 @@ class DirWriterImpl : public DirWriter {
   DirWriterImpl(const DirOptions& options);
   virtual ~DirWriterImpl();
 
-  virtual IoStats io_stats() const;
+  virtual IoStats GetIoStats() const;
+
   virtual size_t total_memory_usage() const;
   virtual off_t index_size() const;
   virtual off_t filter_size() const;
@@ -232,7 +233,7 @@ class DirWriterImpl : public DirWriter {
   bool finished_;  // If Finish() has been called
   WritableFileStats io_stats_;
   std::vector<std::string*> write_bufs_;
-  DirLogger** dpts_;
+  DirLogger** dirs_;
   LogSink* data_;
 };
 
@@ -244,17 +245,17 @@ DirWriterImpl::DirWriterImpl(const DirOptions& options)
       part_mask_(~static_cast<uint32_t>(0)),
       has_pending_flush_(false),
       finished_(false),
-      dpts_(NULL),
+      dirs_(NULL),
       data_(NULL) {}
 
 DirWriterImpl::~DirWriterImpl() {
   MutexLock l(&mutex_);
   for (size_t i = 0; i < num_parts_; i++) {
-    if (dpts_[i] != NULL) {
-      dpts_[i]->Unref();
+    if (dirs_[i] != NULL) {
+      dirs_[i]->Unref();
     }
   }
-  delete[] dpts_;
+  delete[] dirs_;
   if (data_ != NULL) {
     data_->Unref();
   }
@@ -318,7 +319,7 @@ Status DirWriterImpl::Finalize() {
 
   if (status.ok()) {
     for (size_t i = 0; i < num_parts_; i++) {
-      status = dpts_[i]->SyncAndClose();
+      status = dirs_[i]->SyncAndClose();
       if (!status.ok()) {
         break;
       }
@@ -332,7 +333,7 @@ Status DirWriterImpl::WaitForCompaction() {
   mutex_.AssertHeld();
   Status status;
   for (size_t i = 0; i < num_parts_; i++) {
-    status = dpts_[i]->Wait();
+    status = dirs_[i]->Wait();
     if (!status.ok()) {
       break;
     }
@@ -352,7 +353,7 @@ Status DirWriterImpl::TryBatchWrites(BatchCursor* cursor) {
     const uint32_t hash = Hash(fid.data(), fid.size(), 0);
     const uint32_t part = hash & part_mask_;
     assert(part < num_parts_);
-    status = dpts_[part]->Add(fid, cursor->data());
+    status = dirs_[part]->Add(fid, cursor->data());
 
     if (status.IsBufferFull()) {
       // Try again later
@@ -377,7 +378,7 @@ Status DirWriterImpl::TryBatchWrites(BatchCursor* cursor) {
         for (; it != queue[i].end(); ++it) {
           cursor->Seek(*it);
           if (cursor->Valid()) {
-            status = dpts_[i]->Add(cursor->fid(), cursor->data());
+            status = dirs_[i]->Add(cursor->fid(), cursor->data());
           } else {
             status = cursor->status();
           }
@@ -424,7 +425,7 @@ Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
   assert(has_pending_flush_);
   Status status;
   std::vector<DirLogger*> remaining;
-  for (size_t i = 0; i < num_parts_; i++) remaining.push_back(dpts_[i]);
+  for (size_t i = 0; i < num_parts_; i++) remaining.push_back(dirs_[i]);
   std::vector<DirLogger*> waiting_list;
 
   DirLogger::FlushOptions flush_options(epoch_flush, finalize);
@@ -609,7 +610,7 @@ Status DirWriterImpl::TryAppend(const Slice& fid, const Slice& data) {
   const uint32_t hash = Hash(fid.data(), fid.size(), 0);
   const uint32_t part = hash & part_mask_;
   assert(part < num_parts_);
-  status = dpts_[part]->Add(fid, data);
+  status = dirs_[part]->Add(fid, data);
   return status;
 }
 
@@ -626,12 +627,12 @@ Status DirWriterImpl::Wait() {
   return status;
 }
 
-IoStats DirWriterImpl::io_stats() const {
+IoStats DirWriterImpl::GetIoStats() const {
   MutexLock ml(&mutex_);
   IoStats result;
   for (size_t i = 0; i < num_parts_; i++) {
-    result.index_bytes += dpts_[i]->io_stats_.TotalBytes();
-    result.index_ops += dpts_[i]->io_stats_.TotalOps();
+    result.index_bytes += dirs_[i]->io_stats_.TotalBytes();
+    result.index_ops += dirs_[i]->io_stats_.TotalOps();
   }
   result.data_bytes = io_stats_.TotalBytes();
   result.data_ops = io_stats_.TotalOps();
@@ -641,7 +642,7 @@ IoStats DirWriterImpl::io_stats() const {
 size_t DirWriterImpl::total_memory_usage() const {
   MutexLock ml(&mutex_);
   size_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) result += dpts_[i]->memory_usage();
+  for (size_t i = 0; i < num_parts_; i++) result += dirs_[i]->memory_usage();
   for (size_t i = 0; i < write_bufs_.size(); i++) {
     result += write_bufs_[i]->capacity();
   }
@@ -652,7 +653,7 @@ off_t DirWriterImpl::index_size() const {
   MutexLock ml(&mutex_);
   size_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += dpts_[i]->output_stats()->index_size;
+    result += dirs_[i]->output_stats()->index_size;
   }
   return result;
 }
@@ -661,7 +662,7 @@ off_t DirWriterImpl::filter_size() const {
   MutexLock ml(&mutex_);
   size_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += dpts_[i]->output_stats()->filter_size;
+    result += dirs_[i]->output_stats()->filter_size;
   }
   return result;
 }
@@ -670,7 +671,7 @@ off_t DirWriterImpl::data_size() const {
   MutexLock ml(&mutex_);
   size_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += dpts_[i]->output_stats()->data_size;
+    result += dirs_[i]->output_stats()->data_size;
   }
   return result;
 }
@@ -788,7 +789,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   }
 
   DirWriterImpl* impl = new DirWriterImpl(options);
-  std::vector<DirLogger*> tmp_dpts(num_parts, NULL);
+  std::vector<DirLogger*> tmp_dirs(num_parts, NULL);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
   std::vector<std::string*> write_bufs;
@@ -800,16 +801,16 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   if (status.ok()) {
     port::Mutex* const mtx = NULL;  // No synchronization needed for index files
     for (size_t i = 0; i < num_parts; i++) {
-      tmp_dpts[i] =
+      tmp_dirs[i] =
           new DirLogger(impl->options_, &impl->mutex_, &impl->cond_var_);
       WritableFileStats* internal_io_stats =
-          options.measure_writes ? &tmp_dpts[i]->io_stats_ : NULL;
+          options.measure_writes ? &tmp_dirs[i]->io_stats_ : NULL;
       status =
           OpenSink(&index[i], IndexFileName(name, my_rank, int(i)), env,
                    options.index_buffer, mtx, &write_bufs, internal_io_stats);
-      tmp_dpts[i]->Ref();
+      tmp_dirs[i]->Ref();
       if (status.ok()) {
-        tmp_dpts[i]->Open(data[0], index[i]);
+        tmp_dirs[i]->Open(data[0], index[i]);
       } else {
         break;
       }
@@ -817,11 +818,11 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   }
 
   if (status.ok()) {
-    DirLogger** dpts = new DirLogger*[num_parts];
+    DirLogger** dirs = new DirLogger*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {
-      assert(tmp_dpts[i] != NULL);
-      dpts[i] = tmp_dpts[i];
-      dpts[i]->Ref();
+      assert(tmp_dirs[i] != NULL);
+      dirs[i] = tmp_dirs[i];
+      dirs[i]->Ref();
     }
     impl->data_ = data[0];
     impl->data_->Ref();
@@ -830,14 +831,14 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
     impl->write_bufs_.swap(write_bufs);
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
-    impl->dpts_ = dpts;
+    impl->dirs_ = dirs;
     *result = impl;
   } else {
     delete impl;
   }
 
   for (size_t i = 0; i < num_parts; i++) {
-    if (tmp_dpts[i] != NULL) tmp_dpts[i]->Unref();
+    if (tmp_dirs[i] != NULL) tmp_dirs[i]->Unref();
     if (index[i] != NULL) index[i]->Unref();
     if (i < data.size()) {
       if (data[i] != NULL) {

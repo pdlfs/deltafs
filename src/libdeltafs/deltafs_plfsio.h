@@ -22,13 +22,13 @@ namespace plfsio {
 struct IoStats {
   IoStats();
 
-  // Total bytes accessed as indexes (including padding and checksums)
+  // Total bytes accessed as indexes
   uint64_t index_bytes;
-  // Total number of I/O operations for indexes
+  // Total number of I/O operations for reading or writing indexes
   uint64_t index_ops;
-  // Total bytes accessed as data (including padding and checksums)
+  // Total bytes accessed as data
   uint64_t data_bytes;
-  // Total number of I/O operations for data
+  // Total number of I/O operations for reading or writing data
   uint64_t data_ops;
 };
 
@@ -307,11 +307,11 @@ class DirWriter {
   DirWriter() {}
   virtual ~DirWriter();
 
+  // Report the I/O stats for logging the data and the indexes.
+  virtual IoStats GetIoStats() const = 0;
+
   // Return the total amount of memory reserved by this directory.
   virtual size_t total_memory_usage() const = 0;
-
-  // Return the aggregated I/O stats accumulated so far.
-  virtual IoStats io_stats() const = 0;
 
   // Return the aggregate size of all index blocks.
   // Excluding padding and checksums.
