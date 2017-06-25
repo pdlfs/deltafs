@@ -49,8 +49,12 @@ Status LogWriter::Write(ChunkType chunk_type, const Slice& block_contents,
   return status;
 }
 
-Status LogWriter::SealEpoch(const Slice &epoch_stone) {
-  return LogSpecial(kEpochSeal, epoch_stone);
+Status LogWriter::SealEpoch(const Slice& epoch_stone) {
+  Status status = LogSpecial(kEpochStone, epoch_stone);
+  if (status.ok()) {
+    prev_seal_ = sink_->Ltell();
+  }
+  return status;
 }
 
 Status LogWriter::Finish(const Slice& footer) {

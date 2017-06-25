@@ -44,7 +44,7 @@ enum ChunkType {
   kRtChunk = 0x04,    // One per directory
 
   // Special types for durability
-  kEpochSeal = 0x11,
+  kEpochStone = 0x11,
   kFooter = 0xff
 };
 

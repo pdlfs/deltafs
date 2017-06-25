@@ -59,6 +59,7 @@ class LogWriter {
   void operator=(const LogWriter&);
   LogWriter(const LogWriter&);
 
+  uint64_t prev_seal_;  // Log offset of the previous epoch seal
   std::string compressed_;
   LogSink* sink_;
 };
