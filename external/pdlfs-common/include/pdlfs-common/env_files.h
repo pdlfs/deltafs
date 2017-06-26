@@ -306,7 +306,8 @@ class MeasuredSequentialFile : public SequentialFile {
 // Measurements used by an MeasuredRandomAccessFile.
 class RandomAccessFileStats {
  public:
-  RandomAccessFileStats() { Reset(); }
+  RandomAccessFileStats();
+  ~RandomAccessFileStats();
 
   // Total number of bytes read in.
   uint64_t TotalBytes() const;

@@ -66,6 +66,10 @@ uint64_t RandomAccessFileStats::TotalOps() const {
   return static_cast<uint64_t>(rep_->ops);
 }
 
+RandomAccessFileStats::RandomAccessFileStats() { rep_ = new Rep(); }
+
+RandomAccessFileStats::~RandomAccessFileStats() { delete rep_; }
+
 void RandomAccessFileStats::AcceptRead(uint64_t n) { rep_->AcceptRead(n); }
 
 void RandomAccessFileStats::Reset() {
