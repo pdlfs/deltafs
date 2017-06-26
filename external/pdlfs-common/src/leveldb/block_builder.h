@@ -23,10 +23,15 @@ class BlockBuilder {
  public:
   BlockBuilder(int restart_interval, const Comparator* cmp = NULL);
 
+  // Add zero padding to the underlying buffer space.
+  // Must be called either before Reset() or after Finalize().
+  void Pad(size_t n);
+
   // Optionally, caller may specify a direct buffer space to switch with
   // the one currently used by the builder.
   // This allows the builder to append data to an external buffer space and
   // potentially avoids an extra copy of data.
+  // Must be called either before Reset() or after Finalize().
   void SwitchBuffer(std::string* buffer);
 
   // Reset the contents as if the BlockBuilder was just constructed.

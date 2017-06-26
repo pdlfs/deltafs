@@ -62,6 +62,11 @@ void BlockBuilder::SwitchBuffer(std::string* buffer) {
   buffer_start_ = buffer_.size();
 }
 
+void BlockBuilder::Pad(size_t n) {
+  buffer_.resize(buffer_.size() + n, 0);
+  buffer_start_ = buffer_.size();
+}
+
 void BlockBuilder::Reset() {
   buffer_.resize(buffer_start_);
   restarts_.clear();
