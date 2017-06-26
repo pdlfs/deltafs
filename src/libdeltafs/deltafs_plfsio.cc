@@ -980,13 +980,11 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
     LogSource* indx = NULL;
     Dir* dir = new Dir(options_, &mutex_, &cond_cv_);
     dir->Ref();
-    if (options_.measure_reads) {
-      status = LoadSource(&indx, IndexFileName(name_, options_.rank, part),
-                          options_.env, options_.read_size, &dir->io_stats_);
-    } else {
-      status = LoadSource(&indx, IndexFileName(name_, options_.rank, part),
-                          options_.env, options_.read_size);
-    };
+    SequentialFileStats* io_stats =
+        options_.measure_reads ? &dir->io_stats_ : NULL;
+    const size_t io_size = options_.read_size;
+    status = LoadSource(&indx, IndexFileName(name_, options_.rank, part),
+                        options_.env, io_size, io_stats);
     if (status.ok()) {
       status = dir->Open(indx);
     }
@@ -1050,6 +1048,8 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   Status status;
 #if VERBOSE >= 2
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.name -> %s (mode=read)", name.c_str());
+  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.read_size -> %s",
+          PrettySize(options.read_size).c_str());
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.paranoid_checks -> %d",
           int(options.paranoid_checks));
   Verbose(__LOG_ARGS__, 2, "FS: plfsdir.verify_checksums -> %d",
