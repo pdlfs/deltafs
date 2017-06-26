@@ -194,10 +194,11 @@ class DirLogger {
   }
 
  private:
-  ~DirLogger();
   WritableFileStats io_stats_;
   friend class DirWriterImpl;
   friend class DirWriter;
+  ~DirLogger();
+
   Status Prepare(bool force = false, bool epoch_flush = false,
                  bool finalize = false);
 
@@ -242,9 +243,6 @@ class Dir {
  public:
   Dir(const DirOptions& options, port::Mutex*, port::CondVar*);
 
-  // Report I/O stats
-  const MeasuredSequentialFile* io_stats() const { return &io_stats_; }
-
   // Open a directory reader on top of a given directory index partition.
   // Return OK on success, or a non-OK status on errors.
   Status Open(LogSource* indx);
@@ -267,6 +265,11 @@ class Dir {
   }
 
  private:
+  SequentialFileStats io_stats_;
+  friend class DirReaderImpl;
+  friend class DirReader;
+  ~Dir();
+
   typedef void (*Saver)(void* arg, const Slice& key, const Slice& value);
 
   // Obtain the value to a specific key from a given data block.
@@ -314,7 +317,6 @@ class Dir {
   };
   static void BGWork(void*);
 
-  ~Dir();
   // No copying allowed
   void operator=(const Dir&);
   Dir(const Dir&);
@@ -328,8 +330,6 @@ class Dir {
 
   port::Mutex* mu_;
   port::CondVar* bg_cv_;
-  friend class DirReaderImpl;
-  MeasuredSequentialFile io_stats_;
   Block* rt_;
   int refs_;
 };

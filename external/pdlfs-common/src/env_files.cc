@@ -32,6 +32,47 @@ void SequentialFileStats::Reset() {
   ops_ = 0;
 }
 
+#if __cplusplus >= 201103L
+struct RandomAccessFileStats::Rep {
+  Rep() : bytes(0), ops(0) {}
+  std::atomic_uint_fast64_t bytes;
+  std::atomic_uint_fast64_t ops;
+
+  void AcceptRead(uint64_t n) {
+    bytes += n;
+    ops += 1;
+  }
+};
+#else
+struct RandomAccessFileStats::Rep {
+  Rep() : bytes(0), ops(0) {}
+  port::Mutex mutex;
+  uint64_t bytes;
+  uint64_t ops;
+
+  void AcceptRead(uint64_t n) {
+    MutexLock ml(&mutex);
+    bytes += n;
+    ops += 1;
+  }
+};
+#endif
+
+uint64_t RandomAccessFileStats::TotalBytes() const {
+  return static_cast<uint64_t>(rep_->bytes);
+}
+
+uint64_t RandomAccessFileStats::TotalOps() const {
+  return static_cast<uint64_t>(rep_->ops);
+}
+
+void RandomAccessFileStats::AcceptRead(uint64_t n) { rep_->AcceptRead(n); }
+
+void RandomAccessFileStats::Reset() {
+  rep_->bytes = 0;
+  rep_->ops = 0;
+}
+
 Status WholeFileBufferedRandomAccessFile::Load() {
   Status status;
   assert(base_ != NULL);
@@ -53,75 +94,10 @@ Status WholeFileBufferedRandomAccessFile::Load() {
     }
     buf_size_ += sli.size();
   }
-
   delete base_;
   base_ = NULL;
+
   return status;
-}
-
-#if __cplusplus >= 201103L
-struct AtomicMeasuredRandomAccessFile::Rep {
-  Rep() : bytes(0), ops(0) {}
-  std::atomic_uint_fast64_t bytes;
-  std::atomic_uint_fast64_t ops;
-
-  void AcceptRead(uint64_t n) {
-    bytes += n;
-    ops += 1;
-  }
-};
-#else
-struct AtomicMeasuredRandomAccessFile::Rep {
-  Rep() : bytes(0), ops(0) {}
-  port::Mutex mutex;
-  uint64_t bytes;
-  uint64_t ops;
-
-  void AcceptRead(uint64_t n) {
-    MutexLock ml(&mutex);
-    bytes += n;
-    ops += 1;
-  }
-};
-#endif
-
-void AtomicMeasuredRandomAccessFile::Reset(RandomAccessFile* base) {
-  rep_->bytes = rep_->ops = 0;
-  base_ = base;
-}
-
-uint64_t AtomicMeasuredRandomAccessFile::TotalBytes() const {
-  return static_cast<uint64_t>(rep_->bytes);
-}
-
-uint64_t AtomicMeasuredRandomAccessFile::TotalOps() const {
-  return static_cast<uint64_t>(rep_->ops);
-}
-
-Status AtomicMeasuredRandomAccessFile::Read(uint64_t offset, size_t n,
-                                            Slice* result,
-                                            char* scratch) const {
-  if (base_ == NULL) {
-    return Status::Disconnected(Slice());
-  } else {
-    Status status = base_->Read(offset, n, result, scratch);
-    if (status.ok()) {
-      rep_->AcceptRead(result->size());
-      return status;
-    } else {
-      return status;
-    }
-  }
-}
-
-AtomicMeasuredRandomAccessFile::~AtomicMeasuredRandomAccessFile() {
-  delete rep_;
-}
-
-AtomicMeasuredRandomAccessFile::AtomicMeasuredRandomAccessFile(
-    RandomAccessFile* base)
-    : base_(base) {
-  rep_ = new Rep;
 }
 
 }  // namespace pdlfs

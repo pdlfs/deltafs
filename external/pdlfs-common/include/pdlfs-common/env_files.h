@@ -215,12 +215,6 @@ class MeasuredWritableFile : public WritableFile {
     }
   }
 
-  // Reset the counters and the base target.
-  void Reset(WritableFile* base) {
-    stats_->Reset();
-    base_ = base;
-  }
-
   // REQUIRES: External synchronization.
   virtual Status Close() {
     if (base_ != NULL) {
@@ -234,6 +228,12 @@ class MeasuredWritableFile : public WritableFile {
   }
 
  private:
+  // Reset the counters and the base target.
+  void Reset(WritableFile* base) {
+    stats_->Reset();
+    base_ = base;
+  }
+
   WritableFileStats* stats_;
   WritableFile* base_;
 };
@@ -292,41 +292,66 @@ class MeasuredSequentialFile : public SequentialFile {
     }
   }
 
+ private:
   // Reset the counters and the base target.
   void Reset(SequentialFile* base) {
     stats_->Reset();
     base_ = base;
   }
 
- private:
   SequentialFileStats* stats_;
   SequentialFile* base_;
 };
 
-// Measure the I/O activity accessing an underlying random access file
-// and store the results in a set of atomic counters.
-class AtomicMeasuredRandomAccessFile : public RandomAccessFile {
+// Measurements used by an MeasuredRandomAccessFile.
+class RandomAccessFileStats {
  public:
-  explicit AtomicMeasuredRandomAccessFile(RandomAccessFile* base);
-  virtual ~AtomicMeasuredRandomAccessFile();  // base_ not owned by us
+  RandomAccessFileStats() { Reset(); }
 
-  // Reset the counters and the base target.
-  void Reset(RandomAccessFile* base);
-
-  // Safe for concurrent use by multiple threads.
-  virtual Status Read(uint64_t offset, size_t n, Slice* result,
-                      char* scratch) const;
-
-  // Total number of bytes read out.
+  // Total number of bytes read in.
   uint64_t TotalBytes() const;
 
   // Total number of read operations witnessed.
   uint64_t TotalOps() const;
 
  private:
+  friend class MeasuredRandomAccessFile;
+  void AcceptRead(uint64_t n);
+  void Reset();
+
   struct Rep;
-  RandomAccessFile* base_;  // Weak reference
   Rep* rep_;
+};
+
+// Measure the I/O activity accessing an underlying random access file and store
+// the results in a set of external atomic counters.
+class MeasuredRandomAccessFile : public RandomAccessFile {
+ public:
+  MeasuredRandomAccessFile(RandomAccessFileStats* stats, RandomAccessFile* base)
+      : stats_(stats) {
+    Reset(base);
+  }
+  virtual ~MeasuredRandomAccessFile() { delete base_; }
+
+  // Safe for concurrent use by multiple threads.
+  virtual Status Read(uint64_t offset, size_t n, Slice* result,
+                      char* scratch) const {
+    Status status = base_->Read(offset, n, result, scratch);
+    if (status.ok()) {
+      stats_->AcceptRead(result->size());
+    }
+    return status;
+  }
+
+ private:
+  // Reset the counters and the base target.
+  void Reset(RandomAccessFile* base) {
+    stats_->Reset();
+    base_ = base;
+  }
+
+  RandomAccessFileStats* stats_;
+  RandomAccessFile* base_;
 };
 
 // Convert a sequential file into a fully buffered random access file by

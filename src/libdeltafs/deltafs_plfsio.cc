@@ -866,6 +866,7 @@ class DirReaderImpl : public DirReader {
   virtual IoStats io_stats() const;
 
  private:
+  RandomAccessFileStats io_stats_;
   friend class DirReader;
 
   DirOptions options_;
@@ -875,7 +876,6 @@ class DirReaderImpl : public DirReader {
 
   mutable port::Mutex mutex_;
   port::CondVar cond_cv_;
-  AtomicMeasuredRandomAccessFile io_stats_;
   Dir** dpts_;  // Lazily initialized directory partitions
   LogSource* data_;
 };
@@ -886,7 +886,6 @@ DirReaderImpl::DirReaderImpl(const DirOptions& opts, const std::string& name)
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
       cond_cv_(&mutex_),
-      io_stats_(NULL),
       dpts_(NULL),
       data_(NULL) {}
 
@@ -903,32 +902,8 @@ DirReaderImpl::~DirReaderImpl() {
   }
 }
 
-namespace {
-template <typename F>
-class SequentialFileRef : public SequentialFile {
- public:
-  SequentialFileRef(SequentialFile* base, F* dec) : base_(base), dec_(dec) {
-    dec_->Reset(base);
-  }
-  virtual ~SequentialFileRef() { delete base_; }
-
-  // REQUIRES: External synchronization
-  virtual Status Read(size_t n, Slice* result, char* scratch) {
-    return dec_->Read(n, result, scratch);
-  }
-
-  // REQUIRES: External synchronization
-  virtual Status Skip(uint64_t n) { return dec_->Skip(n); }
-
- private:
-  SequentialFile* base_;
-  F* dec_;  // Owned by external code
-};
-}  // namespace
-
-template <typename F = MeasuredSequentialFile>
 static Status LoadSource(LogSource** result, const std::string& fname, Env* env,
-                         F* decorator = NULL) {
+                         SequentialFileStats* stats = NULL) {
   *result = NULL;
   SequentialFile* base = NULL;
   uint64_t size = 0;
@@ -940,11 +915,9 @@ static Status LoadSource(LogSource** result, const std::string& fname, Env* env,
     }
   }
   if (status.ok()) {
-    SequentialFile* file;
-    // Bind to an external decorator
-    if (decorator != NULL) {
-      SequentialFile* ref = new SequentialFileRef<F>(base, decorator);
-      file = ref;
+    SequentialFile* file;  // Bind to an external stats for monitoring
+    if (stats != NULL) {
+      file = new MeasuredSequentialFile(stats, base);
     } else {
       file = base;
     }
@@ -966,30 +939,8 @@ static Status LoadSource(LogSource** result, const std::string& fname, Env* env,
   return status;
 }
 
-namespace {
-template <typename F>
-class RandomAccessFileRef : public RandomAccessFile {
- public:
-  RandomAccessFileRef(RandomAccessFile* base, F* dec) : base_(base), dec_(dec) {
-    dec_->Reset(base);
-  }
-  virtual ~RandomAccessFileRef() { delete base_; }
-
-  // Safe for concurrent use by multiple threads
-  virtual Status Read(uint64_t offset, size_t n, Slice* result,
-                      char* scratch) const {
-    return dec_->Read(offset, n, result, scratch);
-  }
-
- private:
-  RandomAccessFile* base_;
-  F* dec_;  // Owned by external code
-};
-}  // namespace
-
-template <typename F = AtomicMeasuredRandomAccessFile>
 static Status OpenSource(LogSource** result, const std::string& fname, Env* env,
-                         F* decorator = NULL) {
+                         RandomAccessFileStats* stats = NULL) {
   *result = NULL;
   RandomAccessFile* base = NULL;
   uint64_t size = 0;
@@ -1001,11 +952,9 @@ static Status OpenSource(LogSource** result, const std::string& fname, Env* env,
     }
   }
   if (status.ok()) {
-    RandomAccessFile* file;
-    // Bind to an external decorator
-    if (decorator != NULL) {
-      RandomAccessFile* ref = new RandomAccessFileRef<F>(base, decorator);
-      file = ref;
+    RandomAccessFile* file;  // Bind to an external stats for monitoring
+    if (stats != NULL) {
+      file = new MeasuredRandomAccessFile(stats, base);
     } else {
       file = base;
     }
@@ -1072,8 +1021,8 @@ IoStats DirReaderImpl::io_stats() const {
   MutexLock ml(&mutex_);
   IoStats result;
   for (size_t i = 0; i < num_parts_; i++) {
-    result.index_bytes += dpts_[i]->io_stats()->TotalBytes();
-    result.index_ops += dpts_[i]->io_stats()->TotalOps();
+    result.index_bytes += dpts_[i]->io_stats_.TotalBytes();
+    result.index_ops += dpts_[i]->io_stats_.TotalOps();
   }
   result.data_bytes = io_stats_.TotalBytes();
   result.data_ops = io_stats_.TotalOps();

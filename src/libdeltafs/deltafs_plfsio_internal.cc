@@ -1408,7 +1408,6 @@ Dir::Dir(const DirOptions& options, port::Mutex* mu, port::CondVar* bg_cv)
       indx_(NULL),
       mu_(mu),
       bg_cv_(bg_cv),
-      io_stats_(NULL),
       rt_(NULL),
       refs_(0) {}
 
