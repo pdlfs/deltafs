@@ -118,6 +118,10 @@ struct DirOptions {
   // Default: NULL
   ThreadPool* reader_pool;
 
+  // Number of bytes to read when loading the indexes.
+  // Default: 8MB
+  size_t read_size;
+
   // Set to true to enable parallel reading across different epochs.
   // Otherwise, reads progress serially over all epochs.
   // Default: false
@@ -378,7 +382,7 @@ class DirReader {
   virtual Status ReadAll(const Slice& fid, std::string* dst) = 0;
 
   // Return the aggregated I/O stats accumulated so far.
-  virtual IoStats io_stats() const = 0;
+  virtual IoStats GetIoStats() const = 0;
 
  private:
   // No copying allowed

@@ -41,6 +41,7 @@ DirOptions::DirOptions()
       tail_padding(false),
       compaction_pool(NULL),
       reader_pool(NULL),
+      read_size(8 << 20),
       parallel_reads(false),
       non_blocking(false),
       slowdown_micros(0),
@@ -863,7 +864,7 @@ class DirReaderImpl : public DirReader {
 
   virtual Status ReadAll(const Slice& fid, std::string* dst);
 
-  virtual IoStats io_stats() const;
+  virtual IoStats GetIoStats() const;
 
  private:
   RandomAccessFileStats io_stats_;
@@ -876,7 +877,7 @@ class DirReaderImpl : public DirReader {
 
   mutable port::Mutex mutex_;
   port::CondVar cond_cv_;
-  Dir** dpts_;  // Lazily initialized directory partitions
+  Dir** dirs_;  // Lazily initialized directory partitions
   LogSource* data_;
 };
 
@@ -886,23 +887,24 @@ DirReaderImpl::DirReaderImpl(const DirOptions& opts, const std::string& name)
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
       cond_cv_(&mutex_),
-      dpts_(NULL),
+      dirs_(NULL),
       data_(NULL) {}
 
 DirReaderImpl::~DirReaderImpl() {
   MutexLock ml(&mutex_);
   for (size_t i = 0; i < num_parts_; i++) {
-    if (dpts_[i] != NULL) {
-      dpts_[i]->Unref();
+    if (dirs_[i] != NULL) {
+      dirs_[i]->Unref();
     }
   }
-  delete[] dpts_;
+  delete[] dirs_;
   if (data_ != NULL) {
     data_->Unref();
   }
 }
 
 static Status LoadSource(LogSource** result, const std::string& fname, Env* env,
+                         size_t read_size = 8 << 20,
                          SequentialFileStats* stats = NULL) {
   *result = NULL;
   SequentialFile* base = NULL;
@@ -921,18 +923,17 @@ static Status LoadSource(LogSource** result, const std::string& fname, Env* env,
     } else {
       file = base;
     }
-    const size_t io_size = 8 << 20;  // Less physical I/O ops
     WholeFileBufferedRandomAccessFile* buffered_file =
-        new WholeFileBufferedRandomAccessFile(file, size, io_size);
+        new WholeFileBufferedRandomAccessFile(file, size, read_size);
     status = buffered_file->Load();
-    if (!status.ok()) {
-      delete buffered_file;
-    } else {
+    if (status.ok()) {
       PrintLogInfo(fname, size);
       LogSource* src = new LogSource(buffered_file, size);
       src->Ref();
 
       *result = src;
+    } else {
+      delete buffered_file;
     }
   }
 
@@ -974,17 +975,17 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
   uint32_t part = hash & part_mask_;
   assert(part < num_parts_);
   MutexLock ml(&mutex_);
-  if (dpts_[part] == NULL) {
-    mutex_.Unlock();  // Unlock when load indexes
+  if (dirs_[part] == NULL) {
+    mutex_.Unlock();  // Unlock when load dir indexes
     LogSource* indx = NULL;
     Dir* dir = new Dir(options_, &mutex_, &cond_cv_);
     dir->Ref();
     if (options_.measure_reads) {
       status = LoadSource(&indx, IndexFileName(name_, options_.rank, part),
-                          options_.env, &dir->io_stats_);
+                          options_.env, options_.read_size, &dir->io_stats_);
     } else {
       status = LoadSource(&indx, IndexFileName(name_, options_.rank, part),
-                          options_.env);
+                          options_.env, options_.read_size);
     };
     if (status.ok()) {
       status = dir->Open(indx);
@@ -992,12 +993,11 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
     mutex_.Lock();
     if (status.ok()) {
       dir->RebindDataSource(data_);
-      if (dpts_[part] == NULL) {
-        dpts_[part] = dir;
-        dpts_[part]->Ref();
-      } else {
-        // Loaded by another thread
+      if (dirs_[part] != NULL) {
+        dirs_[part]->Unref();
       }
+      dirs_[part] = dir;
+      dirs_[part]->Ref();
     }
     dir->Unref();
     if (indx != NULL) {
@@ -1006,10 +1006,10 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
   }
 
   if (status.ok()) {
-    assert(dpts_[part] != NULL);
-    Dir* const dir = dpts_[part];
+    assert(dirs_[part] != NULL);
+    Dir* const dir = dirs_[part];
     dir->Ref();
-    status = dpts_[part]->Read(fid, dst);
+    status = dirs_[part]->Read(fid, dst);
     dir->Unref();
     return status;
   } else {
@@ -1017,12 +1017,12 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
   }
 }
 
-IoStats DirReaderImpl::io_stats() const {
+IoStats DirReaderImpl::GetIoStats() const {
   MutexLock ml(&mutex_);
   IoStats result;
   for (size_t i = 0; i < num_parts_; i++) {
-    result.index_bytes += dpts_[i]->io_stats_.TotalBytes();
-    result.index_ops += dpts_[i]->io_stats_.TotalOps();
+    result.index_bytes += dirs_[i]->io_stats_.TotalBytes();
+    result.index_ops += dirs_[i]->io_stats_.TotalOps();
   }
   result.data_bytes = io_stats_.TotalBytes();
   result.data_ops = io_stats_.TotalOps();
@@ -1093,7 +1093,7 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   }
 
   if (status.ok()) {
-    impl->dpts_ = new Dir*[num_parts]();
+    impl->dirs_ = new Dir*[num_parts]();
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
     impl->data_ = data;
