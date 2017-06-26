@@ -123,6 +123,7 @@ class TableLogger {
   std::string last_key_;
   uint32_t num_uncommitted_indx_;  // Number of uncommitted index entries
   uint32_t num_uncommitted_data_;  // Number of uncommitted data blocks
+  bool pending_restart_;  // Restart a new data block using an exiting buffer
   BlockBuilder data_block_;
   BlockBuilder indx_block_;  // Locate the data blocks within a table
   BlockBuilder meta_block_;  // Locate the tables within an epoch

@@ -260,6 +260,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
     : options_(options),
       num_uncommitted_indx_(0),
       num_uncommitted_data_(0),
+      pending_restart_(false),
       data_block_(16),
       indx_block_(1),
       meta_block_(1),
@@ -294,9 +295,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   uncommitted_indexes_.reserve(1 << 10);
   data_block_.buffer_store()->reserve(options_.block_batch_size);
   data_block_.buffer_store()->clear();
-  data_block_.SwitchBuffer(NULL);
-  data_block_.Pad(BlockHandle::kMaxEncodedLength);
-  data_block_.Reset();
+  pending_restart_ = true;
 }
 
 TableLogger::~TableLogger() {
@@ -477,6 +476,11 @@ void TableLogger::Commit() {
       assert(offset >= BlockHandle::kMaxEncodedLength);
       memcpy(&buffer->at(offset - BlockHandle::kMaxEncodedLength),
              handle_encoding.data(), handle_encoding.size());
+      if (options_.block_padding) {
+        assert((handle.offset() - BlockHandle::kMaxEncodedLength) %
+                   options_.block_size ==
+               0);  // Verify block alignment
+      }
       indx_block_.Add(key, handle_encoding);
       num_index_committed++;
     } else {
@@ -492,9 +496,7 @@ void TableLogger::Commit() {
   num_uncommitted_data_ = num_uncommitted_indx_ = 0;
   uncommitted_indexes_.clear();
   data_block_.buffer_store()->clear();
-  data_block_.SwitchBuffer(NULL);
-  data_block_.Pad(BlockHandle::kMaxEncodedLength);
-  data_block_.Reset();
+  pending_restart_ = true;
 }
 
 void TableLogger::EndBlock() {
@@ -521,9 +523,7 @@ void TableLogger::EndBlock() {
   output_stats_.data_size += block_size;
 
   if (ok()) {
-    data_block_.SwitchBuffer(NULL);
-    data_block_.Pad(BlockHandle::kMaxEncodedLength);
-    data_block_.Reset();
+    pending_restart_ = true;
     pending_indx_handle_.set_size(block_size);
     pending_indx_handle_.set_offset(block_offset);
     assert(!pending_indx_entry_);
@@ -557,6 +557,14 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
     pending_indx_handle_.EncodeTo(&uncommitted_indexes_);
     pending_indx_entry_ = false;
     num_uncommitted_indx_++;
+  }
+
+  // Establish a new data block
+  if (pending_restart_) {
+    data_block_.SwitchBuffer(NULL);
+    data_block_.Pad(BlockHandle::kMaxEncodedLength);
+    data_block_.Reset();
+    pending_restart_ = false;
   }
 
   // Flush block buffer if it is about to full
