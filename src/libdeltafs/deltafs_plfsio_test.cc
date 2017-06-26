@@ -159,13 +159,13 @@ class PlfsIoTest {
   int epoch_;
 };
 
-TEST(PlfsIoTest, Empty0) {
+TEST(PlfsIoTest, Empty) {
   MakeEpoch();
   std::string val = Read("non-exists");
   ASSERT_TRUE(val.empty());
 }
 
-TEST(PlfsIoTest, SingleEpoch0) {
+TEST(PlfsIoTest, SingleEpoch) {
   Write("k1", "v1");
   Write("k2", "v2");
   Write("k3", "v3");
@@ -186,7 +186,7 @@ TEST(PlfsIoTest, SingleEpoch0) {
   ASSERT_EQ(Read("k6"), "v6");
 }
 
-TEST(PlfsIoTest, MultiEpoch0) {
+TEST(PlfsIoTest, MultiEpoch) {
   Write("k1", "v1");
   Write("k2", "v2");
   MakeEpoch();
@@ -201,7 +201,24 @@ TEST(PlfsIoTest, MultiEpoch0) {
   ASSERT_EQ(Read("k2"), "v2v4v6");
 }
 
-TEST(PlfsIoTest, NoFilter0) {
+TEST(PlfsIoTest, Snappy) {
+  options_.compression = kSnappyCompression;
+  options_.force_compression = true;
+  Write("k1", "v1");
+  Write("k2", "v2");
+  MakeEpoch();
+  Write("k1", "v3");
+  Write("k2", "v4");
+  MakeEpoch();
+  Write("k1", "v5");
+  Write("k2", "v6");
+  MakeEpoch();
+  ASSERT_EQ(Read("k1"), "v1v3v5");
+  ASSERT_TRUE(Read("k1.1").empty());
+  ASSERT_EQ(Read("k2"), "v2v4v6");
+}
+
+TEST(PlfsIoTest, NoFilter) {
   options_.bf_bits_per_key = 0;
   Write("k1", "v1");
   Write("k2", "v2");
@@ -225,7 +242,7 @@ TEST(PlfsIoTest, NoFilter0) {
   ASSERT_EQ(Read("k6"), "v6");
 }
 
-TEST(PlfsIoTest, NoUniKeys0) {
+TEST(PlfsIoTest, NoUniKeys) {
   options_.unique_keys = false;
   Write("k1", "v1");
   Write("k1", "v2");

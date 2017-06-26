@@ -49,6 +49,7 @@ DirOptions::DirOptions()
       unique_keys(true),
       ignore_filters(false),
       compression(kNoCompression),
+      force_compression(false),
       verify_checksums(false),
       skip_checksums(false),
       measure_reads(true),

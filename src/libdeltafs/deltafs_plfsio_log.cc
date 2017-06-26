@@ -33,8 +33,9 @@ Status LogWriter::Write(ChunkType chunk_type, const Slice& block_contents,
     case kSnappyCompression:
       if (port::Snappy_Compress(block_contents.data(), block_contents.size(),
                                 &compressed_) &&
-          compressed_.size() <
-              block_contents.size() - (block_contents.size() / 8u)) {
+          (options_.force_compression ||
+           compressed_.size() <
+               block_contents.size() - (block_contents.size() / 8u))) {
         raw_contents = compressed_;
       } else {
         // Snappy not supported, or compressed less than 12.5%, so just

@@ -159,6 +159,10 @@ struct DirOptions {
   // Default: kNoCompression
   CompressionType compression;
 
+  // True if compressed data is written out even if compression rate is low.
+  // Default: false
+  bool force_compression;
+
   // True if all data read from underlying storage will be verified
   // against the corresponding checksums stored.
   // Default: false
