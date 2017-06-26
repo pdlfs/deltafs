@@ -295,6 +295,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   data_block_.buffer_store()->reserve(options_.block_batch_size);
   data_block_.buffer_store()->clear();
   data_block_.SwitchBuffer(NULL);
+  data_block_.Pad(BlockHandle::kMaxEncodedLength);
   data_block_.Reset();
 }
 
@@ -459,10 +460,8 @@ void TableLogger::Commit() {
 
   data_sink_->Lock();
   assert(num_uncommitted_data_ == num_uncommitted_indx_);
-  const size_t offset = data_sink_->Ltell();
-  status_ = data_sink_->Lwrite(*data_block_.buffer_store());
-  data_sink_->Unlock();
-  if (!ok()) return;  // Abort
+  std::string* buffer = data_block_.buffer_store();
+  const size_t base = data_sink_->Ltell();
 
   Slice key;
   int num_index_committed = 0;
@@ -472,8 +471,12 @@ void TableLogger::Commit() {
   while (!input.empty()) {
     if (GetLengthPrefixedSlice(&input, &key)) {
       handle.DecodeFrom(&input);
-      handle.set_offset(offset + handle.offset());
+      const uint64_t offset = handle.offset();
+      handle.set_offset(base + offset);
       handle.EncodeTo(&handle_encoding);
+      assert(offset >= BlockHandle::kMaxEncodedLength);
+      memcpy(&buffer->at(offset - BlockHandle::kMaxEncodedLength),
+             handle_encoding.data(), handle_encoding.size());
       indx_block_.Add(key, handle_encoding);
       num_index_committed++;
     } else {
@@ -482,10 +485,15 @@ void TableLogger::Commit() {
   }
 
   assert(num_index_committed == num_uncommitted_indx_);
+  status_ = data_sink_->Lwrite(*buffer);
+  data_sink_->Unlock();
+  if (!ok()) return;  // Abort
+
   num_uncommitted_data_ = num_uncommitted_indx_ = 0;
   uncommitted_indexes_.clear();
   data_block_.buffer_store()->clear();
   data_block_.SwitchBuffer(NULL);
+  data_block_.Pad(BlockHandle::kMaxEncodedLength);
   data_block_.Reset();
 }
 
@@ -498,8 +506,10 @@ void TableLogger::EndBlock() {
   const size_t block_size = block_contents.size();
   Slice final_block_contents;
   if (options_.block_padding) {
+    const size_t padding_target =
+        options_.block_size - BlockHandle::kMaxEncodedLength;
     final_block_contents = data_block_.Finalize(
-        !options_.skip_checksums, static_cast<uint32_t>(options_.block_size));
+        !options_.skip_checksums, static_cast<uint32_t>(padding_target));
   } else {
     final_block_contents = data_block_.Finalize(!options_.skip_checksums);
   }
@@ -512,6 +522,7 @@ void TableLogger::EndBlock() {
 
   if (ok()) {
     data_block_.SwitchBuffer(NULL);
+    data_block_.Pad(BlockHandle::kMaxEncodedLength);
     data_block_.Reset();
     pending_indx_handle_.set_size(block_size);
     pending_indx_handle_.set_offset(block_offset);
@@ -559,7 +570,8 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   output_stats_.key_size += key.size();
 
   data_block_.Add(key, value);
-  if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize >=
+  if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize +
+          BlockHandle::kMaxEncodedLength >=
       static_cast<size_t>(options_.block_size * options_.block_util)) {
     EndBlock();
   }
@@ -696,13 +708,15 @@ DirLogger::~DirLogger() {
 }
 
 Status DirLogger::Open(LogSink* data, LogSink* indx) {
-  assert(!opened_);
+  assert(!opened_);  // Open() has not been called before
+  opened_ = true;
   data_ = data;
   indx_ = indx;
-  tb_ = new TableLogger(options_, data_, indx_);
-  opened_ = true;
   data_->Ref();
   indx_->Ref();
+
+  tb_ = new TableLogger(options_, data_, indx_);
+  // We always return OK
   return Status::OK();
 }
 
