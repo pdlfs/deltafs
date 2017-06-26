@@ -8,10 +8,11 @@
 Please see the accompanying COPYING file for license details. Deltafs is still under development.
 
 # Features
-  * Serverless design featuring zero dedicated metadata servers, no global file system namespace, and no ground truth.
-  * Client-funded metadata service harnessing compute nodes to handle metadata and achieve highly agile scalability.
+  * Serverless design featuring zero dedicated metadata servers and no global file system namespace.
+  * Application-owned metadata service harnessing compute nodes to handle metadata and achieve highly agile scalability.
   * Freedom from unjustified synchronization among HPC applications that do not need to use the file system to communicate.
   * Write-optimized LSM-based metadata representation with file system namespace snapshots as the basis of inter-job data sharing and workflow execution.
+  * A special direcotry type with an embedded striped-down streaming Map-Reduce pipeline.
   * A file system as no more than a thin service composed by each application at runtime to provide a temporary view of a private namespace backed by a stack of immutable snapshots and a collection of shared data objects.
   * Simplified data center storage consisting of multiple independent underlying object stores, providing flat namespaces of data objects, and oblivious of file system semantics.
 
@@ -32,11 +33,10 @@ On Ubuntu 16.04.1, you may use the following to prepare the envrionment for Delt
 ```
 sudo apt-get update
 
-sudo apt-get install -y gcc g++ make pkg-config
+sudo apt-get install -y gcc g++ make
+sudo apt-get install -y autoconf automake libtool pkg-config
+sudo apt-get install -y cmake cmake-curses-gui
 sudo apt-get install -y libsnappy-dev libgflags-dev libgoogle-glog-dev
-sudo apt-get install -y autoconf automake libtool
-sudo apt-get install -y cmake
-sudo apt-get install -y cmake-curses-gui  # Optional, if you prefer a cool gui interface
 sudo apt-get install -y libmpich-dev  # Alternatively, this can also be openmpi
 sudo apt-get install -y mpich
 ```
@@ -90,26 +90,29 @@ ccmake ..
 Type 'c' multiple times and choose suitable options. Recommended options are:
 
 ```
- BUILD_SHARED_LIBS               *ON
- BUILD_TESTS                     *ON
- CMAKE_BUILD_TYPE                *RelWithDebInfo
- CMAKE_INSTALL_PREFIX            */usr/local
- CMAKE_PREFIX_PATH               *
- DEBUG_SANITIZER                 *Off
- DELTAFS_BENCHMARKS              *ON
- DELTAFS_MPI                     *ON
- PDLFS_GFLAGS                    *ON
- PDLFS_GLOG                      *ON
- PDLFS_MARGO_RPC                 *OFF
- PDLFS_MERCURY_RPC               *ON
- PDLFS_OS                        *Linux
- PDLFS_OS_VERSION                *4.2.0-c9
- PDLFS_PLATFORM                  *POSIX
- PDLFS_RADOS                     *OFF
- PDLFS_SNAPPY                    *ON
- PDLFS_TARGET_OS                 *Linux
- PDLFS_TARGET_OS_VERSION         *4.2.0-c9
- PDLFS_VERBOSE                   *1
+ BUILD_SHARED_LIBS                ON
+ BUILD_TESTS                      ON
+ CMAKE_BUILD_TYPE                 RelWithDebInfo
+ CMAKE_INSTALL_PREFIX             /usr/local
+ CMAKE_PREFIX_PATH
+ DEBUG_SANITIZER                  Off
+ DELTAFS_BBOS                     OFF
+ DELTAFS_BENCHMARKS               OFF
+ DELTAFS_COMMON_INTREE            ON
+ DELTAFS_MPI                      ON
+ PDLFS_GFLAGS                     ON
+ PDLFS_GLOG                       ON
+ PDLFS_HOST_OS                    Linux
+ PDLFS_HOST_OS_VERSION            4.9.17-c9
+ PDLFS_MARGO_RPC                  OFF
+ PDLFS_MERCURY_RPC                ON
+ PDLFS_PLATFORM                   POSIX
+ PDLFS_RADOS                      OFF
+ PDLFS_SNAPPY                     ON
+ PDLFS_TARGET_OS                  Linux
+ PDLFS_TARGET_OS_VERSION          4.9.17-c9
+ PDLFS_VERBOSE                    0
+ deltafs-common_DIR               deltafs-common_DIR-NOTFOUND
 ```
 
 Once you exit the CMake configuration screen and are ready to build the targets, do:
@@ -137,4 +140,4 @@ This will start a Deltafs shell and instruct it to connect to Deltafs servers we
 
 # Deltafs app
 
-Currently, applications have to explicitly link to Deltafs user libbrary (include/deltafs_api.h) in order to call Deltafs. Alternatively, Deltafs may be implicitly invoked by preloading fs calls made by an application and redirecting them to Deltafs. We have developped one such library and it is available here, https://github.com/pdlfs/pdlfs-preload. 
+Currently, applications have to explicitly link to Deltafs user libbrary (include/deltafs_api.h) in order to call Deltafs. Alternatively, Deltafs may be implicitly invoked by preloading fs calls made by an application and redirecting them to Deltafs. We have developped one such library and it is available here, https://github.com/pdlfs/pdlfs-preload.
