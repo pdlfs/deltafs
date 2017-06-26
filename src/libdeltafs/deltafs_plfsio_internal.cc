@@ -958,10 +958,7 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
 
   assert(source != NULL);
   size_t n = static_cast<size_t>(handle.size());
-  size_t m = n;
-  if (!options.skip_checksums) {
-    m += kBlockTrailerSize;
-  }
+  size_t m = n + kBlockTrailerSize;
   char* buf = new char[m];
   Slice contents;
   Status status = source->Read(handle.offset(), m, &contents, buf);
@@ -987,7 +984,23 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
     }
   }
 
-  if (data != buf) {
+  if (data[n] == kSnappyCompression) {
+    size_t ulen = 0;
+    if (!port::Snappy_GetUncompressedLength(data, n, &ulen)) {
+      delete[] buf;
+      return Status::Corruption("Cannot compress");
+    }
+    char* ubuf = new char[ulen];
+    if (!port::Snappy_Uncompress(data, n, ubuf)) {
+      delete[] buf;
+      delete[] ubuf;
+      return Status::Corruption("Cannot compress");
+    }
+    delete[] buf;
+    result->data = Slice(ubuf, ulen);
+    result->heap_allocated = true;
+    result->cachable = true;
+  } else if (data != buf) {
     // File implementation has given us pointer to some other data.
     // Use it directly under the assumption that it will be live
     // while the file is open.
