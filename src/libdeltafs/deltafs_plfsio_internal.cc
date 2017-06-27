@@ -486,6 +486,7 @@ void TableLogger::Commit() {
       handle.DecodeFrom(&input);
       const uint64_t offset = handle.offset();
       handle.set_offset(base + offset);
+      handle_encoding.clear();
       handle.EncodeTo(&handle_encoding);
       assert(offset >= BlockHandle::kMaxEncodedLength);
       memcpy(&buffer->at(offset - BlockHandle::kMaxEncodedLength),
