@@ -261,6 +261,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
       num_uncommitted_indx_(0),
       num_uncommitted_data_(0),
       pending_restart_(false),
+      pending_commit_(false),
       data_block_(16),
       indx_block_(1),
       meta_block_(1),
@@ -507,6 +508,7 @@ void TableLogger::Commit() {
   data_sink_->Unlock();
   if (!ok()) return;  // Abort
 
+  pending_commit_ = false;
   num_uncommitted_data_ = num_uncommitted_indx_ = 0;
   uncommitted_indexes_.clear();
   data_block_.buffer_store()->clear();
@@ -573,18 +575,20 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
     num_uncommitted_indx_++;
   }
 
+  // Commit buffered data and indexes
+  if (pending_commit_) {
+    Commit();
+    if (!ok()) {
+      return;
+    }
+  }
+
   // Establish a new data block
   if (pending_restart_) {
     data_block_.SwitchBuffer(NULL);
     data_block_.Pad(BlockHandle::kMaxEncodedLength);
     data_block_.Reset();
     pending_restart_ = false;
-  }
-
-  // Flush block buffer if it is about to full
-  if (data_block_.buffer_store()->size() + options_.block_size >
-      options_.block_batch_size) {
-    Commit();
   }
 
   last_key_ = key.ToString();
@@ -596,6 +600,11 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
           BlockHandle::kMaxEncodedLength >=
       static_cast<size_t>(options_.block_size * options_.block_util)) {
     EndBlock();
+    // Schedule buffer commit if it is about to full
+    if (data_block_.buffer_store()->size() + options_.block_size >
+        options_.block_batch_size) {
+      pending_commit_ = true;
+    }
   }
 }
 
