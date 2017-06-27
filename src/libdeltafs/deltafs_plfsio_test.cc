@@ -343,11 +343,12 @@ class FakeEnv : public EnvWrapper {
 
 class PlfsIoBench {
  public:
-  PlfsIoBench() : dirhome_(test::TmpDir() + "/plfsio_test_benchmark") {
-    env_ = new FakeEnv(6 << 20);  // Burst-buffer link speed is 6MB/s
+  PlfsIoBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
+    link_speed_ = 6;
+    ordered_keys_ = false;
+    num_files_ = 16;
     writer_ = NULL;
-    dump_size_ = 16 << 20;  // 16M particles per core
-    ordered_ = false;
+    env_ = NULL;
 
     options_.rank = 0;
     options_.lg_parts = 2;
@@ -367,25 +368,29 @@ class PlfsIoBench {
   }
 
   void LogAndApply() {
-    DestroyDir(dirhome_, options_);
+    DestroyDir(home_, options_);
+    DoIt();
+  }
+
+  void DoIt() {
+    env_ = new FakeEnv(link_speed_ << 20);
     ThreadPool* pool = ThreadPool::NewFixed(1 << options_.lg_parts);
     options_.compaction_pool = pool;
     options_.env = env_;
-    Status s = DirWriter::Open(options_, dirhome_, &writer_);
+    Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
-
-    char tmp[20];
+    const uint64_t start = env_->NowMicros();
+    char tmp[30];
     std::string dummy_val(options_.value_size, 'x');
     Slice key(tmp, options_.key_size);
-    for (int i = 0; i < dump_size_; i++) {
-      uint32_t particle_id;
-      if (!ordered_) {
-        particle_id = xxhash32(&i, sizeof(i), 0);
+    for (int i = 0; i < (num_files_ << 20); i++) {
+      int fid;
+      if (!ordered_keys_) {
+        fid = xxhash32(&i, sizeof(i), 0);
       } else {
-        particle_id = i;
+        fid = i;
       }
-      snprintf(tmp, sizeof(tmp), "p-%08x",
-               static_cast<unsigned int>(particle_id));
+      snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
       s = writer_->Append(key, dummy_val, 0);
       ASSERT_OK(s) << "Cannot write";
     }
@@ -395,14 +400,33 @@ class PlfsIoBench {
     s = writer_->Finish();
     ASSERT_OK(s) << "Cannot finish";
 
+    uint64_t dura = env_->NowMicros() - start;
+
+    PrintStats(dura);
+
     delete writer_;
     writer_ = NULL;
+    delete env_;
+    env_ = NULL;
+
     delete pool;
   }
 
-  int ordered_;
-  int dump_size_;
-  const std::string dirhome_;
+  void PrintStats(uint64_t dura) {
+    fprintf(stderr, "   Ordered Insertion: %s\n", ordered_keys_ ? "Yes" : "No");
+    fprintf(stderr, "Total Particle Files: %d M\n", num_files_);
+    fprintf(stderr, " Emulated Link Speed: %d MB/s\n", link_speed_);
+    fprintf(stderr, "          Total Time: %.3f secs\n",
+            dura / 1000.0 / 1000.0);
+    fprintf(stderr, "    Write Throughput: %.3f MB/s\n",
+            1.0 * (options_.key_size + options_.value_size) *
+                (num_files_ << 20) / dura);
+  }
+
+  int link_speed_;  // MBps
+  bool ordered_keys_;
+  int num_files_;  // Millions
+  const std::string home_;
   DirOptions options_;
   DirWriter* writer_;
   Env* env_;
