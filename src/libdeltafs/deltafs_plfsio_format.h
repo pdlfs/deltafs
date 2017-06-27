@@ -37,15 +37,17 @@ extern Status ParseEpochKey(const Slice& input, uint32_t* epoch,
 enum ChunkType {
   kUnknown = 0x00,  // Useless padding that should be ignored
 
-  // Standard block types for data indexing
+  // Standard indexing block types
   kIdxChunk = 0x01,
-  kSbfChunk = 0x02,   // Standard bloom filters
-  kMetaChunk = 0x03,  // Meta indexes for each epoch
-  kRtChunk = 0x04,    // One per directory
+  kSbfChunk = 0x02,  // Standard bloom filters
+
+  // Meta indexing block types
+  kMetaChunk = 0x71,  // Meta indexes for each epoch
+  kRtChunk = 0x72,    // One per directory
 
   // Special types for durability
-  kEpochStone = 0x11,
-  kFooter = 0xff
+  kEpochStone = 0xf0,
+  kFooter = 0xfe
 };
 
 // Table handle is a pointer to extends of a file that store the index and
