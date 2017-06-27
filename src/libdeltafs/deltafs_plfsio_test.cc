@@ -9,12 +9,13 @@
 
 #include "deltafs_plfsio_internal.h"
 
-#include "pdlfs-common/coding.h"
-#include "pdlfs-common/murmur.h"
+#include "pdlfs-common/histogram.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
+#include "pdlfs-common/xxhash.h"
 
 #include <map>
+#include <vector>
 
 namespace pdlfs {
 namespace plfsio {
@@ -287,58 +288,155 @@ TEST(PlfsIoTest, NoUniKeys) {
   ASSERT_EQ(Read("k1"), "v1v2v4v5v6v7v9");
 }
 
-static void BM_LogAndApply(size_t num_entries) {
-  DirWriter* writer;
-  DirOptions options;
-  options.verify_checksums = false;
-  options.env = TestEnv();
-  options.key_size = 10;
-  options.value_size = 40;
-  options.bf_bits_per_key = 10;
-  std::string dirhome = test::TmpDir() + "/plfsio_test_benchmark";
-  DestroyDir(dirhome, options);
-  ASSERT_OK(DirWriter::Open(options, dirhome, &writer));
+namespace {
 
-  uint64_t start = Env::Default()->NowMicros();
+class FakeWritableFile : public WritableFile {
+ public:
+  FakeWritableFile(Histogram* hist, uint64_t bytes_ps)
+      : prev_write_micros(0), hist_(hist), bytes_ps_(bytes_ps) {}
+  virtual ~FakeWritableFile() {}
 
-  char key[16];
-  std::string dummy_value(options.value_size, 'x');
-  for (size_t i = 0; i < num_entries; i++) {
-    murmur_x64_128(&i, sizeof(i), 0, key);
-    ASSERT_OK(writer->Append(Slice(key, options.key_size), dummy_value));
+  virtual Status Append(const Slice& data) {
+    if (!data.empty()) {
+      uint64_t now_micros = Env::Default()->NowMicros();
+      if (prev_write_micros != 0) {
+        hist_->Add(now_micros - prev_write_micros);
+      }
+      prev_write_micros = now_micros;
+      double micros_to_delay =
+          static_cast<double>(1000 * 1000) * data.size() / bytes_ps_;
+      Env::Default()->SleepForMicroseconds(micros_to_delay);
+    }
+    return Status::OK();
   }
-  ASSERT_OK(writer->Finish());
 
-  uint64_t end = Env::Default()->NowMicros();
+  virtual Status Close() { return Status::OK(); }
+  virtual Status Flush() { return Status::OK(); }
+  virtual Status Sync() { return Status::OK(); }
 
-  fprintf(stderr, "== %9llu keys, %5.1f s, %5.2f us/key, %8.3f MB/s (value)\n",
-          static_cast<unsigned long long>(num_entries),
-          double(end - start) / double(1000000),
-          double(end - start) / double(num_entries),
-          double(num_entries * options.value_size) / double(end - start));
+ private:
+  uint64_t prev_write_micros;  // Timestamp of the previous write
+  Histogram* hist_;            // Mean time between writes
 
-  char tmp[200];
-  IoStats stats = writer->GetIoStats();
-  snprintf(tmp, sizeof(tmp), ".dat: %lld bytes (%lld ops, %.3f bytes/op)",
-           static_cast<long long>(stats.data_bytes),
-           static_cast<long long>(stats.data_ops),
-           static_cast<double>(stats.data_bytes) / stats.data_ops);
-  fprintf(stderr, "%s\n", tmp);
-  delete writer;
-}
+  uint64_t bytes_ps_;  // Bytes per second
+};
+
+class FakeEnv : public EnvWrapper {
+ public:
+  explicit FakeEnv(uint64_t bytes_ps)
+      : EnvWrapper(TestEnv()), bytes_ps_(bytes_ps) {}
+  virtual ~FakeEnv() {}
+
+  virtual Status NewWritableFile(const Slice& f, WritableFile** r) {
+    Histogram* hist = new Histogram;
+    hists_.insert(std::make_pair(f.ToString(), hist));
+    *r = new FakeWritableFile(hist, bytes_ps_);
+    return Status::OK();
+  }
+
+ private:
+  std::map<std::string, Histogram*> hists_;
+  uint64_t bytes_ps_;  // Bytes per second
+};
+
+}  // anonymous namespace
+
+class PlfsIoBench {
+ public:
+  PlfsIoBench() : dirhome_(test::TmpDir() + "/plfsio_test_benchmark") {
+    env_ = new FakeEnv(6 << 20);  // Burst-buffer link speed is 6MB/s
+    writer_ = NULL;
+    dump_size_ = 16 << 20;  // 16M particles per core
+    ordered_ = false;
+
+    options_.rank = 0;
+    options_.lg_parts = 2;
+    options_.total_memtable_budget = 32 << 20;
+    options_.block_size = 128 << 10;
+    options_.block_batch_size = 2 << 20;
+    options_.index_buffer = 2 << 20;
+    options_.data_buffer = 8 << 20;
+    options_.bf_bits_per_key = 10;
+    options_.value_size = 40;
+    options_.key_size = 10;
+  }
+
+  ~PlfsIoBench() {
+    delete writer_;
+    delete env_;
+  }
+
+  void LogAndApply() {
+    DestroyDir(dirhome_, options_);
+    ThreadPool* pool = ThreadPool::NewFixed(1 << options_.lg_parts);
+    options_.compaction_pool = pool;
+    options_.env = env_;
+    Status s = DirWriter::Open(options_, dirhome_, &writer_);
+    ASSERT_OK(s) << "Cannot open dir";
+
+    char tmp[20];
+    std::string dummy_val(options_.value_size, 'x');
+    Slice key(tmp, options_.key_size);
+    for (int i = 0; i < dump_size_; i++) {
+      uint32_t particle_id;
+      if (!ordered_) {
+        particle_id = xxhash32(&i, sizeof(i), 0);
+      } else {
+        particle_id = i;
+      }
+      snprintf(tmp, sizeof(tmp), "p-%08x",
+               static_cast<unsigned int>(particle_id));
+      s = writer_->Append(key, dummy_val, 0);
+      ASSERT_OK(s) << "Cannot write";
+    }
+
+    s = writer_->EpochFlush(0);
+    ASSERT_OK(s) << "Cannot flush epoch";
+    s = writer_->Finish();
+    ASSERT_OK(s) << "Cannot finish";
+
+    delete writer_;
+    writer_ = NULL;
+    delete pool;
+  }
+
+  int ordered_;
+  int dump_size_;
+  const std::string dirhome_;
+  DirOptions options_;
+  DirWriter* writer_;
+  Env* env_;
+};
 
 }  // namespace plfsio
 }  // namespace pdlfs
 
+#if defined(PDLFS_GFLAGS)
+#include <gflags/gflags.h>
+#endif
+#if defined(PDLFS_GLOG)
+#include <glog/logging.h>
+#endif
+
+static void BM_LogAndApply(int* argc, char*** argv) {
+#if defined(PDLFS_GFLAGS)
+  ::google::ParseCommandLineFlags(argc, argv, true);
+#endif
+#if defined(PDLFS_GLOG)
+  ::google::InitGoogleLogging((*argv)[0]);
+  ::google::InstallFailureSignalHandler();
+#endif
+  pdlfs::plfsio::PlfsIoBench bench;
+  bench.LogAndApply();
+}
+
 int main(int argc, char* argv[]) {
-  if (argc > 1 && std::string(argv[argc - 1]) == "--benchmark") {
-    ::pdlfs::plfsio::BM_LogAndApply(1 << 20);
-    ::pdlfs::plfsio::BM_LogAndApply(2 << 20);
-    ::pdlfs::plfsio::BM_LogAndApply(4 << 20);
-    ::pdlfs::plfsio::BM_LogAndApply(8 << 20);
-    ::pdlfs::plfsio::BM_LogAndApply(16 << 20);
+  std::string arg;
+  if (argc > 1) arg = std::string(argv[argc - 1]);
+  if (arg != "--bench") {
+    return ::pdlfs::test::RunAllTests(&argc, &argv);
+  } else {
+    BM_LogAndApply(&argc, &argv);
     return 0;
   }
-
-  return ::pdlfs::test::RunAllTests(&argc, &argv);
 }
