@@ -270,7 +270,10 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
       pending_root_entry_(false),
       num_tables_(0),
       num_epochs_(0),
+      pending_data_flush_(0),
+      pending_indx_flush_(0),
       data_sink_(data),
+      data_offset_(0),
       indx_logger_(options, indx),
       indx_sink_(indx),
       finished_(false) {
@@ -361,6 +364,11 @@ void TableLogger::MakeEpoch() {
     status_ = indx_logger_.SealEpoch(epoch_stone);
   } else {
     return;  // Abort
+  }
+
+  if (ok()) {
+    pending_indx_flush_ = indx_sink_->Ltell();
+    pending_data_flush_ = data_offset_;
   }
 
   if (ok()) {
@@ -495,6 +503,7 @@ void TableLogger::Commit() {
 
   assert(num_index_committed == num_uncommitted_indx_);
   status_ = data_sink_->Lwrite(*buffer);
+  data_offset_ = base + buffer->size();
   data_sink_->Unlock();
   if (!ok()) return;  // Abort
 

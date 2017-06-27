@@ -137,7 +137,10 @@ class TableLogger {
   uint32_t num_tables_;  // Number of tables generated within the current epoch
   uint32_t num_epochs_;  // Number of epochs generated
   std::string uncommitted_indexes_;
+  uint64_t pending_data_flush_;  // Offset of the data pending flush
+  uint64_t pending_indx_flush_;  // Offset of the index pending flush
   LogSink* data_sink_;
+  uint64_t data_offset_;  // Latest data offset
   LogWriter indx_logger_;
   LogSink* indx_sink_;
   bool finished_;
