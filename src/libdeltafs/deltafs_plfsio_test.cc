@@ -99,6 +99,9 @@ class PlfsIoTest {
  public:
   PlfsIoTest() {
     dirname_ = test::TmpDir() + "/plfsio_test";
+    options_.total_memtable_budget = 1 << 20;
+    options_.block_batch_size = 256 << 10;
+    options_.block_size = 64 << 10;
     options_.verify_checksums = true;
     options_.paranoid_checks = true;
     options_.env = TestEnv();
@@ -216,6 +219,30 @@ TEST(PlfsIoTest, Snappy) {
   ASSERT_EQ(Read("k1"), "v1v3v5");
   ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2v4v6");
+}
+
+TEST(PlfsIoTest, LargeBatch) {
+  const std::string dummy_val(32, 'x');
+  const int batch_size = 64 << 10;
+  char tmp[10];
+  for (int i = 0; i < batch_size; i++) {
+    snprintf(tmp, sizeof(tmp), "k%07d", i);
+    Write(Slice(tmp), dummy_val);
+  }
+  MakeEpoch();
+  for (int i = 0; i < batch_size; i++) {
+    snprintf(tmp, sizeof(tmp), "k%07d", i);
+    Write(Slice(tmp), dummy_val);
+  }
+  MakeEpoch();
+  for (int i = 0; i < batch_size; i++) {
+    snprintf(tmp, sizeof(tmp), "k%07d", i);
+    ASSERT_EQ(Read(Slice(tmp)).size(), dummy_val.size() * 2) << tmp;
+    if (i % 1024 == 1023) {
+      fprintf(stderr, "key [%07d-%07d): OK\n", i - 1023, i + 1);
+    }
+  }
+  ASSERT_TRUE(Read("kx").empty());
 }
 
 TEST(PlfsIoTest, NoFilter) {
