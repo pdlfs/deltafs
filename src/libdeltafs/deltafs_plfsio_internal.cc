@@ -289,8 +289,10 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   // Allocate memory
   const size_t estimated_index_size_per_table = 4 << 10;
   indx_block_.Reserve(estimated_index_size_per_table);
-  const size_t estimated_meta_size = 4 << 10;
-  meta_block_.Reserve(estimated_meta_size);
+  const size_t estimated_meta_index_size_per_epoch = 4 << 10;
+  meta_block_.Reserve(estimated_meta_index_size_per_epoch);
+  const size_t estimated_root_index = 4 << 10;
+  root_block_.Reserve(estimated_root_index);
 
   uncommitted_indexes_.reserve(1 << 10);
   data_block_.buffer_store()->reserve(options_.block_batch_size);
@@ -454,14 +456,17 @@ void TableLogger::EndTable(T* filter_block, ChunkType filter_type) {
 
 void TableLogger::Commit() {
   assert(!finished_);  // Finish() has not been called
-  if (data_block_.buffer_store()->empty()) return;  // Empty commit
-  if (!ok()) return;                                // Abort
+  // Skip empty commit
+  if (data_block_.buffer_store()->empty()) return;
+  if (!ok()) return;  // Abort
+
+  assert(num_uncommitted_data_ == num_uncommitted_indx_);
+  std::string* const buffer = data_block_.buffer_store();
 
   data_sink_->Lock();
-  assert(num_uncommitted_data_ == num_uncommitted_indx_);
-  std::string* buffer = data_block_.buffer_store();
+  assert(buffer->size() <= options_.block_batch_size);  // Verify write size
+  assert(buffer->size() % options_.block_size == 0);
   const size_t base = data_sink_->Ltell();
-
   Slice key;
   int num_index_committed = 0;
   Slice input = uncommitted_indexes_;
@@ -477,7 +482,7 @@ void TableLogger::Commit() {
       memcpy(&buffer->at(offset - BlockHandle::kMaxEncodedLength),
              handle_encoding.data(), handle_encoding.size());
       if (options_.block_padding) {
-        assert((handle.offset() - BlockHandle::kMaxEncodedLength) %
+        assert((base + offset - BlockHandle::kMaxEncodedLength) %
                    options_.block_size ==
                0);  // Verify block alignment
       }
