@@ -15,6 +15,7 @@
 #include "pdlfs-common/testutil.h"
 #include "pdlfs-common/xxhash.h"
 
+#include <stdlib.h>
 #ifdef PDLFS_PLATFORM_POSIX
 #include <sys/resource.h>
 #include <sys/time.h>
@@ -339,6 +340,16 @@ class FakeEnv : public EnvWrapper {
     return Status::OK();
   }
 
+  virtual const Histogram* GetHist() {
+    std::map<std::string, Histogram*>::iterator iter;
+    for (iter = hists_.begin(); iter != hists_.end(); ++iter) {
+      if (Slice(iter->first).ends_with(".dat")) {
+        return iter->second;
+      }
+    }
+    return NULL;
+  }
+
  private:
   std::map<std::string, Histogram*> hists_;
   uint64_t bytes_ps_;  // Bytes per second
@@ -348,20 +359,34 @@ class FakeEnv : public EnvWrapper {
 
 class PlfsIoBench {
  public:
+  static int GetOption(const char* key, int defval) {
+    const char* env = getenv(key);
+    if (env == NULL) {
+      return defval;
+    } else if (strlen(env) == 0) {
+      return defval;
+    } else {
+      return atoi(env);
+    }
+  }
+
   PlfsIoBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
-    link_speed_ = 6;
-    ordered_keys_ = false;
-    num_files_ = 16;
+    link_speed_ =
+        GetOption("LINK_SPEED", 6);  // Burst-buffer link speed is 6 MBps
+    ordered_keys_ = GetOption("ORDERED_KEYS", false);
+    num_files_ = GetOption("NUM_FILES", 16);  // 16M files per VPIC core
+    num_threads_ = GetOption("NUM_THREADS", 4);
     writer_ = NULL;
     env_ = NULL;
 
     options_.rank = 0;
-    options_.lg_parts = 2;
-    options_.total_memtable_budget = 32 << 20;
-    options_.block_size = 128 << 10;
-    options_.block_batch_size = 2 << 20;
-    options_.index_buffer = 2 << 20;
-    options_.data_buffer = 8 << 20;
+    options_.lg_parts = GetOption("LG_PARTS", 2);
+    options_.skip_sort = ordered_keys_ != 0;
+    options_.total_memtable_budget = GetOption("MEMTABLE_SIZE", 32) << 20;
+    options_.block_size = GetOption("BLOCK_SIZE", 128) << 10;
+    options_.block_batch_size = GetOption("BLOCK_BATCH_SIZE", 2) << 20;
+    options_.index_buffer = GetOption("INDEX_BUFFER", 2) << 20;
+    options_.data_buffer = GetOption("DATA_BUFFER", 8) << 20;
     options_.bf_bits_per_key = 10;
     options_.value_size = 40;
     options_.key_size = 10;
@@ -378,8 +403,8 @@ class PlfsIoBench {
   }
 
   void DoIt() {
-    env_ = new FakeEnv(link_speed_ << 20);
-    ThreadPool* pool = ThreadPool::NewFixed(1 << options_.lg_parts);
+    env_ = new FakeEnv(static_cast<uint64_t>(link_speed_ << 20));
+    ThreadPool* pool = ThreadPool::NewFixed(num_threads_);
     options_.compaction_pool = pool;
     options_.env = env_;
     Status s = DirWriter::Open(options_, home_, &writer_);
@@ -424,28 +449,44 @@ class PlfsIoBench {
 #endif
 
   void PrintStats(uint64_t dura) {
-    fprintf(stderr, "          Total Time: %.3f seconds\n",
+    fprintf(stderr, "             Total Time: %.3f s\n",
             dura / 1000.0 / 1000.0);
 #ifdef PDLFS_PLATFORM_POSIX
     struct rusage usage;
     int r = getrusage(RUSAGE_SELF, &usage);
     ASSERT_TRUE(r == 0);
-    fprintf(stderr, "     System CPU Time: %.3f seconds\n",
-            ToSecs(&usage.ru_stime));
-    fprintf(stderr, "       User CPU Time: %.3f seconds\n",
+    fprintf(stderr, "          User CPU Time: %.3f s\n",
             ToSecs(&usage.ru_utime));
+    fprintf(stderr, "        System CPU Time: %.3f s\n",
+            ToSecs(&usage.ru_stime));
 #endif
-    fprintf(stderr, "   Ordered Insertion: %s\n", ordered_keys_ ? "Yes" : "No");
-    fprintf(stderr, "Total Particle Files: %d M\n", num_files_);
-    fprintf(stderr, " Emulated Link Speed: %d MB/s (per log)\n", link_speed_);
-    fprintf(stderr, "    Write Throughput: %.3f MB/s\n",
+    fprintf(stderr, "      Ordered Insertion: %s\n",
+            ordered_keys_ ? "Yes" : "No");
+    fprintf(stderr, "   Total Particle Files: %d M\n", num_files_);
+    fprintf(stderr, "          Particle Data: %.3f MB\n",
+            48 * (num_files_ << 20) / 1000.0 / 1000.0);
+    fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
+    fprintf(stderr, "         Num Bg Threads: %d\n", num_threads_);
+    fprintf(stderr, "    Emulated Link Speed: %d MB/s (per log)\n",
+            link_speed_);
+    fprintf(stderr, "            Write Speed: %.3f MB/s\n",
             1.0 * (options_.key_size + options_.value_size) *
                 (num_files_ << 20) / dura);
+    IoStats stats = writer_->GetIoStats();
+    fprintf(stderr, "              Phys Data: %.3f MB\n",
+            stats.data_bytes / 1000.0 / 1000.0);
+    const Histogram* hist = dynamic_cast<FakeEnv*>(env_)->GetHist();
+    ASSERT_TRUE(hist != NULL);
+    fprintf(stderr, "                   MTBW: %.3f s\n",
+            hist->Average() / 1000.0 / 1000.0);
+    fprintf(stderr, "           Phys Indexes: %.3f MB\n",
+            stats.index_bytes / 1000.0 / 1000.0);
   }
 
-  int link_speed_;  // MBps
-  bool ordered_keys_;
-  int num_files_;  // Millions
+  int link_speed_;  // Link speed to emulate (in MBps)
+  int ordered_keys_;
+  int num_files_;    // Number of particle files (in millions)
+  int num_threads_;  // Number of bg compaction threads
   const std::string home_;
   DirOptions options_;
   DirWriter* writer_;
