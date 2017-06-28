@@ -923,8 +923,8 @@ void DirLogger::CompactMemtable() {
   TableLogger* const tb = tb_;
   BloomBlock* const bf = static_cast<BloomBlock*>(filter_);
   mu_->Unlock();
-  uint64_t start = Env::Default()->NowMicros();
 #if VERBOSE >= 3
+  uint64_t start = Env::Default()->NowMicros();
   Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes) ...",
           static_cast<int>(buffer->CurrentBufferSize()),
           static_cast<int>(tb_bytes_));
@@ -962,8 +962,8 @@ void DirLogger::CompactMemtable() {
     }
   }
 
-  uint64_t end = Env::Default()->NowMicros();
 #if VERBOSE >= 3
+  uint64_t end = Env::Default()->NowMicros();
   Verbose(__LOG_ARGS__, 3, "Compaction done: %d kv pairs (%d us)",
           static_cast<int>(buffer->NumEntries()),
           static_cast<int>(end - start));
