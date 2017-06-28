@@ -386,6 +386,9 @@ class PlfsIoBench {
     options_.rank = 0;
     options_.lg_parts = GetOption("LG_PARTS", 2);
     options_.skip_sort = ordered_keys_ != 0;
+    options_.compression =
+        GetOption("SNAPPY", false) ? kSnappyCompression : kNoCompression;
+    options_.force_compression = true;
     options_.total_memtable_budget = GetOption("MEMTABLE_SIZE", 32) << 20;
     options_.block_size = GetOption("BLOCK_SIZE", 128) << 10;
     options_.block_batch_size = GetOption("BLOCK_BATCH_SIZE", 2) << 20;
@@ -483,6 +486,8 @@ class PlfsIoBench {
 #endif
     fprintf(stderr, "      Ordered Insertion: %s\n",
             ordered_keys_ ? "Yes" : "No");
+    fprintf(stderr, "    Indexes Compression: %s\n",
+            options_.compression == kSnappyCompression ? "Yes" : "No");
     fprintf(stderr, "     Num Particle Files: %d Mi\n", num_files_);
     fprintf(stderr, "          Particle Data: %d MB\n", 48 * num_files_);
     fprintf(stderr, "    Total MemTable Size: %d MB\n",
