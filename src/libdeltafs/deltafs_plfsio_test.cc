@@ -391,6 +391,7 @@ class PlfsIoBench {
     options_.force_compression = true;
     options_.total_memtable_budget = GetOption("MEMTABLE_SIZE", 32) << 20;
     options_.block_size = GetOption("BLOCK_SIZE", 128) << 10;
+    options_.block_util = GetOption("BLOCK_UTIL", 999) / 1000.0;
     options_.block_batch_size = GetOption("BLOCK_BATCH_SIZE", 2) << 20;
     options_.index_buffer = GetOption("INDEX_BUFFER", 2) << 20;
     options_.data_buffer = GetOption("DATA_BUFFER", 8) << 20;
@@ -496,6 +497,8 @@ class PlfsIoBench {
             int(options_.total_memtable_budget) >> 20);
     fprintf(stderr, " Estimated SSTable Size: %.3f MB\n",
             writer_->TEST_estimated_sstable_size() / ki / ki);
+    fprintf(stderr, "   Estimated Block Size: %d KB (util: %.1f%%)\n",
+            int(options_.block_size) >> 10, options_.block_util * 100);
     fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
     fprintf(stderr, "         Num Bg Threads: %d\n", num_threads_);
     fprintf(stderr, "    Emulated Link Speed: %d MB/s (per log)\n",
