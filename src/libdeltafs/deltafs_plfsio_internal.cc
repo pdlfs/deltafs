@@ -205,13 +205,15 @@ struct WriteBuffer::STLLessThan {
   }
 };
 
-void WriteBuffer::FinishAndSort() {
-  // Sort entries
+void WriteBuffer::Finish(bool skip_sort) {
   assert(!finished_);
-  std::vector<uint32_t>::iterator begin = offsets_.begin();
-  std::vector<uint32_t>::iterator end = offsets_.end();
-  std::sort(begin, end, STLLessThan(buffer_));
   finished_ = true;
+  // Sort entries if not skipped
+  if (!skip_sort) {
+    std::vector<uint32_t>::iterator begin = offsets_.begin();
+    std::vector<uint32_t>::iterator end = offsets_.end();
+    std::sort(begin, end, STLLessThan(buffer_));
+  }
 }
 
 void WriteBuffer::Reset() {
@@ -931,7 +933,7 @@ void DirLogger::CompactMemtable() {
   uint32_t num_keys = 0;
 #endif
   if (bf != NULL) bf->Reset();
-  buffer->FinishAndSort();
+  buffer->Finish(options_.skip_sort);
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {

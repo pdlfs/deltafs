@@ -15,7 +15,6 @@
 #include "pdlfs-common/xxhash.h"
 
 #include <map>
-#include <vector>
 
 namespace pdlfs {
 namespace plfsio {
@@ -25,7 +24,7 @@ class WriterBufTest {
   explicit WriterBufTest(uint32_t seed = 301) : num_entries_(0), rnd_(seed) {}
 
   Iterator* Flush() {
-    buffer_.FinishAndSort();
+    buffer_.Finish();
     ASSERT_EQ(buffer_.NumEntries(), num_entries_);
     return buffer_.NewIterator();
   }

@@ -29,6 +29,7 @@ IoStats::IoStats() : index_bytes(0), index_ops(0), data_bytes(0), data_ops(0) {}
 DirOptions::DirOptions()
     : total_memtable_budget(32 << 20),
       memtable_util(1.0),
+      skip_sort(false),
       key_size(8),
       value_size(32),
       bf_bits_per_key(8),

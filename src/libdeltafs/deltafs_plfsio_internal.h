@@ -35,7 +35,7 @@ class WriteBuffer {
   uint32_t NumEntries() const { return num_entries_; }
   void Add(const Slice& key, const Slice& value);
   Iterator* NewIterator() const;
-  void FinishAndSort();
+  void Finish(bool skip_sort = false);
   void Reset();
 
  private:

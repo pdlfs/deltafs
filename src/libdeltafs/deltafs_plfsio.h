@@ -47,6 +47,11 @@ struct DirOptions {
   // Default: 1 (100%)
   double memtable_util;
 
+  // Skip sorting memtables.
+  // This is useful when the input data is known to be pre-sorted.
+  // Default: false
+  bool skip_sort;
+
   // Estimated average key size.
   // Default: 8 bytes
   size_t key_size;
