@@ -99,7 +99,8 @@ Slice BlockBuilder::Finish() {
   return result;
 }
 
-Slice BlockBuilder::Finalize(bool crc32c, uint32_t padding_target) {
+Slice BlockBuilder::Finalize(bool crc32c, uint32_t padding_target,
+                             char padding_char) {
   assert(finished_);
   Slice contents = buffer_;  // Contents without the trailer and padding
   contents.remove_prefix(buffer_start_);
@@ -114,7 +115,7 @@ Slice BlockBuilder::Finalize(bool crc32c, uint32_t padding_target) {
   }
   buffer_.append(trailer, sizeof(trailer));
   if (padding_target != 0 && buffer_.size() < buffer_start_ + padding_target) {
-    buffer_.resize(buffer_start_ + padding_target, 0);
+    buffer_.resize(buffer_start_ + padding_target, padding_char);
   }
   Slice result = buffer_;
   result.remove_prefix(buffer_start_);
