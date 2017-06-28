@@ -394,7 +394,7 @@ class PlfsIoBench {
     options_.block_batch_size = GetOption("BLOCK_BATCH_SIZE", 2) << 20;
     options_.index_buffer = GetOption("INDEX_BUFFER", 2) << 20;
     options_.data_buffer = GetOption("DATA_BUFFER", 8) << 20;
-    options_.bf_bits_per_key = 10;
+    options_.bf_bits_per_key = GetOption("BF_BITS", 10);
     options_.value_size = 40;
     options_.key_size = 10;
   }
@@ -488,6 +488,8 @@ class PlfsIoBench {
             ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "    Indexes Compression: %s\n",
             options_.compression == kSnappyCompression ? "Yes" : "No");
+    fprintf(stderr, "                BF Bits: %d (pey key)\n",
+            int(options_.bf_bits_per_key));
     fprintf(stderr, "     Num Particle Files: %d Mi\n", num_files_);
     fprintf(stderr, "          Particle Data: %d MB\n", 48 * num_files_);
     fprintf(stderr, "    Total MemTable Size: %d MB\n",
