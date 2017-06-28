@@ -10,9 +10,15 @@
 #include "deltafs_plfsio_internal.h"
 
 #include "pdlfs-common/histogram.h"
+#include "pdlfs-common/port.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 #include "pdlfs-common/xxhash.h"
+
+#ifdef PDLFS_PLATFORM_POSIX
+#include <sys/resource.h>
+#include <sys/time.h>
+#endif
 
 #include <map>
 
@@ -411,12 +417,27 @@ class PlfsIoBench {
     delete pool;
   }
 
+#ifdef PDLFS_PLATFORM_POSIX
+  static inline double ToSecs(const struct timeval* tv) {
+    return tv->tv_sec + tv->tv_usec / 1000.0 / 1000.0;
+  }
+#endif
+
   void PrintStats(uint64_t dura) {
+    fprintf(stderr, "          Total Time: %.3f seconds\n",
+            dura / 1000.0 / 1000.0);
+#ifdef PDLFS_PLATFORM_POSIX
+    struct rusage usage;
+    int r = getrusage(RUSAGE_SELF, &usage);
+    ASSERT_TRUE(r == 0);
+    fprintf(stderr, "     System CPU Time: %.3f seconds\n",
+            ToSecs(&usage.ru_stime));
+    fprintf(stderr, "       User CPU Time: %.3f seconds\n",
+            ToSecs(&usage.ru_utime));
+#endif
     fprintf(stderr, "   Ordered Insertion: %s\n", ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "Total Particle Files: %d M\n", num_files_);
-    fprintf(stderr, " Emulated Link Speed: %d MB/s\n", link_speed_);
-    fprintf(stderr, "          Total Time: %.3f secs\n",
-            dura / 1000.0 / 1000.0);
+    fprintf(stderr, " Emulated Link Speed: %d MB/s (per log)\n", link_speed_);
     fprintf(stderr, "    Write Throughput: %.3f MB/s\n",
             1.0 * (options_.key_size + options_.value_size) *
                 (num_files_ << 20) / dura);
