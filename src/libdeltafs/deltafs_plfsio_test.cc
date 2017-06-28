@@ -17,6 +17,10 @@
 
 #include <stdlib.h>
 #ifdef PDLFS_PLATFORM_POSIX
+#ifdef PDLFS_OS_LINUX
+#include <sched.h>
+#include <sys/types.h>
+#endif
 #include <sys/resource.h>
 #include <sys/time.h>
 #endif
@@ -452,16 +456,30 @@ class PlfsIoBench {
 
   void PrintStats(uint64_t dura) {
     const double k = 1000.0, ki = 1024.0;
+    fprintf(stderr, "----------------------------------------\n");
+    const uint64_t total_memory_usage = writer_->TEST_total_memory_usage();
+    fprintf(stderr, "     Total Memory Usage: %.3f MB\n",
+            total_memory_usage / ki / ki);
     fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
     const IoStats stats = writer_->GetIoStats();
 #ifdef PDLFS_PLATFORM_POSIX
     struct rusage usage;
-    int r = getrusage(RUSAGE_SELF, &usage);
-    ASSERT_TRUE(r == 0);
+    int r1 = getrusage(RUSAGE_SELF, &usage);
+    ASSERT_TRUE(r1 == 0);
     fprintf(stderr, "          User CPU Time: %.3f s\n",
             ToSecs(&usage.ru_utime));
     fprintf(stderr, "        System CPU Time: %.3f s\n",
             ToSecs(&usage.ru_stime));
+#ifdef PDLFS_OS_LINUX
+    cpu_set_t cpu_set;
+    CPU_ZERO(&cpu_set);
+    int r2 = sched_getaffinity(getpid(), sizeof(cpu_set), &cpu_set);
+    ASSERT_TRUE(r2 == 0);
+    fprintf(stderr, "          Num CPU Cores: %d\n", CPU_COUNT(&cpu_set));
+    fprintf(stderr, "              CPU Usage: %.1f%%\n",
+            k * k * (ToSecs(&usage.ru_utime) + ToSecs(&usage.ru_stime)) /
+                CPU_COUNT(&cpu_set) / dura * 100);
+#endif
 #endif
     fprintf(stderr, "      Ordered Insertion: %s\n",
             ordered_keys_ ? "Yes" : "No");
@@ -473,17 +491,23 @@ class PlfsIoBench {
     fprintf(stderr, "         Num Bg Threads: %d\n", num_threads_);
     fprintf(stderr, "    Emulated Link Speed: %d MB/s (per log)\n",
             link_speed_);
-    fprintf(stderr, "            Write Speed: %.3f MB/s\n",
+    fprintf(stderr, "            Write Speed: %.3f MB/s (observed by app)\n",
             1.0 * k * k * (options_.key_size + options_.value_size) *
                 num_files_ / dura);
     fprintf(stderr, "              Index Buf: %d MB (x%d)\n",
             int(options_.index_buffer) >> 20, 1 << options_.lg_parts);
+    fprintf(stderr, " Total Index Block Size: %.3f MB\n",
+            writer_->TEST_index_size() / ki / ki);
+    fprintf(stderr, "    Total BF Block Size: %.3f MB\n",
+            writer_->TEST_filter_size() / ki / ki);
     fprintf(stderr, "     Final Phys Indexes: %.3f MB\n",
             stats.index_bytes / ki / ki);
     fprintf(stderr, "         Compaction Buf: %d MB (x%d)\n",
             int(options_.block_batch_size) >> 20, 1 << options_.lg_parts);
     fprintf(stderr, "               Data Buf: %d MB\n",
             int(options_.data_buffer) >> 20);
+    fprintf(stderr, "  Total Data Block Size: %.3f MB\n",
+            writer_->TEST_data_size() / ki / ki);
     fprintf(stderr, "        Final Phys Data: %.3f MB\n",
             stats.data_bytes / ki / ki);
     fprintf(stderr, "           Avg I/O Size: %.3f MB\n",
