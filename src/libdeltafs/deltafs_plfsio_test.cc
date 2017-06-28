@@ -340,10 +340,10 @@ class FakeEnv : public EnvWrapper {
     return Status::OK();
   }
 
-  virtual const Histogram* GetHist() {
+  const Histogram* GetHist(const Slice& suffix) {
     std::map<std::string, Histogram*>::iterator iter;
     for (iter = hists_.begin(); iter != hists_.end(); ++iter) {
-      if (Slice(iter->first).ends_with(".dat")) {
+      if (Slice(iter->first).ends_with(suffix)) {
         return iter->second;
       }
     }
@@ -411,6 +411,7 @@ class PlfsIoBench {
     ASSERT_OK(s) << "Cannot open dir";
     const uint64_t start = env_->NowMicros();
     char tmp[30];
+    fprintf(stderr, "Doing it...\n");
     std::string dummy_val(options_.value_size, 'x');
     Slice key(tmp, options_.key_size);
     for (int i = 0; i < (num_files_ << 20); i++) {
@@ -430,6 +431,7 @@ class PlfsIoBench {
     s = writer_->Finish();
     ASSERT_OK(s) << "Cannot finish";
 
+    fprintf(stderr, "Done!\n");
     uint64_t dura = env_->NowMicros() - start;
 
     PrintStats(dura);
@@ -449,8 +451,9 @@ class PlfsIoBench {
 #endif
 
   void PrintStats(uint64_t dura) {
-    fprintf(stderr, "             Total Time: %.3f s\n",
-            dura / 1000.0 / 1000.0);
+    const double k = 1000.0, ki = 1024.0;
+    fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
+    const IoStats stats = writer_->GetIoStats();
 #ifdef PDLFS_PLATFORM_POSIX
     struct rusage usage;
     int r = getrusage(RUSAGE_SELF, &usage);
@@ -462,25 +465,33 @@ class PlfsIoBench {
 #endif
     fprintf(stderr, "      Ordered Insertion: %s\n",
             ordered_keys_ ? "Yes" : "No");
-    fprintf(stderr, "   Total Particle Files: %d M\n", num_files_);
-    fprintf(stderr, "          Particle Data: %.3f MB\n",
-            48 * (num_files_ << 20) / 1000.0 / 1000.0);
+    fprintf(stderr, "     Num Particle Files: %d Mi\n", num_files_);
+    fprintf(stderr, "          Particle Data: %d MB\n", 48 * num_files_);
+    fprintf(stderr, "    Total MemTable Size: %d MB\n",
+            int(options_.total_memtable_budget) >> 20);
     fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
     fprintf(stderr, "         Num Bg Threads: %d\n", num_threads_);
     fprintf(stderr, "    Emulated Link Speed: %d MB/s (per log)\n",
             link_speed_);
     fprintf(stderr, "            Write Speed: %.3f MB/s\n",
-            1.0 * (options_.key_size + options_.value_size) *
-                (num_files_ << 20) / dura);
-    IoStats stats = writer_->GetIoStats();
-    fprintf(stderr, "              Phys Data: %.3f MB\n",
-            stats.data_bytes / 1000.0 / 1000.0);
-    const Histogram* hist = dynamic_cast<FakeEnv*>(env_)->GetHist();
+            1.0 * k * k * (options_.key_size + options_.value_size) *
+                num_files_ / dura);
+    fprintf(stderr, "              Index Buf: %d MB (x%d)\n",
+            int(options_.index_buffer) >> 20, 1 << options_.lg_parts);
+    fprintf(stderr, "     Final Phys Indexes: %.3f MB\n",
+            stats.index_bytes / ki / ki);
+    fprintf(stderr, "         Compaction Buf: %d MB (x%d)\n",
+            int(options_.block_batch_size) >> 20, 1 << options_.lg_parts);
+    fprintf(stderr, "               Data Buf: %d MB\n",
+            int(options_.data_buffer) >> 20);
+    fprintf(stderr, "        Final Phys Data: %.3f MB\n",
+            stats.data_bytes / ki / ki);
+    fprintf(stderr, "           Avg I/O Size: %.3f MB\n",
+            1.0 * stats.data_bytes / stats.data_ops / ki / ki);
+    const Histogram* hist = dynamic_cast<FakeEnv*>(env_)->GetHist(".dat");
     ASSERT_TRUE(hist != NULL);
     fprintf(stderr, "                   MTBW: %.3f s\n",
-            hist->Average() / 1000.0 / 1000.0);
-    fprintf(stderr, "           Phys Indexes: %.3f MB\n",
-            stats.index_bytes / 1000.0 / 1000.0);
+            hist->Average() / k / k);
   }
 
   int link_speed_;  // Link speed to emulate (in MBps)
