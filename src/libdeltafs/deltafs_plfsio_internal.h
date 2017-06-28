@@ -158,6 +158,7 @@ class DirLogger {
 
   // Report compaction stats
   const OutputStats* output_stats() const { return &tb_->output_stats_; }
+  size_t estimated_table_size() const { return tb_bytes_; }
   size_t memory_usage() const;  // Report real memory usage
 
   // REQUIRES: mutex_ has been locked

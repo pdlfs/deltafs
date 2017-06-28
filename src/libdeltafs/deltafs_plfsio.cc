@@ -199,6 +199,7 @@ class DirWriterImpl : public DirWriter {
 
   virtual IoStats GetIoStats() const;
 
+  virtual uint64_t TEST_estimated_sstable_size() const;
   virtual uint64_t TEST_total_memory_usage() const;
 
   virtual uint64_t TEST_index_size() const;
@@ -641,6 +642,15 @@ IoStats DirWriterImpl::GetIoStats() const {
   }
   result.data_bytes = io_stats_.TotalBytes();
   result.data_ops = io_stats_.TotalOps();
+  return result;
+}
+
+uint64_t DirWriterImpl::TEST_estimated_sstable_size() const {
+  MutexLock ml(&mutex_);
+  uint64_t result = 0;
+  if (num_parts_ != 0) {
+    result = dirs_[0]->estimated_table_size();
+  }
   return result;
 }
 

@@ -313,8 +313,8 @@ class FakeWritableFile : public WritableFile {
         hist_->Add(now_micros - prev_write_micros);
       }
       prev_write_micros = now_micros;
-      double micros_to_delay =
-          static_cast<double>(1000 * 1000) * data.size() / bytes_ps_;
+      int micros_to_delay =
+          static_cast<int>(1000 * 1000 * data.size() / bytes_ps_);
       Env::Default()->SleepForMicroseconds(micros_to_delay);
     }
     return Status::OK();
@@ -494,6 +494,8 @@ class PlfsIoBench {
     fprintf(stderr, "          Particle Data: %d MB\n", 48 * num_files_);
     fprintf(stderr, "    Total MemTable Size: %d MB\n",
             int(options_.total_memtable_budget) >> 20);
+    fprintf(stderr, " Estimated SSTable Size: %.3f MB\n",
+            writer_->TEST_estimated_sstable_size() / ki / ki);
     fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
     fprintf(stderr, "         Num Bg Threads: %d\n", num_threads_);
     fprintf(stderr, "    Emulated Link Speed: %d MB/s (per log)\n",
