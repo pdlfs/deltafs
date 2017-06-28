@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2017 Carnegie Mellon University.
@@ -9,6 +7,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+
+#pragma once
 
 #include <string>
 
@@ -25,6 +25,11 @@ class Histogram {
 
   std::string ToString() const;
 
+  double Median() const;
+  double Percentile(double p) const;
+  double Average() const;
+  double StandardDeviation() const;
+
  private:
   double min_;
   double max_;
@@ -35,11 +40,6 @@ class Histogram {
   enum { kNumBuckets = 154 };
   static const double kBucketLimit[kNumBuckets];
   double buckets_[kNumBuckets];
-
-  double Median() const;
-  double Percentile(double p) const;
-  double Average() const;
-  double StandardDeviation() const;
 };
 
 }  // namespace pdlfs
