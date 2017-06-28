@@ -528,7 +528,8 @@ void TableLogger::EndBlock() {
     const size_t padding_target =
         options_.block_size - BlockHandle::kMaxEncodedLength;
     final_block_contents = data_block_.Finalize(
-        !options_.skip_checksums, static_cast<uint32_t>(padding_target));
+        !options_.skip_checksums, static_cast<uint32_t>(padding_target),
+        static_cast<char>(0xff));
   } else {
     final_block_contents = data_block_.Finalize(!options_.skip_checksums);
   }
