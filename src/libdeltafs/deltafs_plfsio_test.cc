@@ -300,7 +300,7 @@ TEST(PlfsIoTest, NoUniKeys) {
 
 namespace {
 
-class FakeWritableFile : public WritableFile {
+class FakeWritableFile : public WritableFileWrapper {
  public:
   FakeWritableFile(Histogram* hist, uint64_t bytes_ps)
       : prev_write_micros(0), hist_(hist), bytes_ps_(bytes_ps) {}
@@ -320,10 +320,6 @@ class FakeWritableFile : public WritableFile {
     return Status::OK();
   }
 
-  virtual Status Close() { return Status::OK(); }
-  virtual Status Flush() { return Status::OK(); }
-  virtual Status Sync() { return Status::OK(); }
-
  private:
   uint64_t prev_write_micros;  // Timestamp of the previous write
   Histogram* hist_;            // Mean time between writes
@@ -335,7 +331,12 @@ class FakeEnv : public EnvWrapper {
  public:
   explicit FakeEnv(uint64_t bytes_ps)
       : EnvWrapper(TestEnv()), bytes_ps_(bytes_ps) {}
-  virtual ~FakeEnv() {}
+  virtual ~FakeEnv() {
+    HistIter iter = hists_.begin();
+    for (; iter != hists_.end(); ++iter) {
+      delete iter->second;
+    }
+  }
 
   virtual Status NewWritableFile(const Slice& f, WritableFile** r) {
     Histogram* hist = new Histogram;
@@ -345,8 +346,8 @@ class FakeEnv : public EnvWrapper {
   }
 
   const Histogram* GetHist(const Slice& suffix) {
-    std::map<std::string, Histogram*>::iterator iter;
-    for (iter = hists_.begin(); iter != hists_.end(); ++iter) {
+    HistIter iter = hists_.begin();
+    for (; iter != hists_.end(); ++iter) {
       if (Slice(iter->first).ends_with(suffix)) {
         return iter->second;
       }
@@ -355,8 +356,12 @@ class FakeEnv : public EnvWrapper {
   }
 
  private:
-  std::map<std::string, Histogram*> hists_;
   uint64_t bytes_ps_;  // Bytes per second
+
+  typedef std::map<std::string, Histogram*> HistMap;
+  typedef HistMap::iterator HistIter;
+
+  HistMap hists_;
 };
 
 }  // anonymous namespace
@@ -540,6 +545,251 @@ class PlfsIoBench {
   Env* env_;
 };
 
+namespace {
+
+class StringWritableFile : public WritableFileWrapper {
+ public:
+  explicit StringWritableFile(std::string* buffer) : buf_(buffer) {}
+  virtual ~StringWritableFile() {}
+
+  virtual Status Append(const Slice& data) {
+    buf_->append(data.data(), data.size());
+    return Status::OK();
+  }
+
+ private:
+  // Owned by external code
+  std::string* buf_;
+};
+
+class StringFile : public SequentialFile, public RandomAccessFile {
+ public:
+  explicit StringFile(const std::string* buffer) : buf_(buffer), off_(0) {}
+  virtual ~StringFile() {}
+
+  virtual Status Read(uint64_t offset, size_t n, Slice* result,
+                      char* scratch) const {
+    if (offset > buf_->size()) {
+      offset = buf_->size();
+    }
+    if (n > buf_->size() - offset) {
+      n = buf_->size() - offset;
+    }
+    if (n != 0) {
+      *result = Slice(buf_->data() + offset, n);
+    } else {
+      *result = Slice();
+    }
+    return Status::OK();
+  }
+
+  virtual Status Read(size_t n, Slice* result, char* scratch) {
+    if (n > buf_->size() - off_) {
+      n = buf_->size() - off_;
+    }
+    if (n != 0) {
+      *result = Slice(buf_->data() + off_, n);
+    } else {
+      *result = Slice();
+    }
+    return Skip(n);
+  }
+
+  virtual Status Skip(uint64_t n) {
+    if (n > buf_->size() - off_) {
+      n = buf_->size() - off_;
+    }
+    off_ += n;
+    return Status::OK();
+  }
+
+ private:
+  // Owned by external code
+  const std::string* buf_;
+  size_t off_;
+};
+
+class StringEnv : public EnvWrapper {
+ public:
+  StringEnv() : EnvWrapper(TestEnv()) {}
+
+  virtual ~StringEnv() {
+    FSIter iter = fs_.begin();
+    for (; iter != fs_.end(); ++iter) {
+      delete iter->second;
+    }
+  }
+
+  virtual Status NewWritableFile(const Slice& f, WritableFile** r) {
+    std::string* buf = new std::string;
+    fs_.insert(std::make_pair(f.ToString(), buf));
+    *r = new StringWritableFile(buf);
+    return Status::OK();
+  }
+
+  virtual Status NewRandomAccessFile(const Slice& f, RandomAccessFile** r) {
+    std::string* buf = Find(f);
+    if (buf == NULL) {
+      *r = NULL;
+      return Status::NotFound(Slice());
+    } else {
+      *r = new StringFile(buf);
+      return Status::OK();
+    }
+  }
+
+  virtual Status NewSequentialFile(const Slice& f, SequentialFile** r) {
+    std::string* buf = Find(f);
+    if (buf == NULL) {
+      *r = NULL;
+      return Status::NotFound(Slice());
+    } else {
+      *r = new StringFile(buf);
+      return Status::OK();
+    }
+  }
+
+  virtual Status GetFileSize(const Slice& f, uint64_t* s) {
+    std::string* buf = Find(f);
+    if (buf == NULL) {
+      *s = 0;
+      return Status::NotFound(Slice());
+    } else {
+      *s = buf->size();
+      return Status::OK();
+    }
+  }
+
+ private:
+  typedef std::map<std::string, std::string*> FS;
+  typedef FS::iterator FSIter;
+
+  std::string* Find(const Slice& f) {
+    FSIter iter = fs_.begin();
+    for (; iter != fs_.end(); ++iter) {
+      if (Slice(iter->first) == f) {
+        return iter->second;
+      }
+    }
+    return NULL;
+  }
+
+  FS fs_;
+};
+
+}  // anonymous namespace
+
+class PlfsBfBench {
+ public:
+  static int GetOption(const char* key, int defval) {
+    const char* env = getenv(key);
+    if (env == NULL) {
+      return defval;
+    } else if (strlen(env) == 0) {
+      return defval;
+    } else {
+      return atoi(env);
+    }
+  }
+
+  PlfsBfBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
+    num_files_ = GetOption("NUM_FILES", 16);  // 16M files per VPIC core
+    num_threads_ = 1;
+    reader_ = NULL;
+    writer_ = NULL;
+
+    options_.rank = 0;
+    options_.lg_parts = GetOption("LG_PARTS", 2);
+    options_.total_memtable_budget = GetOption("MEMTABLE_SIZE", 48) << 20;
+    options_.block_size = GetOption("BLOCK_SIZE", 128) << 10;
+    options_.block_util = GetOption("BLOCK_UTIL", 999) / 1000.0;
+    options_.block_batch_size = GetOption("BLOCK_BATCH_SIZE", 2) << 20;
+    options_.index_buffer = GetOption("INDEX_BUFFER", 2) << 20;
+    options_.data_buffer = GetOption("DATA_BUFFER", 8) << 20;
+    options_.bf_bits_per_key = GetOption("BF_BITS", 10);
+    options_.value_size = 40;
+    options_.key_size = 10;
+
+    env_ = new StringEnv;
+  }
+
+  ~PlfsBfBench() {
+    delete writer_;
+    delete reader_;
+    delete env_;
+  }
+
+  void LogAndApply() {
+    DestroyDir(home_, options_);
+    Doit();
+    RunQueries();
+  }
+
+  void Doit() {
+    options_.allow_env_threads = false;
+    options_.compaction_pool = NULL;
+    options_.env = env_;
+    Status s = DirWriter::Open(options_, home_, &writer_);
+    ASSERT_OK(s) << "Cannot open dir";
+    char tmp[30];
+    fprintf(stderr, "Inserting keys...\n");
+    std::string dummy_val(options_.value_size, 'x');
+    Slice key(tmp, options_.key_size);
+    for (int i = 0; i < (num_files_ << 20); i++) {
+      const int fid = xxhash32(&i, sizeof(i), 0);
+      snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
+      s = writer_->Append(key, dummy_val, 0);
+      ASSERT_OK(s) << "Cannot write";
+    }
+
+    s = writer_->EpochFlush(0);
+    ASSERT_OK(s) << "Cannot flush epoch";
+    s = writer_->Finish();
+    ASSERT_OK(s) << "Cannot finish";
+
+    fprintf(stderr, "Done!\n");
+
+    delete writer_;
+    writer_ = NULL;
+  }
+
+  void RunQueries() {
+    options_.allow_env_threads = false;
+    options_.reader_pool = NULL;
+    options_.env = env_;
+    Status s = DirReader::Open(options_, home_, &reader_);
+    ASSERT_OK(s) << "Cannot open dir";
+    char tmp[30];
+    fprintf(stderr, "Reading dir...\n");
+    Slice key(tmp, options_.key_size);
+    for (int i = 0; i < (num_files_ << 20); i++) {
+      std::string dummy_buf;
+      const int fid = xxhash32(&i, sizeof(i), 0);
+      snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
+      s = reader_->ReadAll(key, &dummy_buf);
+      ASSERT_OK(s) << "Cannot read";
+    }
+
+    fprintf(stderr, "Done!\n");
+
+    delete reader_;
+    reader_ = NULL;
+  }
+
+  void PrintStats(uint64_t dura) {
+    fprintf(stderr, "OK\n");  // TODO
+  }
+
+ private:
+  int num_files_;    // Number of particle files (in millions)
+  int num_threads_;  // Number of threads for reading
+  const std::string home_;
+  DirOptions options_;
+  DirReader* reader_;
+  DirWriter* writer_;
+  Env* env_;
+};
+
 }  // namespace plfsio
 }  // namespace pdlfs
 
@@ -550,23 +800,42 @@ class PlfsIoBench {
 #include <glog/logging.h>
 #endif
 
+static void BM_Usage() {
+  fprintf(stderr, "Use --bench=io or --bench=bf to select a benchmark.\n");
+}
+
 static void BM_LogAndApply(int* argc, char*** argv) {
 #if defined(PDLFS_GFLAGS)
-  ::google::ParseCommandLineFlags(argc, argv, true);
+  google::ParseCommandLineFlags(argc, argv, true);
 #endif
 #if defined(PDLFS_GLOG)
-  ::google::InitGoogleLogging((*argv)[0]);
-  ::google::InstallFailureSignalHandler();
+  google::InitGoogleLogging((*argv)[0]);
+  google::InstallFailureSignalHandler();
 #endif
-  pdlfs::plfsio::PlfsIoBench bench;
-  bench.LogAndApply();
+  pdlfs::Slice bench_name;
+  if (*argc > 1) {
+    bench_name = pdlfs::Slice((*argv)[*argc - 1]);
+  }
+  if (*argc <= 1) {
+    BM_Usage();
+  } else if (bench_name == "--bench=io") {
+    pdlfs::plfsio::PlfsIoBench bench;
+    bench.LogAndApply();
+  } else if (bench_name == "--bench=bf") {
+    pdlfs::plfsio::PlfsBfBench bench;
+    bench.LogAndApply();
+  } else {
+    BM_Usage();
+  }
 }
 
 int main(int argc, char* argv[]) {
-  std::string arg;
-  if (argc > 1) arg = std::string(argv[argc - 1]);
-  if (arg != "--bench") {
-    return ::pdlfs::test::RunAllTests(&argc, &argv);
+  pdlfs::Slice token;
+  if (argc > 1) {
+    token = pdlfs::Slice(argv[argc - 1]);
+  }
+  if (!token.starts_with("--bench")) {
+    return pdlfs::test::RunAllTests(&argc, &argv);
   } else {
     BM_LogAndApply(&argc, &argv);
     return 0;
