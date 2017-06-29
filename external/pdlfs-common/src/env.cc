@@ -41,6 +41,8 @@ RandomAccessFile::~RandomAccessFile() {}
 
 WritableFile::~WritableFile() {}
 
+WritableFileWrapper::~WritableFileWrapper() {}
+
 Logger::~Logger() {}
 
 FileLock::~FileLock() {}

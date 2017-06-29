@@ -264,8 +264,26 @@ class WritableFile {
 
  private:
   // No copying allowed
-  WritableFile(const WritableFile&);
   void operator=(const WritableFile&);
+  WritableFile(const WritableFile&);
+};
+
+// A WritableFile implementation with all calls
+// implemented as an non-operation.
+class WritableFileWrapper : public WritableFile {
+ public:
+  WritableFileWrapper() {}
+  virtual ~WritableFileWrapper();
+
+  virtual Status Append(const Slice& data) { return Status::OK(); }
+
+  virtual Status Flush() { return Status::OK(); }
+  virtual Status Sync() { return Status::OK(); }
+
+  virtual Status Close() {
+    // Do nothing
+    return Status::OK();
+  }
 };
 
 // An interface for writing log messages.
