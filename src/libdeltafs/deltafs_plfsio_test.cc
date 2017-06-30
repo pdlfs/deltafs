@@ -383,10 +383,9 @@ class PlfsIoBench {
     link_speed_ =
         GetOption("LINK_SPEED", 6);  // Burst-buffer link speed is 6 MBps
     ordered_keys_ = GetOption("ORDERED_KEYS", false);
-    num_files_ = GetOption("NUM_FILES", 16);  // 16M files per VPIC core
-    num_threads_ = GetOption("NUM_THREADS", 4);
-    writer_ = NULL;
-    env_ = NULL;
+    num_files_ = GetOption("NUM_FILES", 16);  // 16M files per epoch
+
+    num_threads_ = GetOption("NUM_THREADS", 4);  // For bg compaction
 
     options_.rank = 0;
     options_.lg_parts = GetOption("LG_PARTS", 2);
@@ -394,20 +393,31 @@ class PlfsIoBench {
     options_.compression =
         GetOption("SNAPPY", false) ? kSnappyCompression : kNoCompression;
     options_.force_compression = true;
-    options_.total_memtable_budget = GetOption("MEMTABLE_SIZE", 32) << 20;
-    options_.block_size = GetOption("BLOCK_SIZE", 128) << 10;
+    options_.total_memtable_budget =
+        static_cast<size_t>(GetOption("MEMTABLE_SIZE", 32) << 20);
+    options_.block_size =
+        static_cast<size_t>(GetOption("BLOCK_SIZE", 128) << 10);
+    options_.block_batch_size =
+        static_cast<size_t>(GetOption("BLOCK_BATCH_SIZE", 2) << 20);
     options_.block_util = GetOption("BLOCK_UTIL", 999) / 1000.0;
-    options_.block_batch_size = GetOption("BLOCK_BATCH_SIZE", 2) << 20;
-    options_.index_buffer = GetOption("INDEX_BUFFER", 2) << 20;
-    options_.data_buffer = GetOption("DATA_BUFFER", 8) << 20;
-    options_.bf_bits_per_key = GetOption("BF_BITS", 10);
-    options_.value_size = 40;
-    options_.key_size = 10;
+    options_.bf_bits_per_key = static_cast<size_t>(GetOption("BF_BITS", 10));
+    options_.value_size = static_cast<size_t>(GetOption("VALUE_SIZE", 40));
+    options_.key_size = static_cast<size_t>(GetOption("KEY_SIZE", 10));
+    options_.data_buffer =
+        static_cast<size_t>(GetOption("DATA_BUFFER", 8) << 20);
+    options_.index_buffer =
+        static_cast<size_t>(GetOption("INDEX_BUFFER", 2) << 20);
+
+    writer_ = NULL;
+
+    env_ = NULL;
   }
 
   ~PlfsIoBench() {
     delete writer_;
+    writer_ = NULL;
     delete env_;
+    env_ = NULL;
   }
 
   void LogAndApply() {
@@ -416,9 +426,19 @@ class PlfsIoBench {
   }
 
   void DoIt() {
-    env_ = new FakeEnv(static_cast<uint64_t>(link_speed_ << 20));
-    ThreadPool* pool = ThreadPool::NewFixed(num_threads_);
-    options_.compaction_pool = pool;
+    bool owns_pool = false;
+    if (num_threads_ != 0) {
+      options_.compaction_pool = ThreadPool::NewFixed(num_threads_);
+      owns_pool = true;
+    } else {
+      options_.allow_env_threads = false;
+      options_.compaction_pool = NULL;
+    }
+    bool owns_env = false;
+    if (env_ == NULL) {
+      env_ = new FakeEnv(static_cast<uint64_t>(link_speed_ << 20));
+      owns_env = true;
+    }
     options_.env = env_;
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
@@ -456,10 +476,16 @@ class PlfsIoBench {
 
     delete writer_;
     writer_ = NULL;
-    delete env_;
-    env_ = NULL;
 
-    delete pool;
+    if (owns_pool) {
+      delete options_.compaction_pool;
+      options_.compaction_pool = NULL;
+    }
+    if (owns_env) {
+      delete options_.env;
+      options_.env = NULL;
+      env_ = NULL;
+    }
   }
 
 #ifdef PDLFS_PLATFORM_POSIX
@@ -684,85 +710,30 @@ class StringEnv : public EnvWrapper {
 
 }  // anonymous namespace
 
-class PlfsBfBench {
+class PlfsBfBench : PlfsIoBench {
  public:
-  static int GetOption(const char* key, int defval) {
-    const char* env = getenv(key);
-    if (env == NULL) {
-      return defval;
-    } else if (strlen(env) == 0) {
-      return defval;
-    } else {
-      return atoi(env);
-    }
-  }
+  PlfsBfBench() : PlfsIoBench() {
+    num_threads_ = 0;
 
-  PlfsBfBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
-    num_files_ = GetOption("NUM_FILES", 16);  // 16M files per VPIC core
-
-    options_.rank = 0;
-    options_.lg_parts = GetOption("LG_PARTS", 2);
-    options_.total_memtable_budget = GetOption("MEMTABLE_SIZE", 48) << 20;
-    options_.block_size = GetOption("BLOCK_SIZE", 128) << 10;
-    options_.block_util = GetOption("BLOCK_UTIL", 999) / 1000.0;
-    options_.block_batch_size = GetOption("BLOCK_BATCH_SIZE", 2) << 20;
-    options_.index_buffer = GetOption("INDEX_BUFFER", 2) << 20;
-    options_.data_buffer = GetOption("DATA_BUFFER", 8) << 20;
-    options_.bf_bits_per_key = GetOption("BF_BITS", 10);
-    options_.value_size = 40;
-    options_.key_size = 10;
+    options_.verify_checksums = false;
+    options_.paranoid_checks = false;
 
     env_ = new StringEnv;
-
-    reader_ = NULL;
-    writer_ = NULL;
   }
 
   ~PlfsBfBench() {
     delete writer_;
+    writer_ = NULL;
     delete reader_;
+    reader_ = NULL;
     delete env_;
+    env_ = NULL;
   }
 
   void LogAndApply() {
     DestroyDir(home_, options_);
     DoIt();
     RunQueries();
-  }
-
-  void DoIt() {
-    options_.allow_env_threads = false;
-    options_.compaction_pool = NULL;
-    options_.env = env_;
-    Status s = DirWriter::Open(options_, home_, &writer_);
-    ASSERT_OK(s) << "Cannot open dir";
-    char tmp[30];
-    fprintf(stderr, "Inserting data...\n");
-    std::string dummy_val(options_.value_size, 'x');
-    Slice key(tmp, options_.key_size);
-    const int total_files = num_files_ << 20;
-    for (int i = 0; i < total_files; i++) {
-      const int fid = xxhash32(&i, sizeof(i), 0);
-      snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
-      s = writer_->Append(key, dummy_val, 0);
-      ASSERT_OK(s) << "Cannot write";
-      if (i % (1 << 20) == (1 << 20) - 1) {
-        fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / total_files);
-      }
-    }
-    fprintf(stderr, "\n");
-
-    s = writer_->EpochFlush(0);
-    ASSERT_OK(s) << "Cannot flush epoch";
-    s = writer_->Finish();
-    ASSERT_OK(s) << "Cannot finish";
-
-    fprintf(stderr, "Done!\n");
-
-    PrintStatsForWrite();
-
-    delete writer_;
-    writer_ = NULL;
   }
 
   void RunQueries() {
@@ -789,37 +760,13 @@ class PlfsBfBench {
     fprintf(stderr, "\n");
     fprintf(stderr, "Done!\n");
 
-    PrintStats();
+    Report();
 
     delete reader_;
     reader_ = NULL;
   }
 
-  void PrintStatsForWrite() {
-    const double ki = 1024.0;
-    fprintf(stderr, "----------------------------------------\n");
-    fprintf(stderr, "     Num Particle Files: %d Mi\n", num_files_);
-    fprintf(stderr, "          Particle Data: %d MB\n", 48 * num_files_);
-    fprintf(stderr, "    Total MemTable Size: %d MB\n",
-            int(options_.total_memtable_budget) >> 20);
-    fprintf(stderr, " Estimated SSTable Size: %.3f MB\n",
-            writer_->TEST_estimated_sstable_size() / ki / ki);
-    fprintf(stderr, "   Estimated Block Size: %d KB (util: %.1f%%)\n",
-            int(options_.block_size) >> 10, options_.block_util * 100);
-    fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
-
-    fprintf(stderr, "                BF Size: %d (bits per key)\n",
-            int(options_.bf_bits_per_key));
-    fprintf(stderr, " Total Index Block Size: %.3f MB\n",
-            writer_->TEST_index_size() / ki / ki);
-    fprintf(stderr, "    Total BF Block Size: %.3f MB\n",
-            writer_->TEST_filter_size() / ki / ki);
-    const IoStats stats = writer_->GetIoStats();
-    fprintf(stderr, "     Final Phys Indexes: %.3f MB\n",
-            stats.index_bytes / ki / ki);
-  }
-
-  void PrintStats() {
+  void Report() {
     const double ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
     const IoStats stats = reader_->GetIoStats();
@@ -834,12 +781,7 @@ class PlfsBfBench {
   }
 
  private:
-  int num_files_;  // Number of particle files (in millions)
-  const std::string home_;
-  DirOptions options_;
   DirReader* reader_;
-  DirWriter* writer_;
-  Env* env_;
 };
 
 }  // namespace plfsio
