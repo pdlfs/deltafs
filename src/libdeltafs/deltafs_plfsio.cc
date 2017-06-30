@@ -1031,8 +1031,10 @@ IoStats DirReaderImpl::GetIoStats() const {
   MutexLock ml(&mutex_);
   IoStats result;
   for (size_t i = 0; i < num_parts_; i++) {
-    result.index_bytes += dirs_[i]->io_stats_.TotalBytes();
-    result.index_ops += dirs_[i]->io_stats_.TotalOps();
+    if (dirs_[i] != NULL) {
+      result.index_bytes += dirs_[i]->io_stats_.TotalBytes();
+      result.index_ops += dirs_[i]->io_stats_.TotalOps();
+    }
   }
   result.data_bytes = io_stats_.TotalBytes();
   result.data_ops = io_stats_.TotalOps();
