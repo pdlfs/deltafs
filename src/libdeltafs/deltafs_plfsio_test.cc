@@ -759,6 +759,8 @@ class PlfsBfBench {
 
     fprintf(stderr, "Done!\n");
 
+    PrintStatsForWrite();
+
     delete writer_;
     writer_ = NULL;
   }
@@ -793,7 +795,7 @@ class PlfsBfBench {
     reader_ = NULL;
   }
 
-  void PrintStats() {
+  void PrintStatsForWrite() {
     const double ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
     fprintf(stderr, "     Num Particle Files: %d Mi\n", num_files_);
@@ -805,15 +807,22 @@ class PlfsBfBench {
     fprintf(stderr, "   Estimated Block Size: %d KB (util: %.1f%%)\n",
             int(options_.block_size) >> 10, options_.block_util * 100);
     fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
-    const IoStats stats = reader_->GetIoStats();
+
     fprintf(stderr, "                BF Size: %d (bits per key)\n",
             int(options_.bf_bits_per_key));
     fprintf(stderr, " Total Index Block Size: %.3f MB\n",
             writer_->TEST_index_size() / ki / ki);
     fprintf(stderr, "    Total BF Block Size: %.3f MB\n",
             writer_->TEST_filter_size() / ki / ki);
+    const IoStats stats = reader_->GetIoStats();
     fprintf(stderr, "     Final Phys Indexes: %.3f MB\n",
             stats.index_bytes / ki / ki);
+  }
+
+  void PrintStats() {
+    const double ki = 1024.0;
+    fprintf(stderr, "----------------------------------------\n");
+    const IoStats stats = reader_->GetIoStats();
     fprintf(stderr, "              Num Seeks: %.3f (per file)\n",
             1.0 * stats.data_ops / (num_files_ << 20));
     fprintf(stderr, "  Total Indexes Fetched: %.3f TB\n",
