@@ -499,7 +499,7 @@ class PlfsIoBench {
             ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "    Indexes Compression: %s\n",
             options_.compression == kSnappyCompression ? "Yes" : "No");
-    fprintf(stderr, "                BF Bits: %d (bits pey key)\n",
+    fprintf(stderr, "                BF Size: %d (bits pey key)\n",
             int(options_.bf_bits_per_key));
     fprintf(stderr, "     Num Particle Files: %d Mi\n", num_files_);
     fprintf(stderr, "          Particle Data: %d MB\n", 48 * num_files_);
@@ -798,9 +798,9 @@ class PlfsBfBench {
     fprintf(stderr, "     Num Particle Files: %d Mi\n", num_files_);
     fprintf(stderr, "          Particle Data: %d MB\n", 48 * num_files_);
     const IoStats stats = reader_->GetIoStats();
-    fprintf(stderr, "                BF Bits: %d (bits per key)\n",
+    fprintf(stderr, "                BF Size: %d (bits per key)\n",
             int(options_.bf_bits_per_key));
-    fprintf(stderr, "                  Seeks: %.3f (per file)\n",
+    fprintf(stderr, "              Num Seeks: %.3f (per file)\n",
             1.0 * stats.data_ops / (num_files_ << 20));
     fprintf(stderr, "  Total Indexes Fetched: %.3f MB\n",
             1.0 * stats.index_bytes / ki / ki);
