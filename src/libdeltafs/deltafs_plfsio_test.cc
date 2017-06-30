@@ -754,6 +754,7 @@ class PlfsBfBench : PlfsIoBench {
     fprintf(stderr, "Reading dir...\n");
     Slice key(tmp, options_.key_size);
     const int total_files = num_files_ << 20;
+    uint64_t accumulated_seeks = 0;
     for (int i = 0; i < total_files; i++) {
       std::string dummy_buf;
       const int fid = xxhash32(&i, sizeof(i), 0);
@@ -764,6 +765,9 @@ class PlfsBfBench : PlfsIoBench {
       if (i % (1 << 18) == (1 << 18) - 1) {
         fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / total_files);
       }
+      const IoStats ios = reader_->GetIoStats();
+      seeks_.Add(10.0 * (ios.data_ops - accumulated_seeks));
+      accumulated_seeks = ios.data_ops;
     }
     fprintf(stderr, "\n");
     fprintf(stderr, "Done!\n");
@@ -777,9 +781,21 @@ class PlfsBfBench : PlfsIoBench {
   void Report() {
     const double ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
-    const IoStats stats = reader_->GetIoStats();
     fprintf(stderr, "          Avg Num Seeks: %.3f (per file)\n",
-            1.0 * stats.data_ops / (num_files_ << 20));
+            seeks_.Average() / 10.0);
+    fprintf(stderr, "              10%% Seeks: %.3f\n",
+            seeks_.Percentile(10) / 10.0);
+    fprintf(stderr, "              30%% Seeks: %.3f\n",
+            seeks_.Percentile(30) / 10.0);
+    fprintf(stderr, "              50%% Seeks: %.3f\n",
+            seeks_.Percentile(50) / 10.0);
+    fprintf(stderr, "              70%% Seeks: %.3f\n",
+            seeks_.Percentile(70) / 10.0);
+    fprintf(stderr, "              90%% Seeks: %.3f\n",
+            seeks_.Percentile(90) / 10.0);
+    fprintf(stderr, "              99%% Seeks: %.3f\n",
+            seeks_.Percentile(99) / 10.0);
+    const IoStats stats = reader_->GetIoStats();
     fprintf(stderr, "  Total Indexes Fetched: %.3f MB\n",
             1.0 * stats.index_bytes / ki / ki);
     fprintf(stderr, "     Total Data Fetched: %.3f TB\n",
@@ -790,6 +806,7 @@ class PlfsBfBench : PlfsIoBench {
 
  private:
   DirReader* reader_;
+  Histogram seeks_;
 };
 
 }  // namespace plfsio
