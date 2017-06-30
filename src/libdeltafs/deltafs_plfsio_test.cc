@@ -568,6 +568,10 @@ class PlfsIoBench {
     } else {
       fprintf(stderr, "                   MTBW: N/A\n");
     }
+    const uint32_t num_tables = writer_->TEST_num_sstables();
+    fprintf(stderr, "         Total SSTables: %d\n", int(num_tables));
+    fprintf(stderr, " SSTables Per Partition: %.1f\n",
+            1.0 * num_tables / (1 << options_.lg_parts));
     fprintf(stderr, "             Value Size: %d bytes\n",
             int(options_.value_size));
     fprintf(stderr, "               Key Size: %d bytes\n",
