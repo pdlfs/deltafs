@@ -699,9 +699,6 @@ class PlfsBfBench {
 
   PlfsBfBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
     num_files_ = GetOption("NUM_FILES", 16);  // 16M files per VPIC core
-    num_threads_ = 1;
-    reader_ = NULL;
-    writer_ = NULL;
 
     options_.rank = 0;
     options_.lg_parts = GetOption("LG_PARTS", 2);
@@ -716,6 +713,9 @@ class PlfsBfBench {
     options_.key_size = 10;
 
     env_ = new StringEnv;
+
+    reader_ = NULL;
+    writer_ = NULL;
   }
 
   ~PlfsBfBench() {
@@ -726,11 +726,11 @@ class PlfsBfBench {
 
   void LogAndApply() {
     DestroyDir(home_, options_);
-    Doit();
+    DoIt();
     RunQueries();
   }
 
-  void Doit() {
+  void DoIt() {
     options_.allow_env_threads = false;
     options_.compaction_pool = NULL;
     options_.env = env_;
@@ -750,6 +750,7 @@ class PlfsBfBench {
         fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / total_files);
       }
     }
+    fprintf(stderr, "\n");
 
     s = writer_->EpochFlush(0);
     ASSERT_OK(s) << "Cannot flush epoch";
@@ -797,13 +798,26 @@ class PlfsBfBench {
     fprintf(stderr, "----------------------------------------\n");
     fprintf(stderr, "     Num Particle Files: %d Mi\n", num_files_);
     fprintf(stderr, "          Particle Data: %d MB\n", 48 * num_files_);
+    fprintf(stderr, "    Total MemTable Size: %d MB\n",
+            int(options_.total_memtable_budget) >> 20);
+    fprintf(stderr, " Estimated SSTable Size: %.3f MB\n",
+            writer_->TEST_estimated_sstable_size() / ki / ki);
+    fprintf(stderr, "   Estimated Block Size: %d KB (util: %.1f%%)\n",
+            int(options_.block_size) >> 10, options_.block_util * 100);
+    fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
     const IoStats stats = reader_->GetIoStats();
     fprintf(stderr, "                BF Size: %d (bits per key)\n",
             int(options_.bf_bits_per_key));
+    fprintf(stderr, " Total Index Block Size: %.3f MB\n",
+            writer_->TEST_index_size() / ki / ki);
+    fprintf(stderr, "    Total BF Block Size: %.3f MB\n",
+            writer_->TEST_filter_size() / ki / ki);
+    fprintf(stderr, "     Final Phys Indexes: %.3f MB\n",
+            stats.index_bytes / ki / ki);
     fprintf(stderr, "              Num Seeks: %.3f (per file)\n",
             1.0 * stats.data_ops / (num_files_ << 20));
-    fprintf(stderr, "  Total Indexes Fetched: %.3f MB\n",
-            1.0 * stats.index_bytes / ki / ki);
+    fprintf(stderr, "  Total Indexes Fetched: %.3f TB\n",
+            1.0 * stats.index_bytes / ki / ki / ki / ki);
     fprintf(stderr, "     Total Data Fetched: %.3f MB\n",
             1.0 * stats.data_bytes / ki / ki);
     fprintf(stderr, "           Avg I/O size: %.3f KB\n",
@@ -811,8 +825,7 @@ class PlfsBfBench {
   }
 
  private:
-  int num_files_;    // Number of particle files (in millions)
-  int num_threads_;  // Number of threads for reading
+  int num_files_;  // Number of particle files (in millions)
   const std::string home_;
   DirOptions options_;
   DirReader* reader_;
