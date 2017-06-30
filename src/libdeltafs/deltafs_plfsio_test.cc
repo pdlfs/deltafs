@@ -424,10 +424,11 @@ class PlfsIoBench {
     ASSERT_OK(s) << "Cannot open dir";
     const uint64_t start = env_->NowMicros();
     char tmp[30];
-    fprintf(stderr, "Doing it...\n");
+    fprintf(stderr, "Inserting data ...\n");
     std::string dummy_val(options_.value_size, 'x');
     Slice key(tmp, options_.key_size);
-    for (int i = 0; i < (num_files_ << 20); i++) {
+    const int total_files = num_files_ << 20;
+    for (int i = 0; i < total_files; i++) {
       int fid;
       if (!ordered_keys_) {
         fid = xxhash32(&i, sizeof(i), 0);
@@ -437,7 +438,11 @@ class PlfsIoBench {
       snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
       s = writer_->Append(key, dummy_val, 0);
       ASSERT_OK(s) << "Cannot write";
+      if (i % (1 << 20) == (1 << 20) - 1) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / total_files);
+      }
     }
+    fprintf(stderr, "\n");
 
     s = writer_->EpochFlush(0);
     ASSERT_OK(s) << "Cannot flush epoch";
@@ -494,7 +499,7 @@ class PlfsIoBench {
             ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "    Indexes Compression: %s\n",
             options_.compression == kSnappyCompression ? "Yes" : "No");
-    fprintf(stderr, "                BF Bits: %d (pey key)\n",
+    fprintf(stderr, "                BF Bits: %d (bits pey key)\n",
             int(options_.bf_bits_per_key));
     fprintf(stderr, "     Num Particle Files: %d Mi\n", num_files_);
     fprintf(stderr, "          Particle Data: %d MB\n", 48 * num_files_);
@@ -732,14 +737,18 @@ class PlfsBfBench {
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
     char tmp[30];
-    fprintf(stderr, "Inserting keys...\n");
+    fprintf(stderr, "Inserting data ...\n");
     std::string dummy_val(options_.value_size, 'x');
     Slice key(tmp, options_.key_size);
-    for (int i = 0; i < (num_files_ << 20); i++) {
+    const int total_files = num_files_ << 20;
+    for (int i = 0; i < total_files; i++) {
       const int fid = xxhash32(&i, sizeof(i), 0);
       snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
       s = writer_->Append(key, dummy_val, 0);
       ASSERT_OK(s) << "Cannot write";
+      if (i % (1 << 20) == (1 << 20) - 1) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / total_files);
+      }
     }
 
     s = writer_->EpochFlush(0);
@@ -762,22 +771,43 @@ class PlfsBfBench {
     char tmp[30];
     fprintf(stderr, "Reading dir...\n");
     Slice key(tmp, options_.key_size);
-    for (int i = 0; i < (num_files_ << 20); i++) {
+    const int total_files = num_files_ << 20;
+    for (int i = 0; i < total_files; i++) {
       std::string dummy_buf;
       const int fid = xxhash32(&i, sizeof(i), 0);
       snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
       s = reader_->ReadAll(key, &dummy_buf);
       ASSERT_OK(s) << "Cannot read";
+      ASSERT_TRUE(dummy_buf.size() == options_.value_size);
+      if (i % (1 << 20) == (1 << 20) - 1) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / total_files);
+      }
     }
-
+    fprintf(stderr, "\n");
     fprintf(stderr, "Done!\n");
+
+    PrintStats();
 
     delete reader_;
     reader_ = NULL;
   }
 
-  void PrintStats(uint64_t dura) {
-    fprintf(stderr, "OK\n");  // TODO
+  void PrintStats() {
+    const double ki = 1024.0;
+    fprintf(stderr, "----------------------------------------\n");
+    fprintf(stderr, "     Num Particle Files: %d Mi\n", num_files_);
+    fprintf(stderr, "          Particle Data: %d MB\n", 48 * num_files_);
+    const IoStats stats = reader_->GetIoStats();
+    fprintf(stderr, "                BF Bits: %d (bits per key)\n",
+            int(options_.bf_bits_per_key));
+    fprintf(stderr, "                  Seeks: %.3f (per file)\n",
+            1.0 * stats.data_ops / (num_files_ << 20));
+    fprintf(stderr, "  Total Indexes Fetched: %.3f MB\n",
+            1.0 * stats.index_bytes / ki / ki);
+    fprintf(stderr, "     Total Data Fetched: %.3f MB\n",
+            1.0 * stats.data_bytes / ki / ki);
+    fprintf(stderr, "           Avg I/O size: %.3f KB\n",
+            1.0 * stats.data_bytes / stats.data_ops / ki);
   }
 
  private:
