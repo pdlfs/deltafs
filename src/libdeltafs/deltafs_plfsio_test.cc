@@ -814,7 +814,7 @@ class PlfsBfBench {
             writer_->TEST_index_size() / ki / ki);
     fprintf(stderr, "    Total BF Block Size: %.3f MB\n",
             writer_->TEST_filter_size() / ki / ki);
-    const IoStats stats = reader_->GetIoStats();
+    const IoStats stats = writer_->GetIoStats();
     fprintf(stderr, "     Final Phys Indexes: %.3f MB\n",
             stats.index_bytes / ki / ki);
   }
