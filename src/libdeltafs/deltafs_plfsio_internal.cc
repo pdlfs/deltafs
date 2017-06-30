@@ -1002,7 +1002,9 @@ size_t DirLogger::memory_usage() const {
 }
 
 static Status ReadBlock(LogSource* source, const DirOptions& options,
-                        const BlockHandle& handle, BlockContents* result) {
+                        const BlockHandle& handle, BlockContents* result,
+                        bool cached = false, char* tmp = NULL,
+                        size_t tmp_length = 0) {
   result->data = Slice();
   result->heap_allocated = false;
   result->cachable = false;
@@ -1010,7 +1012,12 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
   assert(source != NULL);
   size_t n = static_cast<size_t>(handle.size());
   size_t m = n + kBlockTrailerSize;
-  char* buf = new char[m];
+  char* buf = tmp;
+  if (cached) {
+    buf = NULL;
+  } else if (buf == NULL || tmp_length < m) {
+    buf = new char[m];
+  }
   Slice contents;
   Status status = source->Read(handle.offset(), m, &contents, buf);
   if (status.ok()) {
@@ -1019,7 +1026,7 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
     }
   }
   if (!status.ok()) {
-    delete[] buf;
+    if (buf != tmp) delete[] buf;
     return status;
   }
 
@@ -1029,7 +1036,7 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
     const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
     const uint32_t actual = crc32c::Value(data, n + 1);
     if (actual != crc) {
-      delete[] buf;
+      if (buf != tmp) delete[] buf;
       status = Status::Corruption("Block checksum mismatch");
       return status;
     }
@@ -1038,16 +1045,20 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
   if (data[n] == kSnappyCompression) {
     size_t ulen = 0;
     if (!port::Snappy_GetUncompressedLength(data, n, &ulen)) {
-      delete[] buf;
-      return Status::Corruption("Cannot compress");
+      if (buf != tmp) delete[] buf;
+      status = Status::Corruption("Cannot compress");
+      return status;
     }
     char* ubuf = new char[ulen];
     if (!port::Snappy_Uncompress(data, n, ubuf)) {
-      delete[] buf;
+      if (buf != tmp) delete[] buf;
       delete[] ubuf;
-      return Status::Corruption("Cannot compress");
+      status = Status::Corruption("Cannot compress");
+      return status;
     }
-    delete[] buf;
+    if (buf != tmp) {
+      delete[] buf;
+    }
     result->data = Slice(ubuf, ulen);
     result->heap_allocated = true;
     result->cachable = true;
@@ -1055,13 +1066,15 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
     // File implementation has given us pointer to some other data.
     // Use it directly under the assumption that it will be live
     // while the file is open.
-    delete[] buf;
+    if (buf != tmp) {
+      delete[] buf;
+    }
     result->data = Slice(data, n);
     result->heap_allocated = false;
     result->cachable = false;  // Avoid double cache
   } else {
     result->data = Slice(buf, n);
-    result->heap_allocated = true;
+    result->heap_allocated = (buf != tmp);
     result->cachable = true;
   }
 
@@ -1128,7 +1141,7 @@ Status Dir::Fetch(const Slice& key, const BlockHandle& handle, Saver saver,
 bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
   Status status;
   BlockContents contents;
-  status = ReadBlock(indx_, options_, handle, &contents);
+  status = ReadBlock(indx_, options_, handle, &contents, true);
   if (status.ok()) {
     bool r = BloomKeyMayMatch(key, contents.data);
     if (contents.heap_allocated) {
@@ -1167,7 +1180,7 @@ Status Dir::Fetch(const Slice& key, const TableHandle& handle, Saver saver,
   BlockHandle index_handle;
   index_handle.set_offset(handle.index_offset());
   index_handle.set_size(handle.index_size());
-  status = ReadBlock(indx_, options_, index_handle, &index_contents);
+  status = ReadBlock(indx_, options_, index_handle, &index_contents, true);
   if (!status.ok()) {
     return status;
   }
@@ -1251,7 +1264,7 @@ Status Dir::TryGet(const Slice& key, const BlockHandle& handle, uint32_t epoch,
   Status status;
   // Load the meta index for the epoch
   BlockContents meta_index_contents;
-  status = ReadBlock(indx_, options_, handle, &meta_index_contents);
+  status = ReadBlock(indx_, options_, handle, &meta_index_contents, true);
   if (!status.ok()) {
     return status;
   }
@@ -1535,7 +1548,7 @@ Status Dir::Open(LogSource* indx) {
 
   BlockContents contents;
   const BlockHandle& handle = footer.epoch_index_handle();
-  status = ReadBlock(indx, options_, handle, &contents);
+  status = ReadBlock(indx, options_, handle, &contents, true);
   if (!status.ok()) {
     return status;
   }
