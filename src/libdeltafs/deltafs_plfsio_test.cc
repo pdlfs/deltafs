@@ -472,7 +472,7 @@ class PlfsIoBench {
     fprintf(stderr, "Done!\n");
     uint64_t dura = env_->NowMicros() - start;
 
-    PrintStats(dura);
+    PrintStats(dura, owns_env);
 
     delete writer_;
     writer_ = NULL;
@@ -494,7 +494,7 @@ class PlfsIoBench {
   }
 #endif
 
-  void PrintStats(uint64_t dura) {
+  void PrintStats(uint64_t dura, bool owns_env) {
     const double k = 1000.0, ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
     const uint64_t total_memory_usage = writer_->TEST_total_memory_usage();
@@ -525,11 +525,11 @@ class PlfsIoBench {
             ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "    Indexes Compression: %s\n",
             options_.compression == kSnappyCompression ? "Yes" : "No");
-    fprintf(stderr, "                BF Size: %d (bits pey key)\n",
+    fprintf(stderr, "              BF Budget: %d (bits pey key)\n",
             int(options_.bf_bits_per_key));
-    fprintf(stderr, "     Num Particle Files: %d Mi\n", num_files_);
-    fprintf(stderr, "          Particle Data: %d MB\n", 48 * num_files_);
-    fprintf(stderr, "    Total MemTable Size: %d MB\n",
+    fprintf(stderr, "     Num Files Inserted: %d million\n", num_files_);
+    fprintf(stderr, "        Total File Data: %d MB\n", 48 * num_files_);
+    fprintf(stderr, "  Total MemTable Budget: %d MB\n",
             int(options_.total_memtable_budget) >> 20);
     fprintf(stderr, " Estimated SSTable Size: %.3f MB\n",
             writer_->TEST_estimated_sstable_size() / ki / ki);
@@ -544,9 +544,9 @@ class PlfsIoBench {
                 num_files_ / dura);
     fprintf(stderr, "              Index Buf: %d MB (x%d)\n",
             int(options_.index_buffer) >> 20, 1 << options_.lg_parts);
-    fprintf(stderr, " Total Index Block Size: %.3f MB\n",
+    fprintf(stderr, "  Total SSTable Indexes: %.3f MB (before compression)\n",
             writer_->TEST_index_size() / ki / ki);
-    fprintf(stderr, "    Total BF Block Size: %.3f MB\n",
+    fprintf(stderr, "               Total BF: %.3f MB (before compression)\n",
             writer_->TEST_filter_size() / ki / ki);
     fprintf(stderr, "     Final Phys Indexes: %.3f MB\n",
             stats.index_bytes / ki / ki);
@@ -554,16 +554,24 @@ class PlfsIoBench {
             int(options_.block_batch_size) >> 20, 1 << options_.lg_parts);
     fprintf(stderr, "               Data Buf: %d MB\n",
             int(options_.data_buffer) >> 20);
-    fprintf(stderr, "  Total Data Block Size: %.3f MB\n",
+    fprintf(stderr, "     Total SSTable Data: %.3f MB\n",
             writer_->TEST_data_size() / ki / ki);
     fprintf(stderr, "        Final Phys Data: %.3f MB\n",
             stats.data_bytes / ki / ki);
     fprintf(stderr, "           Avg I/O Size: %.3f MB\n",
             1.0 * stats.data_bytes / stats.data_ops / ki / ki);
-    const Histogram* hist = dynamic_cast<FakeEnv*>(env_)->GetHist(".dat");
-    ASSERT_TRUE(hist != NULL);
-    fprintf(stderr, "                   MTBW: %.3f s\n",
-            hist->Average() / k / k);
+    if (owns_env) {
+      const Histogram* hist = dynamic_cast<FakeEnv*>(env_)->GetHist(".dat");
+      ASSERT_TRUE(hist != NULL);
+      fprintf(stderr, "                   MTBW: %.3f s\n",
+              hist->Average() / k / k);
+    } else {
+      fprintf(stderr, "                   MTBW: N/A\n");
+    }
+    fprintf(stderr, "             Value Size: %d bytes\n",
+            int(options_.value_size));
+    fprintf(stderr, "               Key Size: %d bytes\n",
+            int(options_.key_size));
   }
 
   int link_speed_;  // Link speed to emulate (in MBps)
@@ -753,7 +761,7 @@ class PlfsBfBench : PlfsIoBench {
       s = reader_->ReadAll(key, &dummy_buf);
       ASSERT_OK(s) << "Cannot read";
       ASSERT_TRUE(dummy_buf.size() == options_.value_size);
-      if (i % (1 << 20) == (1 << 20) - 1) {
+      if (i % (1 << 18) == (1 << 18) - 1) {
         fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / total_files);
       }
     }
@@ -770,12 +778,12 @@ class PlfsBfBench : PlfsIoBench {
     const double ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
     const IoStats stats = reader_->GetIoStats();
-    fprintf(stderr, "              Num Seeks: %.3f (per file)\n",
+    fprintf(stderr, "          Avg Num Seeks: %.3f (per file)\n",
             1.0 * stats.data_ops / (num_files_ << 20));
-    fprintf(stderr, "  Total Indexes Fetched: %.3f TB\n",
-            1.0 * stats.index_bytes / ki / ki / ki / ki);
-    fprintf(stderr, "     Total Data Fetched: %.3f MB\n",
-            1.0 * stats.data_bytes / ki / ki);
+    fprintf(stderr, "  Total Indexes Fetched: %.3f MB\n",
+            1.0 * stats.index_bytes / ki / ki);
+    fprintf(stderr, "     Total Data Fetched: %.3f TB\n",
+            1.0 * stats.data_bytes / ki / ki / ki / ki);
     fprintf(stderr, "           Avg I/O size: %.3f KB\n",
             1.0 * stats.data_bytes / stats.data_ops / ki);
   }
