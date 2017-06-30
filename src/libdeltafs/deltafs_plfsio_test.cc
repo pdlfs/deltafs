@@ -424,7 +424,7 @@ class PlfsIoBench {
     ASSERT_OK(s) << "Cannot open dir";
     const uint64_t start = env_->NowMicros();
     char tmp[30];
-    fprintf(stderr, "Inserting data ...\n");
+    fprintf(stderr, "Inserting data...\n");
     std::string dummy_val(options_.value_size, 'x');
     Slice key(tmp, options_.key_size);
     const int total_files = num_files_ << 20;
@@ -737,7 +737,7 @@ class PlfsBfBench {
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
     char tmp[30];
-    fprintf(stderr, "Inserting data ...\n");
+    fprintf(stderr, "Inserting data...\n");
     std::string dummy_val(options_.value_size, 'x');
     Slice key(tmp, options_.key_size);
     const int total_files = num_files_ << 20;
