@@ -135,6 +135,7 @@ class TableLogger {
   TableHandle pending_meta_handle_;
   bool pending_root_entry_;
   BlockHandle pending_root_handle_;
+  uint32_t total_num_tables_;
   uint32_t num_tables_;  // Number of tables generated within the current epoch
   uint32_t num_epochs_;  // Number of epochs generated
   std::string uncommitted_indexes_;
@@ -158,6 +159,7 @@ class DirLogger {
 
   // Report compaction stats
   const OutputStats* output_stats() const { return &tb_->output_stats_; }
+  uint32_t num_tables() const { return tb_->total_num_tables_; }
   size_t estimated_table_size() const { return tb_bytes_; }
   size_t memory_usage() const;  // Report real memory usage
 

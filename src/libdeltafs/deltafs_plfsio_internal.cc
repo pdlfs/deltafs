@@ -271,6 +271,7 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
       pending_indx_entry_(false),
       pending_meta_entry_(false),
       pending_root_entry_(false),
+      total_num_tables_(0),
       num_tables_(0),
       num_epochs_(0),
       pending_data_flush_(0),
@@ -461,6 +462,7 @@ void TableLogger::EndTable(T* filter_block, ChunkType filter_type) {
     smallest_key_.clear();
     largest_key_.clear();
     last_key_.clear();
+    total_num_tables_++;
     num_tables_++;
   }
 }

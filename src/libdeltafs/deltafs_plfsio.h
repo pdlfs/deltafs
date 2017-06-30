@@ -326,6 +326,9 @@ class DirWriter {
   // Return the estimated size of each SSTable.
   virtual uint64_t TEST_estimated_sstable_size() const = 0;
 
+  // Return the total number of SSTable generated so far.
+  virtual uint32_t TEST_num_sstables() const = 0;
+
   // Return the total amount of memory reserved by this directory.
   virtual uint64_t TEST_total_memory_usage() const = 0;
 
