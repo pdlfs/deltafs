@@ -384,6 +384,7 @@ class PlfsIoBench {
     link_speed_ =
         GetOption("LINK_SPEED", 6);  // Burst-buffer link speed is 6 MBps
     batched_insertion_ = GetOption("BATCHED_INSERTION", false);
+    batch_size_ = GetOption("BATCH_SIZE", 64 << 10);  // Files per batch op
     ordered_keys_ = GetOption("ORDERED_KEYS", false);
     num_files_ = GetOption("NUM_FILES", 16);  // 16M files per epoch
 
@@ -430,19 +431,26 @@ class PlfsIoBench {
  protected:
   class BigBatch : public BatchCursor {
    public:
-    BigBatch(const DirOptions& options, int num_files, bool ordered_keys)
+    BigBatch(const DirOptions& options, int base_offset, int size)
         : key_size_(options.key_size),
           dummy_val_(options.value_size, 'x'),
-          total_files_(static_cast<uint32_t>(num_files << 20)),
-          ordered_keys_(ordered_keys),
-          offset_(total_files_) {}
+          base_offset_(static_cast<uint32_t>(base_offset)),
+          size_(static_cast<uint32_t>(size)),
+          ordered_keys_(options.skip_sort),
+          offset_(size_) {}
 
     virtual ~BigBatch() {}
 
+    void Reset(int base_offset, int size) {
+      base_offset_ = static_cast<uint32_t>(base_offset);
+      size_ = static_cast<uint32_t>(size);
+      offset_ = size_;
+    }
+
     virtual Status status() const { return status_; }
-    virtual bool Valid() const { return offset_ < total_files_; }
+    virtual bool Valid() const { return offset_ < size_; }
     virtual uint32_t offset() const { return offset_; }
-    virtual Slice fid() const { return Slice(tmp_, key_size_); }
+    virtual Slice fid() const { return Slice(key_, key_size_); }
     virtual Slice data() const { return dummy_val_; }
 
     virtual void Seek(uint32_t offset) {
@@ -462,29 +470,28 @@ class PlfsIoBench {
    private:
     size_t key_size_;
     std::string dummy_val_;
-    uint32_t total_files_;
+    uint32_t base_offset_;
+    uint32_t size_;
     bool ordered_keys_;
     Status status_;
 
     void ToKey(int fid) {
-      snprintf(tmp_, sizeof(tmp_), "%08x-%08x-%08x", fid, fid, fid);
+      snprintf(key_, sizeof(key_), "%08x-%08x-%08x", fid, fid, fid);
     }
 
     void MakeKey() {
-      if (offset_ % (1 << 20) == (1 << 20) - 1) {
-        fprintf(stderr, "\r%.2f%%", 100.0 * (offset_ + 1) / total_files_);
-      }
+      uint32_t offset = base_offset_ + offset_;
       uint32_t fid;
       if (!ordered_keys_) {
-        fid = xxhash32(&offset_, sizeof(offset_), 0);
+        fid = xxhash32(&offset, sizeof(offset), 0);
       } else {
-        fid = offset_;
+        fid = offset;
       }
       ToKey(fid);
     }
 
     uint32_t offset_;
-    char tmp_[30];
+    char key_[30];
   };
 
   void DoIt() {
@@ -506,19 +513,35 @@ class PlfsIoBench {
     ASSERT_OK(s) << "Cannot open dir";
     const uint64_t start = env_->NowMicros();
     fprintf(stderr, "Inserting data...\n");
-    BigBatch batch(options_, num_files_, ordered_keys_);
-    if (batched_insertion_) {
-      s = writer_->Write(&batch, 0);
-    } else {
-      batch.Seek(0);
-      for (; batch.Valid(); batch.Next()) {
+    int i = 0, total_files = (num_files_ << 20);
+    BigBatch batch(options_, i, batched_insertion_ ? batch_size_ : total_files);
+    batch.Seek(0);
+    while (i < total_files) {
+      // Report progress
+      if (i % (1 << 20) == 0) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * i / total_files);
+      }
+      if (batched_insertion_) {
+        s = writer_->Write(&batch, 0);
+        if (s.ok()) {
+          i += batch_size_;
+          batch.Reset(i, batch_size_);
+          batch.Seek(0);
+        } else {
+          break;
+        }
+      } else {
         s = writer_->Append(batch.fid(), batch.data(), 0);
-        if (!s.ok()) {
+        if (s.ok()) {
+          i++;
+          batch.Next();
+        } else {
           break;
         }
       }
     }
     ASSERT_OK(s) << "Cannot write";
+    fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
 
     s = writer_->EpochFlush(0);
@@ -642,6 +665,7 @@ class PlfsIoBench {
   }
 
   int link_speed_;  // Link speed to emulate (in MBps)
+  int batch_size_;
   int batched_insertion_;
   int ordered_keys_;
   int num_files_;    // Number of particle files (in millions)
