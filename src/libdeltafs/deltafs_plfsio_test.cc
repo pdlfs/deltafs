@@ -427,6 +427,7 @@ class PlfsIoBench {
     DoIt();
   }
 
+ protected:
   class BigBatch : public BatchCursor {
    public:
     BigBatch(const DirOptions& options, int num_files, bool ordered_keys)
@@ -785,11 +786,13 @@ class StringEnv : public EnvWrapper {
 
 }  // anonymous namespace
 
-class PlfsBfBench : PlfsIoBench {
+class PlfsBfBench : protected PlfsIoBench {
  public:
   PlfsBfBench() : PlfsIoBench() {
     num_threads_ = 0;
     link_speed_ = 0;
+
+    force_negative_lookups_ = GetOption("FALSE_KEYS", false);
 
     options_.verify_checksums = false;
     options_.paranoid_checks = false;
@@ -814,6 +817,7 @@ class PlfsBfBench : PlfsIoBench {
     RunQueries();
   }
 
+ protected:
   void RunQueries() {
     options_.allow_env_threads = false;
     options_.reader_pool = NULL;
@@ -828,7 +832,8 @@ class PlfsBfBench : PlfsIoBench {
     const uint64_t start = env_->NowMicros();
     for (int i = 0; i < total_files; i++) {
       std::string dummy_buf;
-      const int fid = xxhash32(&i, sizeof(i), 0);
+      int ii = force_negative_lookups_ ? (-1 * i) : i;
+      const int fid = xxhash32(&ii, sizeof(ii), 0);
       snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
       s = reader_->ReadAll(key, &dummy_buf, block_buffer_, options_.block_size);
       ASSERT_OK(s) << "Cannot read";
@@ -888,7 +893,7 @@ class PlfsBfBench : PlfsIoBench {
             1.0 * stats.data_bytes / stats.data_ops / ki);
   }
 
- private:
+  int force_negative_lookups_;
   char* block_buffer_;
   DirReader* reader_;
 
