@@ -537,8 +537,12 @@ class PlfsIoBench {
             int(options_.block_size) >> 10, options_.block_util * 100);
     fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
     fprintf(stderr, "         Num Bg Threads: %d\n", num_threads_);
-    fprintf(stderr, "    Emulated Link Speed: %d MB/s (per log)\n",
-            link_speed_);
+    if (owns_env) {
+      fprintf(stderr, "    Emulated Link Speed: %d MB/s (per log)\n",
+              link_speed_);
+    } else {
+      fprintf(stderr, "    Emulated Link Speed: N/A\n");
+    }
     fprintf(stderr, "            Write Speed: %.3f MB/s (observed by app)\n",
             1.0 * k * k * (options_.key_size + options_.value_size) *
                 num_files_ / dura);
@@ -800,6 +804,14 @@ class PlfsBfBench : PlfsIoBench {
             seeks_.Percentile(70) / 10.0);
     fprintf(stderr, "              90%% Seeks: %.3f\n",
             seeks_.Percentile(90) / 10.0);
+    fprintf(stderr, "              91%% Seeks: %.3f\n",
+            seeks_.Percentile(91) / 10.0);
+    fprintf(stderr, "              93%% Seeks: %.3f\n",
+            seeks_.Percentile(93) / 10.0);
+    fprintf(stderr, "              95%% Seeks: %.3f\n",
+            seeks_.Percentile(95) / 10.0);
+    fprintf(stderr, "              97%% Seeks: %.3f\n",
+            seeks_.Percentile(97) / 10.0);
     fprintf(stderr, "              99%% Seeks: %.3f\n",
             seeks_.Percentile(99) / 10.0);
     const IoStats stats = reader_->GetIoStats();
@@ -826,7 +838,7 @@ class PlfsBfBench : PlfsIoBench {
 #include <glog/logging.h>
 #endif
 
-static void BM_Usage() {
+static inline void BM_Usage() {
   fprintf(stderr, "Use --bench=io or --bench=bf to select a benchmark.\n");
 }
 
