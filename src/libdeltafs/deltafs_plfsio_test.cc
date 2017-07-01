@@ -759,11 +759,12 @@ class PlfsBfBench : PlfsIoBench {
     Slice key(tmp, options_.key_size);
     const int total_files = num_files_ << 20;
     uint64_t accumulated_seeks = 0;
+    char* block_buffer = new char[options_.block_size];
     for (int i = 0; i < total_files; i++) {
       std::string dummy_buf;
       const int fid = xxhash32(&i, sizeof(i), 0);
       snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
-      s = reader_->ReadAll(key, &dummy_buf);
+      s = reader_->ReadAll(key, &dummy_buf, block_buffer, options_.block_size);
       ASSERT_OK(s) << "Cannot read";
       ASSERT_TRUE(dummy_buf.size() == options_.value_size);
       if (i % (1 << 18) == (1 << 18) - 1) {
@@ -777,6 +778,8 @@ class PlfsBfBench : PlfsIoBench {
     fprintf(stderr, "Done!\n");
 
     Report();
+
+    delete[] block_buffer;
 
     delete reader_;
     reader_ = NULL;

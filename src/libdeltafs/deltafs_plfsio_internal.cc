@@ -561,10 +561,10 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 
   if (!last_key_.empty()) {
     // Keys within a single table are expected to be added in a sorted order.
-    assert(key.compare(last_key_) >= 0);
+    assert(key >= last_key_);
     if (options_.unique_keys) {
       // Duplicated keys are not allowed
-      assert(key.compare(last_key_) != 0);
+      assert(key != last_key_);
     }
   }
   if (smallest_key_.empty()) {
@@ -1102,7 +1102,7 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
     iter->Seek(key);  // Binary search
   } else {
     iter->SeekToFirst();
-    while (iter->Valid() && key.compare(iter->key()) > 0) {
+    while (iter->Valid() && key > iter->key()) {
       iter->Next();
     }
   }
@@ -1191,7 +1191,7 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
     iter->Seek(key);  // Binary search
   } else {
     iter->SeekToFirst();
-    while (iter->Valid() && key.compare(iter->key()) > 0) {
+    while (iter->Valid() && key > iter->key()) {
       iter->Next();
     }
   }

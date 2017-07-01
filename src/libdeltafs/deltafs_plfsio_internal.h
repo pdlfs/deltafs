@@ -295,7 +295,7 @@ class Dir {
   // Obtain the value to a specific key from a given data block.
   // If key is found, "opts.saver" will be called. Set *exhausted to true if
   // keys larger than the given one have been seen.
-  // NOTE: "saver" may be called multiple times.
+  // NOTE: "opts.saver" may be called multiple times.
   // Return OK on success, or a non-OK status on errors.
   Status Fetch(const FetchOptions& opts, const Slice& key, const BlockHandle& h,
                bool* exhausted);
@@ -304,8 +304,8 @@ class Dir {
   bool KeyMayMatch(const Slice& key, const BlockHandle& h);
 
   // Obtain the value to a specific key from a given table.
-  // If key is found, "saver" will be called.
-  // NOTE: "saver" may be called multiple times.
+  // If key is found, "opts.saver" will be called.
+  // NOTE: "opts.saver" may be called multiple times.
   // Return OK on success, or a non-OK status on errors.
   Status Fetch(const FetchOptions& opts, const Slice& key,
                const TableHandle& h);
