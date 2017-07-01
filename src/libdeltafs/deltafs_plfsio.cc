@@ -352,8 +352,8 @@ Status DirWriterImpl::TryBatchWrites(BatchCursor* cursor) {
   mutex_.AssertHeld();
   assert(has_pending_flush_);
   Status status;
-  std::vector<std::vector<uint16_t> > waiting_list(num_parts_);
-  std::vector<std::vector<uint16_t> > queue(num_parts_);
+  std::vector<std::vector<uint32_t> > waiting_list(num_parts_);
+  std::vector<std::vector<uint32_t> > queue(num_parts_);
   cursor->Seek(0);
   for (; cursor->Valid(); cursor->Next()) {
     Slice fid = cursor->fid();
@@ -381,7 +381,7 @@ Status DirWriterImpl::TryBatchWrites(BatchCursor* cursor) {
     bool has_more = false;  // If the entire batch is done
     for (size_t i = 0; i < num_parts_; i++) {
       if (!queue[i].empty()) {
-        std::vector<uint16_t>::iterator it = queue[i].begin();
+        std::vector<uint32_t>::iterator it = queue[i].begin();
         for (; it != queue[i].end(); ++it) {
           cursor->Seek(*it);
           if (cursor->Valid()) {

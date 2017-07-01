@@ -31,7 +31,7 @@ class BatchCursor {
 
   // Position at the write entry at the target memory offset. This cursor is
   // Valid() after this call iff the specified memory offset is legit.
-  virtual void Seek(uint16_t offset) = 0;
+  virtual void Seek(uint32_t offset) = 0;
 
   // Moves to the next entry in the batch. After this call, Valid() is true iff
   // the cursor was not positioned at the last entry in the batch.
@@ -55,12 +55,12 @@ class BatchCursor {
 
   // Return the memory offset for the current entry.
   // REQUIRES: Valid()
-  virtual uint16_t offset() const = 0;
+  virtual uint32_t offset() const = 0;
 
  private:
   // No copying allowed
-  BatchCursor(const BatchCursor&);
   void operator=(const BatchCursor&);
+  BatchCursor(const BatchCursor&);
 };
 
 }  // namespace plfsio

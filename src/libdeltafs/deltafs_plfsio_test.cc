@@ -7,6 +7,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "deltafs_plfsio_batch.h"
 #include "deltafs_plfsio_internal.h"
 
 #include "pdlfs-common/histogram.h"
@@ -425,6 +426,65 @@ class PlfsIoBench {
     DoIt();
   }
 
+  class BigBatch : public BatchCursor {
+   public:
+    BigBatch(const DirOptions& options, int num_files, bool ordered_keys)
+        : key_size_(options.key_size),
+          dummy_val_(options.value_size, 'x'),
+          total_files_(static_cast<uint32_t>(num_files << 20)),
+          ordered_keys_(ordered_keys),
+          offset_(total_files_) {}
+
+    virtual ~BigBatch() {}
+
+    virtual Status status() const { return status_; }
+    virtual bool Valid() const { return offset_ < total_files_; }
+    virtual uint32_t offset() const { return offset_; }
+    virtual Slice fid() const { return Slice(tmp_, key_size_); }
+    virtual Slice data() const { return dummy_val_; }
+
+    virtual void Seek(uint32_t offset) {
+      offset_ = offset;
+      if (Valid()) {
+        MakeKey();
+      }
+    }
+
+    virtual void Next() {
+      offset_++;
+      if (Valid()) {
+        MakeKey();
+      }
+    }
+
+   private:
+    size_t key_size_;
+    std::string dummy_val_;
+    uint32_t total_files_;
+    bool ordered_keys_;
+    Status status_;
+
+    void ToKey(int fid) {
+      snprintf(tmp_, sizeof(tmp_), "%08x-%08x-%08x", fid, fid, fid);
+    }
+
+    void MakeKey() {
+      if (offset_ % (1 << 20) == (1 << 20) - 1) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * (offset_ + 1) / total_files_);
+      }
+      uint32_t fid;
+      if (!ordered_keys_) {
+        fid = xxhash32(&offset_, sizeof(offset_), 0);
+      } else {
+        fid = offset_;
+      }
+      ToKey(fid);
+    }
+
+    uint32_t offset_;
+    char tmp_[30];
+  };
+
   void DoIt() {
     bool owns_pool = false;
     if (num_threads_ != 0) {
@@ -443,24 +503,12 @@ class PlfsIoBench {
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
     const uint64_t start = env_->NowMicros();
-    char tmp[30];
     fprintf(stderr, "Inserting data...\n");
-    std::string dummy_val(options_.value_size, 'x');
-    Slice key(tmp, options_.key_size);
-    const int total_files = num_files_ << 20;
-    for (int i = 0; i < total_files; i++) {
-      int fid;
-      if (!ordered_keys_) {
-        fid = xxhash32(&i, sizeof(i), 0);
-      } else {
-        fid = i;
-      }
-      snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
-      s = writer_->Append(key, dummy_val, 0);
+    BigBatch batch(options_, num_files_, ordered_keys_);
+    batch.Seek(0);
+    for (; batch.Valid(); batch.Next()) {
+      s = writer_->Append(batch.fid(), batch.data(), 0);
       ASSERT_OK(s) << "Cannot write";
-      if (i % (1 << 20) == (1 << 20) - 1) {
-        fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / total_files);
-      }
     }
     fprintf(stderr, "\n");
 
