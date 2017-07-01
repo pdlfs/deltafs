@@ -830,14 +830,16 @@ class PlfsBfBench : protected PlfsIoBench {
     const int total_files = num_files_ << 20;
     uint64_t accumulated_seeks = 0;
     const uint64_t start = env_->NowMicros();
+    std::string dummy_buf;
     for (int i = 0; i < total_files; i++) {
-      std::string dummy_buf;
-      int ii = force_negative_lookups_ ? (-1 * i) : i;
+      const int ii = force_negative_lookups_ ? (-1 * i) : i;
       const int fid = xxhash32(&ii, sizeof(ii), 0);
       snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
+      dummy_buf.clear();
       s = reader_->ReadAll(key, &dummy_buf, block_buffer_, options_.block_size);
-      ASSERT_OK(s) << "Cannot read";
-      ASSERT_TRUE(dummy_buf.size() == options_.value_size);
+      if (!s.ok()) {
+        break;
+      }
       if (i % (1 << 18) == (1 << 18) - 1) {
         fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / total_files);
       }
@@ -845,6 +847,7 @@ class PlfsBfBench : protected PlfsIoBench {
       seeks_.Add(10.0 * (ios.data_ops - accumulated_seeks));
       accumulated_seeks = ios.data_ops;
     }
+    ASSERT_OK(s) << "Cannot read";
     fprintf(stderr, "\n");
     fprintf(stderr, "Done!\n");
 
