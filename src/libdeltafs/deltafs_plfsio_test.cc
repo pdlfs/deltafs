@@ -383,6 +383,7 @@ class PlfsIoBench {
   PlfsIoBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
     link_speed_ =
         GetOption("LINK_SPEED", 6);  // Burst-buffer link speed is 6 MBps
+    batched_insertion_ = GetOption("BATCHED_INSERTION", false);
     ordered_keys_ = GetOption("ORDERED_KEYS", false);
     num_files_ = GetOption("NUM_FILES", 16);  // 16M files per epoch
 
@@ -505,11 +506,18 @@ class PlfsIoBench {
     const uint64_t start = env_->NowMicros();
     fprintf(stderr, "Inserting data...\n");
     BigBatch batch(options_, num_files_, ordered_keys_);
-    batch.Seek(0);
-    for (; batch.Valid(); batch.Next()) {
-      s = writer_->Append(batch.fid(), batch.data(), 0);
-      ASSERT_OK(s) << "Cannot write";
+    if (batched_insertion_) {
+      s = writer_->Write(&batch, 0);
+    } else {
+      batch.Seek(0);
+      for (; batch.Valid(); batch.Next()) {
+        s = writer_->Append(batch.fid(), batch.data(), 0);
+        if (!s.ok()) {
+          break;
+        }
+      }
     }
+    ASSERT_OK(s) << "Cannot write";
     fprintf(stderr, "\n");
 
     s = writer_->EpochFlush(0);
@@ -569,7 +577,9 @@ class PlfsIoBench {
                 CPU_COUNT(&cpu_set) / dura * 100);
 #endif
 #endif
-    fprintf(stderr, "      Ordered Insertion: %s\n",
+    fprintf(stderr, "      Batched Insertion: %s\n",
+            batched_insertion_ ? "Yes" : "No");
+    fprintf(stderr, "           Ordered Keys: %s\n",
             ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "    Indexes Compression: %s\n",
             options_.compression == kSnappyCompression ? "Yes" : "No");
@@ -631,6 +641,7 @@ class PlfsIoBench {
   }
 
   int link_speed_;  // Link speed to emulate (in MBps)
+  int batched_insertion_;
   int ordered_keys_;
   int num_files_;    // Number of particle files (in millions)
   int num_threads_;  // Number of bg compaction threads
