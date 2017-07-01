@@ -1081,16 +1081,17 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
   return status;
 }
 
-// Retrieve value to a specific key from a given block and call "saver"
+// Retrieve value to a specific key from a given block and call "opts.saver"
 // using the value found. In addition, set *exhausted to true if a larger key
 // has been observed so there is no need to check further.
 // Return OK on success and a non-OK status on errors.
-Status Dir::Fetch(const Slice& key, const BlockHandle& handle, Saver saver,
-                  void* arg, bool* exhausted) {
+Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
+                  const BlockHandle& h, bool* exhausted) {
   *exhausted = false;
   Status status;
   BlockContents contents;
-  status = ReadBlock(data_, options_, handle, &contents);
+  status = ReadBlock(data_, options_, h, &contents, false, opts.tmp,
+                     opts.tmp_length);
   if (!status.ok()) {
     return status;
   }
@@ -1118,7 +1119,7 @@ Status Dir::Fetch(const Slice& key, const BlockHandle& handle, Saver saver,
 
   for (; iter->Valid(); iter->Next()) {
     if (iter->key() == key) {
-      saver(arg, key, iter->value());
+      opts.saver(opts.arg, key, iter->value());
       if (options_.unique_keys) {
         break;  // If keys are unique, we are done
       }
@@ -1138,10 +1139,10 @@ Status Dir::Fetch(const Slice& key, const BlockHandle& handle, Saver saver,
 
 // Check if a specific key may or must not exist in one or more blocks
 // indexed by the given filter.
-bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
+bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& h) {
   Status status;
   BlockContents contents;
-  status = ReadBlock(indx_, options_, handle, &contents, true);
+  status = ReadBlock(indx_, options_, h, &contents, true);
   if (status.ok()) {
     bool r = BloomKeyMayMatch(key, contents.data);
     if (contents.heap_allocated) {
@@ -1153,20 +1154,19 @@ bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& handle) {
   }
 }
 
-// Retrieve value to a specific key from a given table and call "saver" using
-// the value found. Use filter to reduce block reads if available.
+// Retrieve value to a specific key from a given table and call "opts.saver"
+// using the value found. Use filter to reduce block reads if available.
 // Return OK on success and a non-OK status on errors.
-Status Dir::Fetch(const Slice& key, const TableHandle& handle, Saver saver,
-                  void* arg) {
+Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
+                  const TableHandle& h) {
   Status status;
   // Check table key range and the paired filter
-  if (key.compare(handle.smallest_key()) < 0 ||
-      key.compare(handle.largest_key()) > 0) {
+  if (key < h.smallest_key() || key > h.largest_key()) {
     return status;
   } else if (!options_.ignore_filters) {
     BlockHandle filter_handle;
-    filter_handle.set_offset(handle.filter_offset());
-    filter_handle.set_size(handle.filter_size());
+    filter_handle.set_offset(h.filter_offset());
+    filter_handle.set_size(h.filter_size());
     if (filter_handle.size() != 0) {  // Filter detected
       if (!KeyMayMatch(key, filter_handle)) {
         // Assuming no false negatives
@@ -1178,8 +1178,8 @@ Status Dir::Fetch(const Slice& key, const TableHandle& handle, Saver saver,
   // Load the index block
   BlockContents index_contents;
   BlockHandle index_handle;
-  index_handle.set_offset(handle.index_offset());
-  index_handle.set_size(handle.index_size());
+  index_handle.set_offset(h.index_offset());
+  index_handle.set_size(h.index_size());
   status = ReadBlock(indx_, options_, index_handle, &index_contents, true);
   if (!status.ok()) {
     return status;
@@ -1198,11 +1198,11 @@ Status Dir::Fetch(const Slice& key, const TableHandle& handle, Saver saver,
 
   bool exhausted = false;
   for (; iter->Valid(); iter->Next()) {
-    BlockHandle h;
+    BlockHandle block_handle;
     Slice input = iter->value();
-    status = h.DecodeFrom(&input);
+    status = block_handle.DecodeFrom(&input);
     if (status.ok()) {
-      status = Fetch(key, h, saver, arg, &exhausted);
+      status = Fetch(opts, key, block_handle, &exhausted);
     }
 
     if (!status.ok()) {
@@ -1259,12 +1259,12 @@ static inline Iterator* NewRtIterator(Block* block) {
 
 }  // namespace
 
-Status Dir::TryGet(const Slice& key, const BlockHandle& handle, uint32_t epoch,
+Status Dir::TryGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
                    GetContext* ctx) {
   Status status;
   // Load the meta index for the epoch
   BlockContents meta_index_contents;
-  status = ReadBlock(indx_, options_, handle, &meta_index_contents, true);
+  status = ReadBlock(indx_, options_, h, &meta_index_contents, true);
   if (!status.ok()) {
     return status;
   }
@@ -1291,15 +1291,22 @@ Status Dir::TryGet(const Slice& key, const BlockHandle& handle, uint32_t epoch,
     state.mu = mu_;
     state.dst = ctx->dst;
     state.found = false;
-    TableHandle h;
+    TableHandle table_handle;
     Slice input = iter->value();
-    status = h.DecodeFrom(&input);
+    status = table_handle.DecodeFrom(&input);
     iter->Next();
     if (status.ok()) {
+      FetchOptions opts;
+      opts.tmp_length = ctx->tmp_length;
+      opts.tmp = ctx->tmp;
       if (options_.parallel_reads) {
-        status = Fetch(key, h, ParaSaveValue, &state);
+        opts.saver = ParaSaveValue;
+        opts.arg = &state;
+        status = Fetch(opts, key, table_handle);
       } else {
-        status = Fetch(key, h, SaveValue, &state);
+        opts.saver = SaveValue;
+        opts.arg = &state;
+        status = Fetch(opts, key, table_handle);
       }
       if (status.ok() && state.found) {
         if (options_.unique_keys) {
@@ -1413,7 +1420,8 @@ void Dir::Merge(GetContext* ctx) {
   }
 }
 
-Status Dir::Read(const Slice& key, std::string* dst) {
+Status Dir::Read(const Slice& key, std::string* dst, char* tmp,
+                 size_t tmp_length) {
   mu_->AssertHeld();
   Status status;
   assert(rt_ != NULL);
@@ -1421,6 +1429,8 @@ Status Dir::Read(const Slice& key, std::string* dst) {
   std::string buffer;
 
   GetContext ctx;
+  ctx.tmp = tmp;
+  ctx.tmp_length = tmp_length;
   ctx.num_open_reads = 0;  // Number of outstanding epoch reads
   ctx.status = &status;
   ctx.offsets = &offsets;

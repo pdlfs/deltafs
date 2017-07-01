@@ -258,7 +258,8 @@ class Dir {
   // Obtain the value to a key from all epochs.
   // All value found will be appended to "dst"
   // Return OK on success, or a non-OK status on errors.
-  Status Read(const Slice& key, std::string* dst);
+  Status Read(const Slice& key, std::string* dst, char* tmp = NULL,
+              size_t tmp_length = 0);
 
   void RebindDataSource(LogSource* data);
 
@@ -280,22 +281,34 @@ class Dir {
 
   typedef void (*Saver)(void* arg, const Slice& key, const Slice& value);
 
+  struct FetchOptions {
+    // Scratch space for temporary data block storage
+    char* tmp;
+    // Scratch size
+    size_t tmp_length;
+    // Callback for handling fetched data
+    Saver saver;
+    // Callback argument
+    void* arg;
+  };
+
   // Obtain the value to a specific key from a given data block.
-  // If key is found, "saver" will be called. Set *exhausted to true if keys
-  // larger than the given one have been seen.
+  // If key is found, "opts.saver" will be called. Set *exhausted to true if
+  // keys larger than the given one have been seen.
   // NOTE: "saver" may be called multiple times.
   // Return OK on success, or a non-OK status on errors.
-  Status Fetch(const Slice& key, const BlockHandle& handle, Saver saver, void*,
+  Status Fetch(const FetchOptions& opts, const Slice& key, const BlockHandle& h,
                bool* exhausted);
 
   // Return true if the given key matches a specific filter block.
-  bool KeyMayMatch(const Slice& key, const BlockHandle& handle);
+  bool KeyMayMatch(const Slice& key, const BlockHandle& h);
 
   // Obtain the value to a specific key from a given table.
   // If key is found, "saver" will be called.
   // NOTE: "saver" may be called multiple times.
   // Return OK on success, or a non-OK status on errors.
-  Status Fetch(const Slice& key, const TableHandle& handle, Saver saver, void*);
+  Status Fetch(const FetchOptions& opts, const Slice& key,
+               const TableHandle& h);
 
   // Obtain the value to a specific key within a given epoch.
   // If key is found, value is appended to *ctx->dst.
@@ -309,10 +322,12 @@ class Dir {
     std::vector<uint32_t>* offsets;  // Only used during parallel reads
     std::string* buffer;
     Status* status;
+    char* tmp;  // Temporary block storage
+    size_t tmp_length;
   };
   void Get(const Slice& key, uint32_t epoch, GetContext* ctx);
 
-  Status TryGet(const Slice& key, const BlockHandle& handle, uint32_t epoch,
+  Status TryGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
                 GetContext* ctx);
 
   static void Merge(GetContext* ctx);
