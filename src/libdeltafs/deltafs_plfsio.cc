@@ -884,7 +884,8 @@ class DirReaderImpl : public DirReader {
   DirReaderImpl(const DirOptions& opts, const std::string& name);
   virtual ~DirReaderImpl();
 
-  virtual Status ReadAll(const Slice& fid, std::string* dst);
+  virtual Status ReadAll(const Slice& fid, std::string* dst, char* tmp,
+                         size_t tmp_length);
 
   virtual IoStats GetIoStats() const;
 
@@ -991,7 +992,8 @@ static Status OpenSource(LogSource** result, const std::string& fname, Env* env,
   return status;
 }
 
-Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
+Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
+                              size_t tmp_length) {
   Status status;
   uint32_t hash = Hash(fid.data(), fid.size(), 0);
   uint32_t part = hash & part_mask_;
@@ -1029,7 +1031,7 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst) {
     assert(dirs_[part] != NULL);
     Dir* const dir = dirs_[part];
     dir->Ref();
-    status = dirs_[part]->Read(fid, dst);
+    status = dirs_[part]->Read(fid, dst, tmp, tmp_length);
     dir->Unref();
     return status;
   } else {
