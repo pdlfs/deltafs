@@ -1015,7 +1015,7 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
   char* buf = tmp;
   if (cached) {
     buf = NULL;
-  } else if (buf == NULL || tmp_length < m) {
+  } else if (tmp == NULL || tmp_length < m) {
     buf = new char[m];
   }
   Slice contents;

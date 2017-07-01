@@ -730,14 +730,17 @@ class PlfsBfBench : PlfsIoBench {
  public:
   PlfsBfBench() : PlfsIoBench() {
     num_threads_ = 0;
+    link_speed_ = 0;
 
     options_.verify_checksums = false;
     options_.paranoid_checks = false;
 
+    block_buffer_ = new char[options_.block_size];
     env_ = new StringEnv;
   }
 
   ~PlfsBfBench() {
+    delete[] block_buffer_;
     delete writer_;
     writer_ = NULL;
     delete reader_;
@@ -763,12 +766,12 @@ class PlfsBfBench : PlfsIoBench {
     Slice key(tmp, options_.key_size);
     const int total_files = num_files_ << 20;
     uint64_t accumulated_seeks = 0;
-    char* block_buffer = new char[options_.block_size];
+    const uint64_t start = env_->NowMicros();
     for (int i = 0; i < total_files; i++) {
       std::string dummy_buf;
       const int fid = xxhash32(&i, sizeof(i), 0);
       snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
-      s = reader_->ReadAll(key, &dummy_buf, block_buffer, options_.block_size);
+      s = reader_->ReadAll(key, &dummy_buf, block_buffer_, options_.block_size);
       ASSERT_OK(s) << "Cannot read";
       ASSERT_TRUE(dummy_buf.size() == options_.value_size);
       if (i % (1 << 18) == (1 << 18) - 1) {
@@ -781,18 +784,21 @@ class PlfsBfBench : PlfsIoBench {
     fprintf(stderr, "\n");
     fprintf(stderr, "Done!\n");
 
-    Report();
+    uint64_t dura = env_->NowMicros() - start;
 
-    delete[] block_buffer;
+    Report(dura);
 
     delete reader_;
     reader_ = NULL;
   }
 
-  void Report() {
-    const double ki = 1024.0;
+  void Report(uint64_t dura) {
+    const double k = 1000.0, ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
-    fprintf(stderr, "          Avg Num Seeks: %.3f (per file)\n",
+    fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
+    fprintf(stderr, "          Avg Read Time: %.3f us (per file)\n",
+            1.0 * dura / (num_files_ << 20));
+    fprintf(stderr, " Avg Num Seeks Per Read: %.3f (per file)\n",
             seeks_.Average() / 10.0);
     fprintf(stderr, "              10%% Seeks: %.3f\n",
             seeks_.Percentile(10) / 10.0);
@@ -824,7 +830,9 @@ class PlfsBfBench : PlfsIoBench {
   }
 
  private:
+  char* block_buffer_;
   DirReader* reader_;
+
   Histogram seeks_;
 };
 
