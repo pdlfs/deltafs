@@ -393,6 +393,7 @@ class PlfsIoBench {
     options_.rank = 0;
     options_.lg_parts = GetOption("LG_PARTS", 2);
     options_.skip_sort = ordered_keys_ != 0;
+    options_.non_blocking = batched_insertion_ != 0;
     options_.compression =
         GetOption("SNAPPY", false) ? kSnappyCompression : kNoCompression;
     options_.force_compression = true;
