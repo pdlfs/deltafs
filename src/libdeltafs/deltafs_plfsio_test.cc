@@ -305,7 +305,7 @@ namespace {
 
 class FakeWritableFile : public WritableFileWrapper {
  public:
-  FakeWritableFile(Histogram* hist, uint64_t bytes_ps,
+  FakeWritableFile(uint64_t bytes_ps, Histogram* hist = NULL,
                    EventListener* lis = NULL)
       : lis_(lis), prev_write_micros_(0), hist_(hist), bytes_ps_(bytes_ps) {}
   virtual ~FakeWritableFile() {}
@@ -313,7 +313,7 @@ class FakeWritableFile : public WritableFileWrapper {
   virtual Status Append(const Slice& data) {
     if (!data.empty()) {
       const uint64_t now_micros = Env::Default()->NowMicros();
-      if (prev_write_micros_ != 0) {
+      if (hist_ != NULL && prev_write_micros_ != 0) {
         hist_->Add(now_micros - prev_write_micros_);
       }
       prev_write_micros_ = now_micros;
@@ -358,12 +358,12 @@ class FakeEnv : public EnvWrapper {
   }
 
   virtual Status NewWritableFile(const Slice& f, WritableFile** r) {
-    Histogram* hist = new Histogram;
-    hists_.insert(std::make_pair(f.ToString(), hist));
     if (f.ends_with(".dat")) {
-      *r = new FakeWritableFile(hist, bytes_ps_, lis_);
+      Histogram* hist = new Histogram;
+      hists_.insert(std::make_pair(f.ToString(), hist));
+      *r = new FakeWritableFile(bytes_ps_, hist, lis_);
     } else {
-      *r = new FakeWritableFile(hist, bytes_ps_);
+      *r = new FakeWritableFile(bytes_ps_);
     }
     return Status::OK();
   }
@@ -405,7 +405,11 @@ class PlfsIoBench {
 
   class EventPrinter : public EventListener {
    public:
-    EventPrinter() : base_time_(Env::Default()->NowMicros()) {}
+    EventPrinter() : base_time_(Env::Default()->NowMicros()) {
+      events_.reserve(1024);
+      iops_.reserve(1024);
+    }
+
     virtual ~EventPrinter() {}
 
     virtual void OnEvent(EventType type, void* arg) {
