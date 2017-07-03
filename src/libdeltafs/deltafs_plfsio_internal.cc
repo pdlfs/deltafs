@@ -650,11 +650,12 @@ Status TableLogger::Finish() {
   return status_;
 }
 
-DirLogger::DirLogger(const DirOptions& options, port::Mutex* mu,
+DirLogger::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
                      port::CondVar* cv)
     : options_(options),
       bg_cv_(cv),
       mu_(mu),
+      part_(part),
       num_flush_requested_(0),
       num_flush_completed_(0),
       has_bg_compaction_(false),

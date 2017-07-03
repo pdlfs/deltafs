@@ -56,6 +56,7 @@ DirOptions::DirOptions()
       measure_reads(true),
       measure_writes(true),
       lg_parts(0),
+      listener(NULL),
       env(NULL),
       allow_env_threads(false),
       is_env_pfs(true),
@@ -828,7 +829,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
     port::Mutex* const mtx = NULL;  // No synchronization needed for index files
     for (size_t i = 0; i < num_parts; i++) {
       tmp_dirs[i] =
-          new DirLogger(impl->options_, &impl->mutex_, &impl->cond_var_);
+          new DirLogger(impl->options_, i, &impl->mutex_, &impl->cond_var_);
       WritableFileStats* internal_io_stats =
           options.measure_writes ? &tmp_dirs[i]->io_stats_ : NULL;
       status =

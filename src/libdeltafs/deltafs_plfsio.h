@@ -19,6 +19,9 @@
 namespace pdlfs {
 namespace plfsio {
 
+class BatchCursor;
+class EventListener;
+
 struct IoStats {
   IoStats();
 
@@ -191,6 +194,10 @@ struct DirOptions {
   // Default: 0
   int lg_parts;
 
+  // User callback for handling background events.
+  // Default: NULL
+  EventListener* listener;
+
   // Env instance used to access objects or files stored in the underlying
   // storage system. If NULL, Env::Default() will be used.
   // Default: NULL
@@ -311,8 +318,6 @@ class LogSource {
 // Destroy the contents of the specified directory.
 // Be very careful using this method.
 extern Status DestroyDir(const std::string& dirname, const DirOptions& options);
-
-class BatchCursor;
 
 // Deltafs Plfs Dir Writer
 class DirWriter {

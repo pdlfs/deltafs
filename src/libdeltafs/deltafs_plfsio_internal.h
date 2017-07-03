@@ -153,7 +153,8 @@ class TableLogger {
 // uses background threads.
 class DirLogger {
  public:
-  DirLogger(const DirOptions& options, port::Mutex* mu, port::CondVar* cv);
+  DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
+            port::CondVar* cv);
 
   Status Open(LogSink* data, LogSink* indx);
 
@@ -227,6 +228,7 @@ class DirLogger {
   size_t bf_bytes_;          // Target bloom filter size
   uint32_t entries_per_tb_;  // Number of entries packed per table
   size_t tb_bytes_;          // Target table size
+  size_t part_;              // Partition index
 
   // State below is protected by mutex_
   uint32_t num_flush_requested_;
