@@ -17,14 +17,9 @@ namespace plfsio {
 
 enum EventType { kCompactionStart, kCompactionEnd, kIoStart, kIoEnd };
 
-struct CompactionStartEvent {
-  size_t part;  // Memtable partition index
+struct CompactionEvent {
+  EventType type;  // Event type
 
-  // Current time micros
-  uint64_t micros;
-};
-
-struct CompactionEndEvent {
   size_t part;  // Memtable partition index
 
   // Current time micros

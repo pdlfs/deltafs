@@ -934,7 +934,8 @@ void DirLogger::CompactMemtable() {
   mu_->Unlock();
   const uint64_t start = CurrentTimeMicros();
   if (options_.listener != NULL) {
-    CompactionStartEvent event;
+    CompactionEvent event;
+    event.type = kCompactionStart;
     event.micros = start;
     event.part = part_;
     options_.listener->OnEvent(kCompactionStart, &event);
@@ -979,8 +980,9 @@ void DirLogger::CompactMemtable() {
 
   const uint64_t end = CurrentTimeMicros();
   if (options_.listener != NULL) {
-    CompactionEndEvent event;
-    event.micros = start;
+    CompactionEvent event;
+    event.type = kCompactionEnd;
+    event.micros = end;
     event.part = part_;
     options_.listener->OnEvent(kCompactionEnd, &event);
   }

@@ -8,6 +8,7 @@
  */
 
 #include "deltafs_plfsio_batch.h"
+#include "deltafs_plfsio_events.h"
 #include "deltafs_plfsio_internal.h"
 
 #include "pdlfs-common/histogram.h"
@@ -27,6 +28,7 @@
 #endif
 
 #include <map>
+#include <vector>
 
 namespace pdlfs {
 namespace plfsio {
@@ -380,6 +382,52 @@ class PlfsIoBench {
     }
   }
 
+  class EventPrinter : public EventListener {
+   public:
+    EventPrinter() : base_time_(Env::Default()->NowMicros()) {}
+    virtual ~EventPrinter() {}
+
+    virtual void OnEvent(EventType type, void* arg) {
+      switch (type) {
+        case kCompactionStart:
+        case kCompactionEnd: {
+          CompactionEvent* event = static_cast<CompactionEvent*>(arg);
+          event->micros -= base_time_;
+          events_.push_back(*event);
+          break;
+        }
+        default:
+          break;
+      }
+    }
+
+    static std::string ToString(const CompactionEvent& e) {
+      char tmp[20];
+      snprintf(tmp, sizeof(tmp), "%.3f,%d,%s", 1.0 * e.micros / 1000.0 / 1000.0,
+               static_cast<int>(e.part),
+               e.type == kCompactionStart ? "START" : "END");
+      return tmp;
+    }
+
+    void PrintEvents() {
+      fprintf(stderr, "\n\n!!! Compaction Events !!!\n");
+      fprintf(stderr, "\n-- XXX --\n");
+      EventIter iter = events_.begin();
+      for (; iter != events_.end(); ++iter) {
+        fprintf(stderr, "%s\n", ToString(*iter).c_str());
+      }
+      fprintf(stderr, "\n-- XXX --\n");
+    }
+
+   private:
+    uint64_t base_time_;
+
+    typedef std::vector<CompactionEvent> EventQueue;
+    typedef EventQueue::iterator EventIter;
+
+    EventQueue events_;
+  };
+
   PlfsIoBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
     link_speed_ =
         GetOption("LINK_SPEED", 6);  // Burst-buffer link speed is 6 MBps
@@ -389,6 +437,8 @@ class PlfsIoBench {
     num_files_ = GetOption("NUM_FILES", 16);  // 16M files per epoch
 
     num_threads_ = GetOption("NUM_THREADS", 4);  // For bg compaction
+
+    print_events_ = GetOption("PRINT_EVENTS", false);
 
     options_.rank = 0;
     options_.lg_parts = GetOption("LG_PARTS", 2);
@@ -411,6 +461,7 @@ class PlfsIoBench {
         static_cast<size_t>(GetOption("DATA_BUFFER", 8) << 20);
     options_.index_buffer =
         static_cast<size_t>(GetOption("INDEX_BUFFER", 2) << 20);
+    options_.listener = &printer_;
 
     writer_ = NULL;
 
@@ -555,6 +606,8 @@ class PlfsIoBench {
 
     PrintStats(dura, owns_env);
 
+    if (print_events_) printer_.PrintEvents();
+
     delete writer_;
     writer_ = NULL;
 
@@ -671,6 +724,8 @@ class PlfsIoBench {
   int ordered_keys_;
   int num_files_;    // Number of particle files (in millions)
   int num_threads_;  // Number of bg compaction threads
+  int print_events_;
+  EventPrinter printer_;
   const std::string home_;
   DirOptions options_;
   DirWriter* writer_;
