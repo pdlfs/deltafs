@@ -27,6 +27,8 @@ struct CompactionEvent {
 };
 
 struct IoEvent {
+  EventType type;  // Event type
+
   // Current time micros
   uint64_t micros;
 };

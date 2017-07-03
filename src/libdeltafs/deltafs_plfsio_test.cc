@@ -305,35 +305,51 @@ namespace {
 
 class FakeWritableFile : public WritableFileWrapper {
  public:
-  FakeWritableFile(Histogram* hist, uint64_t bytes_ps)
-      : prev_write_micros(0), hist_(hist), bytes_ps_(bytes_ps) {}
+  FakeWritableFile(Histogram* hist, uint64_t bytes_ps,
+                   EventListener* lis = NULL)
+      : lis_(lis), prev_write_micros_(0), hist_(hist), bytes_ps_(bytes_ps) {}
   virtual ~FakeWritableFile() {}
 
   virtual Status Append(const Slice& data) {
     if (!data.empty()) {
-      uint64_t now_micros = Env::Default()->NowMicros();
-      if (prev_write_micros != 0) {
-        hist_->Add(now_micros - prev_write_micros);
+      const uint64_t now_micros = Env::Default()->NowMicros();
+      if (prev_write_micros_ != 0) {
+        hist_->Add(now_micros - prev_write_micros_);
       }
-      prev_write_micros = now_micros;
-      int micros_to_delay =
+      prev_write_micros_ = now_micros;
+      if (lis_ != NULL) {
+        IoEvent event;
+        event.micros = now_micros;
+        event.type = kIoStart;
+        lis_->OnEvent(kIoStart, &event);
+      }
+      const int micros_to_delay =
           static_cast<int>(1000 * 1000 * data.size() / bytes_ps_);
       Env::Default()->SleepForMicroseconds(micros_to_delay);
+      if (lis_ != NULL) {
+        IoEvent event;
+        event.micros = Env::Default()->NowMicros();
+        event.type = kIoEnd;
+        lis_->OnEvent(kIoEnd, &event);
+      }
     }
-    return Status::OK();
+    return status_;
   }
 
  private:
-  uint64_t prev_write_micros;  // Timestamp of the previous write
-  Histogram* hist_;            // Mean time between writes
+  EventListener* lis_;
+  uint64_t prev_write_micros_;  // Timestamp of the previous write
+  Histogram* hist_;             // Mean time between writes
 
   uint64_t bytes_ps_;  // Bytes per second
+  Status status_;
 };
 
 class FakeEnv : public EnvWrapper {
  public:
-  explicit FakeEnv(uint64_t bytes_ps)
-      : EnvWrapper(TestEnv()), bytes_ps_(bytes_ps) {}
+  FakeEnv(uint64_t bytes_ps, EventListener* lis)
+      : EnvWrapper(TestEnv()), bytes_ps_(bytes_ps), lis_(lis) {}
+
   virtual ~FakeEnv() {
     HistIter iter = hists_.begin();
     for (; iter != hists_.end(); ++iter) {
@@ -344,7 +360,11 @@ class FakeEnv : public EnvWrapper {
   virtual Status NewWritableFile(const Slice& f, WritableFile** r) {
     Histogram* hist = new Histogram;
     hists_.insert(std::make_pair(f.ToString(), hist));
-    *r = new FakeWritableFile(hist, bytes_ps_);
+    if (f.ends_with(".dat")) {
+      *r = new FakeWritableFile(hist, bytes_ps_, lis_);
+    } else {
+      *r = new FakeWritableFile(hist, bytes_ps_);
+    }
     return Status::OK();
   }
 
@@ -361,6 +381,7 @@ class FakeEnv : public EnvWrapper {
  private:
   uint64_t bytes_ps_;  // Bytes per second
 
+  EventListener* lis_;
   typedef std::map<std::string, Histogram*> HistMap;
   typedef HistMap::iterator HistIter;
 
@@ -396,6 +417,13 @@ class PlfsIoBench {
           events_.push_back(*event);
           break;
         }
+        case kIoStart:
+        case kIoEnd: {
+          IoEvent* event = static_cast<IoEvent*>(arg);
+          event->micros -= base_time_;
+          iops_.push_back(*event);
+          break;
+        }
         default:
           break;
       }
@@ -409,11 +437,20 @@ class PlfsIoBench {
       return tmp;
     }
 
+    static std::string ToString(const IoEvent& e) {
+      char tmp[20];
+      snprintf(tmp, sizeof(tmp), "%.3f,io,%s", 1.0 * e.micros / 1000.0 / 1000.0,
+               e.type == kIoStart ? "START" : "END");
+      return tmp;
+    }
+
     void PrintEvents() {
-      fprintf(stderr, "\n\n!!! Compaction Events !!!\n");
+      fprintf(stderr, "\n\n!!! Background Events !!!\n");
       fprintf(stderr, "\n-- XXX --\n");
-      EventIter iter = events_.begin();
-      for (; iter != events_.end(); ++iter) {
+      for (EventIter iter = events_.begin(); iter != events_.end(); ++iter) {
+        fprintf(stderr, "%s\n", ToString(*iter).c_str());
+      }
+      for (IoIter iter = iops_.begin(); iter != iops_.end(); ++iter) {
         fprintf(stderr, "%s\n", ToString(*iter).c_str());
       }
       fprintf(stderr, "\n-- XXX --\n");
@@ -422,10 +459,13 @@ class PlfsIoBench {
    private:
     uint64_t base_time_;
 
+    typedef std::vector<IoEvent> IoQueue;
+    typedef IoQueue::iterator IoIter;
     typedef std::vector<CompactionEvent> EventQueue;
     typedef EventQueue::iterator EventIter;
 
     EventQueue events_;
+    IoQueue iops_;
   };
 
   PlfsIoBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
@@ -557,7 +597,8 @@ class PlfsIoBench {
     }
     bool owns_env = false;
     if (env_ == NULL) {
-      env_ = new FakeEnv(static_cast<uint64_t>(link_speed_ << 20));
+      const uint64_t bytes_ps = static_cast<uint64_t>(link_speed_ << 20);
+      env_ = new FakeEnv(bytes_ps, &printer_);
       owns_env = true;
     }
     options_.env = env_;
@@ -602,7 +643,8 @@ class PlfsIoBench {
     ASSERT_OK(s) << "Cannot finish";
 
     fprintf(stderr, "Done!\n");
-    uint64_t dura = env_->NowMicros() - start;
+    const uint64_t end = env_->NowMicros();
+    const uint64_t dura = end - start;
 
     PrintStats(dura, owns_env);
 
