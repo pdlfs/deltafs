@@ -8,6 +8,7 @@
  */
 
 #include "deltafs_plfsio_internal.h"
+#include "deltafs_plfsio_events.h"
 
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/logging.h"
@@ -25,6 +26,11 @@ namespace plfsio {
 
 static inline uint32_t BloomHash(const Slice& key) {
   return Hash(key.data(), key.size(), 0xbc9f1d34);  // Magic
+}
+
+// Return current time in microseconds.
+static inline uint64_t CurrentTimeMicros() {
+  return Env::Default()->NowMicros();
 }
 
 static bool BloomKeyMayMatch(const Slice& key, const Slice& input) {
@@ -926,8 +932,14 @@ void DirLogger::CompactMemtable() {
   TableLogger* const tb = tb_;
   BloomBlock* const bf = static_cast<BloomBlock*>(filter_);
   mu_->Unlock();
+  const uint64_t start = CurrentTimeMicros();
+  if (options_.listener != NULL) {
+    CompactionStartEvent event;
+    event.micros = start;
+    event.part = part_;
+    options_.listener->OnEvent(kCompactionStart, &event);
+  }
 #if VERBOSE >= 3
-  uint64_t start = Env::Default()->NowMicros();
   Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes) ...",
           static_cast<int>(buffer->CurrentBufferSize()),
           static_cast<int>(tb_bytes_));
@@ -965,8 +977,14 @@ void DirLogger::CompactMemtable() {
     }
   }
 
+  const uint64_t end = CurrentTimeMicros();
+  if (options_.listener != NULL) {
+    CompactionEndEvent event;
+    event.micros = start;
+    event.part = part_;
+    options_.listener->OnEvent(kCompactionEnd, &event);
+  }
 #if VERBOSE >= 3
-  uint64_t end = Env::Default()->NowMicros();
   Verbose(__LOG_ARGS__, 3, "Compaction done: %d kv pairs (%d us)",
           static_cast<int>(buffer->NumEntries()),
           static_cast<int>(end - start));

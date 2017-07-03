@@ -31,6 +31,11 @@ struct CompactionEndEvent {
   uint64_t micros;
 };
 
+struct IoEvent {
+  // Current time micros
+  uint64_t micros;
+};
+
 class EventListener {
  public:
   EventListener() {}
