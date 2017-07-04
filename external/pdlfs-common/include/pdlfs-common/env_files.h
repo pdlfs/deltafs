@@ -50,6 +50,7 @@ class MinMaxBufferedWritableFile : public SynchronizableFile {
   // closed and deleted when the destructor of this class is called.
   MinMaxBufferedWritableFile(WritableFile* base, size_t min, size_t max)
       : base_(base), offset_(0), min_buf_size_(min), max_buf_size_(max) {
+    assert(min_buf_size_ <= max_buf_size_);
     buf_.reserve(max_buf_size_);
   }
 
