@@ -42,18 +42,18 @@ class SynchronizableFile : public WritableFile {
 // Implementation is not thread-safe and requires external synchronization for
 // use by multiple threads.
 // Write buffering will cause an extra copy of data in memory
-class UnsafeBufferedWritableFile : public SynchronizableFile {
+class MinMaxBufferedWritableFile : public SynchronizableFile {
  public:
   std::string* buffer_store() { return &buf_; }
 
   // *base must remain alive during the lifetime of this class and will be
   // closed and deleted when the destructor of this class is called.
-  UnsafeBufferedWritableFile(WritableFile* base, size_t buf_size)
-      : base_(base), offset_(0), max_buf_size_(buf_size) {
+  MinMaxBufferedWritableFile(WritableFile* base, size_t min, size_t max)
+      : base_(base), offset_(0), min_buf_size_(min), max_buf_size_(max) {
     buf_.reserve(max_buf_size_);
   }
 
-  virtual ~UnsafeBufferedWritableFile() {
+  virtual ~MinMaxBufferedWritableFile() {
     if (base_ != NULL) {
       base_->Close();
       delete base_;
@@ -83,15 +83,15 @@ class UnsafeBufferedWritableFile : public SynchronizableFile {
         break;
       }
     }
-    if (!status.ok()) {
-      return status;  // Error
-    } else if (chunk.size() != 0) {
-      buf_.append(chunk.data(), chunk.size());
-      assert(buf_.size() <= max_buf_size_);
-      return status;
-    } else {
-      return status;
+    if (status.ok()) {
+      if (chunk.size() != 0) {
+        buf_.append(chunk.data(), chunk.size());
+      }
+      if (buf_.size() >= min_buf_size_) {
+        status = EmptyBuffer();
+      }
     }
+    return status;
   }
 
   virtual Status SyncBefore(uint64_t offset) {
@@ -131,6 +131,7 @@ class UnsafeBufferedWritableFile : public SynchronizableFile {
  private:
   WritableFile* base_;
   uint64_t offset_;  // Number of bytes flushed
+  const size_t min_buf_size_;
   const size_t max_buf_size_;
   std::string buf_;
 };
