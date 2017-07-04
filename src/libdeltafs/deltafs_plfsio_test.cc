@@ -503,8 +503,12 @@ class PlfsIoBench {
     options_.key_size = static_cast<size_t>(GetOption("KEY_SIZE", 10));
     options_.data_buffer =
         static_cast<size_t>(GetOption("DATA_BUFFER", 8) << 20);
+    options_.min_data_buffer =
+        static_cast<size_t>(GetOption("MIN_DATA_BUFFER", 6) << 20);
     options_.index_buffer =
         static_cast<size_t>(GetOption("INDEX_BUFFER", 2) << 20);
+    options_.min_index_buffer =
+        static_cast<size_t>(GetOption("MIN_INDEX_BUFFER", 2) << 20);
     options_.listener = &printer_;
 
     writer_ = NULL;
@@ -733,6 +737,8 @@ class PlfsIoBench {
                 num_files_ / dura);
     fprintf(stderr, "              Index Buf: %d MB (x%d)\n",
             int(options_.index_buffer) >> 20, 1 << options_.lg_parts);
+    fprintf(stderr, "   Min Index Write Size: %d MB\n",
+            int(options_.min_index_buffer) >> 20);
     fprintf(stderr, "  Total SSTable Indexes: %.3f MB (before compression)\n",
             writer_->TEST_index_size() / ki / ki);
     fprintf(stderr, "               Total BF: %.3f MB (before compression)\n",
@@ -743,6 +749,8 @@ class PlfsIoBench {
             int(options_.block_batch_size) >> 20, 1 << options_.lg_parts);
     fprintf(stderr, "               Data Buf: %d MB\n",
             int(options_.data_buffer) >> 20);
+    fprintf(stderr, "    Min Data Write Size: %d MB\n",
+            int(options_.min_data_buffer) >> 20);
     fprintf(stderr, "     Total SSTable Data: %.3f MB\n",
             writer_->TEST_data_size() / ki / ki);
     fprintf(stderr, "        Final Phys Data: %.3f MB\n",
