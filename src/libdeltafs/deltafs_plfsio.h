@@ -99,11 +99,19 @@ struct DirOptions {
   // Default: 4MB
   size_t data_buffer;
 
+  // Minimum write size for each physical data log.
+  // Default: 4MB
+  size_t min_data_buffer;
+
   // Write buffer size for each physical index log.
   // Set to zero to disable buffering and each index block flush
   // becomes an actual physical write to the underlying storage.
   // Default: 4MB
   size_t index_buffer;
+
+  // Minimum write size for each physical index log.
+  // Default: 4MB
+  size_t min_index_buffer;
 
   // Add necessary padding to the end of each log object to ensure the
   // final object size is always some multiple of the write size.

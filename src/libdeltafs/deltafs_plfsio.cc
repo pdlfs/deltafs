@@ -38,7 +38,9 @@ DirOptions::DirOptions()
       block_padding(true),
       block_batch_size(2 << 20),
       data_buffer(4 << 20),
+      min_data_buffer(4 << 20),
       index_buffer(4 << 20),
+      min_index_buffer(4 << 20),
       tail_padding(false),
       compaction_pool(NULL),
       reader_pool(NULL),
@@ -736,7 +738,8 @@ static void PrintLogInfo(const std::string& name, const size_t mem_size) {
 // Try opening a log sink and store its handle in *result.
 static Status OpenSink(
     LogSink** result, const std::string& fname, Env* env,
-    size_t buf_size = 0,  // Enable write buffering
+    size_t max_buf = 0,  // Max write buffering
+    size_t min_buf = 0,  // Min write size
     port::Mutex* io_mutex =
         NULL,  // Forces external synchronization among multiple threads
     std::vector<std::string*>* write_bufs =
@@ -758,16 +761,16 @@ static Status OpenSink(
   } else {
     file = base;
   }
-  if (buf_size != 0) {
-    UnsafeBufferedWritableFile* buffered =
-        new UnsafeBufferedWritableFile(file, buf_size);
+  if (min_buf != 0) {
+    MinMaxBufferedWritableFile* buffered =
+        new MinMaxBufferedWritableFile(file, min_buf, max_buf);
     write_bufs->push_back(buffered->buffer_store());
     file = buffered;
   } else {
     // No writer buffer?
   }
 
-  PrintLogInfo(fname, buf_size);
+  PrintLogInfo(fname, max_buf);
   LogSink* sink = new LogSink(fname, file, io_mutex);
   sink->Ref();
 
@@ -822,19 +825,21 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   std::vector<std::string*> write_bufs;
   WritableFileStats* io_stats =
       options.measure_writes ? &impl->io_stats_ : NULL;
-  status =
-      OpenSink(&data[0], DataFileName(name, my_rank), env, options.data_buffer,
-               &impl->io_mutex_, &write_bufs, io_stats);
+  size_t min = options.min_data_buffer;
+  size_t max = options.data_buffer;
+  status = OpenSink(&data[0], DataFileName(name, my_rank), env, max, min,
+                    &impl->io_mutex_, &write_bufs, io_stats);
   if (status.ok()) {
     port::Mutex* const mtx = NULL;  // No synchronization needed for index files
     for (size_t i = 0; i < num_parts; i++) {
       tmp_dirs[i] =
           new DirLogger(impl->options_, i, &impl->mutex_, &impl->cond_var_);
-      WritableFileStats* internal_io_stats =
+      WritableFileStats* idx_io_stats =
           options.measure_writes ? &tmp_dirs[i]->io_stats_ : NULL;
-      status =
-          OpenSink(&index[i], IndexFileName(name, my_rank, int(i)), env,
-                   options.index_buffer, mtx, &write_bufs, internal_io_stats);
+      size_t idx_min = options.min_index_buffer;
+      size_t idx_max = options.index_buffer;
+      status = OpenSink(&index[i], IndexFileName(name, my_rank, int(i)), env,
+                        idx_max, idx_min, mtx, &write_bufs, idx_io_stats);
       tmp_dirs[i]->Ref();
       if (status.ok()) {
         tmp_dirs[i]->Open(data[0], index[i]);
