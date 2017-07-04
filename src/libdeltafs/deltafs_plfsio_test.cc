@@ -449,15 +449,15 @@ class PlfsIoBench {
     }
 
     void PrintEvents() {
-      fprintf(stderr, "\n\n!!! Background Events !!!\n");
-      fprintf(stderr, "\n-- XXX --\n");
+      fprintf(stdout, "\n\n!!! Background Events !!!\n");
+      fprintf(stdout, "\n-- XXX --\n");
       for (EventIter iter = events_.begin(); iter != events_.end(); ++iter) {
-        fprintf(stderr, "%s\n", ToString(*iter).c_str());
+        fprintf(stdout, "%s\n", ToString(*iter).c_str());
       }
       for (IoIter iter = iops_.begin(); iter != iops_.end(); ++iter) {
-        fprintf(stderr, "%s\n", ToString(*iter).c_str());
+        fprintf(stdout, "%s\n", ToString(*iter).c_str());
       }
-      fprintf(stderr, "\n-- XXX --\n");
+      fprintf(stdout, "\n-- XXX --\n");
     }
 
    private:
@@ -476,7 +476,7 @@ class PlfsIoBench {
     link_speed_ =
         GetOption("LINK_SPEED", 6);  // Burst-buffer link speed is 6 MBps
     batched_insertion_ = GetOption("BATCHED_INSERTION", false);
-    batch_size_ = GetOption("BATCH_SIZE", 64 << 10);  // Files per batch op
+    batch_size_ = GetOption("BATCH_SIZE", 4) << 10;  // Files per batch op
     ordered_keys_ = GetOption("ORDERED_KEYS", false);
     num_files_ = GetOption("NUM_FILES", 16);  // 16M files per epoch
 
@@ -494,10 +494,10 @@ class PlfsIoBench {
     options_.total_memtable_budget =
         static_cast<size_t>(GetOption("MEMTABLE_SIZE", 32) << 20);
     options_.block_size =
-        static_cast<size_t>(GetOption("BLOCK_SIZE", 128) << 10);
+        static_cast<size_t>(GetOption("BLOCK_SIZE", 32) << 10);
     options_.block_batch_size =
         static_cast<size_t>(GetOption("BLOCK_BATCH_SIZE", 2) << 20);
-    options_.block_util = GetOption("BLOCK_UTIL", 999) / 1000.0;
+    options_.block_util = GetOption("BLOCK_UTIL", 996) / 1000.0;
     options_.bf_bits_per_key = static_cast<size_t>(GetOption("BF_BITS", 10));
     options_.value_size = static_cast<size_t>(GetOption("VALUE_SIZE", 40));
     options_.key_size = static_cast<size_t>(GetOption("KEY_SIZE", 10));
@@ -701,8 +701,11 @@ class PlfsIoBench {
                 CPU_COUNT(&cpu_set) / dura * 100);
 #endif
 #endif
-    fprintf(stderr, "      Batched Insertion: %s\n",
-            batched_insertion_ ? "Yes" : "No");
+    if (batched_insertion_) {
+      fprintf(stderr, "      Batched Insertion: %d K\n", int(batch_size_ / ki));
+    } else {
+      fprintf(stderr, "      Batched Insertion: No\n");
+    }
     fprintf(stderr, "           Ordered Keys: %s\n",
             ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "    Indexes Compression: %s\n",
