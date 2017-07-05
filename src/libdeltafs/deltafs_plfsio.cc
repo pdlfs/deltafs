@@ -768,19 +768,27 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
 // Fix user-supplied options to be reasonable
 static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   DirOptions result = options;
-  if (result.env == NULL) result.env = Env::Default();
   ClipToRange(&result.total_memtable_budget, 1 << 20, 1 << 30);
   ClipToRange(&result.memtable_util, 0.5, 1.0);
-  ClipToRange(&result.block_size, 4 << 10, 4 << 20);
+  ClipToRange(&result.block_size, 1 << 10, 1 << 20);
   ClipToRange(&result.block_util, 0.5, 1.0);
   ClipToRange(&result.lg_parts, 0, 8);
+  if (result.index_buffer < result.min_index_buffer) {
+    result.index_buffer = result.min_index_buffer;
+  }
+  if (result.data_buffer < result.min_data_buffer) {
+    result.data_buffer = result.min_data_buffer;
+  }
+  if (result.env == NULL) {
+    result.env = Env::Default();
+  }
   return result;
 }
 
-static void PrintLogInfo(const std::string& name, const size_t mem_size) {
+static void PrintSinkInfo(const std::string& name, size_t mem_size) {
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Reading or writing %s, mem reserved: %s",
-          name.c_str(), PrettySize(mem_size).c_str());
+  Verbose(__LOG_ARGS__, 3, "Writing %s, buffer reserved: %s", name.c_str(),
+          PrettySize(mem_size).c_str());
 #endif
 }
 
@@ -819,7 +827,7 @@ static Status OpenSink(
     // No writer buffer?
   }
 
-  PrintLogInfo(fname, max_buf);
+  PrintSinkInfo(fname, max_buf);
   LogSink* sink = new LogSink(fname, file, io_mutex);
   sink->Ref();
 
@@ -981,6 +989,13 @@ DirReaderImpl::~DirReaderImpl() {
   }
 }
 
+static void PrintSourceInfo(const std::string& name, size_t mem_size) {
+#if VERBOSE >= 3
+  Verbose(__LOG_ARGS__, 3, "Reading %s, cache size: %s", name.c_str(),
+          PrettySize(mem_size).c_str());
+#endif
+}
+
 static Status LoadSource(LogSource** result, const std::string& fname, Env* env,
                          size_t read_size = 8 << 20,
                          SequentialFileStats* stats = NULL) {
@@ -1005,7 +1020,7 @@ static Status LoadSource(LogSource** result, const std::string& fname, Env* env,
         new WholeFileBufferedRandomAccessFile(file, size, read_size);
     status = buffered_file->Load();
     if (status.ok()) {
-      PrintLogInfo(fname, size);
+      PrintSourceInfo(fname, size);
       LogSource* src = new LogSource(buffered_file, size);
       src->Ref();
 
@@ -1037,7 +1052,7 @@ static Status OpenSource(LogSource** result, const std::string& fname, Env* env,
     } else {
       file = base;
     }
-    PrintLogInfo(fname, 0);
+    PrintSourceInfo(fname, 0);
     LogSource* src = new LogSource(file, size);
     src->Ref();
 
