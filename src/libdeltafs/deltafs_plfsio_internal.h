@@ -165,8 +165,8 @@ class DirLogger {
   size_t memory_usage() const;  // Report real memory usage
 
   // REQUIRES: mutex_ has been locked
-  bool HasCompaction();
-  Status Wait();  // Wait for all on-going compactions to finish
+  bool has_bg_compaction();
+  Status bg_status();  // Return latest compaction status
   // May trigger a new compaction
   Status Add(const Slice& key, const Slice& value);
 
@@ -235,6 +235,7 @@ class DirLogger {
   uint32_t num_flush_requested_;
   uint32_t num_flush_completed_;
   bool has_bg_compaction_;
+  Status bg_status_;
   void* filter_;  // void* since different types of filter might be used
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;

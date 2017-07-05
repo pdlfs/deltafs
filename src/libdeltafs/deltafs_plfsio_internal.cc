@@ -754,34 +754,28 @@ DirLogger::~DirLogger() {
 Status DirLogger::Open(LogSink* data, LogSink* indx) {
   assert(!opened_);  // Open() has not been called before
   opened_ = true;
+
   data_ = data;
   indx_ = indx;
   data_->Ref();
   indx_->Ref();
 
   tb_ = new TableLogger(options_, data_, indx_);
+
   // We always return OK
   return Status::OK();
 }
 
-bool DirLogger::HasCompaction() {
+// True iff there is an on-going background compaction.
+bool DirLogger::has_bg_compaction() {
   mu_->AssertHeld();
   return has_bg_compaction_;
 }
 
-// Block until compactions finish and return the latest compaction status.
-// Potentially multiple passes of compactions may be waited for.
-Status DirLogger::Wait() {
+// Report background compaction status.
+Status DirLogger::bg_status() {
   mu_->AssertHeld();
-  assert(opened_);
-  Status status;
-  while (tb_->ok() && has_bg_compaction_) {
-    bg_cv_->Wait();
-  }
-  if (!tb_->ok()) {
-    status = tb_->status();
-  }
-  return status;
+  return bg_status_;
 }
 
 // Pre-close all linked log files.
@@ -823,7 +817,7 @@ Status DirLogger::Flush(const FlushOptions& flush_options) {
 
   Status status;
   if (flush_options.dry_run) {
-    status = tb_->status();  // Status check only
+    status = bg_status_;  // Status check only
   } else {
     num_flush_requested_++;
     const uint32_t thres = num_flush_requested_;
@@ -854,8 +848,8 @@ Status DirLogger::Prepare(bool force, bool epoch_flush, bool finalize) {
   Status status;
   assert(mem_buf_ != NULL);
   while (true) {
-    if (!tb_->ok()) {
-      status = tb_->status();
+    if (!bg_status_.ok()) {
+      status = bg_status_;
       break;
     } else if (!force &&
                mem_buf_->CurrentBufferSize() <
@@ -894,8 +888,18 @@ Status DirLogger::Prepare(bool force, bool epoch_flush, bool finalize) {
 void DirLogger::MaybeScheduleCompaction() {
   mu_->AssertHeld();
 
-  if (has_bg_compaction_) return;  // Skip if there is one already scheduled
-  if (imm_buf_ == NULL) return;    // Nothing to be scheduled
+  // Do not schedule more if we are in error status
+  if (!bg_status_.ok()) {
+    return;
+  }
+  // Skip if there is one already scheduled
+  if (has_bg_compaction_) {
+    return;
+  }
+  // Nothing to be scheduled
+  if (imm_buf_ == NULL) {
+    return;
+  }
 
   has_bg_compaction_ = true;
 
@@ -997,9 +1001,11 @@ void DirLogger::CompactMemtable() {
           static_cast<int>(end - start));
 #endif
 
+  Status status = tb->status();
   delete iter;
   mu_->Lock();
   num_flush_completed_++;
+  bg_status_ = status;
   return;
 }
 

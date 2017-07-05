@@ -220,6 +220,7 @@ class DirWriterImpl : public DirWriter {
 
  private:
   bool HasCompaction();
+  Status ObtainCompactionStatus();
   Status WaitForCompaction();
   Status TryFlush(bool epoch_flush = false, bool finalize = false);
   Status TryBatchWrites(BatchCursor* cursor);
@@ -343,11 +344,23 @@ Status DirWriterImpl::Finalize() {
   return status;
 }
 
+Status DirWriterImpl::ObtainCompactionStatus() {
+  mutex_.AssertHeld();
+  Status status;
+  for (size_t i = 0; i < num_parts_; i++) {
+    status = dirs_[i]->bg_status();
+    if (!status.ok()) {
+      break;
+    }
+  }
+  return status;
+}
+
 bool DirWriterImpl::HasCompaction() {
   mutex_.AssertHeld();
   bool result = false;
   for (size_t i = 0; i < num_parts_; i++) {
-    if (dirs_[i]->HasCompaction()) {
+    if (dirs_[i]->has_bg_compaction()) {
       result = true;
       break;
     }
@@ -358,14 +371,12 @@ bool DirWriterImpl::HasCompaction() {
 Status DirWriterImpl::WaitForCompaction() {
   mutex_.AssertHeld();
   Status status;
-  while (status.ok()) {
-    if (HasCompaction()) {
-      for (size_t i = 0; i < num_parts_; i++) {
-        status = dirs_[i]->Wait();
-        if (!status.ok()) {
-          break;
-        }
-      }
+  while (true) {
+    status = ObtainCompactionStatus();
+    if (!status.ok()) {
+      break;
+    } else if (HasCompaction()) {
+      bg_cv_.Wait();
     } else {
       break;
     }
@@ -655,6 +666,7 @@ Status DirWriterImpl::WaitForOne() {
     if (HasCompaction()) {
       bg_cv_.Wait();
     }
+    status = ObtainCompactionStatus();
   } else {
     status = finish_status_;
   }
