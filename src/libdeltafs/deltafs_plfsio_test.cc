@@ -737,7 +737,7 @@ class PlfsIoBench {
                 num_files_ / dura);
     fprintf(stderr, "              Index Buf: %d MB (x%d)\n",
             int(options_.index_buffer) >> 20, 1 << options_.lg_parts);
-    fprintf(stderr, "   Min Index Write Size: %d MB\n",
+    fprintf(stderr, " Minimum Index I/O Size: %d MB\n",
             int(options_.min_index_buffer) >> 20);
     fprintf(stderr, "  Total SSTable Indexes: %.3f MB (before compression)\n",
             writer_->TEST_index_size() / ki / ki);
@@ -749,7 +749,7 @@ class PlfsIoBench {
             int(options_.block_batch_size) >> 20, 1 << options_.lg_parts);
     fprintf(stderr, "               Data Buf: %d MB\n",
             int(options_.data_buffer) >> 20);
-    fprintf(stderr, "    Min Data Write Size: %d MB\n",
+    fprintf(stderr, "  Minimum Data I/O Size: %d MB\n",
             int(options_.min_data_buffer) >> 20);
     fprintf(stderr, "     Total SSTable Data: %.3f MB\n",
             writer_->TEST_data_size() / ki / ki);
