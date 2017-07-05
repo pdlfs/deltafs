@@ -210,6 +210,7 @@ class DirWriterImpl : public DirWriter {
   virtual uint64_t TEST_filter_size() const;
   virtual uint64_t TEST_data_size() const;
 
+  virtual Status WaitForOne();
   virtual Status Wait();
   virtual Status Write(BatchCursor* cursor, int epoch);
   virtual Status Append(const Slice& fid, const Slice& data, int epoch);
@@ -218,6 +219,7 @@ class DirWriterImpl : public DirWriter {
   virtual Status Finish();
 
  private:
+  bool HasCompaction();
   Status WaitForCompaction();
   Status TryFlush(bool epoch_flush = false, bool finalize = false);
   Status TryBatchWrites(BatchCursor* cursor);
@@ -230,7 +232,8 @@ class DirWriterImpl : public DirWriter {
   const DirOptions options_;
   mutable port::Mutex io_mutex_;  // Protecting the shared data log
   mutable port::Mutex mutex_;
-  port::CondVar cond_var_;
+  port::CondVar bg_cv_;
+  port::CondVar cv_;
   int num_epochs_;
   uint32_t num_parts_;
   uint32_t part_mask_;
@@ -249,7 +252,8 @@ class DirWriterImpl : public DirWriter {
 
 DirWriterImpl::DirWriterImpl(const DirOptions& options)
     : options_(options),
-      cond_var_(&mutex_),
+      bg_cv_(&mutex_),
+      cv_(&mutex_),
       num_epochs_(0),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
@@ -339,12 +343,30 @@ Status DirWriterImpl::Finalize() {
   return status;
 }
 
+bool DirWriterImpl::HasCompaction() {
+  mutex_.AssertHeld();
+  bool result = false;
+  for (size_t i = 0; i < num_parts_; i++) {
+    if (dirs_[i]->HasCompaction()) {
+      result = true;
+      break;
+    }
+  }
+  return result;
+}
+
 Status DirWriterImpl::WaitForCompaction() {
   mutex_.AssertHeld();
   Status status;
-  for (size_t i = 0; i < num_parts_; i++) {
-    status = dirs_[i]->Wait();
-    if (!status.ok()) {
+  while (status.ok()) {
+    if (HasCompaction()) {
+      for (size_t i = 0; i < num_parts_; i++) {
+        status = dirs_[i]->Wait();
+        if (!status.ok()) {
+          break;
+        }
+      }
+    } else {
       break;
     }
   }
@@ -382,7 +404,7 @@ Status DirWriterImpl::TryBatchWrites(BatchCursor* cursor) {
   while (status.ok()) {
     if (has_more) {
       has_more = false;
-      cond_var_.Wait();
+      bg_cv_.Wait();
     } else {
       break;
     }
@@ -459,7 +481,7 @@ Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
 
     if (status.ok()) {
       if (!waiting_list.empty()) {
-        cond_var_.Wait();  // Waiting for buffer space
+        bg_cv_.Wait();  // Waiting for buffer space
       }
       waiting_list.swap(remaining);
     } else {
@@ -484,7 +506,7 @@ Status DirWriterImpl::Finish() {
       status = finish_status_;  // Return the cached result
       break;
     } else if (has_pending_flush_) {
-      cond_var_.Wait();
+      cv_.Wait();
     } else {
       has_pending_flush_ = true;
       const bool epoch_flush = true;
@@ -493,7 +515,7 @@ Status DirWriterImpl::Finish() {
       if (status.ok()) status = WaitForCompaction();
       if (status.ok()) status = Finalize();
       has_pending_flush_ = false;
-      cond_var_.SignalAll();
+      cv_.SignalAll();
       finish_status_ = status;
       finished_ = true;
       break;
@@ -515,7 +537,7 @@ Status DirWriterImpl::EpochFlush(int epoch) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
     } else if (has_pending_flush_) {
-      cond_var_.Wait();
+      cv_.Wait();
     } else if (epoch != -1 && epoch < num_epochs_) {
       status = Status::AlreadyExists(Slice());
       break;
@@ -528,7 +550,7 @@ Status DirWriterImpl::EpochFlush(int epoch) {
       status = TryFlush(epoch_flush);
       if (status.ok()) num_epochs_++;
       has_pending_flush_ = false;
-      cond_var_.SignalAll();
+      cv_.SignalAll();
       break;
     }
   }
@@ -548,7 +570,7 @@ Status DirWriterImpl::Flush(int epoch) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
     } else if (has_pending_flush_) {
-      cond_var_.Wait();
+      cv_.Wait();
     } else if (epoch != -1 && epoch != num_epochs_) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
@@ -556,7 +578,7 @@ Status DirWriterImpl::Flush(int epoch) {
       has_pending_flush_ = true;
       status = TryFlush();
       has_pending_flush_ = false;
-      cond_var_.SignalAll();
+      cv_.SignalAll();
       break;
     }
   }
@@ -571,7 +593,7 @@ Status DirWriterImpl::Write(BatchCursor* cursor, int epoch) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
     } else if (has_pending_flush_) {
-      cond_var_.Wait();
+      cv_.Wait();
     } else if (epoch != -1 && epoch != num_epochs_) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
@@ -580,7 +602,7 @@ Status DirWriterImpl::Write(BatchCursor* cursor, int epoch) {
       has_pending_flush_ = true;
       status = TryBatchWrites(cursor);
       has_pending_flush_ = false;
-      cond_var_.SignalAll();
+      cv_.SignalAll();
       break;
     }
   }
@@ -595,7 +617,7 @@ Status DirWriterImpl::Append(const Slice& fid, const Slice& data, int epoch) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
     } else if (has_pending_flush_) {
-      cond_var_.Wait();
+      cv_.Wait();
     } else if (epoch != -1 && epoch != num_epochs_) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
@@ -604,7 +626,7 @@ Status DirWriterImpl::Append(const Slice& fid, const Slice& data, int epoch) {
       has_pending_flush_ = true;
       status = TryAppend(fid, data);
       has_pending_flush_ = false;
-      cond_var_.SignalAll();
+      cv_.SignalAll();
       if (status.IsBufferFull()) {
         MaybeSlowdownCaller();
       }
@@ -621,6 +643,21 @@ Status DirWriterImpl::TryAppend(const Slice& fid, const Slice& data) {
   const uint32_t part = hash & part_mask_;
   assert(part < num_parts_);
   status = dirs_[part]->Add(fid, data);
+  return status;
+}
+
+// Wait for an on-going compaction to finish if there is any.
+// Return OK on success, or a non-OK status on errors.
+Status DirWriterImpl::WaitForOne() {
+  Status status;
+  MutexLock ml(&mutex_);
+  if (!finished_) {
+    if (HasCompaction()) {
+      bg_cv_.Wait();
+    }
+  } else {
+    status = finish_status_;
+  }
   return status;
 }
 
@@ -833,7 +870,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
     port::Mutex* const mtx = NULL;  // No synchronization needed for index files
     for (size_t i = 0; i < num_parts; i++) {
       tmp_dirs[i] =
-          new DirLogger(impl->options_, i, &impl->mutex_, &impl->cond_var_);
+          new DirLogger(impl->options_, i, &impl->mutex_, &impl->bg_cv_);
       WritableFileStats* idx_io_stats =
           options.measure_writes ? &tmp_dirs[i]->io_stats_ : NULL;
       size_t idx_min = options.min_index_buffer;

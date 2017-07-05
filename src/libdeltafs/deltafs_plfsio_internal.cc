@@ -764,8 +764,13 @@ Status DirLogger::Open(LogSink* data, LogSink* indx) {
   return Status::OK();
 }
 
-// Block until compaction finishes and return the
-// latest compaction status.
+bool DirLogger::HasCompaction() {
+  mu_->AssertHeld();
+  return has_bg_compaction_;
+}
+
+// Block until compactions finish and return the latest compaction status.
+// Potentially multiple passes of compactions may be waited for.
 Status DirLogger::Wait() {
   mu_->AssertHeld();
   assert(opened_);

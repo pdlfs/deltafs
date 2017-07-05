@@ -165,6 +165,7 @@ class DirLogger {
   size_t memory_usage() const;  // Report real memory usage
 
   // REQUIRES: mutex_ has been locked
+  bool HasCompaction();
   Status Wait();  // Wait for all on-going compactions to finish
   // May trigger a new compaction
   Status Add(const Slice& key, const Slice& value);
