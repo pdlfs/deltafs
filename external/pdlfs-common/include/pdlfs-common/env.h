@@ -344,7 +344,7 @@ class ThreadPool {
 
   // Instantiate a new thread pool with a fixed number of threads.
   // The caller should delete the pool to free associated resources.
-  static ThreadPool* NewFixed(int num_threads);
+  static ThreadPool* NewFixed(int num_threads, bool eager_init = false);
 
   // Arrange to run "(*function)(arg)" once in one of a pool of
   // background threads.

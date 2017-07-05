@@ -140,16 +140,22 @@ class PosixMmapReadableFile : public RandomAccessFile {
 
 class PosixFixedThreadPool : public ThreadPool {
  public:
-  PosixFixedThreadPool(int size)
+  PosixFixedThreadPool(int size, bool eager_init)
       : bg_cv_(&mu_),
-        started_threads_(0),
+        num_pool_threads_(0),
         max_threads_(size),
-        shutting_down_(NULL) {}
+        shutting_down_(NULL) {
+    if (eager_init) {
+      MutexLock ml(&mu_);
+      Init();
+    }
+  }
 
   virtual ~PosixFixedThreadPool();
   virtual void Schedule(void (*function)(void* arg), void* arg);
   virtual std::string ToDebugString();
   void StartThread(void (*function)(void* arg), void* arg);
+  void Init();
 
  private:
   // BGThread() is the body of the background thread
@@ -162,7 +168,7 @@ class PosixFixedThreadPool : public ThreadPool {
 
   port::Mutex mu_;
   port::CondVar bg_cv_;
-  int started_threads_;
+  int num_pool_threads_;
   int max_threads_;
 
   port::AtomicPointer shutting_down_;
@@ -189,7 +195,7 @@ class PosixFixedThreadPool : public ThreadPool {
 
 class PosixEnv : public Env {
  public:
-  explicit PosixEnv() : pool_(1) {}
+  explicit PosixEnv() : pool_(1, false) {}
   virtual ~PosixEnv() { abort(); }
 
   virtual Status NewSequentialFile(const Slice& fname,
@@ -569,35 +575,34 @@ PosixFixedThreadPool::~PosixFixedThreadPool() {
   mu_.Lock();
   shutting_down_.Release_Store(this);
   bg_cv_.SignalAll();
-  while (started_threads_ != 0) {
+  while (num_pool_threads_ != 0) {
     bg_cv_.Wait();
   }
   mu_.Unlock();
 }
 
+void PosixFixedThreadPool::Init() {
+  mu_.AssertHeld();
+  while (num_pool_threads_ < max_threads_) {
+    num_pool_threads_++;
+    PthreadCreate(BGThreadWrapper, this);
+  }
+}
+
 void PosixFixedThreadPool::Schedule(void (*function)(void*), void* arg) {
   if (!shutting_down_.Acquire_Load()) {
-    mu_.Lock();
+    MutexLock ml(&mu_);
 
-    // Start background threads if necessary
-    while (started_threads_ < max_threads_) {
-      assert(started_threads_ >= 0);
-      started_threads_++;
-      PthreadCreate(BGThreadWrapper, this);
-    }
+    Init();  // Start background threads if necessary
 
-    // If the queue is currently empty, the background thread may currently be
-    // waiting.
-    if (queue_.empty()) {
-      bg_cv_.SignalAll();
-    }
+    // If the queue is currently empty, the background threads
+    // may be waiting.
+    if (queue_.empty()) bg_cv_.SignalAll();
 
     // Add to priority queue
     queue_.push_back(BGItem());
     queue_.back().function = function;
     queue_.back().arg = arg;
-
-    mu_.Unlock();
   }
 }
 
@@ -613,8 +618,8 @@ void PosixFixedThreadPool::BGThread() {
         bg_cv_.Wait();
       }
       if (shutting_down_.Acquire_Load()) {
-        started_threads_--;
-        assert(started_threads_ >= 0);
+        assert(num_pool_threads_ > 0);
+        num_pool_threads_--;
         bg_cv_.SignalAll();
         return;
       }
@@ -627,7 +632,6 @@ void PosixFixedThreadPool::BGThread() {
 
     assert(function != NULL);
     function(arg);
-    function = NULL;
   }
 }
 
@@ -638,8 +642,8 @@ void PosixFixedThreadPool::StartThread(void (*function)(void* arg), void* arg) {
   PthreadCreate(StartThreadWrapper, state);
 }
 
-ThreadPool* ThreadPool::NewFixed(int num_threads) {
-  return new PosixFixedThreadPool(num_threads);
+ThreadPool* ThreadPool::NewFixed(int num_threads, bool eager_init) {
+  return new PosixFixedThreadPool(num_threads, eager_init);
 }
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;
