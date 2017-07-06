@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2017 Carnegie Mellon University.
@@ -10,17 +8,19 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#pragma once
+
+#include "pdlfs-common/env.h"
+#include "pdlfs-common/map.h"
+#include "pdlfs-common/mutexlock.h"
+#include "pdlfs-common/port.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
 #include <unistd.h>
-
-#include "pdlfs-common/env.h"
-#include "pdlfs-common/map.h"
-#include "pdlfs-common/mutexlock.h"
-#include "pdlfs-common/port.h"
 
 namespace pdlfs {
 
@@ -38,7 +38,7 @@ inline int LockOrUnlock(int fd, bool lock) {
   errno = 0;
   struct flock f;
   memset(&f, 0, sizeof(f));
-  f.l_type = (lock ? F_WRLCK : F_UNLCK);
+  f.l_type = static_cast<short>(lock ? F_WRLCK : F_UNLCK);
   f.l_whence = SEEK_SET;
   f.l_start = 0;
   f.l_len = 0;  // Cover the entire file
@@ -133,18 +133,17 @@ class PosixSequentialFile : public SequentialFile {
     ssize_t nr = read(fd_, scratch, n);
     if (nr == -1) {
       s = IOError(filename_, errno);
-    } else if (nr == 0) {
-      // EOF
+    } else if (nr != 0) {
+      *result = Slice(scratch, static_cast<size_t>(nr));
+    } else {  // EOF
       *result = Slice(scratch, 0);
-    } else {
-      *result = Slice(scratch, nr);
     }
 
     return s;
   }
 
   virtual Status Skip(uint64_t n) {
-    int r = lseek(fd_, n, SEEK_CUR);
+    off_t r = lseek(fd_, n, SEEK_CUR);
     if (r == -1) {
       return IOError(filename_, errno);
     } else {
@@ -168,7 +167,7 @@ class PosixRandomAccessFile : public RandomAccessFile {
                       char* scratch) const {
     Status s;
     ssize_t r = pread(fd_, scratch, n, static_cast<off_t>(offset));
-    *result = Slice(scratch, (r < 0) ? 0 : r);
+    *result = Slice(scratch, static_cast<size_t>(r < 0 ? 0 : r));
     if (r < 0) {
       // An error: return a non-ok status
       s = IOError(filename_, errno);

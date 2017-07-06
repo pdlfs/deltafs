@@ -144,7 +144,7 @@ class PosixFixedThreadPool : public ThreadPool {
       : bg_cv_(&mu_),
         num_pool_threads_(0),
         max_threads_(size),
-        shutting_down_(NULL) {
+        shutting_down_(false) {
     if (eager_init) {
       MutexLock ml(&mu_);
       Init();
@@ -171,7 +171,8 @@ class PosixFixedThreadPool : public ThreadPool {
   int num_pool_threads_;
   int max_threads_;
 
-  port::AtomicPointer shutting_down_;
+  bool shutting_down_;
+
   // Entry per Schedule() call
   struct BGItem {
     void* arg;
@@ -262,7 +263,7 @@ class PosixEnv : public Env {
     }
     struct dirent* entry;
     while ((entry = readdir(d)) != NULL) {
-      result->push_back(entry->d_name);
+      result->push_back(static_cast<const char*>(entry->d_name));
     }
     closedir(d);
     return Status::OK();
@@ -310,11 +311,11 @@ class PosixEnv : public Env {
   virtual Status GetFileSize(const Slice& fname, uint64_t* size) {
     Status s;
     struct stat sbuf;
-    if (stat(fname.c_str(), &sbuf) != 0) {
-      *size = 0;
-      s = IOError(fname, errno);
+    if (stat(fname.c_str(), &sbuf) == 0) {
+      *size = static_cast<uint64_t>(sbuf.st_size);
     } else {
-      *size = sbuf.st_size;
+      s = IOError(fname, errno);
+      *size = 0;
     }
     return s;
   }
@@ -573,7 +574,7 @@ std::string PosixFixedThreadPool::ToDebugString() {
 
 PosixFixedThreadPool::~PosixFixedThreadPool() {
   mu_.Lock();
-  shutting_down_.Release_Store(this);
+  shutting_down_ = true;
   bg_cv_.SignalAll();
   while (num_pool_threads_ != 0) {
     bg_cv_.Wait();
@@ -590,20 +591,18 @@ void PosixFixedThreadPool::Init() {
 }
 
 void PosixFixedThreadPool::Schedule(void (*function)(void*), void* arg) {
-  if (!shutting_down_.Acquire_Load()) {
-    MutexLock ml(&mu_);
+  MutexLock ml(&mu_);
+  if (shutting_down_) return;
+  Init();  // Start background threads if necessary
 
-    Init();  // Start background threads if necessary
+  // If the queue is currently empty, the background threads
+  // may be waiting.
+  if (queue_.empty()) bg_cv_.SignalAll();
 
-    // If the queue is currently empty, the background threads
-    // may be waiting.
-    if (queue_.empty()) bg_cv_.SignalAll();
-
-    // Add to priority queue
-    queue_.push_back(BGItem());
-    queue_.back().function = function;
-    queue_.back().arg = arg;
-  }
+  // Add to priority queue
+  queue_.push_back(BGItem());
+  queue_.back().function = function;
+  queue_.back().arg = arg;
 }
 
 void PosixFixedThreadPool::BGThread() {
@@ -614,10 +613,10 @@ void PosixFixedThreadPool::BGThread() {
     {
       MutexLock l(&mu_);
       // Wait until there is an item that is ready to run
-      while (queue_.empty() && !shutting_down_.Acquire_Load()) {
+      while (queue_.empty() && !shutting_down_) {
         bg_cv_.Wait();
       }
-      if (shutting_down_.Acquire_Load()) {
+      if (shutting_down_) {
         assert(num_pool_threads_ > 0);
         num_pool_threads_--;
         bg_cv_.SignalAll();
