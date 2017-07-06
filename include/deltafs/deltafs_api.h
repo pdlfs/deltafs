@@ -92,14 +92,19 @@ struct deltafs_plfsdir; /* Opaque handle for an opened deltafs plfsdir */
 typedef struct deltafs_plfsdir deltafs_plfsdir_t;
 /* Returns NULL on errors. A heap-allocated plfsdir handle otherwise.
    The returned object should be deleted via deltafs_plfsdir_free_handle(). */
-deltafs_plfsdir_t* deltafs_plfsdir_create_handle(int __mode);
+deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf,
+                                                 int __mode);
 int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size);
 int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size);
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env);
 int deltafs_plfsdir_set_thread_pool(deltafs_plfsdir_t* __dir,
                                     deltafs_tp_t* __tp);
-int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
-                         const char* __conf);
+/* Error printer type */
+typedef void (*deltafs_printer_t)(const char* __err, void* __arg);
+int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
+                                    deltafs_printer_t __printer,
+                                    void* __printer_arg);
+int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name);
 int deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
                         size_t __keylen, int __epoch, const char* __value,
                         size_t __sz);
