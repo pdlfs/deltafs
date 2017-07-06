@@ -480,7 +480,8 @@ class PlfsIoBench {
     ordered_keys_ = GetOption("ORDERED_KEYS", false);
     num_files_ = GetOption("NUM_FILES", 16);  // 16M files per epoch
 
-    num_threads_ = GetOption("NUM_THREADS", 4);  // For bg compaction
+    num_threads_ = GetOption("NUM_THREADS", 4);  // Threads for bg compaction
+
     print_events_ = GetOption("PRINT_EVENTS", false);
     force_fifo_ = GetOption("FORCE_FIFO", false);
 
@@ -595,7 +596,8 @@ class PlfsIoBench {
   };
 
 #if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_OS_LINUX)
-  void ForceFifoScheduling(pthread_attr_t* attr) {
+  void* MaybeForceFifoScheduling(pthread_attr_t* attr) {
+    if (!force_fifo_) return NULL;
     int min = sched_get_priority_min(SCHED_FIFO);
     int max = sched_get_priority_max(SCHED_FIFO);
     struct sched_param param;
@@ -611,6 +613,7 @@ class PlfsIoBench {
     param.sched_priority = (min + max) / 2 - 1;
     int r5 = pthread_attr_setschedparam(attr, &param);
     ASSERT_EQ(r5, 0);
+    return attr;
   }
 #endif
 
@@ -618,12 +621,8 @@ class PlfsIoBench {
     bool owns_pool = false;
     if (num_threads_ != 0) {
 #if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_OS_LINUX)
-      pthread_attr_t th_attr;
-      pthread_attr_t* attr = NULL;
-      if (force_fifo_) {
-        ForceFifoScheduling(&th_attr);
-        attr = &th_attr;
-      }
+      pthread_attr_t pthread_attr;
+      void* attr = MaybeForceFifoScheduling(&pthread_attr);
       ThreadPool* pool = ThreadPool::NewFixed(num_threads_, true, attr);
 #else
       ThreadPool* pool = ThreadPool::NewFixed(num_threads_, true);
@@ -720,7 +719,7 @@ class PlfsIoBench {
 #ifdef PDLFS_PLATFORM_POSIX
     struct rusage usage;
     int r1 = getrusage(RUSAGE_SELF, &usage);
-    ASSERT_TRUE(r1 == 0);
+    ASSERT_EQ(r1, 0);
     fprintf(stderr, "          User CPU Time: %.3f s\n",
             ToSecs(&usage.ru_utime));
     fprintf(stderr, "        System CPU Time: %.3f s\n",
@@ -729,7 +728,7 @@ class PlfsIoBench {
     cpu_set_t cpu_set;
     CPU_ZERO(&cpu_set);
     int r2 = sched_getaffinity(getpid(), sizeof(cpu_set), &cpu_set);
-    ASSERT_TRUE(r2 == 0);
+    ASSERT_EQ(r2, 0);
     fprintf(stderr, "          Num CPU Cores: %d\n", CPU_COUNT(&cpu_set));
     fprintf(stderr, "              CPU Usage: %.1f%%\n",
             k * k * (ToSecs(&usage.ru_utime) + ToSecs(&usage.ru_stime)) /
@@ -810,10 +809,10 @@ class PlfsIoBench {
   int batch_size_;
   int batched_insertion_;
   int ordered_keys_;
-  int num_files_;    // Number of particle files (in millions)
-  int num_threads_;  // Number of bg compaction threads
-  int print_events_;
-  int force_fifo_;
+  int num_files_;     // Number of particle files (in millions)
+  int num_threads_;   // Number of bg compaction threads
+  int force_fifo_;    // Force real-time FIFO scheduling
+  int print_events_;  // Dump background events
   EventPrinter printer_;
   const std::string home_;
   DirOptions options_;
