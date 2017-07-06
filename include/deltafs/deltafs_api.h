@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2015-2017 Carnegie Mellon University.
  *
@@ -9,9 +7,13 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <stdint.h>
+#pragma once
+
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include <stddef.h>
+#include <stdint.h>
 
 /* Used as a mode to create a special type of directories where all
    I/O operations to files beneath these directories will be performed
@@ -71,7 +73,7 @@ int deltafs_close(int __fd);
  * ------------------------
  */
 
-struct deltafs_env; /* Opaque handle for an opened env */
+struct deltafs_env; /* Opaque handle for an opened deltafs env */
 typedef struct deltafs_env deltafs_env_t;
 /* Returns NULL on errors. A heap-allocated env instance otherwise.
    The returned object should be deleted via deltafs_env_close(). */
@@ -79,18 +81,28 @@ deltafs_env_t* deltafs_env_init(int __argc, void** __argv);
 int deltafs_env_is_system(deltafs_env_t* __env);
 int deltafs_env_close(deltafs_env_t* __env);
 
-struct deltafs_plfsdir; /* Opaque handle for an opened plfsdir */
+struct deltafs_tp; /* Opaque handle for a deltafs thread pool */
+typedef struct deltafs_tp deltafs_tp_t;
+/* Returns NULL on errors. A heap-allocated thread pool instance otherwise.
+   The returned object should be deleted via deltafs_tp_close(). */
+deltafs_tp_t* deltafs_tp_init(int __size);
+int deltafs_tp_close(deltafs_tp_t* __tp);
+
+struct deltafs_plfsdir; /* Opaque handle for an opened deltafs plfsdir */
 typedef struct deltafs_plfsdir deltafs_plfsdir_t;
 /* Returns NULL on errors. A heap-allocated plfsdir handle otherwise.
    The returned object should be deleted via deltafs_plfsdir_free_handle(). */
 deltafs_plfsdir_t* deltafs_plfsdir_create_handle(int __mode);
-int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, int __key_size);
+int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size);
+int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size);
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env);
+int deltafs_plfsdir_set_thread_pool(deltafs_plfsdir_t* __dir,
+                                    deltafs_tp_t* __tp);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
                          const char* __conf);
-int deltafs_plfsdir_post(deltafs_plfsdir_t* __dir, const char* __key,
-                         size_t __keylen, int __epoch, const char* __value,
-                         size_t __sz);
+int deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
+                        size_t __keylen, int __epoch, const char* __value,
+                        size_t __sz);
 /* Appends a piece of data into a given file.
    __fname is hashed to become a fixed-sized key.
    Return 0 on success, -1 on errors. */

@@ -638,18 +638,19 @@ namespace {
 typedef pdlfs::plfsio::IoStats CompactionStats;
 // Dir options
 typedef pdlfs::plfsio::DirOptions DirOptions;
-
 // Dir writer
 typedef pdlfs::plfsio::DirWriter DirWriter;
 // Dir Reader
-typedef pdlfs::plfsio::DirReader Reader;
+typedef pdlfs::plfsio::DirReader DirReader;
 
-// Dir Env
-typedef pdlfs::Env Env;
+// Default system env.
+static inline pdlfs::Env* DefaultDirEnv() {
+  return pdlfs::port::posix::GetUnBufferedIOEnv();  // Avoid double-buffering
+}
 
-static inline Env* DefaultDirEnv() {
-  // Avoid double-buffering
-  return pdlfs::port::posix::GetUnBufferedIOEnv();
+// Default thread pool impl.
+static inline pdlfs::ThreadPool* CreateThreadPool(int num_threads) {
+  return pdlfs::ThreadPool::NewFixed(num_threads, true);
 }
 
 static inline DirOptions ParseOptions(const char* conf) {
@@ -663,19 +664,21 @@ static inline DirOptions ParseOptions(const char* conf) {
 }  // namespace
 
 struct deltafs_env {
-  Env* env;
+  pdlfs::Env* env;
   // True iff env belongs to the system
   // and should not be deleted
   int sys;
 };
 
 deltafs_env_t* deltafs_env_init(int __argc, void** __argv) {
-  bool is_system;
-  Env* env = pdlfs::TryOpenEnv(__argc, __argv, &is_system);
+  pdlfs::Env* env;
+  bool sys;
+  env = pdlfs::TryOpenEnv(__argc, __argv, &sys);
 
   if (env != NULL) {
-    deltafs_env_t* result = (deltafs_env_t*)malloc(sizeof(deltafs_env_t));
-    result->sys = int(is_system);
+    deltafs_env_t* result =
+        static_cast<deltafs_env_t*>(malloc(sizeof(deltafs_env_t)));
+    result->sys = int(sys);
     result->env = env;
     return result;
   } else {
@@ -704,23 +707,58 @@ int deltafs_env_close(deltafs_env_t* __env) {
   }
 }
 
+struct deltafs_tp {
+  pdlfs::ThreadPool* pool;
+};
+
+deltafs_tp_t* deltafs_tp_init(int __size) {
+  pdlfs::ThreadPool* pool = CreateThreadPool(__size);
+  if (pool != NULL) {
+    deltafs_tp_t* result =
+        static_cast<deltafs_tp_t*>(malloc(sizeof(deltafs_tp_t)));
+    result->pool = pool;
+    return result;
+  } else {
+    SetErrno(BadArgs());
+    return NULL;
+  }
+}
+
+int deltafs_tp_close(deltafs_tp_t* __tp) {
+  if (__tp != NULL) {
+    if (__tp->pool != NULL) {
+      delete __tp->pool;
+    }
+    free(__tp);
+    return 0;
+  } else {
+    return 0;
+  }
+}
+
 struct deltafs_plfsdir {
-  Env* env;
-  int key_size;
-  int mode;
+  pdlfs::Env* env;
+  pdlfs::ThreadPool* pool;
   union {
     DirWriter* writer;
-    Reader* reader;
+    DirReader* reader;
   } io;
+  int opened;  // If deltafs_plfsdir_open() has been called
+  size_t value_size;
+  size_t key_size;
+  // O_WRONLY or O_RDONLY
+  int mode;
 };
 
 deltafs_plfsdir_t* deltafs_plfsdir_create_handle(int __mode) {
   __mode = __mode & O_ACCMODE;
   if (__mode == O_RDONLY || __mode == O_WRONLY) {
     deltafs_plfsdir_t* dir =
-        (deltafs_plfsdir_t*)malloc(sizeof(deltafs_plfsdir_t));
+        static_cast<deltafs_plfsdir_t*>(malloc(sizeof(deltafs_plfsdir_t)));
     dir->env = DefaultDirEnv();
-    dir->key_size = 10;
+    dir->pool = NULL;
+    dir->key_size = 8;
+    dir->opened = false;
     dir->mode = __mode;
 
     if (__mode == O_RDONLY) {
@@ -736,13 +774,13 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(int __mode) {
   }
 }
 
-int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, int __key_size) {
+int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size) {
   if (__key_size < 8) {
     __key_size = 8;
   } else if (__key_size > 16) {
     __key_size = 16;
   }
-  if (__dir != NULL) {
+  if (__dir != NULL && !__dir->opened) {
     __dir->key_size = __key_size;
     return 0;
   } else {
@@ -751,8 +789,18 @@ int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, int __key_size) {
   }
 }
 
+int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size) {
+  if (__dir != NULL && !__dir->opened) {
+    __dir->value_size = __val_size;
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env) {
-  if (__dir != NULL && __env != NULL) {
+  if (__dir != NULL && !__dir->opened && __env != NULL) {
     __dir->env = __env->env;
     return 0;
   } else {
@@ -761,107 +809,182 @@ int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env) {
   }
 }
 
+int deltafs_plfsdir_set_thread_pool(deltafs_plfsdir_t* __dir,
+                                    deltafs_tp_t* __tp) {
+  if (__dir != NULL && !__dir->opened && __tp != NULL) {
+    __dir->pool = __tp->pool;
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
+namespace {
+
+static pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
+  DirOptions options;
+  options.value_size = dir->value_size;
+  options.key_size = dir->key_size;
+  options.allow_env_threads = true;
+  options.env = dir->env;
+
+  if (dir->pool != NULL) {
+    options.compaction_pool = dir->pool;
+  } else {
+    options.compaction_pool = NULL;
+  }
+
+  DirWriter* writer;
+  DirReader* reader;
+
+  pdlfs::Status s;
+  if (dir->mode == O_WRONLY) {
+    s = DirWriter::Open(options, name, &writer);
+    if (s.ok()) {
+      dir->io.writer = writer;
+    } else {
+      dir->io.writer = NULL;
+    }
+  } else {
+    s = DirReader::Open(options, name, &reader);
+    if (s.ok()) {
+      dir->io.reader = reader;
+    } else {
+      dir->io.reader = NULL;
+    }
+  }
+
+  if (s.ok()) {
+    dir->opened = true;
+  }
+
+  return s;
+}
+
+static int DirError(deltafs_plfsdir_t* dir, const pdlfs::Status& s) {
+  SetErrno(s);
+  return -1;
+}
+
+static bool IsDirOpened(deltafs_plfsdir_t* dir) {
+  if (dir != NULL) {
+    return bool(dir->opened);
+  } else {
+    return false;
+  }
+}
+}
+
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name,
                          const char* __conf) {
   pdlfs::Status s;
 
-  if (__dir != NULL && __name != NULL) {
-    DirOptions options = ParseOptions(__conf);
-    options.key_size = __dir->key_size;
-    options.env = __dir->env;
-    if (__dir->mode == O_WRONLY) {
-      s = DirWriter::Open(options, __name, &__dir->io.writer);
-    } else {
-      s = Reader::Open(options, __name, &__dir->io.reader);
-    }
-  } else {
+  if (__dir == NULL || __dir->opened) {
     s = BadArgs();
+  } else if (__name == NULL || strlen(__name) == 0) {
+    s = BadArgs();
+  } else {
+    s = OpenDir(__dir, __name);
   }
 
-  if (s.ok()) {
-    return 0;
+  if (!s.ok()) {
+    return DirError(__dir, s);
   } else {
-    SetErrno(s);
-    return -1;
+    return 0;
   }
 }
 
-// XXX: make proper use of the input epoch
-int deltafs_plfsdir_post(deltafs_plfsdir_t* __dir, const char* __key,
-                         size_t __keylen, int __epoch, const char* __value,
-                         size_t __sz) {
+int deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
+                        size_t __keylen, int __epoch, const char* __value,
+                        size_t __sz) {
   pdlfs::Status s;
 
-  if (__dir != NULL && __dir->mode == O_WRONLY && __key != NULL &&
-      __keylen != 0) {
-    pdlfs::Slice k(__key, __keylen);
-    s = __dir->io.writer->Append(k, pdlfs::Slice(__value, __sz));
-  } else {
+  if (!IsDirOpened(__dir)) {
     s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else if (__key == NULL) {
+    s = BadArgs();
+  } else if (__keylen == 0) {
+    s = BadArgs();
+  } else {
+    DirWriter* writer = __dir->io.writer;
+    pdlfs::Slice k(__key, __keylen), v(__value, __sz);
+    s = writer->Append(k, v, __epoch);
   }
 
-  if (s.ok()) {
-    return 0;
+  if (!s.ok()) {
+    return DirError(__dir, s);
   } else {
-    SetErrno(s);
-    return -1;
+    return 0;
   }
 }
 
-// XXX: make proper use of the input epoch
 int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
                            int __epoch, const void* __buf, size_t __sz) {
   pdlfs::Status s;
 
-  if (__dir != NULL && __dir->mode == O_WRONLY && __fname != NULL) {
-    char tmp[16];
-    pdlfs::murmur_x64_128(__fname, strlen(__fname), 0, tmp);
-    pdlfs::Slice k(tmp, __dir->key_size);
-    s = __dir->io.writer->Append(
-        k, pdlfs::Slice(reinterpret_cast<const char*>(__buf), __sz));
-  } else {
+  if (!IsDirOpened(__dir)) {
     s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else if (__fname == NULL) {
+    s = BadArgs();
+  } else if (strlen(__fname) == 0) {
+    s = BadArgs();
+  } else {
+    DirWriter* writer = __dir->io.writer;
+    char tmp[16];
+    pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
+    pdlfs::Slice k(tmp, __dir->key_size);
+    const char* data = static_cast<const char*>(__buf);
+    pdlfs::Slice v(data, __sz);
+    s = writer->Append(k, v, __epoch);
   }
 
-  if (s.ok()) {
-    return 0;
+  if (!s.ok()) {
+    return DirError(__dir, s);
   } else {
-    SetErrno(s);
-    return -1;
+    return 0;
   }
 }
 
 int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch) {
   pdlfs::Status s;
 
-  if (__dir != NULL && __dir->mode == O_WRONLY) {
-    s = __dir->io.writer->EpochFlush();
-  } else {
+  if (!IsDirOpened(__dir)) {
     s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else {
+    DirWriter* writer = __dir->io.writer;
+    s = writer->EpochFlush(__epoch);
   }
 
-  if (s.ok()) {
-    return 0;
+  if (!s.ok()) {
+    return DirError(__dir, s);
   } else {
-    SetErrno(s);
-    return -1;
+    return 0;
   }
 }
 
 int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
   pdlfs::Status s;
 
-  if (__dir != NULL && __dir->mode == O_WRONLY) {
-    s = __dir->io.writer->Finish();
-  } else {
+  if (!IsDirOpened(__dir)) {
     s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else {
+    DirWriter* writer = __dir->io.writer;
+    s = writer->Finish();
   }
 
-  if (s.ok()) {
-    return 0;
+  if (!s.ok()) {
+    return DirError(__dir, s);
   } else {
-    SetErrno(s);
-    return -1;
+    return 0;
   }
 }
 
@@ -901,12 +1024,18 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
   pdlfs::Status s;
   char* buf;
 
-  buf = NULL;
-
-  if (__dir != NULL && __dir->mode == O_RDONLY && __key != NULL &&
-      __keylen != 0) {
+  if (!IsDirOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_RDONLY) {
+    s = BadArgs();
+  } else if (__key == NULL) {
+    s = BadArgs();
+  } else if (__keylen == 0) {
+    s = BadArgs();
+  } else {
+    DirReader* reader = __dir->io.reader;
     std::string dst;
-    s = __dir->io.reader->ReadAll(pdlfs::Slice(__key, __keylen), &dst);
+    s = reader->ReadAll(pdlfs::Slice(__key, __keylen), &dst);
     if (s.ok()) {
       buf = static_cast<char*>(malloc(dst.size()));
       memcpy(buf, dst.data(), dst.size());
@@ -914,16 +1043,13 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
         *__sz = dst.size();
       }
     }
-  } else {
-    s = BadArgs();
   }
 
-  if (s.ok()) {
-    assert(buf != NULL);
-    return buf;
-  } else {
-    SetErrno(s);
+  if (!s.ok()) {
+    DirError(__dir, s);
     return NULL;
+  } else {
+    return buf;
   }
 }
 
@@ -932,40 +1058,48 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
   pdlfs::Status s;
   void* buf;
 
-  buf = NULL;
-
-  if (__dir != NULL && __dir->mode == O_RDONLY && __fname != NULL) {
+  if (!IsDirOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_RDONLY) {
+    s = BadArgs();
+  } else if (__fname == NULL) {
+    s = BadArgs();
+  } else if (strlen(__fname) == 0) {
+    s = BadArgs();
+  } else {
+    DirReader* reader = __dir->io.reader;
     std::string dst;
     char tmp[16];
-    pdlfs::murmur_x64_128(__fname, strlen(__fname), 0, tmp);
+    pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
     pdlfs::Slice k(tmp, __dir->key_size);
-    s = __dir->io.reader->ReadAll(k, &dst);
+    s = reader->ReadAll(k, &dst);
     if (s.ok()) {
-      buf = malloc(dst.size());
+      buf = static_cast<char*>(malloc(dst.size()));
       memcpy(buf, dst.data(), dst.size());
       if (__sz != NULL) {
         *__sz = dst.size();
       }
     }
-  } else {
-    s = BadArgs();
   }
 
-  if (s.ok()) {
-    assert(buf != NULL);
-    return buf;
-  } else {
-    SetErrno(s);
+  if (!s.ok()) {
+    DirError(__dir, s);
     return NULL;
+  } else {
+    return buf;
   }
 }
 
 int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
   if (__dir != NULL) {
-    if (__dir->mode == O_WRONLY) {
-      delete __dir->io.writer;
-    } else {
-      delete __dir->io.reader;
+    if (__dir->opened) {
+      if (__dir->mode == O_WRONLY)
+        delete __dir->io.writer;
+      else if (__dir->mode == O_RDONLY)
+        delete __dir->io.reader;
+      else {
+        // Skip
+      }
     }
     free(__dir);
   }
