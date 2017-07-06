@@ -492,15 +492,15 @@ class PlfsIoBench {
         GetOption("SNAPPY", false) ? kSnappyCompression : kNoCompression;
     options_.force_compression = true;
     options_.total_memtable_budget =
-        static_cast<size_t>(GetOption("MEMTABLE_SIZE", 32) << 20);
+        static_cast<size_t>(GetOption("MEMTABLE_SIZE", 48) << 20);
     options_.block_size =
         static_cast<size_t>(GetOption("BLOCK_SIZE", 32) << 10);
     options_.block_batch_size =
-        static_cast<size_t>(GetOption("BLOCK_BATCH_SIZE", 2) << 20);
+        static_cast<size_t>(GetOption("BLOCK_BATCH_SIZE", 4) << 20);
     options_.block_util = GetOption("BLOCK_UTIL", 996) / 1000.0;
-    options_.bf_bits_per_key = static_cast<size_t>(GetOption("BF_BITS", 10));
+    options_.bf_bits_per_key = static_cast<size_t>(GetOption("BF_BITS", 14));
     options_.value_size = static_cast<size_t>(GetOption("VALUE_SIZE", 40));
-    options_.key_size = static_cast<size_t>(GetOption("KEY_SIZE", 10));
+    options_.key_size = static_cast<size_t>(GetOption("KEY_SIZE", 8));
     options_.data_buffer =
         static_cast<size_t>(GetOption("DATA_BUFFER", 8) << 20);
     options_.min_data_buffer =
@@ -594,10 +594,32 @@ class PlfsIoBench {
     char key_[30];
   };
 
+#ifdef PDLFS_PLATFORM_POSIX
+  void ForceFifoScheduling(pthread_attr_t* attr) {
+    int min = sched_get_priority_min(SCHED_FIFO);
+    int max = sched_get_priority_max(SCHED_FIFO);
+    struct sched_param param;
+    param.sched_priority = (min + max) / 2 + 1;
+    pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+    pthread_attr_init(attr);
+    pthread_attr_setinheritsched(attr, PTHREAD_EXPLICIT_SCHED);
+    pthread_attr_setschedpolicy(attr, SCHED_FIFO);
+    param.sched_priority = (min + max) / 2 - 1;
+    pthread_attr_setschedparam(attr, &param);
+  }
+#endif
+
   void DoIt() {
     bool owns_pool = false;
     if (num_threads_ != 0) {
-      options_.compaction_pool = ThreadPool::NewFixed(num_threads_);
+#ifdef PDLFS_PLATFORM_POSIX
+      pthread_attr_t attr;
+      ForceFifoScheduling(&attr);
+      ThreadPool* pool = ThreadPool::NewFixed(num_threads_, true, &attr);
+#else
+      ThreadPool* pool = ThreadPool::NewFixed(num_threads_, true);
+#endif
+      options_.compaction_pool = pool;
       owns_pool = true;
     } else {
       options_.allow_env_threads = false;
