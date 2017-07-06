@@ -8,15 +8,15 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "posix_env.h"
+#include "posix_logger.h"
+#include "posix_sock.h"
+
 #include <dirent.h>
 #include <pthread.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <deque>
-
-#include "posix_env.h"
-#include "posix_logger.h"
-#include "posix_sock.h"
 
 namespace pdlfs {
 
@@ -140,7 +140,7 @@ class PosixMmapReadableFile : public RandomAccessFile {
 
 class PosixFixedThreadPool : public ThreadPool {
  public:
-  PosixFixedThreadPool(int size, bool eager_init)
+  PosixFixedThreadPool(int size, bool eager_init, void* attr)
       : bg_cv_(&mu_),
         num_pool_threads_(0),
         max_threads_(size),
@@ -148,7 +148,7 @@ class PosixFixedThreadPool : public ThreadPool {
         paused_(false) {
     if (eager_init) {
       MutexLock ml(&mu_);
-      Init();
+      InitPool(attr);
     }
   }
 
@@ -159,13 +159,13 @@ class PosixFixedThreadPool : public ThreadPool {
   virtual void Pause();
 
   void StartThread(void (*function)(void*), void* arg);
-  void Init();
+  void InitPool(void* attr);
 
  private:
   // BGThread() is the body of the background thread
   void BGThread();
 
-  static void* BGThreadWrapper(void* arg) {
+  static void* BGWrapper(void* arg) {
     reinterpret_cast<PosixFixedThreadPool*>(arg)->BGThread();
     return NULL;
   }
@@ -201,7 +201,7 @@ class PosixFixedThreadPool : public ThreadPool {
 
 class PosixEnv : public Env {
  public:
-  explicit PosixEnv() : pool_(1, false) {}
+  explicit PosixEnv() : pool_(1, false, NULL) {}
   virtual ~PosixEnv() { abort(); }
 
   virtual Status NewSequentialFile(const Slice& fname,
@@ -563,11 +563,12 @@ class PosixUnBufferedIOWrapper : public EnvWrapper {
   }
 };
 
-static pthread_t PthreadCreate(void* (*func)(void*), void* arg) {
-  pthread_t new_th;
-  port::PthreadCall("pthread_create", pthread_create(&new_th, NULL, func, arg));
-  port::PthreadCall("pthread_detach", pthread_detach(new_th));
-  return new_th;
+static pthread_t Pthread(void* (*func)(void*), void* arg, void* attr) {
+  pthread_t th;
+  pthread_attr_t* ta = reinterpret_cast<pthread_attr_t*>(attr);
+  port::PthreadCall("pthread_create", pthread_create(&th, ta, func, arg));
+  port::PthreadCall("pthread_detach", pthread_detach(th));
+  return th;
 }
 
 std::string PosixFixedThreadPool::ToDebugString() {
@@ -587,18 +588,18 @@ PosixFixedThreadPool::~PosixFixedThreadPool() {
   mu_.Unlock();
 }
 
-void PosixFixedThreadPool::Init() {
+void PosixFixedThreadPool::InitPool(void* attr) {
   mu_.AssertHeld();
   while (num_pool_threads_ < max_threads_) {
     num_pool_threads_++;
-    PthreadCreate(BGThreadWrapper, this);
+    Pthread(BGWrapper, this, attr);
   }
 }
 
 void PosixFixedThreadPool::Schedule(void (*function)(void*), void* arg) {
   MutexLock ml(&mu_);
   if (shutting_down_) return;
-  Init();  // Start background threads if necessary
+  InitPool(NULL);  // Start background threads if necessary
 
   // If the queue is currently empty, the background threads
   // may be waiting.
@@ -650,15 +651,15 @@ void PosixFixedThreadPool::Pause() {
   paused_ = true;
 }
 
-void PosixFixedThreadPool::StartThread(void (*function)(void* arg), void* arg) {
+void PosixFixedThreadPool::StartThread(void (*function)(void*), void* arg) {
   StartThreadState* state = new StartThreadState;
   state->user_function = function;
   state->arg = arg;
-  PthreadCreate(StartThreadWrapper, state);
+  Pthread(StartThreadWrapper, state, NULL);
 }
 
-ThreadPool* ThreadPool::NewFixed(int num_threads, bool eager_init) {
-  return new PosixFixedThreadPool(num_threads, eager_init);
+ThreadPool* ThreadPool::NewFixed(int num_threads, bool eager_init, void* attr) {
+  return new PosixFixedThreadPool(num_threads, eager_init, attr);
 }
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;

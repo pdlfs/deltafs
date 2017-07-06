@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2017 Carnegie Mellon University.
@@ -10,13 +8,15 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#pragma once
+
+#include "pdlfs-common/slice.h"
+#include "pdlfs-common/status.h"
+
 #include <stdarg.h>
 #include <stdint.h>
 #include <string>
 #include <vector>
-
-#include "pdlfs-common/slice.h"
-#include "pdlfs-common/status.h"
 
 namespace pdlfs {
 
@@ -342,9 +342,12 @@ class ThreadPool {
   ThreadPool() {}
   virtual ~ThreadPool();
 
-  // Instantiate a new thread pool with a fixed number of threads.
-  // The caller should delete the pool to free associated resources.
-  static ThreadPool* NewFixed(int num_threads, bool eager_init = false);
+  // Instantiate a new thread pool with a fixed number of threads. The caller
+  // should delete the pool to free associated resources.
+  // If "eager_init" is true, children threads will be created immediately.
+  // A caller may optionally set "attr" to alter default thread behaviour.
+  static ThreadPool* NewFixed(int num_threads, bool eager_init = false,
+                              void* attr = NULL);
 
   // Arrange to run "(*function)(arg)" once in one of a pool of
   // background threads.
