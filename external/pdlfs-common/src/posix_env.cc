@@ -140,13 +140,15 @@ class PosixMmapReadableFile : public RandomAccessFile {
 
 class PosixFixedThreadPool : public ThreadPool {
  public:
-  PosixFixedThreadPool(int size, bool eager_init, void* attr)
+  explicit PosixFixedThreadPool(int max_threads, bool eager_init = false,
+                                void* attr = NULL)
       : bg_cv_(&mu_),
         num_pool_threads_(0),
-        max_threads_(size),
+        max_threads_(max_threads),
         shutting_down_(false),
         paused_(false) {
     if (eager_init) {
+      // Create pool threads immediately
       MutexLock ml(&mu_);
       InitPool(attr);
     }
@@ -201,7 +203,7 @@ class PosixFixedThreadPool : public ThreadPool {
 
 class PosixEnv : public Env {
  public:
-  explicit PosixEnv() : pool_(1, false, NULL) {}
+  explicit PosixEnv(int bg_threads = 1) : pool_(bg_threads) {}
   virtual ~PosixEnv() { abort(); }
 
   virtual Status NewSequentialFile(const Slice& fname,
