@@ -664,6 +664,8 @@ static inline DirOptions ParseOptions(const char* conf) {
 
 struct deltafs_env {
   pdlfs::Env* env;
+  // True iff the env is backed by a posix file system
+  bool is_pfs;
   // True iff env belongs to the system
   // and should not be deleted
   bool sys;
@@ -677,6 +679,7 @@ deltafs_env_t* deltafs_env_init(int __argc, void** __argv) {
   if (env != NULL) {
     deltafs_env_t* result =
         static_cast<deltafs_env_t*>(malloc(sizeof(deltafs_env_t)));
+    result->is_pfs = true;  // FIXME
     result->sys = sys;
     result->env = env;
     return result;
@@ -723,6 +726,28 @@ deltafs_tp_t* deltafs_tp_init(int __size) {
   }
 }
 
+int deltafs_tp_pause(deltafs_tp_t* __tp) {
+  if (__tp != NULL) {
+    pdlfs::ThreadPool* pool = __tp->pool;
+    pool->Pause();
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
+int deltafs_tp_rerun(deltafs_tp_t* __tp) {
+  if (__tp != NULL) {
+    pdlfs::ThreadPool* pool = __tp->pool;
+    pool->Resume();
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
 int deltafs_tp_close(deltafs_tp_t* __tp) {
   if (__tp != NULL) {
     if (__tp->pool != NULL) {
@@ -743,10 +768,11 @@ struct deltafs_plfsdir {
     DirReader* reader;
     void* x;
   } io;
+  bool is_env_pfs;
+  bool opened;  // If deltafs_plfsdir_open() has been called
+  DirOptions options;
   deltafs_printer_t printer;  // Error printer
   void* printer_arg;
-  DirOptions opts;
-  bool opened;  // If deltafs_plfsdir_open() has been called
   // O_WRONLY or O_RDONLY
   int mode;
 };
@@ -757,12 +783,13 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf,
   if (__mode == O_RDONLY || __mode == O_WRONLY) {
     deltafs_plfsdir_t* dir =
         static_cast<deltafs_plfsdir_t*>(malloc(sizeof(deltafs_plfsdir_t)));
-    dir->opts = ParseOptions(__conf);
+    dir->options = ParseOptions(__conf);
     dir->opened = false;
     dir->printer_arg = NULL;
     dir->printer = NULL;
     dir->io.x = NULL;
     dir->mode = __mode;
+    dir->is_env_pfs = true;
     dir->env = DefaultDirEnv();
     dir->pool = NULL;
     return dir;
@@ -779,7 +806,7 @@ int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size) {
     __key_size = 16;
   }
   if (__dir != NULL && !__dir->opened) {
-    __dir->opts.key_size = __key_size;
+    __dir->options.key_size = __key_size;
     return 0;
   } else {
     SetErrno(BadArgs());
@@ -789,7 +816,7 @@ int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size) {
 
 int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size) {
   if (__dir != NULL && !__dir->opened) {
-    __dir->opts.value_size = __val_size;
+    __dir->options.value_size = __val_size;
     return 0;
   } else {
     SetErrno(BadArgs());
@@ -799,6 +826,7 @@ int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size) {
 
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env) {
   if (__dir != NULL && !__dir->opened && __env != NULL) {
+    __dir->is_env_pfs = __env->is_pfs;
     __dir->env = __env->env;
     return 0;
   } else {
@@ -831,32 +859,39 @@ int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
   }
 }
 
+int deltafs_plfsdir_set_non_blocking(deltafs_plfsdir_t* __dir, int __flag) {
+  if (__dir != NULL && !__dir->opened) {
+    const bool non_blocking = static_cast<bool>(__flag);
+    __dir->options.non_blocking = non_blocking;
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
 namespace {
 
 static pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
-  dir->opts.allow_env_threads = true;
-  dir->opts.env = dir->env;
-
-  if (dir->pool != NULL) {
-    dir->opts.compaction_pool = dir->pool;
-  } else {
-    dir->opts.compaction_pool = NULL;
-  }
-
-  DirWriter* writer;
-  DirReader* reader;
-
   pdlfs::Status s;
+  dir->options.allow_env_threads = true;
+  dir->options.is_env_pfs = dir->is_env_pfs;
+  dir->options.env = dir->env;
+
   if (dir->mode == O_WRONLY) {
-    s = DirWriter::Open(dir->opts, name, &writer);
+    DirWriter* writer;
+    s = DirWriter::Open(dir->options, name, &writer);
     if (s.ok()) {
+      dir->options.compaction_pool = dir->pool;
       dir->io.writer = writer;
     } else {
       dir->io.writer = NULL;
     }
   } else {
-    s = DirReader::Open(dir->opts, name, &reader);
+    DirReader* reader;
+    s = DirReader::Open(dir->options, name, &reader);
     if (s.ok()) {
+      dir->options.reader_pool = dir->pool;
       dir->io.reader = reader;
     } else {
       dir->io.reader = NULL;
@@ -947,7 +982,7 @@ int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
     DirWriter* writer = __dir->io.writer;
     char tmp[16];
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
-    pdlfs::Slice k(tmp, __dir->opts.key_size);
+    pdlfs::Slice k(tmp, __dir->options.key_size);
     const char* data = static_cast<const char*>(__buf);
     pdlfs::Slice v(data, __sz);
     s = writer->Append(k, v, __epoch);
@@ -998,19 +1033,17 @@ int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
   }
 }
 
-static char* makechar(unsigned long long val) {
-  char tmp[100];
-  snprintf(tmp, sizeof(tmp), "%llu", val);
-  return strdup(tmp);
-}
-
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
                                    const char* __key) {
-  if (__dir != NULL && __key != NULL) {
-    if (__dir->mode == O_WRONLY && __dir->io.writer != NULL) {
-      // TODO
-    } else if (__dir->mode == O_RDONLY) {
-      // TODO
+  if (IsDirOpened(__dir)) {
+    if (__key != NULL && strlen(__key) != 0) {
+      if (__dir->mode == O_WRONLY) {
+        // TODO
+      } else if (__dir->mode == O_RDONLY) {
+        // TODO
+      } else {
+        // Skip
+      }
     }
   }
 
@@ -1081,7 +1114,7 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
     std::string dst;
     char tmp[16];
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
-    pdlfs::Slice k(tmp, __dir->opts.key_size);
+    pdlfs::Slice k(tmp, __dir->options.key_size);
     s = reader->ReadAll(k, &dst);
     if (s.ok()) {
       buf = static_cast<char*>(malloc(dst.size()));

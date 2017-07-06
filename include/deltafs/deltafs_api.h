@@ -86,6 +86,10 @@ typedef struct deltafs_tp deltafs_tp_t;
 /* Returns NULL on errors. A heap-allocated thread pool instance otherwise.
    The returned object should be deleted via deltafs_tp_close(). */
 deltafs_tp_t* deltafs_tp_init(int __size);
+/* Pause executing queued tasks or tasks submitted in future */
+int deltafs_tp_pause(deltafs_tp_t* __tp);
+/* Resume executing tasks */
+int deltafs_tp_rerun(deltafs_tp_t* __tp);
 int deltafs_tp_close(deltafs_tp_t* __tp);
 
 struct deltafs_plfsdir; /* Opaque handle for an opened deltafs plfsdir */
@@ -99,6 +103,7 @@ int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size);
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env);
 int deltafs_plfsdir_set_thread_pool(deltafs_plfsdir_t* __dir,
                                     deltafs_tp_t* __tp);
+int deltafs_plfsdir_set_non_blocking(deltafs_plfsdir_t* __dir, int __flag);
 /* Error printer type */
 typedef void (*deltafs_printer_t)(const char* __err, void* __arg);
 int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
