@@ -358,6 +358,14 @@ class ThreadPool {
   // Return a description of the pool implementation.
   virtual std::string ToDebugString() = 0;
 
+  // Stop executing any tasks. Tasks already scheduled will keep running. Tasks
+  // not yet scheduled won't be scheduled. Tasks submitted in future will be
+  // queued but won't be scheduled.
+  virtual void Pause() = 0;
+
+  // Resume executing tasks.
+  virtual void Resume() = 0;
+
  private:
   // No copying allowed
   void operator=(const ThreadPool&);

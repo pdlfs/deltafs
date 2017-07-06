@@ -144,7 +144,8 @@ class PosixFixedThreadPool : public ThreadPool {
       : bg_cv_(&mu_),
         num_pool_threads_(0),
         max_threads_(size),
-        shutting_down_(false) {
+        shutting_down_(false),
+        paused_(false) {
     if (eager_init) {
       MutexLock ml(&mu_);
       Init();
@@ -152,9 +153,12 @@ class PosixFixedThreadPool : public ThreadPool {
   }
 
   virtual ~PosixFixedThreadPool();
-  virtual void Schedule(void (*function)(void* arg), void* arg);
+  virtual void Schedule(void (*function)(void*), void* arg);
   virtual std::string ToDebugString();
-  void StartThread(void (*function)(void* arg), void* arg);
+  virtual void Resume();
+  virtual void Pause();
+
+  void StartThread(void (*function)(void*), void* arg);
   void Init();
 
  private:
@@ -172,6 +176,7 @@ class PosixFixedThreadPool : public ThreadPool {
   int max_threads_;
 
   bool shutting_down_;
+  bool paused_;
 
   // Entry per Schedule() call
   struct BGItem {
@@ -613,7 +618,7 @@ void PosixFixedThreadPool::BGThread() {
     {
       MutexLock l(&mu_);
       // Wait until there is an item that is ready to run
-      while (queue_.empty() && !shutting_down_) {
+      while (!shutting_down_ && (paused_ || queue_.empty())) {
         bg_cv_.Wait();
       }
       if (shutting_down_) {
@@ -632,6 +637,17 @@ void PosixFixedThreadPool::BGThread() {
     assert(function != NULL);
     function(arg);
   }
+}
+
+void PosixFixedThreadPool::Resume() {
+  MutexLock ml(&mu_);
+  paused_ = false;
+  bg_cv_.SignalAll();
+}
+
+void PosixFixedThreadPool::Pause() {
+  MutexLock ml(&mu_);
+  paused_ = true;
 }
 
 void PosixFixedThreadPool::StartThread(void (*function)(void* arg), void* arg) {
