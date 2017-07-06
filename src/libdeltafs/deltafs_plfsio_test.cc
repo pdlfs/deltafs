@@ -481,8 +481,8 @@ class PlfsIoBench {
     num_files_ = GetOption("NUM_FILES", 16);  // 16M files per epoch
 
     num_threads_ = GetOption("NUM_THREADS", 4);  // For bg compaction
-
     print_events_ = GetOption("PRINT_EVENTS", false);
+    force_fifo_ = GetOption("FORCE_FIFO", false);
 
     options_.rank = 0;
     options_.lg_parts = GetOption("LG_PARTS", 2);
@@ -594,28 +594,37 @@ class PlfsIoBench {
     char key_[30];
   };
 
-#ifdef PDLFS_PLATFORM_POSIX
+#if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_OS_LINUX)
   void ForceFifoScheduling(pthread_attr_t* attr) {
     int min = sched_get_priority_min(SCHED_FIFO);
     int max = sched_get_priority_max(SCHED_FIFO);
     struct sched_param param;
     param.sched_priority = (min + max) / 2 + 1;
-    pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
-    pthread_attr_init(attr);
-    pthread_attr_setinheritsched(attr, PTHREAD_EXPLICIT_SCHED);
-    pthread_attr_setschedpolicy(attr, SCHED_FIFO);
+    int r1 = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+    ASSERT_EQ(r1, 0);
+    int r2 = pthread_attr_init(attr);
+    ASSERT_EQ(r2, 0);
+    int r3 = pthread_attr_setinheritsched(attr, PTHREAD_EXPLICIT_SCHED);
+    ASSERT_EQ(r3, 0);
+    int r4 = pthread_attr_setschedpolicy(attr, SCHED_FIFO);
+    ASSERT_EQ(r4, 0);
     param.sched_priority = (min + max) / 2 - 1;
-    pthread_attr_setschedparam(attr, &param);
+    int r5 = pthread_attr_setschedparam(attr, &param);
+    ASSERT_EQ(r5, 0);
   }
 #endif
 
   void DoIt() {
     bool owns_pool = false;
     if (num_threads_ != 0) {
-#ifdef PDLFS_PLATFORM_POSIX
-      pthread_attr_t attr;
-      ForceFifoScheduling(&attr);
-      ThreadPool* pool = ThreadPool::NewFixed(num_threads_, true, &attr);
+#if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_OS_LINUX)
+      pthread_attr_t th_attr;
+      pthread_attr_t* attr = NULL;
+      if (force_fifo_) {
+        ForceFifoScheduling(&th_attr);
+        attr = &th_attr;
+      }
+      ThreadPool* pool = ThreadPool::NewFixed(num_threads_, true, attr);
 #else
       ThreadPool* pool = ThreadPool::NewFixed(num_threads_, true);
 #endif
@@ -804,6 +813,7 @@ class PlfsIoBench {
   int num_files_;    // Number of particle files (in millions)
   int num_threads_;  // Number of bg compaction threads
   int print_events_;
+  int force_fifo_;
   EventPrinter printer_;
   const std::string home_;
   DirOptions options_;
