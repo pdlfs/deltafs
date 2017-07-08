@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2015-2017 Carnegie Mellon University.
  *
@@ -8,6 +6,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+
+#pragma once
 
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"
@@ -18,7 +18,7 @@ namespace pdlfs {
 // is called.  Implementation is thread safe.
 class LazyInitEnv : public Env {
  public:
-  LazyInitEnv(const std::string& env_name, const std::string& env_conf)
+  LazyInitEnv(const char* env_name, const char* env_conf)
       : env_name_(env_name), env_conf_(env_conf), env_ok_(true), env_(NULL) {}
 
   virtual ~LazyInitEnv() {
@@ -29,7 +29,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status NewSequentialFile(const Slice& f, SequentialFile** r) {
+  virtual Status NewSequentialFile(const char* f, SequentialFile** r) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->NewSequentialFile(f, r);
@@ -38,7 +38,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status NewRandomAccessFile(const Slice& f, RandomAccessFile** r) {
+  virtual Status NewRandomAccessFile(const char* f, RandomAccessFile** r) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->NewRandomAccessFile(f, r);
@@ -47,7 +47,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status NewWritableFile(const Slice& f, WritableFile** r) {
+  virtual Status NewWritableFile(const char* f, WritableFile** r) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->NewWritableFile(f, r);
@@ -56,7 +56,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual bool FileExists(const Slice& f) {
+  virtual bool FileExists(const char* f) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->FileExists(f);
@@ -65,7 +65,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status GetChildren(const Slice& d, std::vector<std::string>* r) {
+  virtual Status GetChildren(const char* d, std::vector<std::string>* r) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->GetChildren(d, r);
@@ -74,7 +74,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status DeleteFile(const Slice& f) {
+  virtual Status DeleteFile(const char* f) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->DeleteFile(f);
@@ -83,7 +83,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status CreateDir(const Slice& d) {
+  virtual Status CreateDir(const char* d) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->CreateDir(d);
@@ -92,7 +92,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status AttachDir(const Slice& d) {
+  virtual Status AttachDir(const char* d) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->AttachDir(d);
@@ -101,7 +101,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status DeleteDir(const Slice& d) {
+  virtual Status DeleteDir(const char* d) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->DeleteDir(d);
@@ -110,7 +110,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status DetachDir(const Slice& d) {
+  virtual Status DetachDir(const char* d) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->DetachDir(d);
@@ -119,7 +119,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status GetFileSize(const Slice& f, uint64_t* size) {
+  virtual Status GetFileSize(const char* f, uint64_t* size) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->GetFileSize(f, size);
@@ -128,7 +128,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status CopyFile(const Slice& src, const Slice& dst) {
+  virtual Status CopyFile(const char* src, const char* dst) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->CopyFile(src, dst);
@@ -137,7 +137,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status RenameFile(const Slice& src, const Slice& dst) {
+  virtual Status RenameFile(const char* src, const char* dst) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->RenameFile(src, dst);
@@ -146,7 +146,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status LockFile(const Slice& f, FileLock** l) {
+  virtual Status LockFile(const char* f, FileLock** l) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->LockFile(f, l);
@@ -181,7 +181,7 @@ class LazyInitEnv : public Env {
     }
   }
 
-  virtual Status NewLogger(const std::string& fname, Logger** result) {
+  virtual Status NewLogger(const char* fname, Logger** result) {
     Status s = OpenEnv();
     if (s.ok()) {
       return env_->NewLogger(fname, result);
@@ -224,7 +224,7 @@ class LazyInitEnv : public Env {
     if (env_ok_ && env_ == NULL) {
       MutexLock ml(&mu_);
       if (env_ok_ && env_ == NULL) {
-        env_ = Env::Open(env_name_, env_conf_, &env_is_sys_);
+        env_ = Env::Open(env_name_.c_str(), env_conf_.c_str(), &env_is_sys_);
         if (env_ == NULL) {
           env_ok_ = false;
         }

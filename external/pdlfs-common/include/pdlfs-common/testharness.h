@@ -47,7 +47,7 @@ extern std::string TmpDir();
 // Create a sub-directory under test::TmpDir().
 // If the sub-directory already exists, remove all its existing children.
 // Return the full path of this sub-directory.
-extern std::string NewTmpDirectory(const Slice& subdir, Env* env = NULL);
+extern std::string NewTmpDirectory(const char* subdir, Env* env = NULL);
 
 // Return a randomization seed for this run.  Typically returns the
 // same number on repeated invocations of this binary, but automated

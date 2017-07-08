@@ -45,8 +45,7 @@ class Env {
   // Set *is_system to true iff the returned Env belongs to system and
   // must not be deleted.  Otherwise, the result should be
   // deleted when it is no longer needed.
-  static Env* Open(const Slice& env_name, const Slice& env_conf,
-                   bool* is_system);
+  static Env* Open(const char* env_name, const char* env_conf, bool* is_system);
 
   // Return a default environment suitable for the current operating
   // system.  Sophisticated users may wish to provide their own Env
@@ -56,82 +55,74 @@ class Env {
   static Env* Default();
 
   // Create a brand new sequentially-readable file with the specified name.
-  // On success, stores a pointer to the new file in *result and returns OK.
-  // On failure stores NULL in *result and returns non-OK.  If the file does
-  // not exist, returns a non-OK status.
+  // On success, stores a pointer to the new file in *r and returns OK.
+  // On failure stores NULL in *r and returns non-OK.  If the file does not
+  // exist, returns a non-OK status.
   //
   // The returned file will only be accessed by one thread at a time.
-  virtual Status NewSequentialFile(const Slice& fname,
-                                   SequentialFile** result) = 0;
+  virtual Status NewSequentialFile(const char* f, SequentialFile** r) = 0;
 
-  // Create a brand new random access read-only file with the
-  // specified name.  On success, stores a pointer to the new file in
-  // *result and returns OK.  On failure stores NULL in *result and
-  // returns non-OK.  If the file does not exist, returns a non-OK
-  // status.
+  // Create a brand new random access read-only file with the specified name.
+  // On success, stores a pointer to the new file in *r and returns OK.
+  // On failure stores NULL in *r and returns non-OK.  If the file does not
+  // exist, returns a non-OK status.
   //
   // The returned file may be concurrently accessed by multiple threads.
-  virtual Status NewRandomAccessFile(const Slice& fname,
-                                     RandomAccessFile** result) = 0;
+  virtual Status NewRandomAccessFile(const char* f, RandomAccessFile** r) = 0;
 
-  // Create an object that writes to a new file with the specified
-  // name.  Deletes any existing file with the same name and creates a
-  // new file.  On success, stores a pointer to the new file in
-  // *result and returns OK.  On failure stores NULL in *result and
-  // returns non-OK.
+  // Create an object that writes to a new file with the specified name.
+  // Deletes any existing file with the same name and creates a new file.
+  // On success, stores a pointer to the new file in *r and returns OK.
+  // On failure stores NULL in *r and returns non-OK.
   //
   // The returned file will only be accessed by one thread at a time.
-  virtual Status NewWritableFile(const Slice& fname, WritableFile** result) = 0;
+  virtual Status NewWritableFile(const char* f, WritableFile** r) = 0;
 
   // Returns true iff the named file exists.
-  virtual bool FileExists(const Slice& fname) = 0;
+  virtual bool FileExists(const char* f) = 0;
 
-  // Store in *result the names of the children of the specified directory.
+  // Store in *r the names of the children of the specified directory.
   // The names are relative to "dir".
-  // Original contents of *results are dropped.
-  virtual Status GetChildren(const Slice& dir,
-                             std::vector<std::string>* result) = 0;
+  // Original contents of *r are dropped.
+  virtual Status GetChildren(const char* dir, std::vector<std::string>* r) = 0;
 
   // Delete the named file.
-  virtual Status DeleteFile(const Slice& fname) = 0;
+  virtual Status DeleteFile(const char* f) = 0;
 
   // Create the specified directory.
-  virtual Status CreateDir(const Slice& dirname) = 0;
+  virtual Status CreateDir(const char* dir) = 0;
 
   // Load a directory created by another process.
-  // This call makes no sense for Env implementations that are
-  // backed by a POSIX file system but is usually needed
-  // for implementations that are backed by a shared
-  // object storage service.
+  // This call makes no sense for Env implementations that are backed by a posix
+  // file system but is usually needed for implementations that are backed by a
+  // shared object storage service.
   // Return OK if the directory is attached and ready to use.
-  // For Env implementations that are backed by a POSIX file system,
-  // return OK if the directory exists.
-  virtual Status AttachDir(const Slice& dirname) = 0;
+  // For Env implementations that are backed by a posix file system, return OK
+  // if the directory exists.
+  virtual Status AttachDir(const char* dir) = 0;
 
   // Delete the specified directory.
-  virtual Status DeleteDir(const Slice& dirname) = 0;
+  virtual Status DeleteDir(const char* dir) = 0;
 
-  // Forget a directory previously loaded or created.
-  // After this call, the directory appears to have never been
-  // created before.
-  // This call makes no sense for Env implementations that are
-  // backed by a POSIX file system but is useful for implementations
-  // that are backed by a shared object storage.
-  // Return OK is the directory is detached and appears deleted.
-  // Return OK does not mean the directory has been physically
-  // removed.
-  // Return NotSupported for Env implementations that are
-  // backed by a POSIX file system.
-  virtual Status DetachDir(const Slice& dirname) = 0;
+  // Forget a directory previously loaded or created. After this call, the
+  // directory appears to have never been created before.
+  // This call makes no sense for Env implementations that are backed by a posix
+  // file system but is useful for implementations that are backed by a shared
+  // object storage.
+  // Return OK is the directory is detached and appears deleted. Return OK does
+  // not mean the directory has been physically removed.
+  // Return NotSupported for Env implementations that are backed by a posix file
+  // system.
+  virtual Status DetachDir(const char* dir) = 0;
 
-  // Store the size of fname in *file_size.
-  virtual Status GetFileSize(const Slice& fname, uint64_t* file_size) = 0;
+  // Store the size of the named file in *file_size.
+  virtual Status GetFileSize(const char* f, uint64_t* file_size) = 0;
 
-  // Copy file src to target.
-  virtual Status CopyFile(const Slice& src, const Slice& target) = 0;
+  // Copy file src to dst.
+  virtual Status CopyFile(const char* src, const char* dst) = 0;
 
-  // Rename file src to target.
-  virtual Status RenameFile(const Slice& src, const Slice& target) = 0;
+  // Rename file src to dst.
+  virtual Status RenameFile(const char* src, const char* dst) = 0;
 
   // Lock the specified file.  Used to prevent concurrent access to
   // the same db by multiple processes.  On failure, stores NULL in
@@ -147,7 +138,7 @@ class Env {
   // to go away.
   //
   // May create the named file if it does not already exist.
-  virtual Status LockFile(const Slice& fname, FileLock** lock) = 0;
+  virtual Status LockFile(const char* fname, FileLock** lock) = 0;
 
   // Release the lock acquired by a previous successful call to LockFile.
   // REQUIRES: lock was returned by a successful LockFile() call
@@ -160,11 +151,11 @@ class Env {
   // added to the same Env may run concurrently in different threads.
   // I.e., the caller may not assume that background work items are
   // serialized.
-  virtual void Schedule(void (*function)(void* arg), void* arg) = 0;
+  virtual void Schedule(void (*function)(void*), void* arg) = 0;
 
   // Start a new thread, invoking "function(arg)" within the new thread.
   // When "function(arg)" returns, the thread will be destroyed.
-  virtual void StartThread(void (*function)(void* arg), void* arg) = 0;
+  virtual void StartThread(void (*function)(void*), void* arg) = 0;
 
   // *path is set to a temporary directory that can be used for testing. It may
   // or many not have just been created. The directory may or may not differ
@@ -173,7 +164,7 @@ class Env {
   virtual Status GetTestDirectory(std::string* path) = 0;
 
   // Create and return a log file for storing informational messages.
-  virtual Status NewLogger(const std::string& fname, Logger** result) = 0;
+  virtual Status NewLogger(const char* fname, Logger** result) = 0;
 
   // Returns the number of micro-seconds since some fixed point in time. Only
   // useful for computing deltas of time.
@@ -314,8 +305,8 @@ class FileLock {
 
  private:
   // No copying allowed
-  FileLock(const FileLock&);
   void operator=(const FileLock&);
+  FileLock(const FileLock&);
 };
 
 // Log the specified data to *info_log if info_log is non-NULL.
@@ -327,14 +318,13 @@ extern void Log(Logger* info_log, const char* format, ...)
     ;
 
 // A utility routine: write "data" to the named file.
-extern Status WriteStringToFile(Env* env, const Slice& data,
-                                const Slice& fname);
+extern Status WriteStringToFile(Env* env, const Slice& data, const char* fname);
 // A utility routine: write "data" to the named file and Sync() it.
 extern Status WriteStringToFileSync(Env* env, const Slice& data,
-                                    const Slice& fname);
+                                    const char* fname);
 
 // A utility routine: read contents of named file into *data
-extern Status ReadFileToString(Env* env, const Slice& fname, std::string* data);
+extern Status ReadFileToString(Env* env, const char* fname, std::string* data);
 
 // Background execution service.
 class ThreadPool {
@@ -356,7 +346,7 @@ class ThreadPool {
   // added to the same pool may run concurrently in different threads.
   // I.e., the caller may not assume that background work items are
   // serialized.
-  virtual void Schedule(void (*function)(void* arg), void* arg) = 0;
+  virtual void Schedule(void (*function)(void*), void* arg) = 0;
 
   // Return a description of the pool implementation.
   virtual std::string ToDebugString() = 0;
@@ -388,47 +378,47 @@ class EnvWrapper : public Env {
   Env* target() const { return target_; }
 
   // The following text is boilerplate that forwards all methods to target()
-  virtual Status NewSequentialFile(const Slice& f, SequentialFile** r) {
+  virtual Status NewSequentialFile(const char* f, SequentialFile** r) {
     return target_->NewSequentialFile(f, r);
   }
 
-  virtual Status NewRandomAccessFile(const Slice& f, RandomAccessFile** r) {
+  virtual Status NewRandomAccessFile(const char* f, RandomAccessFile** r) {
     return target_->NewRandomAccessFile(f, r);
   }
 
-  virtual Status NewWritableFile(const Slice& f, WritableFile** r) {
+  virtual Status NewWritableFile(const char* f, WritableFile** r) {
     return target_->NewWritableFile(f, r);
   }
 
-  virtual bool FileExists(const Slice& f) { return target_->FileExists(f); }
+  virtual bool FileExists(const char* f) { return target_->FileExists(f); }
 
-  virtual Status GetChildren(const Slice& d, std::vector<std::string>* r) {
+  virtual Status GetChildren(const char* d, std::vector<std::string>* r) {
     return target_->GetChildren(d, r);
   }
 
-  virtual Status DeleteFile(const Slice& f) { return target_->DeleteFile(f); }
+  virtual Status DeleteFile(const char* f) { return target_->DeleteFile(f); }
 
-  virtual Status CreateDir(const Slice& d) { return target_->CreateDir(d); }
+  virtual Status CreateDir(const char* d) { return target_->CreateDir(d); }
 
-  virtual Status AttachDir(const Slice& d) { return target_->AttachDir(d); }
+  virtual Status AttachDir(const char* d) { return target_->AttachDir(d); }
 
-  virtual Status DeleteDir(const Slice& d) { return target_->DeleteDir(d); }
+  virtual Status DeleteDir(const char* d) { return target_->DeleteDir(d); }
 
-  virtual Status DetachDir(const Slice& d) { return target_->DetachDir(d); }
+  virtual Status DetachDir(const char* d) { return target_->DetachDir(d); }
 
-  virtual Status GetFileSize(const Slice& f, uint64_t* s) {
+  virtual Status GetFileSize(const char* f, uint64_t* s) {
     return target_->GetFileSize(f, s);
   }
 
-  virtual Status CopyFile(const Slice& s, const Slice& t) {
+  virtual Status CopyFile(const char* s, const char* t) {
     return target_->CopyFile(s, t);
   }
 
-  virtual Status RenameFile(const Slice& s, const Slice& t) {
+  virtual Status RenameFile(const char* s, const char* t) {
     return target_->RenameFile(s, t);
   }
 
-  virtual Status LockFile(const Slice& f, FileLock** l) {
+  virtual Status LockFile(const char* f, FileLock** l) {
     return target_->LockFile(f, l);
   }
 
@@ -446,7 +436,7 @@ class EnvWrapper : public Env {
     return target_->GetTestDirectory(path);
   }
 
-  virtual Status NewLogger(const std::string& fname, Logger** result) {
+  virtual Status NewLogger(const char* fname, Logger** result) {
     return target_->NewLogger(fname, result);
   }
 
