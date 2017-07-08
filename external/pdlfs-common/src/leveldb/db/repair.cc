@@ -65,7 +65,7 @@ class Repairer {
     if (options_.info_log == Logger::Default()) {
       owns_info_log_ = false;
     }
-    env_->AttachDir(dbname_);
+    env_->AttachDir(dbname_.c_str());
   }
 
   ~Repairer() {
@@ -75,7 +75,7 @@ class Repairer {
     if (owns_cache_) delete options_.block_cache;
     if (owns_table_cache_) delete options_.table_cache;
 
-    env_->DetachDir(dbname_);
+    env_->DetachDir(dbname_.c_str());
   }
 
   Status Run() {
@@ -125,7 +125,7 @@ class Repairer {
 
   Status FindFiles() {
     std::vector<std::string> filenames;
-    Status status = env_->GetChildren(dbname_, &filenames);
+    Status status = env_->GetChildren(dbname_.c_str(), &filenames);
     if (!status.ok()) {
       return status;
     }
@@ -158,13 +158,13 @@ class Repairer {
 
   void ConvertLogFilesToTables() {
     for (size_t i = 0; i < logs_.size(); i++) {
-      std::string logname = LogFileName(dbname_, logs_[i]);
+      const std::string fname = LogFileName(dbname_, logs_[i]);
       Status status = ConvertLogToTable(logs_[i]);
       if (!status.ok()) {
         Log(options_.info_log, "Log #%llu: ignoring conversion error: %s",
             (unsigned long long)logs_[i], status.ToString().c_str());
       }
-      ArchiveFile(logname);
+      ArchiveFile(fname);
     }
   }
 
@@ -182,9 +182,9 @@ class Repairer {
     };
 
     // Open the log file
-    std::string logname = LogFileName(dbname_, log);
+    const std::string fname = LogFileName(dbname_, log);
     SequentialFile* lfile;
-    Status status = env_->NewSequentialFile(logname, &lfile);
+    Status status = env_->NewSequentialFile(fname.c_str(), &lfile);
     if (!status.ok()) {
       return status;
     }
@@ -268,11 +268,11 @@ class Repairer {
     TableInfo t;
     t.meta.number = number;
     std::string fname = TableFileName(dbname_, number);
-    Status status = env_->GetFileSize(fname, &t.meta.file_size);
+    Status status = env_->GetFileSize(fname.c_str(), &t.meta.file_size);
     if (!status.ok()) {
       // Try alternate file name.
       fname = SSTTableFileName(dbname_, number);
-      Status s2 = env_->GetFileSize(fname, &t.meta.file_size);
+      Status s2 = env_->GetFileSize(fname.c_str(), &t.meta.file_size);
       if (s2.ok()) {
         status = Status::OK();
       }
@@ -328,9 +328,9 @@ class Repairer {
     // new table over the source.
 
     // Create builder.
-    std::string copy = TableFileName(dbname_, next_file_number_++);
+    const std::string copy = TableFileName(dbname_, next_file_number_++);
     WritableFile* file;
-    Status s = env_->NewWritableFile(copy, &file);
+    Status s = env_->NewWritableFile(copy.c_str(), &file);
     if (!s.ok()) {
       return;
     }
@@ -364,8 +364,8 @@ class Repairer {
     file = NULL;
 
     if (counter > 0 && s.ok()) {
-      std::string orig = TableFileName(dbname_, t.meta.number);
-      s = env_->RenameFile(copy, orig);
+      const std::string orig = TableFileName(dbname_, t.meta.number);
+      s = env_->RenameFile(copy.c_str(), orig.c_str());
       if (s.ok()) {
         Log(options_.info_log, "Table #%llu: %d entries repaired",
             (unsigned long long)t.meta.number, counter);
@@ -373,15 +373,15 @@ class Repairer {
       }
     }
     if (!s.ok()) {
-      env_->DeleteFile(copy);
+      env_->DeleteFile(copy.c_str());
     }
   }
 
   Status WriteDescriptor() {
-    const uint64_t dsc_number = 3;
-    std::string tmp = TempFileName(dbname_, dsc_number);
+    const uint64_t num = 3;
+    const std::string tmp = TempFileName(dbname_, num);
     WritableFile* file;
-    Status status = env_->NewWritableFile(tmp, &file);
+    Status status = env_->NewWritableFile(tmp.c_str(), &file);
     if (!status.ok()) {
       return status;
     }
@@ -418,7 +418,7 @@ class Repairer {
     file = NULL;
 
     if (!status.ok()) {
-      env_->DeleteFile(tmp);
+      env_->DeleteFile(tmp.c_str());
     } else {
       // Discard older manifests
       for (size_t i = 0; i < manifests_.size(); i++) {
@@ -426,13 +426,15 @@ class Repairer {
       }
 
       // Install new manifest
-      status = env_->RenameFile(tmp, DescriptorFileName(dbname_, dsc_number));
+      const std::string manifest = DescriptorFileName(dbname_, num);
+      status = env_->RenameFile(tmp.c_str(), manifest.c_str());
       if (status.ok()) {
         status = SetCurrentFile(env_, dbname_, 3);
       } else {
-        env_->DeleteFile(tmp);
+        env_->DeleteFile(tmp.c_str());
       }
     }
+
     return status;
   }
 
@@ -447,11 +449,11 @@ class Repairer {
       new_dir.assign(fname.data(), slash - fname.data());
     }
     new_dir.append("/lost");
-    env_->CreateDir(new_dir);  // Ignore error
+    env_->CreateDir(new_dir.c_str());  // Ignore error
     std::string new_file = new_dir;
     new_file.append("/");
     new_file.append((slash == NULL) ? fname.c_str() : slash + 1);
-    Status s = env_->RenameFile(fname, new_file);
+    Status s = env_->RenameFile(fname.c_str(), new_file.c_str());
     Log(options_.info_log, "Archiving %s: %s\n", fname.c_str(),
         s.ToString().c_str());
   }

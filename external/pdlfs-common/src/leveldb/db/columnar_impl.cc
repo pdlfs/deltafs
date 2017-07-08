@@ -7,15 +7,15 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/dbfiles.h"
-#include "pdlfs-common/mutexlock.h"
-
-#include "../merger.h"
 #include "columnar_impl.h"
+#include "../merger.h"
 #include "db_iter.h"
 #include "memtable.h"
 #include "version_edit.h"
 #include "version_set.h"
+
+#include "pdlfs-common/dbfiles.h"
+#include "pdlfs-common/mutexlock.h"
 
 namespace pdlfs {
 
@@ -94,7 +94,7 @@ ColumnarDBImpl::~ColumnarDBImpl() {
 }
 
 Status ColumnarDBImpl::PreRecover(Column::RecoverMethod* method) {
-  env_->CreateDir(dbname_);
+  env_->CreateDir(dbname_.c_str());
   *method = Column::kRollback;
   return Status::OK();
 }
@@ -455,15 +455,15 @@ Status ColumnarDB::Open(const Options& options, const std::string& dbname,
     s = impl->Recover(&edit);  // Handles create_if_missing, error_if_exists
     if (s.ok()) {
       if (!options.disable_write_ahead_log) {
-        uint64_t new_log_number = impl->versions_->NewFileNumber();
-        WritableFile* lfile;
-        s = options.env->NewWritableFile(LogFileName(dbname, new_log_number),
-                                         &lfile);
+        const uint64_t new_log_number = impl->versions_->NewFileNumber();
+        const std::string fname = LogFileName(dbname, new_log_number);
+        WritableFile* file;
+        s = options.env->NewWritableFile(fname.c_str(), &file);
         if (s.ok()) {
           edit.SetLogNumber(new_log_number);
-          impl->logfile_ = lfile;
+          impl->logfile_ = file;
           impl->logfile_number_ = new_log_number;
-          impl->log_ = new log::Writer(lfile);
+          impl->log_ = new log::Writer(file);
         }
       }
       if (s.ok()) {

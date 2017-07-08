@@ -891,7 +891,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     assert(manifest_file_number_ != 0);
     new_manifest_file = DescriptorFileName(dbname_, manifest_file_number_);
     edit->SetNextFile(next_file_number_);
-    s = env_->NewWritableFile(new_manifest_file, &descriptor_file_);
+    s = env_->NewWritableFile(new_manifest_file.c_str(), &descriptor_file_);
     if (s.ok()) {
       descriptor_log_ = new log::Writer(descriptor_file_);
       s = WriteSnapshot(descriptor_log_);
@@ -928,7 +928,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
         names[1] = CurrentFileName(dbname_);
         for (size_t i = 0; i < 2; i++) {
           Log(options_->info_log, "Delete %s", names[i].c_str());
-          env_->DeleteFile(names[i]);
+          env_->DeleteFile(names[i].c_str());
         }
       }
     }
@@ -948,7 +948,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       delete descriptor_file_;
       descriptor_log_ = NULL;
       descriptor_file_ = NULL;
-      env_->DeleteFile(new_manifest_file);
+      env_->DeleteFile(new_manifest_file.c_str());
     }
   }
 
@@ -965,30 +965,31 @@ Status VersionSet::Recover() {
 
   // Try all three candidates, including the odd/even manifest files,
   // and the one that is referenced by "CURRENT"
-  std::string dscnames[3];
-  dscnames[0] = DescriptorFileName(dbname_, 1);
-  if (!env_->FileExists(dscnames[0])) {
-    dscnames[0].clear();
+  std::string manifests[3];
+  manifests[0] = DescriptorFileName(dbname_, 1);
+  if (!env_->FileExists(manifests[0].c_str())) {
+    manifests[0].clear();
   }
-  dscnames[1] = DescriptorFileName(dbname_, 2);
-  if (!env_->FileExists(dscnames[1])) {
-    dscnames[1].clear();
+  manifests[1] = DescriptorFileName(dbname_, 2);
+  if (!env_->FileExists(manifests[1].c_str())) {
+    manifests[1].clear();
   }
   Status status;
 
   // Read "CURRENT" file, which contains a pointer to the current manifest file
-  if (env_->FileExists(CurrentFileName(dbname_))) {
+  const std::string curr = CurrentFileName(dbname_);
+  if (env_->FileExists(curr.c_str())) {
     std::string current;
     Status s;
-    s = ReadFileToString(env_, CurrentFileName(dbname_), &current);
+    s = ReadFileToString(env_, curr.c_str(), &current);
     if (s.ok() && !current.empty()) {
       if (current[current.size() - 1] != '\n') {
         s = Status::Corruption("CURRENT file does not end with newline");
       } else {
         current.resize(current.size() - 1);
-        dscnames[2] = dbname_ + "/" + current;
-        if (dscnames[2] == dscnames[0] || dscnames[2] == dscnames[1]) {
-          dscnames[2].clear();
+        manifests[2] = dbname_ + "/" + current;
+        if (manifests[2] == manifests[0] || manifests[2] == manifests[1]) {
+          manifests[2].clear();
         }
       }
     }
@@ -1011,9 +1012,9 @@ Status VersionSet::Recover() {
   uint64_t final_prev_log_number = 0;
 
   for (size_t i = 0; i < 3; i++) {
-    if (!dscnames[i].empty()) {
+    if (!manifests[i].empty()) {
       SequentialFile* file;
-      Status s = env_->NewSequentialFile(dscnames[i], &file);
+      Status s = env_->NewSequentialFile(manifests[i].c_str(), &file);
       if (s.ok()) {
         bool have_log_number = false;
         bool have_prev_log_number = false;

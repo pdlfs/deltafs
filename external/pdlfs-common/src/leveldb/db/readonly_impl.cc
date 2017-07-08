@@ -46,14 +46,10 @@ ReadonlyDBImpl::~ReadonlyDBImpl() {
   delete logfile_;
   delete table_cache_;
 
-  if (owns_cache_) {
-    delete options_.block_cache;
-  }
-  if (owns_table_cache_) {
-    delete options_.table_cache;
-  }
+  if (owns_cache_) delete options_.block_cache;
+  if (owns_table_cache_) delete options_.table_cache;
 
-  env_->DetachDir(dbname_);
+  env_->DetachDir(dbname_.c_str());
 }
 
 Status ReadonlyDBImpl::Load() {
@@ -62,16 +58,19 @@ Status ReadonlyDBImpl::Load() {
     return Reload();
   }
 
-  env_->AttachDir(dbname_);
+  env_->AttachDir(dbname_.c_str());
   std::string fname;
-  if (env_->FileExists(DescriptorFileName(dbname_, 1))) {
-    fname = DescriptorFileName(dbname_, 1);
-  } else if (env_->FileExists(DescriptorFileName(dbname_, 2))) {
-    fname = DescriptorFileName(dbname_, 2);
+  const std::string man1 = DescriptorFileName(dbname_, 1);
+  const std::string man2 = DescriptorFileName(dbname_, 2);
+  if (env_->FileExists(man1.c_str())) {
+    fname = man1;
+  } else if (env_->FileExists(man2.c_str())) {
+    fname = man2;
   } else {
-    // Use "CURRENT" file to obtain the current manifest file
     std::string current;
-    Status s = ReadFileToString(env_, CurrentFileName(dbname_), &current);
+    const std::string curr = CurrentFileName(dbname_);
+    // Use "CURRENT" file to obtain the current manifest file
+    Status s = ReadFileToString(env_, curr.c_str(), &current);
     if (s.ok() && !current.empty()) {
       if (current[current.size() - 1] == '\n') {
         current.resize(current.size() - 1);
@@ -84,7 +83,7 @@ Status ReadonlyDBImpl::Load() {
     return Status::Corruption(dbname_, "no valid manifest available");
   } else {
     assert(logfile_ == NULL);
-    Status s = env_->NewSequentialFile(fname, &logfile_);
+    Status s = env_->NewSequentialFile(fname.c_str(), &logfile_);
     if (s.ok()) {
       log_ = new log::Reader(logfile_, NULL, true /*checksum*/,
                              0 /*initial_offset*/);
@@ -108,8 +107,8 @@ Status ReadonlyDBImpl::Reload() {
     return Load();
   }
 
-  env_->DetachDir(dbname_);
-  env_->AttachDir(dbname_);
+  env_->DetachDir(dbname_.c_str());
+  env_->AttachDir(dbname_.c_str());
   Status s;
   Slice record;
   std::string scratch;

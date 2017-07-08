@@ -8,11 +8,6 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-
 #include "db_impl.h"
 #include "version_set.h"
 
@@ -27,6 +22,11 @@
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
 namespace pdlfs {
 
 static const int kValueSize = 1000;
@@ -38,12 +38,12 @@ class ErrorEnv : public EnvWrapper {
   bool writable_file_error_;
   int num_writable_file_errors_;
 
-  ErrorEnv()
-      : EnvWrapper(Env::Default()),
+  explicit ErrorEnv(Env* base = Env::Default())
+      : EnvWrapper(base),
         writable_file_error_(false),
         num_writable_file_errors_(0) {}
 
-  virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
+  virtual Status NewWritableFile(const char* fname, WritableFile** result) {
     if (writable_file_error_) {
       ++num_writable_file_errors_;
       *result = NULL;
@@ -156,7 +156,7 @@ class CorruptionTest {
   void Corrupt(FileType filetype, int offset, int bytes_to_corrupt) {
     // Pick file to corrupt
     std::vector<std::string> filenames;
-    ASSERT_OK(env_.GetChildren(dbname_, &filenames));
+    ASSERT_OK(env_.GetChildren(dbname_.c_str(), &filenames));
     uint64_t number;
     FileType type;
     std::string fname;
@@ -165,7 +165,7 @@ class CorruptionTest {
       if (ParseFileName(filenames[i], &number, &type) && type == filetype &&
           int(number) > picked_number) {  // Pick latest file
         fname = dbname_ + "/" + filenames[i];
-        picked_number = number;
+        picked_number = static_cast<int>(number);
       }
     }
     ASSERT_TRUE(!fname.empty()) << filetype;
@@ -193,12 +193,12 @@ class CorruptionTest {
 
     // Do it
     std::string contents;
-    Status s = ReadFileToString(Env::Default(), fname, &contents);
+    Status s = ReadFileToString(Env::Default(), fname.c_str(), &contents);
     ASSERT_TRUE(s.ok()) << s.ToString();
     for (int i = 0; i < bytes_to_corrupt; i++) {
       contents[i + offset] ^= 0x80;
     }
-    s = WriteStringToFile(Env::Default(), contents, fname);
+    s = WriteStringToFile(Env::Default(), contents, fname.c_str());
     ASSERT_TRUE(s.ok()) << s.ToString();
   }
 

@@ -30,10 +30,10 @@ Status BuildTable(const std::string& dbname, Env* env, const DBOptions& options,
   meta->seq_off = 0;
   iter->SeekToFirst();
 
-  std::string fname = TableFileName(dbname, meta->number);
+  const std::string fname = TableFileName(dbname, meta->number);
   if (iter->Valid()) {
     WritableFile* file;
-    s = env->NewWritableFile(fname, &file);
+    s = env->NewWritableFile(fname.c_str(), &file);
     if (!s.ok()) {
       return s;
     }
@@ -108,7 +108,7 @@ Status BuildTable(const std::string& dbname, Env* env, const DBOptions& options,
   if (s.ok() && meta->file_size > 0) {
     // Keep it
   } else {
-    env->DeleteFile(fname);
+    env->DeleteFile(fname.c_str());
   }
   return s;
 }

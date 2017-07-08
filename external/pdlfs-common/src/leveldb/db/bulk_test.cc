@@ -79,8 +79,10 @@ class BulkTest {
 
   // Return the index of the new snapshot
   int DoSnapshot() {
+    int index;
     snapshots_.push_back(db_->GetSnapshot());
-    return snapshots_.size() - 1;
+    index = static_cast<int>(snapshots_.size()) - 1;
+    return index;
   }
 
   void ReleaseSnapshots() {
@@ -113,8 +115,8 @@ class BulkTest {
   // Return number of files copies
   int CopyLDBToTmp() {
     std::vector<std::string> filenames;
-    ASSERT_OK(env_->GetChildren(dbname_, &filenames));
-    env_->CreateDir(dbtmp_);
+    ASSERT_OK(env_->GetChildren(dbname_.c_str(), &filenames));
+    env_->CreateDir(dbtmp_.c_str());
     uint64_t number;
     FileType type;
     int files_replicated = 0;
@@ -122,7 +124,7 @@ class BulkTest {
       if (ParseFileName(filenames[i], &number, &type) && type == kTableFile) {
         const std::string from = TableFileName(dbname_, number);
         const std::string to = TableFileName(dbtmp_, number);
-        ASSERT_OK(env_->CopyFile(from, to));
+        ASSERT_OK(env_->CopyFile(from.c_str(), to.c_str()));
         files_replicated++;
       }
     }

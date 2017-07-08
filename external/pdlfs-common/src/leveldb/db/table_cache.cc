@@ -55,11 +55,11 @@ Status TableCache::LoadTable(uint64_t fnum, uint64_t fsize, Table** table,
                              RandomAccessFile** file) {
   Status s;
   std::string fname = TableFileName(dbname_, fnum);
-  s = env_->NewRandomAccessFile(fname, file);
+  s = env_->NewRandomAccessFile(fname.c_str(), file);
   if (s.IsNotFound()) {
     if (kCheckOldTableName) {
       std::string old_fname = SSTTableFileName(dbname_, fnum);
-      if (env_->NewRandomAccessFile(old_fname, file).ok()) {
+      if (env_->NewRandomAccessFile(old_fname.c_str(), file).ok()) {
         s = Status::OK();
       }
     }

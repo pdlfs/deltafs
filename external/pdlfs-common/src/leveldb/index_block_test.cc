@@ -345,10 +345,10 @@ class TableBuilderWrapper {
   explicit TableBuilderWrapper(const Options* options) {
     dbname = test::TmpDir() + "/index_block_test";
     env = options->env;
-    env->CreateDir(dbname);
-    std::string fname = TableFileName(dbname, 1);
-    env->DeleteFile(fname);
-    ASSERT_OK(env->NewWritableFile(fname, &file));
+    env->CreateDir(dbname.c_str());
+    const std::string fname = TableFileName(dbname, 1);
+    env->DeleteFile(fname.c_str());
+    ASSERT_OK(env->NewWritableFile(fname.c_str(), &file));
     builder = new TableBuilder(*options, file);
     opts = options;
     assert(options->comparator != NULL);

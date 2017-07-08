@@ -156,7 +156,7 @@ class SpecialEnv : public EnvWrapper {
       return Status::IOError("simulated write error");
     }
 
-    Status s = target()->NewWritableFile(f, r);
+    Status s = target()->NewWritableFile(f.c_str(), r);
     if (s.ok()) {
       if (strstr(f.data(), ".ldb") != NULL ||
           strstr(f.data(), ".log") != NULL) {
@@ -185,7 +185,7 @@ class SpecialEnv : public EnvWrapper {
       }
     };
 
-    Status s = target()->NewRandomAccessFile(f, r);
+    Status s = target()->NewRandomAccessFile(f.c_str(), r);
     if (s.ok() && count_random_reads_) {
       *r = new CountingFile(*r, &random_read_counter_);
     }
@@ -432,7 +432,7 @@ class DBTest {
 
   int CountFiles() {
     std::vector<std::string> files;
-    env_->GetChildren(dbname_, &files);
+    env_->GetChildren(dbname_.c_str(), &files);
     return static_cast<int>(files.size());
   }
 
@@ -494,12 +494,13 @@ class DBTest {
 
   bool DeleteAnSSTFile() {
     std::vector<std::string> filenames;
-    ASSERT_OK(env_->GetChildren(dbname_, &filenames));
+    ASSERT_OK(env_->GetChildren(dbname_.c_str(), &filenames));
     uint64_t number;
     FileType type;
     for (size_t i = 0; i < filenames.size(); i++) {
       if (ParseFileName(filenames[i], &number, &type) && type == kTableFile) {
-        ASSERT_OK(env_->DeleteFile(TableFileName(dbname_, number)));
+        std::string fname = TableFileName(dbname_, number);
+        ASSERT_OK(env_->DeleteFile(fname.c_str()));
         return true;
       }
     }
@@ -509,7 +510,7 @@ class DBTest {
   // Returns number of files renamed.
   int RenameLDBToSST() {
     std::vector<std::string> filenames;
-    ASSERT_OK(env_->GetChildren(dbname_, &filenames));
+    ASSERT_OK(env_->GetChildren(dbname_.c_str(), &filenames));
     uint64_t number;
     FileType type;
     int files_renamed = 0;
@@ -517,7 +518,7 @@ class DBTest {
       if (ParseFileName(filenames[i], &number, &type) && type == kTableFile) {
         const std::string from = TableFileName(dbname_, number);
         const std::string to = SSTTableFileName(dbname_, number);
-        ASSERT_OK(env_->RenameFile(from, to));
+        ASSERT_OK(env_->RenameFile(from.c_str(), to.c_str()));
         files_renamed++;
       }
     }

@@ -170,7 +170,7 @@ DBImpl::~DBImpl() {
   }
 
   // Detach db directory so other processes may mount the db.
-  env_->DetachDir(dbname_);
+  env_->DetachDir(dbname_.c_str());
 }
 
 Status DBImpl::NewDB() {
@@ -180,12 +180,12 @@ Status DBImpl::NewDB() {
   new_db.SetNextFile(4);
   new_db.SetLastSequence(0);
 
-  // Descriptor numbers begin with 3 if we are not set to use
-  // odd/even MANIFEST files.
-  uint64_t dscfile_number = options_.rotating_manifest ? 1 : 3;
-  const std::string manifest = DescriptorFileName(dbname_, dscfile_number);
+  // Descriptor numbers begin with 3 if we are not set to use odd/even MANIFEST
+  // files.
+  const uint64_t num = options_.rotating_manifest ? 1 : 3;
+  const std::string manifest = DescriptorFileName(dbname_, num);
   WritableFile* file;
-  Status s = env_->NewWritableFile(manifest, &file);
+  Status s = env_->NewWritableFile(manifest.c_str(), &file);
   if (!s.ok()) {
     return s;
   }
@@ -202,10 +202,10 @@ Status DBImpl::NewDB() {
   if (s.ok()) {
     if (!options_.rotating_manifest) {
       // Make "CURRENT" file that points to the new manifest file.
-      s = SetCurrentFile(env_, dbname_, dscfile_number);
+      s = SetCurrentFile(env_, dbname_, num);
     }
   } else {
-    env_->DeleteFile(manifest);
+    env_->DeleteFile(manifest.c_str());
   }
   return s;
 }
@@ -251,7 +251,7 @@ void DBImpl::DeleteObsoleteFiles() {
   versions_->AddLiveFiles(&live);
 
   std::vector<std::string> filenames;
-  env_->GetChildren(dbname_, &filenames);  // Ignoring errors on purpose
+  env_->GetChildren(dbname_.c_str(), &filenames);  // Ignoring errors on purpose
   uint64_t number;
   FileType type;
   for (size_t i = 0; i < filenames.size(); i++) {
@@ -290,7 +290,8 @@ void DBImpl::DeleteObsoleteFiles() {
             static_cast<unsigned long long>(number));
         if (!options_.gc_skip_deletion) {
           Log(options_.info_log, "Remove %s", filenames[i].c_str());
-          env_->DeleteFile(dbname_ + "/" + filenames[i]);
+          std::string fname = dbname_ + "/" + filenames[i];
+          env_->DeleteFile(fname.c_str());
         }
       }
     }
@@ -303,18 +304,21 @@ Status DBImpl::Recover(VersionEdit* edit) {
   // Ignore error from CreateDir since the creation of the DB is
   // committed only when the descriptor is created, and this directory
   // may already exist from a previous failed creation attempt.
-  env_->CreateDir(dbname_);
+  env_->CreateDir(dbname_.c_str());
   assert(db_lock_ == NULL);
   if (!options_.skip_lock_file) {
-    s = env_->LockFile(LockFileName(dbname_), &db_lock_);
+    const std::string lockname = LockFileName(dbname_);
+    s = env_->LockFile(lockname.c_str(), &db_lock_);
     if (!s.ok()) {
       return s;
     }
   }
 
-  if (!env_->FileExists(DescriptorFileName(dbname_, 1)) &&
-      !env_->FileExists(DescriptorFileName(dbname_, 2)) &&
-      !env_->FileExists(CurrentFileName(dbname_))) {
+  const std::string man1 = DescriptorFileName(dbname_, 1);
+  const std::string man2 = DescriptorFileName(dbname_, 2);
+  const std::string curr = CurrentFileName(dbname_);
+  if (!env_->FileExists(man1.c_str()) && !env_->FileExists(man2.c_str()) &&
+      !env_->FileExists(curr.c_str())) {
     if (options_.create_if_missing) {
       s = NewDB();
       if (!s.ok()) {
@@ -343,7 +347,7 @@ Status DBImpl::Recover(VersionEdit* edit) {
     const uint64_t min_log = versions_->LogNumber();
     const uint64_t prev_log = versions_->PrevLogNumber();
     std::vector<std::string> filenames;
-    s = env_->GetChildren(dbname_, &filenames);
+    s = env_->GetChildren(dbname_.c_str(), &filenames);
     if (!s.ok()) {
       return s;
     }
@@ -406,9 +410,9 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
   mutex_.AssertHeld();
 
   // Open the log file
-  std::string fname = LogFileName(dbname_, log_number);
+  const std::string fname = LogFileName(dbname_, log_number);
   SequentialFile* file;
-  Status status = env_->NewSequentialFile(fname, &file);
+  Status status = env_->NewSequentialFile(fname.c_str(), &file);
   if (!status.ok()) {
     MaybeIgnoreError(&status);
     return status;
@@ -830,7 +834,7 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
 
   // Make the output file
   std::string fname = TableFileName(dbname_, file_number);
-  Status s = env_->NewWritableFile(fname, &compact->outfile);
+  Status s = env_->NewWritableFile(fname.c_str(), &compact->outfile);
   if (s.ok()) {
     compact->builder = new TableBuilder(options_, compact->outfile);
   }
@@ -1516,9 +1520,10 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // Close the current log file and open a new one
       if (!options_.disable_write_ahead_log) {
         assert(versions_->PrevLogNumber() == 0);
-        uint64_t new_log_number = versions_->NewFileNumber();
-        WritableFile* lfile = NULL;
-        s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
+        const uint64_t new_log_number = versions_->NewFileNumber();
+        const std::string fname = LogFileName(dbname_, new_log_number);
+        WritableFile* file = NULL;
+        s = env_->NewWritableFile(fname.c_str(), &file);
         if (!s.ok()) {
           // Avoid chewing through file number space in a tight loop.
           versions_->ReuseFileNumber(new_log_number);
@@ -1526,9 +1531,9 @@ Status DBImpl::MakeRoomForWrite(bool force) {
         }
         delete log_;
         delete logfile_;  // This closes the file
-        logfile_ = lfile;
+        logfile_ = file;
         logfile_number_ = new_log_number;
-        log_ = new log::Writer(lfile);
+        log_ = new log::Writer(file);
       }
 
       // Attempt to switch to a new memtable and
@@ -1769,23 +1774,23 @@ Status DBImpl::MigrateLevel0Table(InsertionState* insert,
   }
 
   mutex_.Unlock();
-  std::string target = TableFileName(dbname_, file_number);
+  std::string dst = TableFileName(dbname_, file_number);
   Log(options_.info_log, "Insert #%llu: %s -> %s",
-      (unsigned long long)file_number, source.c_str(), target.c_str());
+      (unsigned long long)file_number, source.c_str(), dst.c_str());
 
   Status s;
   uint64_t file_size;
-  s = env_->GetFileSize(source, &file_size);
+  s = env_->GetFileSize(source.c_str(), &file_size);
   if (s.ok()) {
     if (file_size == 0) {
       s = Status::Corruption(source, "file is empty");
     } else {
       switch (insert->options->method) {
         case kCopy:
-          s = env_->CopyFile(source, target);
+          s = env_->CopyFile(source.c_str(), dst.c_str());
           break;
         case kRename:
-          s = env_->RenameFile(source, target);
+          s = env_->RenameFile(source.c_str(), dst.c_str());
           break;
       }
     }
@@ -1873,7 +1878,7 @@ Status DBImpl::AddL0Tables(const InsertOptions& options,
   Status s;
   InsertionState insert(options, bulk_dir);
   std::vector<std::string>* const names = &insert.source_names;
-  s = env_->GetChildren(bulk_dir, names);
+  s = env_->GetChildren(bulk_dir.c_str(), names);
   if (!s.ok()) {
     return s;
   }
@@ -1913,8 +1918,8 @@ Status DBImpl::Dump(const DumpOptions& options, const Range& r,
 
   uint64_t file_size = 0;
   uint64_t file_number = 1;
-  std::string fname = TableFileName(dump_dir, file_number);
-  env_->CreateDir(dump_dir);
+  const std::string fname = TableFileName(dump_dir, file_number);
+  env_->CreateDir(dump_dir.c_str());
 
   std::string key_buf;
   if (r.start.empty()) {
@@ -1928,7 +1933,7 @@ Status DBImpl::Dump(const DumpOptions& options, const Range& r,
   key_buf.resize(0);
   if (iter.Valid() && BeforeUserLimit(iter.key(), r.limit)) {
     WritableFile* file;
-    s = env_->NewWritableFile(fname, &file);
+    s = env_->NewWritableFile(fname.c_str(), &file);
     if (!s.ok()) {
       return s;
     }
@@ -1993,7 +1998,7 @@ Status DBImpl::Dump(const DumpOptions& options, const Range& r,
   if (s.ok() && file_size != 0) {
     // OK
   } else {
-    env_->DeleteFile(fname);
+    env_->DeleteFile(fname.c_str());
   }
 
   return s;
@@ -2009,15 +2014,15 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
       impl->Recover(&edit);  // Handles create_if_missing, error_if_exists
   if (s.ok()) {
     if (!options.disable_write_ahead_log) {
-      uint64_t new_log_number = impl->versions_->NewFileNumber();
-      WritableFile* lfile;
-      s = options.env->NewWritableFile(LogFileName(dbname, new_log_number),
-                                       &lfile);
+      const uint64_t new_log_number = impl->versions_->NewFileNumber();
+      const std::string fname = LogFileName(dbname, new_log_number);
+      WritableFile* file;
+      s = options.env->NewWritableFile(fname.c_str(), &file);
       if (s.ok()) {
         edit.SetLogNumber(new_log_number);
-        impl->logfile_ = lfile;
+        impl->logfile_ = file;
         impl->logfile_number_ = new_log_number;
-        impl->log_ = new log::Writer(lfile);
+        impl->log_ = new log::Writer(file);
       }
     }
     if (s.ok()) {

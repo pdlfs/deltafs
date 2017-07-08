@@ -39,24 +39,25 @@ Status DB::Delete(const WriteOptions& opt, const Slice& key) {
 }
 
 Status DestroyDB(const std::string& dbname, const DBOptions& options) {
-  Env* env = options.env;
+  Env* const env = options.env;
   std::vector<std::string> filenames;
   // Ignore error in case directory does not exist
-  env->GetChildren(dbname, &filenames);
+  env->GetChildren(dbname.c_str(), &filenames);
   if (filenames.empty()) {
     return Status::OK();
   }
 
   FileLock* lock;
   const std::string lockname = LockFileName(dbname);
-  Status result = env->LockFile(lockname, &lock);
+  Status result = env->LockFile(lockname.c_str(), &lock);
   if (result.ok()) {
     uint64_t number;
     FileType type;
     for (size_t i = 0; i < filenames.size(); i++) {
       if (ParseFileName(filenames[i], &number, &type) &&
           type != kDBLockFile) {  // Lock file will be deleted at end
-        Status del = env->DeleteFile(dbname + "/" + filenames[i]);
+        const std::string fname = dbname + "/" + filenames[i];
+        Status del = env->DeleteFile(fname.c_str());
         if (result.ok() && !del.ok()) {
           result = del;
         }
@@ -65,11 +66,12 @@ Status DestroyDB(const std::string& dbname, const DBOptions& options) {
 
     // Ignore error since state is already gone
     env->UnlockFile(lock);
-    env->DeleteFile(lockname);
+    env->DeleteFile(lockname.c_str());
 
     // Ignore error in case dir contains other files
-    env->DeleteDir(dbname);
+    env->DeleteDir(dbname.c_str());
   }
+
   return result;
 }
 

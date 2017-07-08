@@ -87,9 +87,11 @@ DBOptions SanitizeOptions(const std::string& dbname,
   ClipToRange(&result.block_size, 1 << 10, 4 << 20);
   if (create_infolog && result.info_log == NULL) {
     // Open a log file in the same directory as the db
-    src.env->CreateDir(dbname);  // In case it does not exist
-    src.env->RenameFile(InfoLogFileName(dbname), OldInfoLogFileName(dbname));
-    Status s = src.env->NewLogger(InfoLogFileName(dbname), &result.info_log);
+    src.env->CreateDir(dbname.c_str());  // In case it does not exist
+    std::string fname = InfoLogFileName(dbname);
+    std::string old_fname = OldInfoLogFileName(dbname);
+    src.env->RenameFile(fname.c_str(), old_fname.c_str());
+    Status s = src.env->NewLogger(fname.c_str(), &result.info_log);
     if (!s.ok()) {
       // No place suitable for logging
       result.info_log = NULL;
