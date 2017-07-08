@@ -232,48 +232,58 @@ Status ReadFileToString(OSD* osd, const Slice& name, std::string* data) {
 class OSDAdaptor : public OSD {
  public:
   OSDAdaptor(Env* env, const Slice& prefix) : env_(env) {
-    AppendSliceTo(&prefix_, prefix);
-    env_->CreateDir(prefix_);
+    prefix_ = prefix.ToString();
+    env_->CreateDir(prefix_.c_str());
     prefix_.append("/obj_");
   }
 
   virtual ~OSDAdaptor() {}
 
   virtual Status NewSequentialObj(const Slice& name, SequentialFile** result) {
-    return env_->NewSequentialFile(FullPath(name), result);
+    std::string fp = FullPath(name);
+    return env_->NewSequentialFile(fp.c_str(), result);
   }
 
   virtual Status NewRandomAccessObj(const Slice& name,
                                     RandomAccessFile** result) {
-    return env_->NewRandomAccessFile(FullPath(name), result);
+    std::string fp = FullPath(name);
+    return env_->NewRandomAccessFile(fp.c_str(), result);
   }
 
   virtual Status NewWritableObj(const Slice& name, WritableFile** result) {
-    return env_->NewWritableFile(FullPath(name), result);
+    std::string fp = FullPath(name);
+    return env_->NewWritableFile(fp.c_str(), result);
   }
 
   virtual bool Exists(const Slice& name) {
-    return env_->FileExists(FullPath(name));
+    std::string fp = FullPath(name);
+    return env_->FileExists(fp.c_str());
   }
 
   virtual Status Size(const Slice& name, uint64_t* obj_size) {
-    return env_->GetFileSize(FullPath(name), obj_size);
+    std::string fp = FullPath(name);
+    return env_->GetFileSize(fp.c_str(), obj_size);
   }
 
   virtual Status Delete(const Slice& name) {
-    return env_->DeleteFile(FullPath(name));
+    std::string fp = FullPath(name);
+    return env_->DeleteFile(fp.c_str());
   }
 
   virtual Status Put(const Slice& name, const Slice& data) {
-    return WriteStringToFile(env_, data, FullPath(name));
+    std::string fp = FullPath(name);
+    return WriteStringToFile(env_, data, fp.c_str());
   }
 
   virtual Status Get(const Slice& name, std::string* data) {
-    return ReadFileToString(env_, FullPath(name), data);
+    std::string fp = FullPath(name);
+    return ReadFileToString(env_, fp.c_str(), data);
   }
 
   virtual Status Copy(const Slice& src, const Slice& target) {
-    return env_->CopyFile(FullPath(src), FullPath(target));
+    std::string fp1 = FullPath(src);
+    std::string fp2 = FullPath(target);
+    return env_->CopyFile(fp1.c_str(), fp2.c_str());
   }
 
  private:
@@ -281,10 +291,7 @@ class OSDAdaptor : public OSD {
   void operator=(const OSDAdaptor&);
   OSDAdaptor(const OSDAdaptor&);
 
-  std::string FullPath(const Slice& name) {
-    std::string path = prefix_ + name.data();
-    return path;
-  }
+  std::string FullPath(const Slice& name) { return prefix_ + name.c_str(); }
 
   std::string prefix_;
   Env* env_;

@@ -58,7 +58,8 @@ Fio* Fio::Open(const Slice& fio_name, const Slice& fio_conf) {
 #endif
   if (fio_name == "posix") {
 #if defined(PDLFS_PLATFORM_POSIX)
-    return new PosixFio(FetchRoot(fio_conf.c_str()));
+    std::string root = FetchRoot(fio_conf.c_str());
+    return new PosixFio(root.c_str());
 #else
     return NULL;
 #endif

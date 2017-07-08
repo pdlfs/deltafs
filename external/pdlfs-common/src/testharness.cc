@@ -99,22 +99,21 @@ int RandomSeed() {
   return result;
 }
 
-std::string NewTmpDirectory(const Slice& subdir, Env* env) {
+std::string NewTmpDirectory(const char* subdir, Env* env) {
   if (env == NULL) env = Env::Default();
-  std::string dirname = TmpDir() + "/" + subdir.data();
-  env->CreateDir(dirname);
-
+  const std::string dirname = TmpDir() + "/" + subdir;
+  env->CreateDir(dirname.c_str());
   std::vector<std::string> names;
-  Status s = env->GetChildren(dirname, &names);
+  Status s = env->GetChildren(dirname.c_str(), &names);
   if (s.ok()) {
     std::string fname = dirname;
     fname.push_back('/');
-    size_t prefix = fname.length();
+    const size_t prefix = fname.length();
     for (size_t i = 0; i < names.size(); i++) {
       if (!Slice(names[i]).starts_with(".")) {
         fname.resize(prefix);
         fname.append(names[i]);
-        s = env->DeleteFile(fname);
+        s = env->DeleteFile(fname.c_str());
         if (!s.ok()) {
           break;
         }

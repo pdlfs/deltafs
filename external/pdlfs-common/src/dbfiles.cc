@@ -135,12 +135,14 @@ Status SetCurrentFile(Env* env, const std::string& dbname,
   assert(contents.starts_with(dbname + "/"));
   contents.remove_prefix(dbname.size() + 1);
   std::string tmp = TempFileName(dbname, descriptor_number);
-  Status s = WriteStringToFileSync(env, contents.ToString() + "\n", tmp);
+  Status s =
+      WriteStringToFileSync(env, contents.ToString() + "\n", tmp.c_str());
   if (s.ok()) {
-    s = env->RenameFile(tmp, CurrentFileName(dbname));
+    std::string curr = CurrentFileName(dbname);
+    s = env->RenameFile(tmp.c_str(), curr.c_str());
   }
   if (!s.ok()) {
-    env->DeleteFile(tmp);
+    env->DeleteFile(tmp.c_str());
   }
   return s;
 }
