@@ -21,16 +21,16 @@
 namespace pdlfs {
 
 #if defined(PDLFS_OS_LINUX) && defined(_GNU_SOURCE)
-static Status OSCopyFile(const Slice& s, const Slice& t) {
+static Status OSCopyFile(const char* src, const char* dst) {
   Status status;
   int r = -1;
   int w = -1;
-  if ((r = open(s.c_str(), O_RDONLY)) == -1) {
-    status = IOError(s, errno);
+  if ((r = open(src, O_RDONLY)) == -1) {
+    status = IOError(src, errno);
   }
   if (status.ok()) {
-    if ((w = open(t.c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0644)) == -1) {
-      status = IOError(t, errno);
+    if ((w = open(dst, O_CREAT | O_TRUNC | O_WRONLY, 0644)) == -1) {
+      status = IOError(dst, errno);
     }
   }
   if (status.ok()) {
@@ -113,9 +113,9 @@ class PosixMmapReadableFile : public RandomAccessFile {
   MmapLimiter* limiter_;
 
  public:
-  PosixMmapReadableFile(const Slice& fname, void* base, size_t length,
+  PosixMmapReadableFile(const char* fname, void* base, size_t length,
                         MmapLimiter* limiter)
-      : filename_(fname.ToString()),
+      : filename_(fname),
         mmapped_region_(base),
         length_(length),
         limiter_(limiter) {}
@@ -206,95 +206,98 @@ class PosixEnv : public Env {
   explicit PosixEnv(int bg_threads = 1) : pool_(bg_threads) {}
   virtual ~PosixEnv() { abort(); }
 
-  virtual Status NewSequentialFile(const Slice& fname,
-                                   SequentialFile** result) {
-    FILE* f = fopen(fname.c_str(), "r");
+  virtual Status NewSequentialFile(const char* fname, SequentialFile** r) {
+    FILE* f = fopen(fname, "r");
     if (f != NULL) {
-      *result = new PosixBufferedSequentialFile(fname, f);
+      *r = new PosixBufferedSequentialFile(fname, f);
       return Status::OK();
     } else {
-      *result = NULL;
+      *r = NULL;
       return IOError(fname, errno);
     }
   }
 
-  virtual Status NewRandomAccessFile(const Slice& fname,
-                                     RandomAccessFile** result) {
-    *result = NULL;
+  virtual Status NewRandomAccessFile(const char* fname, RandomAccessFile** r) {
+    *r = NULL;
     Status s;
-    int fd = open(fname.c_str(), O_RDONLY);
+    int fd = open(fname, O_RDONLY);
     if (fd < 0) {
       s = IOError(fname, errno);
-    } else if (mmap_limit_.Acquire()) {
+    } else if (!mmap_limit_.Acquire()) {
+      *r = new PosixRandomAccessFile(fname, fd);
+    } else {
       uint64_t size;
       s = GetFileSize(fname, &size);
       if (s.ok()) {
-        void* base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
-        if (base != MAP_FAILED) {
-          *result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_);
+        if (size != 0) {
+          void* base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
+          if (base != MAP_FAILED) {
+            *r = new PosixMmapReadableFile(fname, base, size, &mmap_limit_);
+          } else {
+            s = IOError(fname, errno);
+          }
         } else {
-          s = IOError(fname, errno);
+          s = Status::NotSupported(Slice());
         }
       }
       close(fd);
       if (!s.ok()) {
         mmap_limit_.Release();
       }
-    } else {
-      *result = new PosixRandomAccessFile(fname, fd);
     }
     return s;
   }
 
-  virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
-    FILE* f = fopen(fname.c_str(), "w");
+  virtual Status NewWritableFile(const char* fname, WritableFile** r) {
+    FILE* f = fopen(fname, "w");
     if (f != NULL) {
-      *result = new PosixBufferedWritableFile(fname, f);
+      *r = new PosixBufferedWritableFile(fname, f);
       return Status::OK();
     } else {
-      *result = NULL;
+      *r = NULL;
       return IOError(fname, errno);
     }
   }
 
-  virtual bool FileExists(const Slice& fname) {
-    return access(fname.c_str(), F_OK) == 0;
+  virtual bool FileExists(const char* fname) {
+    return access(fname, F_OK) == 0;
   }
 
-  virtual Status GetChildren(const Slice& dir,
+  virtual Status GetChildren(const char* dirname,
                              std::vector<std::string>* result) {
     result->clear();
-    DIR* d = opendir(dir.c_str());
-    if (d == NULL) {
-      return IOError(dir, errno);
+    DIR* dir = opendir(dirname);
+    if (dir != NULL) {
+      struct dirent* entry;
+      while ((entry = readdir(dir)) != NULL) {
+        result->push_back(static_cast<const char*>(entry->d_name));
+      }
+      closedir(dir);
+      return Status::OK();
+    } else {
+      return IOError(dirname, errno);
     }
-    struct dirent* entry;
-    while ((entry = readdir(d)) != NULL) {
-      result->push_back(static_cast<const char*>(entry->d_name));
-    }
-    closedir(d);
-    return Status::OK();
   }
 
-  virtual Status DeleteFile(const Slice& fname) {
+  virtual Status DeleteFile(const char* fname) {
     Status result;
-    if (unlink(fname.c_str()) != 0) {
+    if (unlink(fname) != 0) {
       result = IOError(fname, errno);
     }
     return result;
   }
 
-  virtual Status CreateDir(const Slice& dirname) {
+  virtual Status CreateDir(const char* dirname) {
     Status result;
-    if (mkdir(dirname.c_str(), 0755) != 0) {
+    if (mkdir(dirname, 0755) != 0) {
       result = IOError(dirname, errno);
     }
     return result;
   }
 
-  virtual Status AttachDir(const Slice& dirname) {
+  virtual Status AttachDir(const char* dirname) {
     Status result;
-    DIR* dir = opendir(dirname.c_str());
+    DIR* dir = opendir(dirname);
     if (dir == NULL) {
       result = IOError(dirname, errno);
     } else {
@@ -303,22 +306,22 @@ class PosixEnv : public Env {
     return result;
   }
 
-  virtual Status DeleteDir(const Slice& dirname) {
+  virtual Status DeleteDir(const char* dirname) {
     Status result;
-    if (rmdir(dirname.c_str()) != 0) {
+    if (rmdir(dirname) != 0) {
       result = IOError(dirname, errno);
     }
     return result;
   }
 
-  virtual Status DetachDir(const Slice& dirname) {
+  virtual Status DetachDir(const char* dirname) {
     return Status::NotSupported(Slice());
   }
 
-  virtual Status GetFileSize(const Slice& fname, uint64_t* size) {
+  virtual Status GetFileSize(const char* fname, uint64_t* size) {
     Status s;
     struct stat sbuf;
-    if (stat(fname.c_str(), &sbuf) == 0) {
+    if (stat(fname, &sbuf) == 0) {
       *size = static_cast<uint64_t>(sbuf.st_size);
     } else {
       s = IOError(fname, errno);
@@ -327,32 +330,35 @@ class PosixEnv : public Env {
     return s;
   }
 
-  virtual Status CopyFile(const Slice& src, const Slice& target) {
+  virtual Status CopyFile(const char* src, const char* dst) {
 #if defined(PDLFS_OS_LINUX) && defined(_GNU_SOURCE)
-    return OSCopyFile(src, target);
+    return OSCopyFile(src, dst);
 #else
     Status status;
     int r = -1;
     int w = -1;
-    if ((r = open(src.c_str(), O_RDONLY)) == -1) {
+    if ((r = open(src, O_RDONLY)) == -1) {
       status = IOError(src, errno);
     }
     if (status.ok()) {
-      if ((w = open(target.c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0644)) ==
-          -1) {
-        status = IOError(target, errno);
+      if ((w = open(dst, O_CREAT | O_TRUNC | O_WRONLY, 0644)) == -1) {
+        status = IOError(dst, errno);
       }
     }
     if (status.ok()) {
       ssize_t n;
       char buf[4096];
-      while (status.ok() && (n = read(r, buf, 4096)) > 0) {
-        if (write(w, buf, n) != n) {
-          status = IOError(target, errno);
+      while ((n = read(r, buf, 4096)) > 0) {
+        ssize_t m = write(w, buf, n);
+        if (m != n) {
+          status = IOError(dst, errno);
+          break;
         }
       }
-      if (status.ok() && n == -1) {
-        status = IOError(src, errno);
+      if (n == -1) {
+        if (status.ok()) {
+          status = IOError(src, errno);
+        }
       }
     }
     if (r != -1) {
@@ -365,41 +371,41 @@ class PosixEnv : public Env {
 #endif
   }
 
-  virtual Status RenameFile(const Slice& src, const Slice& target) {
+  virtual Status RenameFile(const char* src, const char* dst) {
     Status result;
-    if (rename(src.c_str(), target.c_str()) != 0) {
+    if (rename(src, dst) != 0) {
       result = IOError(src, errno);
     }
     return result;
   }
 
-  virtual Status LockFile(const Slice& fname, FileLock** lock) {
+  virtual Status LockFile(const char* fname, FileLock** lock) {
     *lock = NULL;
     Status s;
-    int fd = open(fname.c_str(), O_RDWR | O_CREAT, 0644);
+    int fd = open(fname, O_RDWR | O_CREAT, 0644);
     if (fd < 0) {
       s = IOError(fname, errno);
     } else if (!locks_.Insert(fname)) {
       close(fd);
-      s = Status::IOError(fname, "lock already held by process");
+      s = Status::IOError(fname, "Lock already held by process");
     } else if (LockOrUnlock(fd, true) == -1) {
       s = IOError(fname, errno);
       close(fd);
       locks_.Remove(fname);
     } else {
       PosixFileLock* my_lock = new PosixFileLock;
+      my_lock->name_ = fname;
       my_lock->fd_ = fd;
-      my_lock->name_ = fname.ToString();
       *lock = my_lock;
     }
     return s;
   }
 
   virtual Status UnlockFile(FileLock* lock) {
-    PosixFileLock* my_lock = reinterpret_cast<PosixFileLock*>(lock);
     Status s;
+    PosixFileLock* my_lock = reinterpret_cast<PosixFileLock*>(lock);
     if (LockOrUnlock(my_lock->fd_, false) == -1) {
-      s = IOError("unlock", errno);
+      s = IOError("Unlock", errno);
     }
     locks_.Remove(my_lock->name_);
     close(my_lock->fd_);
@@ -411,64 +417,63 @@ class PosixEnv : public Env {
     pool_.Schedule(function, arg);
   }
 
-  virtual void StartThread(void (*function)(void* arg), void* arg) {
+  virtual void StartThread(void (*function)(void*), void* arg) {
     pool_.StartThread(function, arg);
   }
 
   virtual Status GetTestDirectory(std::string* result) {
     const char* env = getenv("TEST_TMPDIR");
-    if (env && env[0] != '\0') {
-      *result = env;
-    } else {
+    if (env == NULL || env[0] == '\0') {
       char buf[100];
       snprintf(buf, sizeof(buf), "/tmp/pdlfs-test-%d",
                static_cast<int>(geteuid()));
       *result = buf;
+    } else {
+      *result = env;
     }
-    // Directory may already exist
-    CreateDir(*result);
+    // Ignore error since directory may exist
+    CreateDir(result->c_str());
     return Status::OK();
   }
 
-  virtual Status NewLogger(const std::string& fname, Logger** result) {
-    FILE* f = fopen(fname.c_str(), "w");
-    if (f == NULL) {
-      *result = NULL;
-      return IOError(fname, errno);
-    } else {
+  virtual Status NewLogger(const char* fname, Logger** result) {
+    FILE* f = fopen(fname, "w");
+    if (f != NULL) {
       *result = new PosixLogger(f, port::PthreadId);
       return Status::OK();
+    } else {
+      *result = NULL;
+      return IOError(fname, errno);
     }
   }
 
   virtual uint64_t NowMicros() {
+    uint64_t result;
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    return static_cast<uint64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+    result = static_cast<uint64_t>(tv.tv_sec) * 1000000 + tv.tv_usec;
+    return result;
   }
 
-  virtual void SleepForMicroseconds(int micros) { usleep(micros); }
+  virtual void SleepForMicroseconds(int micros) {
+    usleep(static_cast<unsigned>(micros));
+  }
 
   virtual Status FetchHostname(std::string* hostname) {
     char buf[PDLFS_HOST_NAME_MAX];
-    Status s;
     if (gethostname(buf, sizeof(buf)) == -1) {
-      s = IOError("gethostname", errno);
+      return IOError("Cannot get hostname", errno);
     } else {
       *hostname = buf;
+      return Status::OK();
     }
-    return s;
   }
 
   virtual Status FetchHostIPAddrs(std::vector<std::string>* ips) {
     PosixSock sock;
     Status s = sock.OpenSocket();
-    if (s.ok()) {
-      s = sock.LoadSocketConfig();
-    }
-    if (s.ok()) {
-      s = sock.GetHostIPAddresses(ips);
-    }
+    if (s.ok()) s = sock.LoadSocketConfig();
+    if (s.ok()) s = sock.GetHostIPAddresses(ips);
     return s;
   }
 
@@ -481,42 +486,38 @@ class PosixEnv : public Env {
 #if defined(PDLFS_OS_LINUX)
 class PosixDirectIOWrapper : public EnvWrapper {
  public:
-  PosixDirectIOWrapper(Env* base) : EnvWrapper(base) {}
-
+  explicit PosixDirectIOWrapper(Env* base) : EnvWrapper(base) {}
   virtual ~PosixDirectIOWrapper() { abort(); }
 
-  virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
-    int fd = open(fname.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_DIRECT,
-                  DEFFILEMODE);
+  virtual Status NewWritableFile(const char* fname, WritableFile** r) {
+    int fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC | O_DIRECT, 0644);
     if (fd != -1) {
-      *result = new PosixWritableFile(fname, fd);
+      *r = new PosixWritableFile(fname, fd);
       return Status::OK();
     } else {
-      *result = NULL;
+      *r = NULL;
       return IOError(fname, errno);
     }
   }
 
-  virtual Status NewRandomAccessFile(const Slice& fname,
-                                     RandomAccessFile** result) {
-    int fd = open(fname.c_str(), O_RDONLY);
+  virtual Status NewRandomAccessFile(const char* fname, RandomAccessFile** r) {
+    int fd = open(fname, O_RDONLY);
     if (fd != -1) {
-      *result = new PosixRandomAccessFile(fname, fd);
+      *r = new PosixRandomAccessFile(fname, fd);
       return Status::OK();
     } else {
-      *result = NULL;
+      *r = NULL;
       return IOError(fname, errno);
     }
   }
 
-  virtual Status NewSequentialFile(const Slice& fname,
-                                   SequentialFile** result) {
-    int fd = open(fname.c_str(), O_RDONLY);
+  virtual Status NewSequentialFile(const char* fname, SequentialFile** r) {
+    int fd = open(fname, O_RDONLY);
     if (fd != -1) {
-      *result = new PosixSequentialFile(fname, fd);
+      *r = new PosixSequentialFile(fname, fd);
       return Status::OK();
     } else {
-      *result = NULL;
+      *r = NULL;
       return IOError(fname, errno);
     }
   }
@@ -525,41 +526,38 @@ class PosixDirectIOWrapper : public EnvWrapper {
 
 class PosixUnBufferedIOWrapper : public EnvWrapper {
  public:
-  PosixUnBufferedIOWrapper(Env* base) : EnvWrapper(base) {}
-
+  explicit PosixUnBufferedIOWrapper(Env* base) : EnvWrapper(base) {}
   virtual ~PosixUnBufferedIOWrapper() { abort(); }
 
-  virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
-    int fd = open(fname.c_str(), O_WRONLY | O_CREAT | O_TRUNC, DEFFILEMODE);
+  virtual Status NewWritableFile(const char* fname, WritableFile** r) {
+    int fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd != -1) {
-      *result = new PosixWritableFile(fname, fd);
+      *r = new PosixWritableFile(fname, fd);
       return Status::OK();
     } else {
-      *result = NULL;
+      *r = NULL;
       return IOError(fname, errno);
     }
   }
 
-  virtual Status NewRandomAccessFile(const Slice& fname,
-                                     RandomAccessFile** result) {
-    int fd = open(fname.c_str(), O_RDONLY);
+  virtual Status NewRandomAccessFile(const char* fname, RandomAccessFile** r) {
+    int fd = open(fname, O_RDONLY);
     if (fd != -1) {
-      *result = new PosixRandomAccessFile(fname, fd);
+      *r = new PosixRandomAccessFile(fname, fd);
       return Status::OK();
     } else {
-      *result = NULL;
+      *r = NULL;
       return IOError(fname, errno);
     }
   }
 
-  virtual Status NewSequentialFile(const Slice& fname,
-                                   SequentialFile** result) {
-    int fd = open(fname.c_str(), O_RDONLY);
+  virtual Status NewSequentialFile(const char* fname, SequentialFile** r) {
+    int fd = open(fname, O_RDONLY);
     if (fd != -1) {
-      *result = new PosixSequentialFile(fname, fd);
+      *r = new PosixSequentialFile(fname, fd);
       return Status::OK();
     } else {
-      *result = NULL;
+      *r = NULL;
       return IOError(fname, errno);
     }
   }

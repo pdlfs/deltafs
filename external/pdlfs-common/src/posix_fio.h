@@ -70,9 +70,8 @@ class PosixFio : public Fio {
   }
 
  public:
-  explicit PosixFio(const Slice& root) {
+  explicit PosixFio(const char* root) : root_(root) {
     Env::Default()->CreateDir(root);
-    root_ = root.ToString();
   }
 
   virtual ~PosixFio() {

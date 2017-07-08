@@ -89,8 +89,8 @@ class PosixBufferedSequentialFile : public SequentialFile {
   FILE* file_;
 
  public:
-  PosixBufferedSequentialFile(const Slice& fname, FILE* f)
-      : filename_(fname.ToString()), file_(f) {}
+  PosixBufferedSequentialFile(const char* fname, FILE* f)
+      : filename_(fname), file_(f) {}
 
   virtual ~PosixBufferedSequentialFile() { fclose(file_); }
 
@@ -123,8 +123,7 @@ class PosixSequentialFile : public SequentialFile {
   int fd_;
 
  public:
-  PosixSequentialFile(const Slice& fname, int fd)
-      : filename_(fname.ToString()), fd_(fd) {}
+  PosixSequentialFile(const char* fname, int fd) : filename_(fname), fd_(fd) {}
 
   virtual ~PosixSequentialFile() { close(fd_); }
 
@@ -158,8 +157,8 @@ class PosixRandomAccessFile : public RandomAccessFile {
   int fd_;
 
  public:
-  PosixRandomAccessFile(const Slice& fname, int fd)
-      : filename_(fname.ToString()), fd_(fd) {}
+  PosixRandomAccessFile(const char* fname, int fd)
+      : filename_(fname), fd_(fd) {}
 
   virtual ~PosixRandomAccessFile() { close(fd_); }
 
@@ -182,8 +181,8 @@ class PosixBufferedWritableFile : public WritableFile {
   FILE* file_;
 
  public:
-  PosixBufferedWritableFile(const Slice& fname, FILE* f)
-      : filename_(fname.ToString()), file_(f) {}
+  PosixBufferedWritableFile(const char* fname, FILE* f)
+      : filename_(fname), file_(f) {}
 
   virtual ~PosixBufferedWritableFile() {
     if (file_ != NULL) {
@@ -262,8 +261,7 @@ class PosixWritableFile : public WritableFile {
   int fd_;
 
  public:
-  PosixWritableFile(const Slice& fname, int fd)
-      : filename_(fname.ToString()), fd_(fd) {}
+  PosixWritableFile(const char* fname, int fd) : filename_(fname), fd_(fd) {}
 
   virtual ~PosixWritableFile() {
     if (fd_ != -1) {
@@ -287,7 +285,7 @@ class PosixWritableFile : public WritableFile {
   }
 
   virtual Status Flush() {
-    // Do nothing
+    // Do nothing since we never buffer any data
     return Status::OK();
   }
 

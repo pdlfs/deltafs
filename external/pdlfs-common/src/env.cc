@@ -51,15 +51,21 @@ ThreadPool::~ThreadPool() {}
 
 EnvWrapper::~EnvWrapper() {}
 
-Env* Env::Open(const Slice& env_name, const Slice& env_conf, bool* is_system) {
+Env* Env::Open(const char* name, const char* conf, bool* is_system) {
   *is_system = false;
-  assert(env_name.size() != 0);
+  if (name == NULL) name = "";
+  if (conf == NULL) conf = "";
+  Slice env_name(name), env_conf(conf);
 #if VERBOSE >= 1
+  const char* env_name_str = env_name.c_str();
+  if (env_name.empty()) {
+    env_name_str = "~";
+  }
   const char* env_conf_str = env_conf.c_str();
   if (env_conf.empty()) {
     env_conf_str = "~";
   }
-  Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name.c_str());
+  Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name_str);
   Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf_str);
 #endif
 // RADOS
@@ -107,7 +113,7 @@ void Log(Logger* info_log, const char* fmt, ...) {
 }
 
 static Status DoWriteStringToFile(Env* env, const Slice& data,
-                                  const Slice& fname, bool should_sync) {
+                                  const char* fname, bool should_sync) {
   WritableFile* file;
   Status s = env->NewWritableFile(fname, &file);
   if (!s.ok()) {
@@ -127,15 +133,15 @@ static Status DoWriteStringToFile(Env* env, const Slice& data,
   return s;
 }
 
-Status WriteStringToFile(Env* env, const Slice& data, const Slice& fname) {
+Status WriteStringToFile(Env* env, const Slice& data, const char* fname) {
   return DoWriteStringToFile(env, data, fname, false);
 }
 
-Status WriteStringToFileSync(Env* env, const Slice& data, const Slice& fname) {
+Status WriteStringToFileSync(Env* env, const Slice& data, const char* fname) {
   return DoWriteStringToFile(env, data, fname, true);
 }
 
-Status ReadFileToString(Env* env, const Slice& fname, std::string* data) {
+Status ReadFileToString(Env* env, const char* fname, std::string* data) {
   data->clear();
   SequentialFile* file;
   Status s = env->NewSequentialFile(fname, &file);
@@ -149,7 +155,7 @@ Status ReadFileToString(Env* env, const Slice& fname, std::string* data) {
     if (!s.ok()) {
       break;
     }
-    AppendSliceTo(data, fragment);
+    data->append(fragment.data(), fragment.size());
     if (fragment.empty()) {
       break;
     }
