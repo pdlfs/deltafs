@@ -130,15 +130,15 @@ bool ParseFileName(const Slice& fname, uint64_t* number, FileType* type) {
 Status SetCurrentFile(Env* env, const std::string& dbname,
                       uint64_t descriptor_number) {
   // Remove leading "dbname/" and add newline to manifest file name
-  std::string manifest = DescriptorFileName(dbname, descriptor_number);
-  Slice contents = manifest;
+  const std::string mani = DescriptorFileName(dbname, descriptor_number);
+  Slice contents = mani;
   assert(contents.starts_with(dbname + "/"));
   contents.remove_prefix(dbname.size() + 1);
-  std::string tmp = TempFileName(dbname, descriptor_number);
+  const std::string tmp = TempFileName(dbname, descriptor_number);
   Status s =
       WriteStringToFileSync(env, contents.ToString() + "\n", tmp.c_str());
   if (s.ok()) {
-    std::string curr = CurrentFileName(dbname);
+    const std::string curr = CurrentFileName(dbname);
     s = env->RenameFile(tmp.c_str(), curr.c_str());
   }
   if (!s.ok()) {
