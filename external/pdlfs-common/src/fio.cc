@@ -45,8 +45,10 @@ static std::string FetchRoot(const char* input) {
   return root;
 }
 
-Fio* Fio::Open(const Slice& fio_name, const Slice& fio_conf) {
-  assert(fio_name.size() != 0);
+Fio* Fio::Open(const char* name, const char* conf) {
+  if (name == NULL) name = "";
+  if (conf == NULL) conf = "";
+  Slice fio_name(name), fio_conf(conf);
 #if VERBOSE >= 1
   Verbose(__LOG_ARGS__, 1, "fio.name -> %s", fio_name.c_str());
   Verbose(__LOG_ARGS__, 1, "fio.conf -> %s", fio_conf.c_str());
