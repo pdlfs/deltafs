@@ -97,7 +97,7 @@ class SpecialEnv : public EnvWrapper {
     manifest_write_error_.Release_Store(NULL);
   }
 
-  virtual Status NewWritableFile(const Slice& f, WritableFile** r) {
+  virtual Status NewWritableFile(const char* f, WritableFile** r) {
     class DataFile : public WritableFile {
      private:
       SpecialEnv* env_;
@@ -156,19 +156,18 @@ class SpecialEnv : public EnvWrapper {
       return Status::IOError("simulated write error");
     }
 
-    Status s = target()->NewWritableFile(f.c_str(), r);
+    Status s = target()->NewWritableFile(f, r);
     if (s.ok()) {
-      if (strstr(f.data(), ".ldb") != NULL ||
-          strstr(f.data(), ".log") != NULL) {
+      if (strstr(f, ".ldb") != NULL || strstr(f, ".log") != NULL) {
         *r = new DataFile(this, *r);
-      } else if (strstr(f.data(), "MANIFEST") != NULL) {
+      } else if (strstr(f, "MANIFEST") != NULL) {
         *r = new ManifestFile(this, *r);
       }
     }
     return s;
   }
 
-  virtual Status NewRandomAccessFile(const Slice& f, RandomAccessFile** r) {
+  virtual Status NewRandomAccessFile(const char* f, RandomAccessFile** r) {
     class CountingFile : public RandomAccessFile {
      private:
       RandomAccessFile* target_;
@@ -185,7 +184,7 @@ class SpecialEnv : public EnvWrapper {
       }
     };
 
-    Status s = target()->NewRandomAccessFile(f.c_str(), r);
+    Status s = target()->NewRandomAccessFile(f, r);
     if (s.ok() && count_random_reads_) {
       *r = new CountingFile(*r, &random_read_counter_);
     }
