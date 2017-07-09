@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2015-2017 Carnegie Mellon University.
  *
@@ -9,12 +7,14 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <stdint.h>
-#include <string>
-#include <vector>
+#pragma once
 
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/status.h"
+
+#include <stdint.h>
+#include <string>
+#include <vector>
 
 namespace pdlfs {
 
@@ -23,13 +23,6 @@ class Env;
 class SequentialFile;
 class RandomAccessFile;
 class WritableFile;
-
-// Create an OSD adaptor atop an existing Env instance. The caller may
-// specify a prefix so that all objects will be stored under that path.
-// If "env" is NULL, the result of Env::Default() will be used.
-// The caller must delete the result when it is no longer needed.
-// The "*env" must remain live while the result is in use.
-extern OSD* NewOSDAdaptor(const Slice& prefix = Slice("/"), Env* env = NULL);
 
 struct MountOptions {
   MountOptions();
@@ -79,15 +72,15 @@ struct UnmountOptions {
 
 // A utility routine: write "data" to the named file.
 // The file is actually backed by an object.
-extern Status WriteStringToFile(OSD* osd, const Slice& data, const Slice& name);
+extern Status WriteStringToFile(OSD* osd, const Slice& data, const char* name);
 // A utility routine: write "data" to the named file and Sync() it.
 // The file is actually backed by an object.
 extern Status WriteStringToFileSync(OSD* osd, const Slice& data,
-                                    const Slice& name);
+                                    const char* name);
 
 // A utility routine: read contents from a named file into *data.
 // The file is actually backed by an object.
-extern Status ReadFileToString(OSD* osd, const Slice& name, std::string* data);
+extern Status ReadFileToString(OSD* osd, const char* name, std::string* data);
 
 // We use the OSDEnv to bridge the OSD world to the traditional file system
 // world. This is achieved by mapping each "file" to an underlying object

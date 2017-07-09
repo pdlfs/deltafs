@@ -24,7 +24,7 @@ class OSDTest {
 
   OSDTest() {
     root_ = test::NewTmpDirectory("osd_test");
-    osd_ = NewOSDAdaptor(root_);
+    osd_ = OSD::FromEnv(root_.c_str());
     ose_ = new OSDEnv(osd_);
   }
 

@@ -18,7 +18,7 @@ namespace pdlfs {
 static Status Access(const std::string& name, OSD* osd, uint64_t* time) {
   *time = 0;
   SequentialFile* file;
-  Status s = osd->NewSequentialObj(name, &file);
+  Status s = osd->NewSequentialObj(name.c_str(), &file);
   if (!s.ok()) {
     if (s.IsNotFound()) {
       return Status::OK();
@@ -124,7 +124,7 @@ static Status RecoverFileSet(OSD* osd, FileSet* fset, HashSet* garbage,
   }
 
   SequentialFile* file;
-  s = osd->NewSequentialObj(log_name, &file);
+  s = osd->NewSequentialObj(log_name.c_str(), &file);
   if (!s.ok()) {
     if (s.IsNotFound()) {
       s = Status::IOError(s.ToString());
@@ -177,7 +177,7 @@ static Status OpenFileSetForWriting(const std::string& log_name, OSD* osd,
                                     FileSet* fset, HashSet* garbage) {
   Status s;
   WritableFile* file;
-  s = osd->NewWritableObj(log_name, &file);
+  s = osd->NewWritableObj(log_name.c_str(), &file);
   if (!s.ok()) {
     return s;
   }
@@ -190,7 +190,7 @@ static Status OpenFileSetForWriting(const std::string& log_name, OSD* osd,
     delete log;
     file->Close();
     delete file;
-    osd->Delete(log_name);
+    osd->Delete(log_name.c_str());
     return s;
   }
 
@@ -200,12 +200,15 @@ static Status OpenFileSetForWriting(const std::string& log_name, OSD* osd,
   struct Visitor : public HashSet::Visitor {
     OSD* osd;
     FileSet* fset;
-    virtual void visit(const Slice& fname) {
-      Status s = osd->Delete(fname);
+    virtual void visit(const Slice& key) {
+      const std::string fname = key.ToString();
+      Status s = osd->Delete(fname.c_str());
       if (s.ok()) {
         fset->DeleteFile(fname);
       } else if (s.IsNotFound()) {
         fset->DeleteFile(fname);
+      } else {
+        // Future work
       }
     }
   };
@@ -316,7 +319,7 @@ Status OSDEnv::Impl::LinkFileSet(const Slice& mntptr, FileSet* fset) {
 
 Status OSDEnv::Impl::UnlinkFileSet(const Slice& mntptr, bool deletion) {
   MutexLock l(&mutex_);
-  FileSet* fset = mtable_.Lookup(mntptr);
+  FileSet* const fset = mtable_.Lookup(mntptr);
   if (fset == NULL) {
     return Status::NotFound(Slice());
   } else {
@@ -325,15 +328,17 @@ Status OSDEnv::Impl::UnlinkFileSet(const Slice& mntptr, bool deletion) {
         return Status::DirNotEmpty(Slice());
       }
     }
-    std::string fset_name = fset->name;
+    std::string parent = fset->name;
     mtable_.Erase(mntptr);
     delete fset;
     if (deletion) {
-      Status s1 = osd_->Delete(Slice(fset_name + "_1"));
+      std::string obj1 = parent + "_1";
+      Status s1 = osd_->Delete(obj1.c_str());
       if (s1.IsNotFound()) {
         s1 = Status::OK();
       }
-      Status s2 = osd_->Delete(Slice(fset_name + "_2"));
+      std::string obj2 = parent + "_2";
+      Status s2 = osd_->Delete(obj2.c_str());
       if (s2.IsNotFound()) {
         s2 = Status::OK();
       }
@@ -360,33 +365,33 @@ std::string OSDEnv::Impl::TEST_GetObjectName(const ResolvedPath& fp) {
 
 Status OSDEnv::Impl::GetFile(const ResolvedPath& fp, std::string* data) {
   MutexLock l(&mutex_);
-  FileSet* fset = mtable_.Lookup(fp.mntptr);
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
     return Status::NotFound(Slice());
   } else {
-    std::string internal_name = InternalObjectName(fset, fp.base);
-    if (!fset->files.Contains(internal_name)) {
+    std::string name = InternalObjectName(fset, fp.base);
+    if (!fset->files.Contains(name)) {
       return Status::NotFound(Slice());
     } else {
-      return osd_->Get(internal_name, data);
+      return osd_->Get(name.c_str(), data);
     }
   }
 }
 
 Status OSDEnv::Impl::PutFile(const ResolvedPath& fp, const Slice& data) {
   MutexLock l(&mutex_);
-  FileSet* fset = mtable_.Lookup(fp.mntptr);
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
     return Status::NotFound(Slice());
   } else {
-    std::string internal_name = InternalObjectName(fset, fp.base);
-    Status s = fset->TryNewFile(internal_name);
+    std::string name = InternalObjectName(fset, fp.base);
+    Status s = fset->TryNewFile(name);
     if (s.ok()) {
-      s = osd_->Put(internal_name, data);
+      s = osd_->Put(name.c_str(), data);
       if (s.ok()) {
-        s = fset->NewFile(internal_name);
+        s = fset->NewFile(name);
         if (!s.ok()) {
-          osd_->Delete(internal_name);
+          osd_->Delete(name.c_str());
         }
       }
     }
@@ -396,15 +401,15 @@ Status OSDEnv::Impl::PutFile(const ResolvedPath& fp, const Slice& data) {
 
 Status OSDEnv::Impl::FileSize(const ResolvedPath& fp, uint64_t* result) {
   MutexLock l(&mutex_);
-  FileSet* fset = mtable_.Lookup(fp.mntptr);
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
     return Status::NotFound(Slice());
   } else {
-    std::string internal_name = InternalObjectName(fset, fp.base);
-    if (!fset->files.Contains(internal_name)) {
+    std::string name = InternalObjectName(fset, fp.base);
+    if (!fset->files.Contains(name)) {
       return Status::NotFound(Slice());
     } else {
-      return osd_->Size(internal_name, result);
+      return osd_->Size(name.c_str(), result);
     }
   }
 }
@@ -412,15 +417,15 @@ Status OSDEnv::Impl::FileSize(const ResolvedPath& fp, uint64_t* result) {
 Status OSDEnv::Impl::NewSequentialFile(const ResolvedPath& fp,
                                        SequentialFile** result) {
   MutexLock l(&mutex_);
-  FileSet* fset = mtable_.Lookup(fp.mntptr);
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
     return Status::NotFound(Slice());
   } else {
-    std::string internal_name = InternalObjectName(fset, fp.base);
-    if (!fset->files.Contains(internal_name)) {
+    std::string name = InternalObjectName(fset, fp.base);
+    if (!fset->files.Contains(name)) {
       return Status::NotFound(Slice());
     } else {
-      return osd_->NewSequentialObj(internal_name, result);
+      return osd_->NewSequentialObj(name.c_str(), result);
     }
   }
 }
@@ -428,36 +433,36 @@ Status OSDEnv::Impl::NewSequentialFile(const ResolvedPath& fp,
 Status OSDEnv::Impl::NewRandomAccessFile(const ResolvedPath& fp,
                                          RandomAccessFile** result) {
   MutexLock l(&mutex_);
-  FileSet* fset = mtable_.Lookup(fp.mntptr);
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
     return Status::NotFound(Slice());
   } else {
-    std::string internal_name = InternalObjectName(fset, fp.base);
-    if (!fset->files.Contains(internal_name)) {
+    std::string name = InternalObjectName(fset, fp.base);
+    if (!fset->files.Contains(name)) {
       return Status::NotFound(Slice());
     } else {
-      return osd_->NewRandomAccessObj(internal_name, result);
+      return osd_->NewRandomAccessObj(name.c_str(), result);
     }
   }
 }
 
 Status OSDEnv::Impl::DeleteFile(const ResolvedPath& fp) {
   MutexLock l(&mutex_);
-  FileSet* fset = mtable_.Lookup(fp.mntptr);
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
     return Status::NotFound(Slice());
   } else {
-    std::string internal_name = InternalObjectName(fset, fp.base);
-    if (!fset->files.Contains(internal_name)) {
+    std::string name = InternalObjectName(fset, fp.base);
+    if (!fset->files.Contains(name)) {
       return Status::NotFound(Slice());
     } else {
-      Status s = fset->TryDeleteFile(internal_name);
+      Status s = fset->TryDeleteFile(name);
       if (s.ok()) {
         // OK if we fail in the following steps as we will redo
         // this delete operation the next time the file set is reloaded.
-        s = osd_->Delete(internal_name);
+        s = osd_->Delete(name.c_str());
         if (s.ok()) {
-          fset->DeleteFile(internal_name);
+          fset->DeleteFile(name);
         } else {
           s = Status::OK();
         }
@@ -470,18 +475,18 @@ Status OSDEnv::Impl::DeleteFile(const ResolvedPath& fp) {
 Status OSDEnv::Impl::NewWritableFile(const ResolvedPath& fp,
                                      WritableFile** result) {
   MutexLock l(&mutex_);
-  FileSet* fset = mtable_.Lookup(fp.mntptr);
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
     return Status::NotFound(Slice());
   } else {
-    std::string internal_name = InternalObjectName(fset, fp.base);
-    Status s = fset->TryNewFile(internal_name);
+    std::string name = InternalObjectName(fset, fp.base);
+    Status s = fset->TryNewFile(name);
     if (s.ok()) {
-      s = osd_->NewWritableObj(internal_name, result);
+      s = osd_->NewWritableObj(name.c_str(), result);
       if (s.ok()) {
-        s = fset->NewFile(internal_name);
+        s = fset->NewFile(name);
         if (!s.ok()) {
-          osd_->Delete(internal_name);
+          osd_->Delete(name.c_str());
           WritableFile* f = *result;
           *result = NULL;
           f->Close();
@@ -496,11 +501,11 @@ Status OSDEnv::Impl::NewWritableFile(const ResolvedPath& fp,
 Status OSDEnv::Impl::CopyFile(const ResolvedPath& src,
                               const ResolvedPath& dst) {
   MutexLock l(&mutex_);
-  FileSet* src_fset = mtable_.Lookup(src.mntptr);
+  FileSet* const src_fset = mtable_.Lookup(src.mntptr);
   if (src_fset == NULL) {
     return Status::NotFound(Slice());
   }
-  FileSet* dst_fset = mtable_.Lookup(dst.mntptr);
+  FileSet* const dst_fset = mtable_.Lookup(dst.mntptr);
   if (dst_fset == NULL) {
     return Status::NotFound(Slice());
   }
@@ -512,11 +517,11 @@ Status OSDEnv::Impl::CopyFile(const ResolvedPath& src,
   std::string dst_name = InternalObjectName(dst_fset, dst.base);
   Status s = dst_fset->TryNewFile(dst_name);
   if (s.ok()) {
-    s = osd_->Copy(src_name, dst_name);
+    s = osd_->Copy(src_name.c_str(), dst_name.c_str());
     if (s.ok()) {
       s = dst_fset->NewFile(dst_name);
       if (!s.ok()) {
-        osd_->Delete(dst_name);
+        osd_->Delete(dst_name.c_str());
       }
     }
   }

@@ -7,11 +7,11 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/osd.h"
-#include "pdlfs-common/env.h"
-#include "pdlfs-common/osd_env.h"
-
 #include "osd_internal.h"
+
+#include "pdlfs-common/env.h"
+#include "pdlfs-common/osd.h"
+#include "pdlfs-common/osd_env.h"
 
 namespace pdlfs {
 
@@ -175,8 +175,8 @@ std::string OSDEnv::TEST_LookupFile(const Slice& fname) {
   }
 }
 
-static Status DoWriteStringToFile(OSD* osd, const Slice& data,
-                                  const Slice& name, bool should_sync) {
+static Status DoWriteStringToFile(OSD* osd, const Slice& data, const char* name,
+                                  bool should_sync) {
   WritableFile* file;
   Status s = osd->NewWritableObj(name, &file);
   if (!s.ok()) {
@@ -196,26 +196,26 @@ static Status DoWriteStringToFile(OSD* osd, const Slice& data,
   return s;
 }
 
-Status WriteStringToFile(OSD* osd, const Slice& data, const Slice& name) {
+Status WriteStringToFile(OSD* osd, const Slice& data, const char* name) {
   return DoWriteStringToFile(osd, data, name, false);
 }
 
-Status WriteStringToFileSync(OSD* osd, const Slice& data, const Slice& name) {
+Status WriteStringToFileSync(OSD* osd, const Slice& data, const char* name) {
   return DoWriteStringToFile(osd, data, name, true);
 }
 
-Status ReadFileToString(OSD* osd, const Slice& name, std::string* data) {
+Status ReadFileToString(OSD* osd, const char* name, std::string* data) {
   data->clear();
   SequentialFile* file;
   Status s = osd->NewSequentialObj(name, &file);
   if (!s.ok()) {
     return s;
   }
-  const size_t kBufferSize = 8192;
-  char* space = new char[kBufferSize];
+  const size_t io_size = 8192;
+  char* space = new char[io_size];
   while (true) {
     Slice fragment;
-    s = file->Read(kBufferSize, &fragment, space);
+    s = file->Read(io_size, &fragment, space);
     if (!s.ok()) {
       break;
     }
@@ -229,76 +229,73 @@ Status ReadFileToString(OSD* osd, const Slice& name, std::string* data) {
   return s;
 }
 
-class OSDAdaptor : public OSD {
+class EnvOSD : public OSD {
  public:
-  OSDAdaptor(Env* env, const Slice& prefix) : env_(env) {
-    prefix_ = prefix.ToString();
+  EnvOSD(Env* env, const char* prefix) : env_(env) {
+    prefix_ = prefix;
     env_->CreateDir(prefix_.c_str());
     prefix_.append("/obj_");
   }
 
-  virtual ~OSDAdaptor() {}
+  virtual ~EnvOSD() {}
 
-  virtual Status NewSequentialObj(const Slice& name, SequentialFile** result) {
-    std::string fp = FullPath(name);
-    return env_->NewSequentialFile(fp.c_str(), result);
+  virtual Status NewSequentialObj(const char* name, SequentialFile** r) {
+    const std::string fp = prefix_ + name;
+    return env_->NewSequentialFile(fp.c_str(), r);
   }
 
-  virtual Status NewRandomAccessObj(const Slice& name,
-                                    RandomAccessFile** result) {
-    std::string fp = FullPath(name);
-    return env_->NewRandomAccessFile(fp.c_str(), result);
+  virtual Status NewRandomAccessObj(const char* name, RandomAccessFile** r) {
+    const std::string fp = prefix_ + name;
+    return env_->NewRandomAccessFile(fp.c_str(), r);
   }
 
-  virtual Status NewWritableObj(const Slice& name, WritableFile** result) {
-    std::string fp = FullPath(name);
-    return env_->NewWritableFile(fp.c_str(), result);
+  virtual Status NewWritableObj(const char* name, WritableFile** r) {
+    const std::string fp = prefix_ + name;
+    return env_->NewWritableFile(fp.c_str(), r);
   }
 
-  virtual bool Exists(const Slice& name) {
-    std::string fp = FullPath(name);
+  virtual bool Exists(const char* name) {
+    const std::string fp = prefix_ + name;
     return env_->FileExists(fp.c_str());
   }
 
-  virtual Status Size(const Slice& name, uint64_t* obj_size) {
-    std::string fp = FullPath(name);
+  virtual Status Size(const char* name, uint64_t* obj_size) {
+    const std::string fp = prefix_ + name;
     return env_->GetFileSize(fp.c_str(), obj_size);
   }
 
-  virtual Status Delete(const Slice& name) {
-    std::string fp = FullPath(name);
+  virtual Status Delete(const char* name) {
+    const std::string fp = prefix_ + name;
     return env_->DeleteFile(fp.c_str());
   }
 
-  virtual Status Put(const Slice& name, const Slice& data) {
-    std::string fp = FullPath(name);
+  virtual Status Put(const char* name, const Slice& data) {
+    const std::string fp = prefix_ + name;
     return WriteStringToFile(env_, data, fp.c_str());
   }
 
-  virtual Status Get(const Slice& name, std::string* data) {
-    std::string fp = FullPath(name);
+  virtual Status Get(const char* name, std::string* data) {
+    const std::string fp = prefix_ + name;
     return ReadFileToString(env_, fp.c_str(), data);
   }
 
-  virtual Status Copy(const Slice& src, const Slice& target) {
-    std::string fp1 = FullPath(src);
-    std::string fp2 = FullPath(target);
+  virtual Status Copy(const char* src, const char* dst) {
+    const std::string fp1 = prefix_ + src;
+    const std::string fp2 = prefix_ + dst;
     return env_->CopyFile(fp1.c_str(), fp2.c_str());
   }
 
  private:
   // No copying allowed
-  void operator=(const OSDAdaptor&);
-  OSDAdaptor(const OSDAdaptor&);
-
-  std::string FullPath(const Slice& name) { return prefix_ + name.c_str(); }
+  void operator=(const EnvOSD&);
+  EnvOSD(const EnvOSD&);
 
   std::string prefix_;
   Env* env_;
 };
 
-OSD* NewOSDAdaptor(const Slice& prefix, Env* env) {
-  return new OSDAdaptor(env == NULL ? Env::Default() : env, prefix);
+OSD* OSD::FromEnv(const char* prefix, Env* env) {
+  return new EnvOSD(env == NULL ? Env::Default() : env, prefix);
 }
 
 }  // namespace pdlfs
