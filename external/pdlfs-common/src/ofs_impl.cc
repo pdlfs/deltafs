@@ -79,6 +79,8 @@ static bool Execute(Slice* input, HashSet* files, HashSet* garbage) {
     case FileSet::kDelFile:
       garbage->Erase(fname);
       return true;
+    case FileSet::kNoOp:
+      return true;
     default:
       return false;
   }

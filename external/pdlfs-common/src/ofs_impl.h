@@ -22,25 +22,27 @@ namespace pdlfs {
 
 class FileSet {
  public:
+  // Values are unsigned
   enum RecordType {
-    kNoOp = 0x00,
+    kNoOp = 0x00,  // Paddings that should be ignored
 
     // Undo required during recovery
     kTryNewFile = 0x01,
     // Redo required during recovery
     kTryDelFile = 0x02,
 
-    // Op Committed
+    // Operation committed
     kNewFile = 0xf1,
     kDelFile = 0xf2
   };
 
   explicit FileSet(const MountOptions& options, const Slice& name)
-      : sync(options.sync),
-        paranoid_checks(options.paranoid_checks),
+      : paranoid_checks(options.paranoid_checks),
         read_only(options.read_only),
         create_if_missing(options.create_if_missing),
         error_if_exists(options.error_if_exists),
+        sync_on_close(false),
+        sync(options.sync),
         name(name.ToString()),
         xfile(NULL),
         xlog(NULL) {}
@@ -48,9 +50,11 @@ class FileSet {
   ~FileSet() {
     delete xlog;
     if (xfile != NULL) {
-      xfile->Close();
+      Status s;
+      if (sync_on_close) s = xfile->Sync();
+      if (s.ok()) xfile->Close();
+      delete xfile;
     }
-    delete xfile;
   }
 
   Status TryNewFile(const Slice& fname) {
@@ -111,13 +115,18 @@ class FileSet {
     }
   }
 
-  bool sync;
+  // File set options
+  // Constant after construction
   bool paranoid_checks;
   bool read_only;
   bool create_if_missing;
   bool error_if_exists;
-  std::string name;
-  HashSet files;
+  bool sync_on_close;
+  bool sync;
+
+  std::string name;  // Internal name of the file set
+
+  HashSet files;  // Children files
 
   // File set logging
   static std::string LogRecord(const Slice& fname, RecordType type);
