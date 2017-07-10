@@ -49,7 +49,7 @@ struct MountOptions {
   // component of its mount point. Use a non-empty name to override this
   // default naming mechanism.
   // Default: Slice().
-  Slice set_name;
+  Slice name;
 
   // If true, all set membership updates are sent to
   // storage synchronously.
@@ -97,55 +97,55 @@ class Ofs {
   // Return true iff the named file exists in a mounted file set.
   // Note: the real identify of the file is subject to
   // how file sets are dynamically mounted.
-  bool FileExists(const Slice& fname);
+  bool FileExists(const char* fname);
 
   // Return true iff there is a file set mounted at the given path.
-  bool FileSetExists(const Slice& dirname);
+  bool FileSetExists(const char* dirname);
 
   // Delete the named file in a mounted file set.
   // If there is no file set mounted at the given path or if the file set
   // does not have the file, a NotFound status is returned.
-  Status DeleteFile(const Slice& fname);
+  Status DeleteFile(const char* fname);
 
   // Mount a file set to the specified path.
   // Return OK on success, and a non-OK status on errors.
-  Status MountFileSet(const MountOptions& options, const Slice& dirname);
+  Status MountFileSet(const MountOptions& options, const char* dirname);
 
   // Unmount the file set currently mounted at the specified path.
   // Return OK on success, and a non-OK status on errors.
-  Status UnmountFileSet(const UnmountOptions& options, const Slice& dirname);
+  Status UnmountFileSet(const UnmountOptions& options, const char* dirname);
 
   // Retrieve all files within a mounted file set.
   // Return OK on success, and a non-OK status on errors.
-  Status GetChildren(const Slice& dirname, std::vector<std::string>* names);
+  Status GetChildren(const char* dirname, std::vector<std::string>* names);
 
   // Return the size of the named file.
-  Status GetFileSize(const Slice& fname, uint64_t* size);
+  Status GetFileSize(const char* fname, uint64_t* size);
 
   // Read contents of the named file into *data in a single I/O operation.
-  Status ReadFileToString(const Slice& fname, std::string* data);
+  Status ReadFileToString(const char* fname, std::string* data);
 
   // Write data to the named file in a single I/O operation.
-  Status WriteStringToFile(const Slice& fname, const Slice& data);
+  Status WriteStringToFile(const char* fname, const Slice& data);
 
   // Copy src to dst.
-  Status CopyFile(const Slice& src, const Slice& dst);
+  Status CopyFile(const char* src, const char* dst);
 
   // Sync a specific file set mounted at the given path.
   // Return OK on success, and a non-OK status on errors.
-  Status SynFileSet(const Slice& dirname);
+  Status SynFileSet(const char* dirname);
 
   // Create a brand new sequentially-readable file with the specified name.
-  Status NewSequentialFile(const Slice& fname, SequentialFile** result);
+  Status NewSequentialFile(const char* fname, SequentialFile** result);
 
   // Create a brand new random access read-only file with the specified name.
-  Status NewRandomAccessFile(const Slice& fname, RandomAccessFile** result);
+  Status NewRandomAccessFile(const char* fname, RandomAccessFile** result);
 
   // Create a new append-only file with the specified name.
-  Status NewWritableFile(const Slice& fname, WritableFile** result);
+  Status NewWritableFile(const char* fname, WritableFile** result);
 
   // Return the name of the underlying object associated with the given file.
-  std::string TEST_LookupFile(const Slice& fname);
+  std::string TEST_LookupFile(const char* fname);
 
  private:
   // No copying allowed

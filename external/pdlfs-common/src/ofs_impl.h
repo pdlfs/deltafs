@@ -23,16 +23,16 @@ namespace pdlfs {
 class FileSet {
  public:
   enum RecordType {
-    kNoOp = 0,
-
-    // Op Committed
-    kNewFile = 1,
-    kDelFile = 2,
+    kNoOp = 0x00,
 
     // Undo required during recovery
-    kTryNewFile = 3,
+    kTryNewFile = 0x01,
     // Redo required during recovery
-    kTryDelFile = 4
+    kTryDelFile = 0x02,
+
+    // Op Committed
+    kNewFile = 0xf1,
+    kDelFile = 0xf2
   };
 
   explicit FileSet(const MountOptions& options, const Slice& name)

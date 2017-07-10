@@ -29,10 +29,10 @@ Status RadosEnv::MountDir(const char* dirname, bool create_dir) {
     if (name[i] == '/') name[i] = '_';
 
   MountOptions options;
-  options.set_name = name;
   options.read_only = !create_dir;
   options.create_if_missing = create_dir;
   options.error_if_exists = false;
+  options.name = name;
   Status s = ofs_->MountFileSet(options, dirname);
   if (s.IsAlreadyExists()) {
     // Force a local mirror

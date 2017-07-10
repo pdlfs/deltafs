@@ -24,11 +24,12 @@ MountOptions::MountOptions()
 
 UnmountOptions::UnmountOptions() : deletion(false) {}
 
-static bool ResolvePath(const Slice& path, Slice* parent, Slice* base) {
-  if (path.size() > 1 && path[0] == '/') {
-    const char* a = path.c_str();
+static bool ResolvePath(const char* path, Slice* parent, Slice* base) {
+  const size_t n = strlen(path);
+  if (n > 1 && path[0] == '/') {
+    const char* a = path;
     const char* b = strrchr(a, '/');
-    *base = Slice(b + 1, a + path.size() - b - 1);
+    *base = Slice(b + 1, a + n - b - 1);
     if (b - a != 0) {
       *parent = Slice(a, b - a);
     } else {
@@ -40,125 +41,114 @@ static bool ResolvePath(const Slice& path, Slice* parent, Slice* base) {
   }
 }
 
-bool Ofs::FileSetExists(const Slice& dirname) {
+static inline Status PathError(const char* path) {
+  return Status::InvalidArgument("Cannot resolve path", path);
+}
+
+bool Ofs::FileSetExists(const char* dirname) {
   return impl_->HasFileSet(dirname);
 }
 
-bool Ofs::FileExists(const Slice& fname) {
+bool Ofs::FileExists(const char* fname) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
     return false;
-  } else {
-    return impl_->HasFile(fp);
   }
+  return impl_->HasFile(fp);
 }
 
-Status Ofs::ReadFileToString(const Slice& fname, std::string* data) {
+Status Ofs::ReadFileToString(const char* fname, std::string* data) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
-    return Status::InvalidArgument(fname, "path cannot be resolved");
-  } else {
-    return impl_->GetFile(fp, data);
+    return PathError(fname);
   }
+  return impl_->GetFile(fp, data);
 }
 
-Status Ofs::WriteStringToFile(const Slice& fname, const Slice& data) {
+Status Ofs::WriteStringToFile(const char* fname, const Slice& data) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
-    return Status::InvalidArgument(fname, "path cannot be resolved");
-  } else {
-    return impl_->PutFile(fp, data);
+    return PathError(fname);
   }
+  return impl_->PutFile(fp, data);
 }
 
-Status Ofs::GetFileSize(const Slice& fname, uint64_t* size) {
+Status Ofs::GetFileSize(const char* fname, uint64_t* size) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
-    return Status::InvalidArgument(fname, "path cannot be resolved");
-  } else {
-    return impl_->FileSize(fp, size);
+    return PathError(fname);
   }
+  return impl_->FileSize(fp, size);
 }
 
-Status Ofs::MountFileSet(const MountOptions& options, const Slice& dirname) {
+Status Ofs::DeleteFile(const char* fname) {
+  ResolvedPath fp;
+  if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
+    return PathError(fname);
+  }
+  return impl_->DeleteFile(fp);
+}
+
+Status Ofs::CopyFile(const char* src, const char* dst) {
+  ResolvedPath sfp, dfp;
+  if (!ResolvePath(src, &sfp.mntptr, &sfp.base)) return PathError(src);
+  if (!ResolvePath(dst, &dfp.mntptr, &dfp.base)) return PathError(dst);
+  return impl_->CopyFile(sfp, dfp);
+}
+
+Status Ofs::MountFileSet(const MountOptions& options, const char* dirname) {
+  Slice ignored_parent;
   Slice name;
-  if (!options.set_name.empty()) {
-    name = options.set_name;
+  if (!options.name.empty()) {
+    name = options.name;
   } else {
-    Slice parent;
-    if (!ResolvePath(dirname, &parent, &name)) {
-      return Status::InvalidArgument(dirname, "path cannot be resolved");
+    if (!ResolvePath(dirname, &ignored_parent, &name)) {
+      return PathError(dirname);
     }
   }
-  FileSet* fset = new FileSet(options, name);
+  FileSet* const fset = new FileSet(options, name);
   Status s = impl_->LinkFileSet(dirname, fset);
-  if (!s.ok()) {
-    delete fset;
-  }
+  if (!s.ok()) delete fset;
   return s;
 }
 
-Status Ofs::UnmountFileSet(const UnmountOptions& options,
-                           const Slice& dirname) {
+Status Ofs::UnmountFileSet(const UnmountOptions& options, const char* dirname) {
   return impl_->UnlinkFileSet(dirname, options.deletion);
 }
 
-Status Ofs::GetChildren(const Slice& dirname, std::vector<std::string>* names) {
+Status Ofs::GetChildren(const char* dirname, std::vector<std::string>* names) {
   return impl_->ListFileSet(dirname, names);
 }
 
-Status Ofs::SynFileSet(const Slice& dirname) {
+Status Ofs::SynFileSet(const char* dirname) {
   return impl_->SynFileSet(dirname);
 }
 
-Status Ofs::DeleteFile(const Slice& fname) {
+Status Ofs::NewSequentialFile(const char* fname, SequentialFile** r) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
-    return Status::InvalidArgument(fname, "path cannot be resolved");
-  } else {
-    return impl_->DeleteFile(fp);
+    return PathError(fname);
   }
+  return impl_->NewSequentialFile(fp, r);
 }
 
-Status Ofs::CopyFile(const Slice& src, const Slice& dst) {
-  ResolvedPath sfp, dfp;
-  if (!ResolvePath(src, &sfp.mntptr, &sfp.base)) {
-    return Status::InvalidArgument(src, "path cannot be resolved");
-  } else if (!ResolvePath(dst, &dfp.mntptr, &dfp.base)) {
-    return Status::InvalidArgument(dst, "path cannot be resolved");
-  } else {
-    return impl_->CopyFile(sfp, dfp);
-  }
-}
-
-Status Ofs::NewSequentialFile(const Slice& fname, SequentialFile** result) {
+Status Ofs::NewRandomAccessFile(const char* fname, RandomAccessFile** r) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
-    return Status::InvalidArgument(fname, "path cannot be resolved");
-  } else {
-    return impl_->NewSequentialFile(fp, result);
+    return PathError(fname);
   }
+  return impl_->NewRandomAccessFile(fp, r);
 }
 
-Status Ofs::NewRandomAccessFile(const Slice& fname, RandomAccessFile** result) {
+Status Ofs::NewWritableFile(const char* fname, WritableFile** r) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
-    return Status::InvalidArgument(fname, "path cannot be resolved");
-  } else {
-    return impl_->NewRandomAccessFile(fp, result);
+    return PathError(fname);
   }
+  return impl_->NewWritableFile(fp, r);
 }
 
-Status Ofs::NewWritableFile(const Slice& fname, WritableFile** result) {
-  ResolvedPath fp;
-  if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
-    return Status::InvalidArgument(fname, "path cannot be resolved");
-  } else {
-    return impl_->NewWritableFile(fp, result);
-  }
-}
-
-std::string Ofs::TEST_LookupFile(const Slice& fname) {
+std::string Ofs::TEST_LookupFile(const char* fname) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
     return std::string();
