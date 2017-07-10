@@ -15,7 +15,7 @@
 
 namespace pdlfs {
 
-static Status Access(const std::string& name, OSD* osd, uint64_t* time) {
+static Status Access(const std::string& name, Osd* osd, uint64_t* time) {
   *time = 0;
   SequentialFile* file;
   Status s = osd->NewSequentialObj(name.c_str(), &file);
@@ -95,7 +95,7 @@ static Status Redo(const Slice& record, FileSet* fset, HashSet* garbage) {
   }
 }
 
-static Status RecoverFileSet(OSD* osd, FileSet* fset, HashSet* garbage,
+static Status RecoverFileSet(Osd* osd, FileSet* fset, HashSet* garbage,
                              std::string* next_log_name) {
   Status s;
   const std::string& fset_name = fset->name;
@@ -173,7 +173,7 @@ static void MakeSnapshot(std::string* result, FileSet* fset, HashSet* garbage) {
   EncodeFixed32(&(*result)[8], num_ops);
 }
 
-static Status OpenFileSetForWriting(const std::string& log_name, OSD* osd,
+static Status OpenFileSetForWriting(const std::string& log_name, Osd* osd,
                                     FileSet* fset, HashSet* garbage) {
   Status s;
   WritableFile* file;
@@ -198,7 +198,7 @@ static Status OpenFileSetForWriting(const std::string& log_name, OSD* osd,
   // all garbage can be purged here. Otherwise, we will re-attempt
   // another pass the next time the set is loaded.
   struct Visitor : public HashSet::Visitor {
-    OSD* osd;
+    Osd* osd;
     FileSet* fset;
     virtual void visit(const Slice& key) {
       const std::string fname = key.ToString();

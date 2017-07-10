@@ -23,23 +23,23 @@ class WritableFile;
 
 class Env;
 
-// An OSD is an abstract interface used by high-level systems to access a shared
+// An Osd is an abstract interface used by high-level systems to access a shared
 // underlying object storage service, such as Ceph RADOS, Amazon S3, LinkedIn
 // Ambry, or Openstack Swift.
 //
-// All OSD implementation should be safe for concurrent access from
+// All Osd implementation should be safe for concurrent access from
 // multiple threads without any external synchronization.
-class OSD {
+class Osd {
  public:
-  OSD() {}
-  virtual ~OSD();
+  Osd() {}
+  virtual ~Osd();
 
-  // Create an OSD instance on top of an existing Env instance. The caller may
+  // Create an Osd instance on top of an existing Env instance. The caller may
   // specify a directory prefix so that all objects will be stored under that
   // path. If "env" is NULL, the result of Env::Default() will be used. The
   // caller must delete the result when it is no longer needed. The "*env" must
   // remain live while the result is in use.
-  static OSD* FromEnv(const char* prefix, Env* env = NULL);
+  static Osd* FromEnv(const char* prefix, Env* env = NULL);
 
   // Create a brand new sequentially-readable object with the specified name.
   // On success, stores a pointer to the new object in *r and returns OK.
@@ -85,8 +85,8 @@ class OSD {
 
  private:
   // No copying allowed
-  void operator=(const OSD&);
-  OSD(const OSD&);
+  void operator=(const Osd&);
+  Osd(const Osd&);
 };
 
 }  // namespace pdlfs

@@ -10,7 +10,6 @@
 #include "rados_env.h"
 
 #include "pdlfs-common/env_files.h"
-#include "pdlfs-common/osd_env.h"
 
 namespace pdlfs {
 namespace rados {

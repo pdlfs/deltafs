@@ -134,7 +134,7 @@ class FileSet {
 
 class OSDEnv::Impl {
  public:
-  explicit Impl(OSD* osd) : osd_(osd) {}
+  explicit Impl(Osd* osd) : osd_(osd) {}
 
   ~Impl() {
     // All file sets should be unmounted
@@ -159,7 +159,7 @@ class OSDEnv::Impl {
   Status CopyFile(const ResolvedPath& src, const ResolvedPath& dst);
 
  private:
-  OSD* osd_;
+  Osd* osd_;
   port::Mutex mutex_;
   HashMap<FileSet> mtable_;
 

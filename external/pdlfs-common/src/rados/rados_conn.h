@@ -72,11 +72,11 @@ class RadosConn {
   // the base, mostly for debugging or testing purposes.
   // The "*base_env" must remain alive when the returned env is being used.
   Status OpenEnv(Env** result, const std::string& rados_root = "/",
-                 const std::string& pool_name = "metadata", OSD* osd = NULL,
+                 const std::string& pool_name = "metadata", Osd* osd = NULL,
                  Env* base_env = NULL);
 
   // *result should be deleted when it is no longer needed.
-  Status OpenOsd(OSD** result, const std::string& pool_name = "metadata",
+  Status OpenOsd(Osd** result, const std::string& pool_name = "metadata",
                  bool force_sync = false);
 
   // *result should be deleted when it is no longer needed.

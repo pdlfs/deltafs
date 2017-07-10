@@ -14,21 +14,15 @@
 
 namespace pdlfs {
 
-class OSDTest {
+class OsdTest {
  public:
-  MountOptions mount_opts_;
-  UnmountOptions unmount_opts_;
-  std::string root_;
-  OSD* osd_;
-  OSDEnv* ose_;
-
-  OSDTest() {
+  OsdTest() {
     root_ = test::NewTmpDirectory("osd_test");
-    osd_ = OSD::FromEnv(root_.c_str());
+    osd_ = Osd::FromEnv(root_.c_str());
     ose_ = new OSDEnv(osd_);
   }
 
-  ~OSDTest() {
+  ~OsdTest() {
     delete ose_;
     delete osd_;
   }
@@ -47,15 +41,21 @@ class OSDTest {
     Status s = ose_->UnmountFileSet(unmount_opts_, "/mnt/fset");
     return s;
   }
+
+  MountOptions mount_opts_;
+  UnmountOptions unmount_opts_;
+  std::string root_;
+  OSDEnv* ose_;
+  Osd* osd_;
 };
 
-TEST(OSDTest, Empty) {
+TEST(OsdTest, Empty) {
   ASSERT_TRUE(!ose_->FileExists("/mnt/fset/a"));
   ASSERT_TRUE(!Mounted());
   ASSERT_NOTFOUND(Unmount());
 }
 
-TEST(OSDTest, MountUnmount) {
+TEST(OsdTest, MountUnmount) {
   mount_opts_.read_only = true;
   ASSERT_NOTFOUND(Mount());
   mount_opts_.read_only = false;
@@ -77,7 +77,7 @@ TEST(OSDTest, MountUnmount) {
   ASSERT_NOTFOUND(Mount());
 }
 
-TEST(OSDTest, CreateDeleteFile) {
+TEST(OsdTest, CreateDeleteFile) {
   ASSERT_OK(Mount());
   WritableFile* wf;
   ASSERT_OK(ose_->NewWritableFile("/mnt/fset/a", &wf));

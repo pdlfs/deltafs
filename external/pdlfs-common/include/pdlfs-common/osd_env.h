@@ -18,11 +18,12 @@
 
 namespace pdlfs {
 
-class OSD;
-class Env;
 class SequentialFile;
 class RandomAccessFile;
 class WritableFile;
+
+class Osd;
+class Env;
 
 struct MountOptions {
   MountOptions();
@@ -72,15 +73,15 @@ struct UnmountOptions {
 
 // A utility routine: write "data" to the named file.
 // The file is actually backed by an object.
-extern Status WriteStringToFile(OSD* osd, const Slice& data, const char* name);
+extern Status WriteStringToFile(Osd* osd, const Slice& data, const char* name);
 // A utility routine: write "data" to the named file and Sync() it.
 // The file is actually backed by an object.
-extern Status WriteStringToFileSync(OSD* osd, const Slice& data,
+extern Status WriteStringToFileSync(Osd* osd, const Slice& data,
                                     const char* name);
 
 // A utility routine: read contents from a named file into *data.
 // The file is actually backed by an object.
-extern Status ReadFileToString(OSD* osd, const char* name, std::string* data);
+extern Status ReadFileToString(Osd* osd, const char* name, std::string* data);
 
 // We use the OSDEnv to bridge the OSD world to the traditional file system
 // world. This is achieved by mapping each "file" to an underlying object
@@ -90,7 +91,7 @@ extern Status ReadFileToString(OSD* osd, const char* name, std::string* data);
 // although we don't expect or allow nested containers.
 class OSDEnv {
  public:
-  OSDEnv(OSD* osd);
+  OSDEnv(Osd* osd);
   ~OSDEnv();
 
   // Return true iff the named file exists in a mounted file set.

@@ -27,7 +27,7 @@ class RadosEnv : public EnvWrapper {
   virtual Status CopyFile(const char* src, const char* dst);
   virtual Status RenameFile(const char* src, const char* dst);
 
-  virtual Status GetChildren(const char* dir, std::vector<std::string>*);
+  virtual Status GetChildren(const char* dir, std::vector<std::string>* r);
   virtual Status CreateDir(const char* dir);
   virtual Status AttachDir(const char* dir);
   virtual Status DeleteDir(const char* dir);
@@ -46,7 +46,7 @@ class RadosEnv : public EnvWrapper {
   std::string rados_root_;
   OSDEnv* osd_env_;
   bool owns_osd_;
-  OSD* osd_;
+  Osd* osd_;
 };
 
 inline FileType TryResolveFileType(const char* fname) {

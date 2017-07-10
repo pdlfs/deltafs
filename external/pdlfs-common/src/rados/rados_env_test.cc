@@ -87,7 +87,7 @@ class RadosTest {
   std::string pool_name_;
   std::string working_dir_;
   std::string root_;
-  OSD* osd_;
+  Osd* osd_;
   Env* env_;
 };
 
@@ -97,7 +97,7 @@ RadosTest::RadosTest() {
   working_dir_ = root_ + "/mydir";
   if (FLAGS_useposixosd) {
     std::string osd_root = test::NewTmpDirectory("rados_test_objs");
-    osd_ = OSD::FromEnv(osd_root.c_str());
+    osd_ = Osd::FromEnv(osd_root.c_str());
   } else {
     port::InitOnce(&once, OpenRadosConn);
     Status s = rados_conn->OpenOsd(&osd_, pool_name_);

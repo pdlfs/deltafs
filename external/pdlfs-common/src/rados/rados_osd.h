@@ -17,7 +17,7 @@ namespace rados {
 
 // Osd implementation using Rados api. Rados async I/O is used by default unless
 // explicitly disabled by the caller.
-class RadosOsd : public OSD {
+class RadosOsd : public Osd {
  public:
   virtual ~RadosOsd();
   virtual Status NewSequentialObj(const char* name, SequentialFile** r);

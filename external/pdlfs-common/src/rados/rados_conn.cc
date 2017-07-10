@@ -57,7 +57,7 @@ Status RadosConn::Open(const RadosOptions& options) {
 }
 
 Status RadosConn::OpenEnv(Env** result, const std::string& rados_root,
-                          const std::string& pool_name, OSD* osd,
+                          const std::string& pool_name, Osd* osd,
                           Env* base_env) {
   Status s;
   if (base_env == NULL) {
@@ -80,7 +80,7 @@ Status RadosConn::OpenEnv(Env** result, const std::string& rados_root,
   return s;
 }
 
-Status RadosConn::OpenOsd(OSD** result, const std::string& pool_name,
+Status RadosConn::OpenOsd(Osd** result, const std::string& pool_name,
                           bool force_sync) {
   rados_ioctx_t ioctx;
   Status s;

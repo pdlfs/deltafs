@@ -15,9 +15,9 @@
 
 namespace pdlfs {
 
-OSD::~OSD() {}
+Osd::~Osd() {}
 
-OSDEnv::OSDEnv(OSD* osd) { impl_ = new Impl(osd); }
+OSDEnv::OSDEnv(Osd* osd) { impl_ = new Impl(osd); }
 
 OSDEnv::~OSDEnv() { delete impl_; }
 
@@ -175,7 +175,7 @@ std::string OSDEnv::TEST_LookupFile(const Slice& fname) {
   }
 }
 
-static Status DoWriteStringToFile(OSD* osd, const Slice& data, const char* name,
+static Status DoWriteStringToFile(Osd* osd, const Slice& data, const char* name,
                                   bool should_sync) {
   WritableFile* file;
   Status s = osd->NewWritableObj(name, &file);
@@ -196,15 +196,15 @@ static Status DoWriteStringToFile(OSD* osd, const Slice& data, const char* name,
   return s;
 }
 
-Status WriteStringToFile(OSD* osd, const Slice& data, const char* name) {
+Status WriteStringToFile(Osd* osd, const Slice& data, const char* name) {
   return DoWriteStringToFile(osd, data, name, false);
 }
 
-Status WriteStringToFileSync(OSD* osd, const Slice& data, const char* name) {
+Status WriteStringToFileSync(Osd* osd, const Slice& data, const char* name) {
   return DoWriteStringToFile(osd, data, name, true);
 }
 
-Status ReadFileToString(OSD* osd, const char* name, std::string* data) {
+Status ReadFileToString(Osd* osd, const char* name, std::string* data) {
   data->clear();
   SequentialFile* file;
   Status s = osd->NewSequentialObj(name, &file);
@@ -229,15 +229,15 @@ Status ReadFileToString(OSD* osd, const char* name, std::string* data) {
   return s;
 }
 
-class EnvOSD : public OSD {
+class EnvOsd : public Osd {
  public:
-  EnvOSD(Env* env, const char* prefix) : env_(env) {
+  EnvOsd(Env* env, const char* prefix) : env_(env) {
     prefix_ = prefix;
     env_->CreateDir(prefix_.c_str());
     prefix_.append("/obj_");
   }
 
-  virtual ~EnvOSD() {}
+  virtual ~EnvOsd() {}
 
   virtual Status NewSequentialObj(const char* name, SequentialFile** r) {
     const std::string fp = prefix_ + name;
@@ -287,15 +287,16 @@ class EnvOSD : public OSD {
 
  private:
   // No copying allowed
-  void operator=(const EnvOSD&);
-  EnvOSD(const EnvOSD&);
+  void operator=(const EnvOsd&);
+  EnvOsd(const EnvOsd&);
 
   std::string prefix_;
   Env* env_;
 };
 
-OSD* OSD::FromEnv(const char* prefix, Env* env) {
-  return new EnvOSD(env == NULL ? Env::Default() : env, prefix);
+Osd* Osd::FromEnv(const char* prefix, Env* env) {
+  if (env == NULL) env = Env::Default();
+  return new EnvOsd(env, prefix);
 }
 
 }  // namespace pdlfs
