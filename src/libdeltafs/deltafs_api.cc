@@ -927,7 +927,7 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
 
   if (__dir == NULL || __dir->opened) {
     s = BadArgs();
-  } else if (__name == NULL || strlen(__name) == 0) {
+  } else if (__name == NULL || __name[0] == 0) {
     s = BadArgs();
   } else {
     s = OpenDir(__dir, __name);
@@ -976,7 +976,7 @@ int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
     s = BadArgs();
   } else if (__fname == NULL) {
     s = BadArgs();
-  } else if (strlen(__fname) == 0) {
+  } else if (__fname[0] == 0) {
     s = BadArgs();
   } else {
     DirWriter* writer = __dir->io.writer;
@@ -1036,7 +1036,7 @@ int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
                                    const char* __key) {
   if (IsDirOpened(__dir)) {
-    if (__key != NULL && strlen(__key) != 0) {
+    if (__key != NULL && __key[0] != 0) {
       if (__dir->mode == O_WRONLY) {
         // TODO
       } else if (__dir->mode == O_RDONLY) {
@@ -1107,7 +1107,7 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
     s = BadArgs();
   } else if (__fname == NULL) {
     s = BadArgs();
-  } else if (strlen(__fname) == 0) {
+  } else if (__fname[0] == 0) {
     s = BadArgs();
   } else {
     DirReader* reader = __dir->io.reader;
