@@ -289,7 +289,8 @@ void MetadataServer::Builder::LoadMDSEnv() {
     myenv_->env_name = config::EnvName();
     myenv_->env_conf = config::EnvConf();
     bool is_system;  // FIXME
-    myenv_->env = Env::Open(myenv_->env_name, myenv_->env_conf, &is_system);
+    myenv_->env = Env::Open(myenv_->env_name.c_str(), myenv_->env_conf.c_str(),
+                            &is_system);
     if (myenv_->env == NULL) {
       status_ = Status::IOError("cannot load MDS env");
     }
@@ -311,7 +312,7 @@ void MetadataServer::Builder::OpenDB() {
   if (ok()) {
     output_root = myenv_->output_conf;
     // Ignore error because it may already exist
-    Env::Default()->CreateDir(output_root);
+    Env::Default()->CreateDir(output_root.c_str());
   }
 
   if (ok()) {
@@ -421,13 +422,13 @@ void MetadataServer::Builder::WriteRunInfo() {
   if (!run_dir.empty()) {
     Env* const env = myenv_->env;
     // Ignore error because it may already exist
-    env->CreateDir(run_dir);
+    env->CreateDir(run_dir.c_str());
     std::string fname = run_dir;
     char tmp[30];
     snprintf(tmp, sizeof(tmp), "/srv-%08d.uri", srv_id_);
     fname += tmp;
     WritableFile* f;
-    Status s = env->NewWritableFile(fname, &f);
+    Status s = env->NewWritableFile(fname.c_str(), &f);
     if (s.ok()) {
       const std::string& info = mdstopo_.srv_addrs[srv_id_];
       assert(info.size() != 0);

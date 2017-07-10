@@ -805,7 +805,7 @@ static Status OpenSink(
     ) {
   *result = NULL;
   WritableFile* base = NULL;
-  Status status = env->NewWritableFile(fname, &base);
+  Status status = env->NewWritableFile(fname.c_str(), &base);
   if (status.ok()) {
     assert(base != NULL);
   } else {
@@ -871,7 +871,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   Status status;
   if (options.is_env_pfs) {
     // Ignore error since it may already exist
-    env->CreateDir(name);
+    env->CreateDir(name.c_str());
   }
 
   DirWriterImpl* impl = new DirWriterImpl(options);
@@ -1002,9 +1002,9 @@ static Status LoadSource(LogSource** result, const std::string& fname, Env* env,
   *result = NULL;
   SequentialFile* base = NULL;
   uint64_t size = 0;
-  Status status = env->NewSequentialFile(fname, &base);
+  Status status = env->NewSequentialFile(fname.c_str(), &base);
   if (status.ok()) {
-    status = env->GetFileSize(fname, &size);
+    status = env->GetFileSize(fname.c_str(), &size);
     if (!status.ok()) {
       delete base;
     }
@@ -1038,9 +1038,9 @@ static Status OpenSource(LogSource** result, const std::string& fname, Env* env,
   *result = NULL;
   RandomAccessFile* base = NULL;
   uint64_t size = 0;
-  Status status = env->NewRandomAccessFile(fname, &base);
+  Status status = env->NewRandomAccessFile(fname.c_str(), &base);
   if (status.ok()) {
-    status = env->GetFileSize(fname, &size);
+    status = env->GetFileSize(fname.c_str(), &size);
     if (!status.ok()) {
       delete base;
     }
@@ -1211,7 +1211,7 @@ static Status DeleteLogStream(const std::string& fname, Env* env) {
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Removing %s ...", fname.c_str());
 #endif
-  return env->DeleteFile(fname);
+  return env->DeleteFile(fname.c_str());
 }
 
 Status DestroyDir(const std::string& dirname, const DirOptions& opts) {
@@ -1220,7 +1220,7 @@ Status DestroyDir(const std::string& dirname, const DirOptions& opts) {
   Env* const env = options.env;
   if (options.is_env_pfs) {
     std::vector<std::string> names;
-    status = env->GetChildren(dirname, &names);
+    status = env->GetChildren(dirname.c_str(), &names);
     if (status.ok()) {
       for (size_t i = 0; i < names.size(); i++) {
         if (!Slice(names[i]).starts_with(".")) {
@@ -1231,7 +1231,7 @@ Status DestroyDir(const std::string& dirname, const DirOptions& opts) {
         }
       }
 
-      env->DeleteDir(dirname);
+      env->DeleteDir(dirname.c_str());
     }
   } else {
     const size_t num_parts = 1u << options.lg_parts;

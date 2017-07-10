@@ -1432,7 +1432,7 @@ static std::string TryObtainSrvUri(int srv_id) {
     char tmp[30];
     snprintf(tmp, sizeof(tmp), "/srv-%08d.uri", srv_id);
     fname += tmp;
-    Status s = ReadFileToString(env, fname, &uri);
+    Status s = ReadFileToString(env, fname.c_str(), &uri);
     if (s.ok()) {
       PrintSrvUri(uri, fname);
       return uri;
@@ -1529,8 +1529,8 @@ void Client::Builder::OpenSession() {
     status_ = mds->Opensession(options, &ret);
     if (ok()) {
       session_id_ = ret.session_id;
-      env_ = new LazyInitEnv(ret.env_name, ret.env_conf);
-      fio_ = Fio::Open(ret.fio_name, ret.fio_conf);
+      env_ = new LazyInitEnv(ret.env_name.c_str(), ret.env_conf.c_str());
+      fio_ = Fio::Open(ret.fio_name.c_str(), ret.fio_conf.c_str());
       if (fio_ == NULL) {
         status_ = Status::IOError("cannot open fio");
       }

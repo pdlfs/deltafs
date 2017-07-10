@@ -51,22 +51,18 @@ class BbosEnv : public Env {
 
   virtual ~BbosEnv() { bbos_finalize(bb_handle_); }
 
-  virtual Status NewSequentialFile(const Slice& fname,
-                                   SequentialFile** result) {
-    // XXX: do we need to check object existence and how?
-    *result = new BbosSequentialFile(BbosName(fname.c_str()), bb_handle_);
+  virtual Status NewSequentialFile(const char* fname, SequentialFile** r) {
+    *r = new BbosSequentialFile(BbosName(fname), bb_handle_);
     return Status::OK();
   }
 
-  virtual Status NewRandomAccessFile(const Slice& fname,
-                                     RandomAccessFile** result) {
-    // XXX: do we need to check object existence and how?
-    *result = new BbosRandomAccessFile(BbosName(fname.c_str()), bb_handle_);
+  virtual Status NewRandomAccessFile(const char* fname, RandomAccessFile** r) {
+    *r = new BbosRandomAccessFile(BbosName(fname), bb_handle_);
     return Status::OK();
   }
 
-  virtual Status NewWritableFile(const Slice& fname, WritableFile** result) {
-    std::string obj_name = BbosName(fname.c_str());
+  virtual Status NewWritableFile(const char* fname, WritableFile** r) {
+    const std::string obj_name = BbosName(fname);
     int ret = bbos_mkobj(
         bb_handle_, obj_name.c_str(),
         static_cast<bbos_mkobj_flag_t>(TryResolveBbosType(obj_name)));
@@ -74,20 +70,20 @@ class BbosEnv : public Env {
       std::string bbos_err_msg("cannot create bbos object '");
       bbos_err_msg += obj_name;
       bbos_err_msg += "'";
-      *result = NULL;
+      *r = NULL;
       return BbosError(bbos_err_msg, ret);
     } else {
-      *result = new BbosWritableFile(obj_name, bb_handle_);
+      *r = new BbosWritableFile(obj_name, bb_handle_);
       return Status::OK();
     }
   }
 
-  virtual Status DeleteFile(const Slice& fname) {
+  virtual Status DeleteFile(const char* fname) {
     return Status::OK();  // Noop
   }
 
-  virtual Status GetFileSize(const Slice& fname, uint64_t* file_size) {
-    std::string obj_name = BbosName(fname.c_str());
+  virtual Status GetFileSize(const char* fname, uint64_t* file_size) {
+    const std::string obj_name = BbosName(fname);
     off_t ret = bbos_get_size(bb_handle_, obj_name.c_str());
     if (ret < 0) {
       std::string bbos_err_msg("cannot get bbos object length '");
@@ -101,34 +97,30 @@ class BbosEnv : public Env {
     }
   }
 
-  virtual bool FileExists(const Slice& fname) {
+  virtual bool FileExists(const char* fname) {
     uint64_t ignored_size;
     Status s = GetFileSize(fname, &ignored_size);
-    if (s.ok()) {
-      return true;
-    } else {
-      return false;
-    }
+    return s.ok();
   }
 
-  virtual Status CreateDir(const Slice& dirname) { return Status::OK(); }
-  virtual Status AttachDir(const Slice& dirname) { return Status::OK(); }
-  virtual Status DeleteDir(const Slice& dirname) { return Status::OK(); }
-  virtual Status DetachDir(const Slice& dirname) { return Status::OK(); }
+  virtual Status CreateDir(const char* dirname) { return Status::OK(); }
+  virtual Status AttachDir(const char* dirname) { return Status::OK(); }
+  virtual Status DeleteDir(const char* dirname) { return Status::OK(); }
+  virtual Status DetachDir(const char* dirname) { return Status::OK(); }
 
-  virtual Status GetChildren(const Slice& dir, std::vector<std::string>*) {
+  virtual Status GetChildren(const char* dirname, std::vector<std::string>*) {
     return Status::OK();
   }
 
-  virtual Status CopyFile(const Slice& src, const Slice& target) {
+  virtual Status CopyFile(const char* src, const char* dst) {
     return Status::NotSupported(Slice());
   }
 
-  virtual Status RenameFile(const Slice& src, const Slice& target) {
+  virtual Status RenameFile(const char* src, const char* dst) {
     return Status::NotSupported(Slice());
   }
 
-  virtual Status LockFile(const Slice& fname, FileLock** lock) {
+  virtual Status LockFile(const char* fname, FileLock** lock) {
     return Status::NotSupported(Slice());
   }
 
@@ -136,11 +128,11 @@ class BbosEnv : public Env {
     return Status::NotSupported(Slice());
   }
 
-  virtual void Schedule(void (*function)(void* arg), void* arg) {
+  virtual void Schedule(void (*function)(void*), void* arg) {
     Env::Default()->Schedule(function, arg);
   }
 
-  virtual void StartThread(void (*function)(void* arg), void* arg) {
+  virtual void StartThread(void (*function)(void*), void* arg) {
     Env::Default()->StartThread(function, arg);
   }
 
@@ -148,7 +140,7 @@ class BbosEnv : public Env {
     return Env::Default()->GetTestDirectory(path);
   }
 
-  virtual Status NewLogger(const std::string& fname, Logger** result) {
+  virtual Status NewLogger(const char* fname, Logger** result) {
     return Env::Default()->NewLogger(fname, result);
   }
 

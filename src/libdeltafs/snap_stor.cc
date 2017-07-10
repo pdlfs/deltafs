@@ -235,10 +235,11 @@ Status Stor::Open(const std::string& conf, Stor** ptr) {
     impl->io_size_ = io_size;
     impl->readonly_ = readonly;
 
-    impl->fio_ = Fio::Open(fio_type, fio_conf);
+    impl->fio_ = Fio::Open(fio_type.c_str(), fio_conf.c_str());
     impl->metadata_env_ =
-        Env::Open(env_type, Slice(), &impl->metadata_env_is_system_);
-    impl->data_env_ = Env::Open(env_type, Slice(), &impl->data_env_is_system_);
+        Env::Open(env_type.c_str(), NULL, &impl->metadata_env_is_system_);
+    impl->data_env_ =
+        Env::Open(env_type.c_str(), NULL, &impl->data_env_is_system_);
 
     impl->metadata_home_ = metadata;
     impl->data_home_ = data;
