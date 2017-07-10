@@ -32,7 +32,6 @@ static const bool FLAGS_useposixosd = true;
 namespace pdlfs {
 namespace rados {
 
-static const int kVerbose = 5;
 // Make sure we only connect to rados once during the entire run.
 static port::OnceType once = PDLFS_ONCE_INIT;
 static RadosConn* rados_conn = NULL;
@@ -93,10 +92,10 @@ class RadosTest {
 
 RadosTest::RadosTest() {
   pool_name_ = "metadata";
-  root_ = test::NewTmpDirectory("rados_test");
-  working_dir_ = root_ + "/mydir";
+  root_ = test::PrepareTmpDir("rados_test");
+  working_dir_ = root_;
   if (FLAGS_useposixosd) {
-    std::string osd_root = test::NewTmpDirectory("rados_test_objs");
+    std::string osd_root = test::PrepareTmpDir("rados_test_objs");
     osd_ = Osd::FromEnv(osd_root.c_str());
   } else {
     port::InitOnce(&once, OpenRadosConn);

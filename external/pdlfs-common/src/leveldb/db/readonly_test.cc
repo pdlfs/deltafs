@@ -26,7 +26,7 @@ class ReadonlyTest {
   DBImpl* dbfull(DB* db) { return reinterpret_cast<DBImpl*>(db); }
 
   ReadonlyTest() {
-    dbname_ = test::NewTmpDirectory("readonly_test");
+    dbname_ = test::PrepareTmpDir("readonly_test");
     blk_cache_ = NewLRUCache(0);
     options_.block_cache = blk_cache_;
     options_.create_if_missing = true;

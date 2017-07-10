@@ -99,7 +99,7 @@ int RandomSeed() {
   return result;
 }
 
-std::string NewTmpDirectory(const char* subdir, Env* env) {
+std::string PrepareTmpDir(const char *subdir, Env *env) {
   if (env == NULL) env = Env::Default();
   const std::string dirname = TmpDir() + "/" + subdir;
   env->CreateDir(dirname.c_str());

@@ -29,7 +29,7 @@ class ServerTest {
  public:
   ServerTest() {
     Env* env = Env::Default();
-    dbname_ = test::NewTmpDirectory("mds_srv_test", env);
+    dbname_ = test::PrepareTmpDir("mds_srv_test", env);
     DBOptions dbopts;
     dbopts.env = env;
     DestroyDB(dbname_, dbopts);

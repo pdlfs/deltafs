@@ -23,7 +23,7 @@ class BlkDBTest {
 
   BlkDBTest() {
     env_ = Env::Default();
-    dbname_ = test::NewTmpDirectory("blkdb_test", env_);
+    dbname_ = test::PrepareTmpDir("blkdb_test", env_);
     DBOptions dbopts;
     dbopts.env = env_;
     DestroyDB(dbname_, dbopts);

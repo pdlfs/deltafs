@@ -17,7 +17,7 @@ namespace pdlfs {
 class OsdTest {
  public:
   OsdTest() {
-    root_ = test::NewTmpDirectory("osd_test");
+    root_ = test::PrepareTmpDir("osd_test");
     osd_ = Osd::FromEnv(root_.c_str());
     ofs_ = new Ofs(osd_);
   }
