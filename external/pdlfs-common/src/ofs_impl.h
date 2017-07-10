@@ -173,7 +173,7 @@ class Ofs::Impl {
 
 inline void PutOp(std::string* dst, const Slice& fname,
                   FileSet::RecordType type) {
-  dst->push_back(static_cast<char>(type));
+  dst->push_back(static_cast<unsigned char>(type));
   PutLengthPrefixedSlice(dst, fname);
 }
 

@@ -14,9 +14,6 @@
 
 namespace pdlfs {
 
-// Type value larger than this is invalid.
-static const int kMaxRecordType = FileSet::kTryDelFile;
-
 std::string Ofs::Impl::OfsName(const FileSet* fset, const Slice& name) {
   Slice parent = fset->name;
   size_t n = parent.size() + name.size() + 1;
@@ -55,27 +52,36 @@ static Status Access(const std::string& name, Osd* osd, uint64_t* time) {
 }
 
 static bool Execute(Slice* input, HashSet* files, HashSet* garbage) {
-  Slice fname;
-  if (!input->empty()) {
-    int type = (*input)[0];
-    input->remove_prefix(1);
-    if (type <= kMaxRecordType && GetLengthPrefixedSlice(input, &fname) &&
-        !fname.empty()) {
-      if (type == FileSet::kTryNewFile) {
-        garbage->Insert(fname);
-      } else if (type == FileSet::kTryDelFile) {
-        files->Erase(fname);
-        garbage->Insert(fname);
-      } else if (type == FileSet::kNewFile) {
-        files->Insert(fname);
-        garbage->Erase(fname);
-      } else if (type == FileSet::kDelFile) {
-        garbage->Erase(fname);
-      }
-      return true;
-    }
+  if (input->empty()) {
+    return false;
   }
-  return false;
+  unsigned char type = static_cast<unsigned char>((*input)[0]);
+  input->remove_prefix(1);
+  Slice fname;
+  if (!GetLengthPrefixedSlice(input, &fname)) {
+    return false;
+  }
+  if (fname.empty()) {
+    return false;
+  }
+  switch (type) {
+    case FileSet::kTryNewFile:
+      garbage->Insert(fname);
+      return true;
+    case FileSet::kTryDelFile:
+      files->Erase(fname);
+      garbage->Insert(fname);
+      return true;
+    case FileSet::kNewFile:
+      files->Insert(fname);
+      garbage->Erase(fname);
+      return true;
+    case FileSet::kDelFile:
+      garbage->Erase(fname);
+      return true;
+    default:
+      return false;
+  }
 }
 
 static Status Redo(const Slice& record, FileSet* fset, HashSet* garbage) {
