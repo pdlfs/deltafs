@@ -10,6 +10,7 @@
 #include "rados_env.h"
 
 #include "pdlfs-common/env_files.h"
+#include "pdlfs-common/osd_env.h"
 
 namespace pdlfs {
 namespace rados {
@@ -21,10 +22,9 @@ RadosEnv::~RadosEnv() {
   }
 }
 
-Status RadosEnv::MountDir(const Slice& dirname, bool create_dir) {
-  Status s;
-  assert(dirname.starts_with(rados_root_));
+Status RadosEnv::MountDir(const char* dirname, bool create_dir) {
   Slice path = dirname;
+  assert(path.starts_with(rados_root_));
   if (rados_root_.size() > 1) path.remove_prefix(rados_root_.size());
   if (path.empty()) path = "/";
   std::string name = path.ToString();
@@ -36,9 +36,10 @@ Status RadosEnv::MountDir(const Slice& dirname, bool create_dir) {
   options.read_only = !create_dir;
   options.create_if_missing = create_dir;
   options.error_if_exists = false;
-  s = osd_env_->MountFileSet(options, dirname);
+  Status s = osd_env_->MountFileSet(options, dirname);
   if (s.IsAlreadyExists()) {
-    target()->CreateDir(dirname);  // Force a local mirror
+    // Force a local mirror
+    target()->CreateDir(dirname);  // Ignore errors
   } else if (s.ok()) {
     s = target()->CreateDir(dirname);
   }
@@ -46,86 +47,119 @@ Status RadosEnv::MountDir(const Slice& dirname, bool create_dir) {
   return s;
 }
 
-Status RadosEnv::UnmountDir(const Slice& dirname, bool delete_dir) {
+Status RadosEnv::UnmountDir(const char* dirname, bool delete_dir) {
   Status s;
-  assert(dirname.starts_with(rados_root_));
   UnmountOptions options;
   options.deletion = delete_dir;
-  if (!delete_dir) {
-    s = osd_env_->SynFileSet(dirname);
-  }
-  if (s.ok()) {
-    s = osd_env_->UnmountFileSet(options, dirname);
-  }
+  if (!delete_dir) s = osd_env_->SynFileSet(dirname);
+  if (s.ok()) s = osd_env_->UnmountFileSet(options, dirname);
   if (s.IsNotFound()) {
-    target()->DeleteDir(dirname);
+    // Remove local mirror
+    target()->DeleteDir(dirname);  // Ignore errors
   } else if (s.ok()) {
     s = target()->DeleteDir(dirname);
+  }
+
+  return s;
+}
+
+bool RadosEnv::PathOnRados(const char* pathname) {
+  const size_t n = rados_root_.length();
+  assert(n != 0);
+  if (n == 1) return true;
+  if (strncmp(pathname, rados_root_.c_str(), n) != 0) return false;
+  return (pathname[n] == '/' || pathname[n] == '\0');
+}
+
+bool RadosEnv::FileOnRados(const char* fname) {
+  if (PathOnRados(fname)) return TypeOnRados(TryResolveFileType(fname));
+  return false;
+}
+
+bool RadosEnv::FileExists(const char* fname) {
+  if (FileOnRados(fname)) return osd_env_->FileExists(fname);
+  return target()->FileExists(fname);
+}
+
+Status RadosEnv::GetFileSize(const char* fname, uint64_t* size) {
+  if (FileOnRados(fname)) return osd_env_->GetFileSize(fname, size);
+  return target()->GetFileSize(fname, size);
+}
+
+Status RadosEnv::DeleteFile(const char* fname) {
+  if (FileOnRados(fname)) return osd_env_->DeleteFile(fname);
+  return target()->DeleteFile(fname);
+}
+
+Status RadosEnv::NewSequentialFile(const char* fname, SequentialFile** r) {
+  if (FileOnRados(fname)) return osd_env_->NewSequentialFile(fname, r);
+  return target()->NewSequentialFile(fname, r);
+}
+
+Status RadosEnv::NewRandomAccessFile(const char* fname, RandomAccessFile** r) {
+  if (FileOnRados(fname)) return osd_env_->NewRandomAccessFile(fname, r);
+  return target()->NewRandomAccessFile(fname, r);
+}
+
+Status RadosEnv::CreateDir(const char* dirname) {
+  if (PathOnRados(dirname)) return MountDir(dirname, true);
+  return target()->CreateDir(dirname);
+}
+
+Status RadosEnv::AttachDir(const char* dirname) {
+  if (PathOnRados(dirname)) return MountDir(dirname, false);
+  return target()->AttachDir(dirname);
+}
+
+Status RadosEnv::DeleteDir(const char* dirname) {
+  if (PathOnRados(dirname)) return UnmountDir(dirname, true);
+  return target()->DeleteDir(dirname);
+}
+
+Status RadosEnv::DetachDir(const char* dirname) {
+  if (PathOnRados(dirname)) return UnmountDir(dirname, false);
+  return target()->DetachDir(dirname);
+}
+
+Status RadosEnv::CopyFile(const char* src, const char* dst) {
+  const int src_on_rados = FileOnRados(src);
+  const int dst_on_rados = FileOnRados(dst);
+  if (src_on_rados ^ dst_on_rados) return Status::NotSupported(Slice());
+  if (src_on_rados) return osd_env_->CopyFile(src, dst);
+  return target()->CopyFile(src, dst);
+}
+
+Status RadosEnv::RenameFile(const char* src, const char* dst) {
+  const int src_on_rados = FileOnRados(src);
+  const int dst_on_rados = FileOnRados(dst);
+  if (TryResolveFileType(src) == kTempFile && !src_on_rados && dst_on_rados)
+    return RenameLocalTmpToRados(src, dst);
+  if (!src_on_rados && !dst_on_rados) return target()->RenameFile(src, dst);
+  return Status::NotSupported(Slice());
+}
+
+Status RadosEnv::GetChildren(const char* dirname, std::vector<std::string>* r) {
+  r->clear();
+  Status s = target()->GetChildren(dirname, r);
+  if (PathOnRados(dirname)) {
+    std::vector<std::string> rr;
+    // The previous status is over-written because it is all right for
+    // local directory listing to fail since it is possible for a directory
+    // to not have a local mirror.
+    s = osd_env_->GetChildren(dirname, &rr);
+    if (s.ok()) {
+      r->insert(r->end(), rr.begin(), rr.end());
+    }
   }
   return s;
 }
 
-bool RadosEnv::FileOnRados(const Slice& fname) {
-  if (fname.starts_with(rados_root_)) {
-    FileType type = TryResolveFileType(fname);
-    return OnRados(type);
-  } else {
-    return false;
-  }
-}
-
-bool RadosEnv::FileExists(const Slice& fname) {
-  if (FileOnRados(fname)) {
-    return osd_env_->FileExists(fname);
-  } else {
-    return target()->FileExists(fname);
-  }
-}
-
-Status RadosEnv::GetFileSize(const Slice& fname, uint64_t* size) {
-  if (FileOnRados(fname)) {
-    return osd_env_->GetFileSize(fname, size);
-  } else {
-    return target()->GetFileSize(fname, size);
-  }
-}
-
-Status RadosEnv::DeleteFile(const Slice& fname) {
-  if (FileOnRados(fname)) {
-    return osd_env_->DeleteFile(fname);
-  } else {
-    return target()->DeleteFile(fname);
-  }
-}
-
-Status RadosEnv::NewSequentialFile(const Slice& fname, SequentialFile** r) {
-  if (FileOnRados(fname)) {
-    return osd_env_->NewSequentialFile(fname, r);
-  } else {
-    return target()->NewSequentialFile(fname, r);
-  }
-}
-
-Status RadosEnv::NewRandomAccessFile(const Slice& fname, RandomAccessFile** r) {
-  if (FileOnRados(fname)) {
-    return osd_env_->NewRandomAccessFile(fname, r);
-  } else {
-    return target()->NewRandomAccessFile(fname, r);
-  }
-}
-
-static inline bool IsLogFile(const Slice& fname) {
-  return TryResolveFileType(fname) == kLogFile;
-}
-
-Status RadosEnv::NewWritableFile(const Slice& fname, WritableFile** r) {
+Status RadosEnv::NewWritableFile(const char* fname, WritableFile** r) {
+  const size_t buf_size = wal_buf_size_;
   if (FileOnRados(fname)) {
     Status s = osd_env_->NewWritableFile(fname, r);
-    if (s.ok() && wal_buf_size_ > 0) {
-      assert(*r != NULL);
-      if (IsLogFile(fname)) {
-        *r = new UnsafeBufferedWritableFile(*r, wal_buf_size_);
-      }
+    if (s.ok() && buf_size > 0 && TryResolveFileType(fname) == kLogFile) {
+      *r = new MinMaxBufferedWritableFile(*r, buf_size, buf_size);
     }
     return s;
   } else {
@@ -133,87 +167,14 @@ Status RadosEnv::NewWritableFile(const Slice& fname, WritableFile** r) {
   }
 }
 
-Status RadosEnv::CreateDir(const Slice& dirname) {
-  if (dirname.starts_with(rados_root_)) {
-    return MountDir(dirname, true);
-  } else {
-    return target()->CreateDir(dirname);
-  }
-}
-
-Status RadosEnv::AttachDir(const Slice& dirname) {
-  if (dirname.starts_with(rados_root_)) {
-    return MountDir(dirname, false);
-  } else {
-    return target()->AttachDir(dirname);
-  }
-}
-
-Status RadosEnv::DeleteDir(const Slice& dirname) {
-  if (dirname.starts_with(rados_root_)) {
-    return UnmountDir(dirname, true);
-  } else {
-    return target()->DeleteDir(dirname);
-  }
-}
-
-Status RadosEnv::DetachDir(const Slice& dirname) {
-  if (dirname.starts_with(rados_root_)) {
-    return UnmountDir(dirname, false);
-  } else {
-    return target()->DetachDir(dirname);
-  }
-}
-
-Status RadosEnv::CopyFile(const Slice& src, const Slice& dst) {
-  bool src_on_rados = FileOnRados(src);
-  bool dst_on_rados = FileOnRados(dst);
-
-  Status s;
-  if (((unsigned char)src_on_rados) ^ ((unsigned char)dst_on_rados)) {
-    s = Status::NotSupported(Slice());
-  } else if (src_on_rados) {
-    s = osd_env_->CopyFile(src, dst);
-  } else {
-    s = target()->CopyFile(src, dst);
-  }
-
-  return s;
-}
-
-Status RadosEnv::RenameFile(const Slice& src, const Slice& dst) {
-  bool src_on_rados = FileOnRados(src);
-  bool dst_on_rados = FileOnRados(dst);
-
-  Status s;
-  if (TryResolveFileType(src) == kTempFile && !src_on_rados && dst_on_rados) {
-    std::string contents;
-    s = ReadFileToString(target(), src, &contents);
+Status RadosEnv::RenameLocalTmpToRados(const char* tmp, const char* dst) {
+  std::string contents;
+  Status s = ReadFileToString(target(), tmp, &contents);
+  if (s.ok()) {
+    s = osd_env_->WriteStringToFile(dst, contents);  // Atomic
     if (s.ok()) {
-      // This is an atomic operation.
-      s = osd_env_->WriteStringToFile(dst, contents);
-      if (s.ok()) {
-        // This step may fail.
-        target()->DeleteFile(src);
-      }
+      target()->DeleteFile(tmp);
     }
-  } else if (!src_on_rados && !dst_on_rados) {
-    s = target()->RenameFile(src, dst);
-  } else {
-    s = Status::NotSupported(Slice());
-  }
-
-  return s;
-}
-
-Status RadosEnv::GetChildren(const Slice& dirname,
-                             std::vector<std::string>* r) {
-  Status s = target()->GetChildren(dirname, r);
-  if (dirname.starts_with(rados_root_)) {
-    // The previous status is over-written because it is all right for
-    // local directory listing to fail since some directories
-    // may not have a local mirror.
-    s = osd_env_->GetChildren(dirname, r);
   }
   return s;
 }

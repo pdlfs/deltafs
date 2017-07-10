@@ -7,16 +7,13 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/pdlfs_config.h"
-
 #include "rados_osd.h"
 
 namespace pdlfs {
 namespace rados {
 
 RadosOsd::~RadosOsd() {
-  // Wait until all async IO operations to finish
-  rados_aio_flush(ioctx_);
+  rados_aio_flush(ioctx_);  // Wait until all async IO operations to finish
   rados_ioctx_destroy(ioctx_);
 }
 
@@ -29,10 +26,11 @@ Status RadosOsd::CreateIoCtx(rados_ioctx_t* result) {
   }
 }
 
-bool RadosOsd::Exists(const Slice& name) {
+// Return true iff the named object exists.
+bool RadosOsd::Exists(const char* name) {
   uint64_t ignored_size;
   time_t ignored_mtime;
-  int r = rados_stat(ioctx_, name.c_str(), &ignored_size, &ignored_mtime);
+  int r = rados_stat(ioctx_, name, &ignored_size, &ignored_mtime);
   if (r != 0) {
     return false;
   } else {
@@ -40,9 +38,9 @@ bool RadosOsd::Exists(const Slice& name) {
   }
 }
 
-Status RadosOsd::Size(const Slice& name, uint64_t* obj_size) {
+Status RadosOsd::Size(const char* name, uint64_t* obj_size) {
   time_t ignored_mtime;
-  int r = rados_stat(ioctx_, name.c_str(), obj_size, &ignored_mtime);
+  int r = rados_stat(ioctx_, name, obj_size, &ignored_mtime);
   if (r != 0) {
     return RadosError("rados_stat", r);
   } else {
@@ -50,51 +48,58 @@ Status RadosOsd::Size(const Slice& name, uint64_t* obj_size) {
   }
 }
 
-Status RadosOsd::NewSequentialObj(const Slice& name, SequentialFile** result) {
+Status RadosOsd::NewSequentialObj(const char* name, SequentialFile** r) {
+  const bool owns_ioctx = false;
   uint64_t obj_size;
   Status s = Size(name, &obj_size);
   if (s.ok()) {
     if (obj_size != 0) {
-      const bool owns_ioctx = false;
-      *result = new RadosSequentialFile(name, ioctx_, owns_ioctx);
+      *r = new RadosSequentialFile(name, ioctx_, owns_ioctx);
     } else {
-      *result = new RadosEmptyFile();
+      *r = new RadosEmptyFile();
     }
-  }
-
-  return s;
-}
-
-Status RadosOsd::NewRandomAccessObj(const Slice& name,
-                                    RandomAccessFile** result) {
-  uint64_t obj_size;
-  Status s = Size(name, &obj_size);
-  if (s.ok()) {
-    if (obj_size != 0) {
-      const bool owns_ioctx = false;
-      *result = new RadosRandomAccessFile(name, ioctx_, owns_ioctx);
-    } else {
-      *result = new RadosEmptyFile();
-    }
-  }
-
-  return s;
-}
-
-Status RadosOsd::NewWritableObj(const Slice& name, WritableFile** result) {
-  Status s;
-  rados_ioctx_t ioctx;
-  s = CreateIoCtx(&ioctx);
-  if (!force_sync_) {
-    *result = new RadosAsyncWritableFile(name, mutex_, ioctx);
   } else {
-    *result = new RadosWritableFile(name, ioctx);
+    *r = NULL;
   }
+
   return s;
 }
 
-Status RadosOsd::Delete(const Slice& name) {
-  int r = rados_remove(ioctx_, name.c_str());
+Status RadosOsd::NewRandomAccessObj(const char* name, RandomAccessFile** r) {
+  const bool owns_ioctx = false;
+  uint64_t obj_size;
+  Status s = Size(name, &obj_size);
+  if (s.ok()) {
+    if (obj_size != 0) {
+      *r = new RadosRandomAccessFile(name, ioctx_, owns_ioctx);
+    } else {
+      *r = new RadosEmptyFile();
+    }
+  } else {
+    *r = NULL;
+  }
+
+  return s;
+}
+
+Status RadosOsd::NewWritableObj(const char* name, WritableFile** r) {
+  rados_ioctx_t ioctx;
+  Status s = CreateIoCtx(&ioctx);
+  if (s.ok()) {
+    if (!force_sync_) {
+      *r = new RadosAsyncWritableFile(name, mutex_, ioctx);
+    } else {
+      *r = new RadosWritableFile(name, ioctx);
+    }
+  } else {
+    *r = NULL;
+  }
+
+  return s;
+}
+
+Status RadosOsd::Delete(const char* name) {
+  int r = rados_remove(ioctx_, name);  // Synchronous removal
   if (r != 0) {
     return RadosError("rados_remove", r);
   } else {
@@ -102,7 +107,7 @@ Status RadosOsd::Delete(const Slice& name) {
   }
 }
 
-Status RadosOsd::Copy(const Slice& src, const Slice& dst) {
+Status RadosOsd::Copy(const char* src, const char* dst) {
   uint64_t obj_size;
   Status s = Size(src, &obj_size);
   if (s.ok()) {
@@ -115,12 +120,14 @@ Status RadosOsd::Copy(const Slice& src, const Slice& dst) {
       } else {
         target = new RadosWritableFile(dst, ioctx);
       }
-      char* buf = new char[1024 * 1024];  // 1m
+      const size_t io_size = 1024 * 1024;  // 1MB
+      char* buf = new char[io_size];
       uint64_t off = 0;
       while (s.ok() && obj_size != 0) {
-        int nbytes = rados_read(ioctx_, src.c_str(), buf, 1024 * 1024, off);
+        int nbytes = rados_read(ioctx_, src, buf, io_size, off);
         if (nbytes > 0) {
-          s = target->Append(Slice(buf, nbytes));
+          size_t n = static_cast<size_t>(nbytes);
+          s = target->Append(Slice(buf, n));
         } else if (nbytes < 0) {
           s = RadosError("rados_read", nbytes);
         } else {
@@ -142,8 +149,8 @@ Status RadosOsd::Copy(const Slice& src, const Slice& dst) {
   return s;
 }
 
-Status RadosOsd::Put(const Slice& name, const Slice& buf) {
-  int r = rados_write_full(ioctx_, name.c_str(), buf.data(), buf.size());
+Status RadosOsd::Put(const char* name, const Slice& buf) {
+  int r = rados_write_full(ioctx_, name, buf.data(), buf.size());  // Atomic
   if (r != 0) {
     return RadosError("rados_write_full", r);
   } else {
@@ -151,16 +158,17 @@ Status RadosOsd::Put(const Slice& name, const Slice& buf) {
   }
 }
 
-Status RadosOsd::Get(const Slice& name, std::string* data) {
+Status RadosOsd::Get(const char* name, std::string* data) {
   uint64_t obj_size;
   Status s = Size(name, &obj_size);
   if (s.ok() && obj_size != 0) {
     char* buf = new char[obj_size];
     uint64_t off = 0;
     while (s.ok() && obj_size != 0) {
-      int nbytes = rados_read(ioctx_, name.c_str(), buf, obj_size, off);
+      int nbytes = rados_read(ioctx_, name, buf, obj_size, off);
       if (nbytes > 0) {
-        data->append(buf, nbytes);
+        size_t n = static_cast<size_t>(nbytes);
+        data->append(buf, n);
       } else if (nbytes < 0) {
         s = RadosError("rados_read", nbytes);
       } else {

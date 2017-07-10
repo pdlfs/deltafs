@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2015-2017 Carnegie Mellon University.
  *
@@ -9,8 +7,9 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/osd_env.h"
+#pragma once
 
+#include "rados_common.h"
 #include "rados_conn.h"
 
 namespace pdlfs {
@@ -19,24 +18,27 @@ namespace rados {
 class RadosEnv : public EnvWrapper {
  public:
   virtual ~RadosEnv();
-  virtual bool FileExists(const Slice& f);
-  virtual Status NewSequentialFile(const Slice& f, SequentialFile** r);
-  virtual Status NewRandomAccessFile(const Slice& f, RandomAccessFile** r);
-  virtual Status NewWritableFile(const Slice& f, WritableFile** r);
-  virtual Status GetChildren(const Slice& d, std::vector<std::string>* r);
-  virtual Status DeleteFile(const Slice& f);
-  virtual Status CreateDir(const Slice& d);
-  virtual Status AttachDir(const Slice& d);
-  virtual Status DeleteDir(const Slice& d);
-  virtual Status DetachDir(const Slice& d);
-  virtual Status GetFileSize(const Slice& f, uint64_t* s);
-  virtual Status CopyFile(const Slice& s, const Slice& t);
-  virtual Status RenameFile(const Slice& s, const Slice& t);
+  virtual Status NewSequentialFile(const char* f, SequentialFile** r);
+  virtual Status NewRandomAccessFile(const char* f, RandomAccessFile** r);
+  virtual Status NewWritableFile(const char* f, WritableFile** r);
+  virtual bool FileExists(const char* f);
+  virtual Status GetFileSize(const char* f, uint64_t* size);
+  virtual Status DeleteFile(const char* f);
+  virtual Status CopyFile(const char* src, const char* dst);
+  virtual Status RenameFile(const char* src, const char* dst);
+
+  virtual Status GetChildren(const char* dir, std::vector<std::string>*);
+  virtual Status CreateDir(const char* dir);
+  virtual Status AttachDir(const char* dir);
+  virtual Status DeleteDir(const char* dir);
+  virtual Status DetachDir(const char* dir);
 
  private:
-  Status MountDir(const Slice& d, bool create_dir);
-  Status UnmountDir(const Slice& d, bool delete_dir);
-  bool FileOnRados(const Slice& f);
+  Status MountDir(const char* dir, bool force_create);
+  Status UnmountDir(const char* dir, bool force_delete);
+  Status RenameLocalTmpToRados(const char* tmp, const char* dst);
+  bool PathOnRados(const char* pathname);
+  bool FileOnRados(const char* fname);
 
   RadosEnv(Env* e) : EnvWrapper(e) {}
   friend class RadosConn;
@@ -47,14 +49,14 @@ class RadosEnv : public EnvWrapper {
   OSD* osd_;
 };
 
-inline FileType TryResolveFileType(const Slice& fname) {
+inline FileType TryResolveFileType(const char* fname) {
   FileType type;
   uint64_t number;
   Slice path = fname;
   // We only interest in the last component of the file path.
-  const char* p = strrchr(fname.data(), '/');
+  const char* p = strrchr(fname, '/');
   if (p != NULL) {
-    path.remove_prefix(static_cast<size_t>(p - fname.data()) + 1);
+    path.remove_prefix(static_cast<size_t>(p - fname) + 1);
   }
   // Handle foreign files by returning an invalid type code.
   if (!ParseFileName(path, &number, &type)) {
@@ -64,7 +66,7 @@ inline FileType TryResolveFileType(const Slice& fname) {
   }
 }
 
-inline bool OnRados(FileType type) {
+inline bool TypeOnRados(FileType type) {
   switch (type) {
     case kTableFile:
     case kLogFile:

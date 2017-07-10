@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2015-2017 Carnegie Mellon University.
  *
@@ -9,13 +7,15 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#pragma once
+
+#include "rados_conn.h"
+
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
-#include "pdlfs-common/pdlfs_config.h"
+#include "pdlfs-common/osd_env.h"
 #include "pdlfs-common/port.h"
-
-#include "rados_conn.h"
 
 #include <rados/librados.h>
 

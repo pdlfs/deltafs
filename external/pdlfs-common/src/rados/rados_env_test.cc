@@ -7,15 +7,13 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <algorithm>
-#include <vector>
+#include "rados_conn.h"
 
 #include "pdlfs-common/osd_env.h"
-#include "pdlfs-common/pdlfs_config.h"
-#include "pdlfs-common/port.h"
 #include "pdlfs-common/testharness.h"
 
-#include "rados_conn.h"
+#include <algorithm>
+#include <vector>
 
 // The following tests are paired with "$top_srcdir/dev/rados.sh".
 // Run "sh $top_srcdir/dev/rados.sh start" to create a new rados cluster
@@ -35,26 +33,6 @@ namespace pdlfs {
 namespace rados {
 
 static const int kVerbose = 5;
-
-static void TestRWEnvFile(Env* env, const Slice& dirname, const Slice& fname) {
-  const char data[] = "xxxxxxxyyyyzz";
-  for (int i = 0; i < 3; i++) {
-    env->DeleteFile(fname);
-    ASSERT_OK(WriteStringToFile(env, Slice(data), fname));
-    ASSERT_TRUE(env->FileExists(fname));
-    std::string tmp;
-    ASSERT_OK(ReadFileToString(env, fname, &tmp));
-    ASSERT_EQ(Slice(tmp), Slice(data));
-    std::vector<std::string> names;
-    ASSERT_OK(env->GetChildren(dirname, &names));
-    Slice slice = fname;
-    slice.remove_prefix(dirname.size() + 1);
-    std::string name = slice.ToString();
-    ASSERT_TRUE(std::find(names.begin(), names.end(), name) != names.end());
-  }
-  env->DeleteFile(fname);
-}
-
 // Make sure we only connect to rados once during the entire run.
 static port::OnceType once = PDLFS_ONCE_INIT;
 static RadosConn* rados_conn = NULL;
@@ -64,60 +42,80 @@ static void OpenRadosConn() {
   ASSERT_OK(s);
 }
 
-class RadosTest {
- public:
-  RadosTest() {
-    Status s;
-    std::string pool_name = "metadata";
-    root_ = test::NewTmpDirectory("rados_test");
-    if (FLAGS_useposixosd) {
-      std::string osd_root = test::NewTmpDirectory("rados_test_objs");
-      osd_ = NewOSDAdaptor(osd_root);
-    } else {
-      port::InitOnce(&once, OpenRadosConn);
-      s = rados_conn->OpenOsd(&osd_, pool_name);
-      ASSERT_OK(s);
-    }
-    s = rados_conn->OpenEnv(&env_, root_, pool_name, osd_);
-    ASSERT_OK(s);
-    env_->CreateDir(WorkingDir());
+static void TestRWEnvFile(Env* env, const char* dirname, const char* fname) {
+  for (int i = 0; i < 3; i++) {
+    env->DeleteFile(fname);
+    ASSERT_OK(WriteStringToFile(env, Slice("xxxxxxxyyyyzz"), fname));
+    ASSERT_TRUE(env->FileExists(fname));
+    std::string tmp;
+    ASSERT_OK(ReadFileToString(env, fname, &tmp));
+    ASSERT_EQ(Slice(tmp), Slice("xxxxxxxyyyyzz"));
+    std::vector<std::string> names;
+    ASSERT_OK(env->GetChildren(dirname, &names));
+    Slice slice = fname;
+    slice.remove_prefix(strlen(dirname) + 1);
+    std::string name = slice.ToString();
+    ASSERT_TRUE(std::find(names.begin(), names.end(), name) != names.end());
   }
 
-  ~RadosTest() {
-    env_->DeleteDir(WorkingDir());
-    delete env_;
-    delete osd_;
-  }
+  env->DeleteFile(fname);
+}
+
+class RadosTest {
+ public:
+  RadosTest();
 
   // Reload the working dir.
   // Check the existence of a specified file under the next context.
-  void Reload(const Slice& f) {
-    Verbose(__LOG_ARGS__, kVerbose, "Reloading ... ");
-    ASSERT_OK(env_->DetachDir(WorkingDir()));
-    ASSERT_OK(env_->CreateDir(WorkingDir()));
-    ASSERT_TRUE(env_->FileExists(f));
+  void Reload(const char* fname) {
+    fprintf(stderr, "Reloading...\n");
+    ASSERT_OK(env_->DetachDir(working_dir_.c_str()));
+    ASSERT_OK(env_->CreateDir(working_dir_.c_str()));
+    ASSERT_TRUE(env_->FileExists(fname));
   }
 
   // Reload the working dir readonly.
   // Check the existence of a specified file under the next context.
-  void ReloadReadonly(const Slice& f) {
-    Verbose(__LOG_ARGS__, kVerbose, "Reloading readonly ... ");
-    ASSERT_OK(env_->DetachDir(WorkingDir()));
-    ASSERT_OK(env_->AttachDir(WorkingDir()));
-    ASSERT_TRUE(env_->FileExists(f));
+  void ReloadReadonly(const char* fname) {
+    fprintf(stderr, "Reloading readonly...\n");
+    ASSERT_OK(env_->DetachDir(working_dir_.c_str()));
+    ASSERT_OK(env_->AttachDir(working_dir_.c_str()));
+    ASSERT_TRUE(env_->FileExists(fname));
   }
 
-  std::string WorkingDir() {
-    return root_ + "/dbhome";  // emulating a leveldb home
-  }
-
+  ~RadosTest();
+  std::string pool_name_;
+  std::string working_dir_;
   std::string root_;
   OSD* osd_;
   Env* env_;
 };
 
+RadosTest::RadosTest() {
+  pool_name_ = "metadata";
+  root_ = test::NewTmpDirectory("rados_test");
+  working_dir_ = root_ + "/mydir";
+  if (FLAGS_useposixosd) {
+    std::string osd_root = test::NewTmpDirectory("rados_test_objs");
+    osd_ = OSD::FromEnv(osd_root.c_str());
+  } else {
+    port::InitOnce(&once, OpenRadosConn);
+    Status s = rados_conn->OpenOsd(&osd_, pool_name_);
+    ASSERT_OK(s);
+  }
+  Status s = rados_conn->OpenEnv(&env_, root_, pool_name_, osd_);
+  ASSERT_OK(s);
+  env_->CreateDir(working_dir_.c_str());
+}
+
+RadosTest::~RadosTest() {
+  env_->DeleteDir(working_dir_.c_str());
+  delete env_;
+  delete osd_;
+}
+
 TEST(RadosTest, OSD_PutAndExists) {
-  const std::string name = "a";
+  const char* name = "a";
   osd_->Delete(name);
   ASSERT_OK(osd_->Put(name, Slice()));
   ASSERT_TRUE(osd_->Exists(name));
@@ -126,8 +124,8 @@ TEST(RadosTest, OSD_PutAndExists) {
 }
 
 TEST(RadosTest, OSD_ReadWrite) {
-  const std::string name = "a";
-  const char data[] = "xxxxxxxyyyyzz";
+  const char* name = "a";
+  const char* data = "xxxxxxxyyyyzz";
   osd_->Delete(name);
   ASSERT_OK(WriteStringToFileSync(osd_, Slice(data), name));
   uint64_t size;
@@ -140,9 +138,9 @@ TEST(RadosTest, OSD_ReadWrite) {
 }
 
 TEST(RadosTest, OSD_PutGetCopy) {
-  const std::string src = "a";
-  const std::string dst = "b";
-  const char data[] = "xxxxxxxyyyyzz";
+  const char* src = "a";
+  const char* dst = "b";
+  const char* data = "xxxxxxxyyyyzz";
   std::string tmp;
   osd_->Delete(src);
   osd_->Delete(dst);
@@ -156,39 +154,47 @@ TEST(RadosTest, OSD_PutGetCopy) {
 
 TEST(RadosTest, FileLock) {
   FileLock* lock;
-  ASSERT_OK(env_->LockFile(LockFileName(WorkingDir()), &lock));
+  std::string lockname = LockFileName(working_dir_);
+  ASSERT_OK(env_->LockFile(lockname.c_str(), &lock));
   ASSERT_OK(env_->UnlockFile(lock));
-  ASSERT_OK(env_->DeleteFile(LockFileName(WorkingDir())));
+  ASSERT_OK(env_->DeleteFile(lockname.c_str()));
 }
 
 TEST(RadosTest, SetCurrentFile) {
-  ASSERT_OK(SetCurrentFile(env_, WorkingDir(), 1));
-  ASSERT_TRUE(env_->FileExists(CurrentFileName(WorkingDir())));
-  ASSERT_OK(env_->DeleteFile(CurrentFileName(WorkingDir())));
+  ASSERT_OK(SetCurrentFile(env_, working_dir_, 1));
+  std::string curr = CurrentFileName(working_dir_);
+  ASSERT_TRUE(env_->FileExists(curr.c_str()));
+  ASSERT_OK(env_->DeleteFile(curr.c_str()));
 }
 
 TEST(RadosTest, ReadWriteFiles) {
-  TestRWEnvFile(env_, WorkingDir(), DescriptorFileName(WorkingDir(), 1));
-  TestRWEnvFile(env_, WorkingDir(), LogFileName(WorkingDir(), 2));
-  TestRWEnvFile(env_, WorkingDir(), TableFileName(WorkingDir(), 3));
-  TestRWEnvFile(env_, WorkingDir(), InfoLogFileName(WorkingDir()));
-  TestRWEnvFile(env_, WorkingDir(), OldInfoLogFileName(WorkingDir()));
+  std::vector<std::string> fnames;
+  fnames.push_back(DescriptorFileName(working_dir_, 1));
+  fnames.push_back(LogFileName(working_dir_, 2));
+  fnames.push_back(TableFileName(working_dir_, 3));
+  fnames.push_back(SSTTableFileName(working_dir_, 4));
+  fnames.push_back(TempFileName(working_dir_, 5));
+  fnames.push_back(InfoLogFileName(working_dir_));
+  fnames.push_back(OldInfoLogFileName(working_dir_));
+  for (size_t i = 0; i < fnames.size(); i++) {
+    TestRWEnvFile(env_, working_dir_.c_str(), fnames[i].c_str());
+  }
 }
 
 TEST(RadosTest, Reloading) {
-  std::string fname = TableFileName(WorkingDir(), 4);
+  std::string fname = TableFileName(working_dir_, 7);
   for (int i = 0; i < 3; i++) {
-    WriteStringToFile(env_, "xxxxxxxxx", fname);
-    ReloadReadonly(fname);
-    ReloadReadonly(fname);
-    ReloadReadonly(fname);
-    Reload(fname);
-    Reload(fname);
-    Reload(fname);
-    Reload(fname);
+    WriteStringToFile(env_, "xxxxxxxxx", fname.c_str());
+    ReloadReadonly(fname.c_str());
+    ReloadReadonly(fname.c_str());
+    ReloadReadonly(fname.c_str());
+    Reload(fname.c_str());
+    Reload(fname.c_str());
+    Reload(fname.c_str());
+    Reload(fname.c_str());
   }
 
-  ASSERT_OK(env_->DeleteFile(fname));
+  ASSERT_OK(env_->DeleteFile(fname.c_str()));
 }
 
 }  // namespace rados

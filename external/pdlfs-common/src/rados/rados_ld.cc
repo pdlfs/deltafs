@@ -7,17 +7,16 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <map>
-#include <vector>
+#include "rados_conn.h"
 
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/map.h"
 #include "pdlfs-common/mutexlock.h"
-#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/rados/rados_ld.h"
 #include "pdlfs-common/strutil.h"
 
-#include "rados_conn.h"
+#include <map>
+#include <vector>
 
 #if defined(__cplusplus)
 extern "C" {

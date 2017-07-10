@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2015-2017 Carnegie Mellon University.
  *
@@ -9,11 +7,12 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/pdlfs_config.h"
-#include "pdlfs-common/rwlock.h"
+#pragma once
 
 #include "rados_common.h"
 #include "rados_conn.h"
+
+#include "pdlfs-common/rwlock.h"
 
 namespace pdlfs {
 namespace rados {

@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2015-2017 Carnegie Mellon University.
  *
@@ -9,7 +7,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/pdlfs_config.h"
+#pragma once
 
 #include "rados_common.h"
 #include "rados_conn.h"
@@ -17,20 +15,20 @@
 namespace pdlfs {
 namespace rados {
 
-// OSD implementation atop Rados.
+// Osd implementation using Rados api. Rados async I/O is used by default unless
+// explicitly disabled by the caller.
 class RadosOsd : public OSD {
  public:
   virtual ~RadosOsd();
-  virtual Status NewSequentialObj(const Slice& name, SequentialFile** result);
-  virtual Status NewRandomAccessObj(const Slice& name,
-                                    RandomAccessFile** result);
-  virtual Status NewWritableObj(const Slice& name, WritableFile** result);
-  virtual bool Exists(const Slice& name);
-  virtual Status Size(const Slice& name, uint64_t* obj_size);
-  virtual Status Delete(const Slice& name);
-  virtual Status Put(const Slice& name, const Slice& data);
-  virtual Status Get(const Slice& name, std::string* data);
-  virtual Status Copy(const Slice& src, const Slice& dst);
+  virtual Status NewSequentialObj(const char* name, SequentialFile** r);
+  virtual Status NewRandomAccessObj(const char* name, RandomAccessFile** r);
+  virtual Status NewWritableObj(const char* name, WritableFile** r);
+  virtual bool Exists(const char* name);
+  virtual Status Size(const char* name, uint64_t* obj_size);
+  virtual Status Delete(const char* name);
+  virtual Status Copy(const char* src, const char* dst);
+  virtual Status Put(const char* name, const Slice& data);
+  virtual Status Get(const char* name, std::string* data);
 
  private:
   RadosOsd() {}

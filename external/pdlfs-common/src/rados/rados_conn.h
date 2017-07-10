@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2015-2017 Carnegie Mellon University.
  *
@@ -9,13 +7,15 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <errno.h>
+#pragma once
 
 #include "pdlfs-common/dbfiles.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/fio.h"
 #include "pdlfs-common/osd.h"
 #include "pdlfs-common/port.h"
+
+#include <errno.h>
 
 namespace pdlfs {
 namespace rados {
@@ -45,7 +45,7 @@ class RadosConn {
   explicit RadosConn() : cluster_(NULL) {}
   ~RadosConn();
 
-  // Open connect to a Rados cluster. Return OK on success.
+  // Connect to a Rados cluster instance. Return OK on success.
   Status Open(const RadosOptions& options);
 
   // Return an env object backed by an open Rados connection.

@@ -7,10 +7,9 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/logging.h"
-#include "pdlfs-common/pdlfs_config.h"
-
 #include "rados_fio.h"
+
+#include "pdlfs-common/logging.h"
 
 namespace pdlfs {
 namespace rados {
