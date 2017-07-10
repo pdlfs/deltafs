@@ -43,7 +43,7 @@ class WriterBufTest {
     return buffer_.NewIterator();
   }
 
-  void Add(uint64_t seq, size_t value_size = 32) {
+  void Add(uint64_t seq, int value_size = 32) {
     std::string key;
     PutFixed64(&key, seq);
     std::string value;
@@ -305,8 +305,8 @@ namespace {
 
 class FakeWritableFile : public WritableFileWrapper {
  public:
-  FakeWritableFile(uint64_t bytes_ps, Histogram* hist = NULL,
-                   EventListener* lis = NULL)
+  explicit FakeWritableFile(uint64_t bytes_ps, Histogram* hist = NULL,
+                            EventListener* lis = NULL)
       : lis_(lis), prev_write_micros_(0), hist_(hist), bytes_ps_(bytes_ps) {}
   virtual ~FakeWritableFile() {}
 
@@ -357,10 +357,11 @@ class FakeEnv : public EnvWrapper {
     }
   }
 
-  virtual Status NewWritableFile(const Slice& f, WritableFile** r) {
-    if (f.ends_with(".dat")) {
+  virtual Status NewWritableFile(const char* f, WritableFile** r) {
+    Slice fname(f);
+    if (fname.ends_with(".dat")) {
       Histogram* hist = new Histogram;
-      hists_.insert(std::make_pair(f.ToString(), hist));
+      hists_.insert(std::make_pair(fname.ToString(), hist));
       *r = new FakeWritableFile(bytes_ps_, hist, lis_);
     } else {
       *r = new FakeWritableFile(bytes_ps_);
@@ -368,7 +369,7 @@ class FakeEnv : public EnvWrapper {
     return Status::OK();
   }
 
-  const Histogram* GetHist(const Slice& suffix) {
+  const Histogram* GetHist(const char* suffix) {
     HistIter iter = hists_.begin();
     for (; iter != hists_.end(); ++iter) {
       if (Slice(iter->first).ends_with(suffix)) {
@@ -895,14 +896,14 @@ class StringEnv : public EnvWrapper {
     }
   }
 
-  virtual Status NewWritableFile(const Slice& f, WritableFile** r) {
+  virtual Status NewWritableFile(const char* f, WritableFile** r) {
     std::string* buf = new std::string;
-    fs_.insert(std::make_pair(f.ToString(), buf));
+    fs_.insert(std::make_pair(std::string(f), buf));
     *r = new StringWritableFile(buf);
     return Status::OK();
   }
 
-  virtual Status NewRandomAccessFile(const Slice& f, RandomAccessFile** r) {
+  virtual Status NewRandomAccessFile(const char* f, RandomAccessFile** r) {
     std::string* buf = Find(f);
     if (buf == NULL) {
       *r = NULL;
@@ -913,7 +914,7 @@ class StringEnv : public EnvWrapper {
     }
   }
 
-  virtual Status NewSequentialFile(const Slice& f, SequentialFile** r) {
+  virtual Status NewSequentialFile(const char* f, SequentialFile** r) {
     std::string* buf = Find(f);
     if (buf == NULL) {
       *r = NULL;
@@ -924,7 +925,7 @@ class StringEnv : public EnvWrapper {
     }
   }
 
-  virtual Status GetFileSize(const Slice& f, uint64_t* s) {
+  virtual Status GetFileSize(const char* f, uint64_t* s) {
     std::string* buf = Find(f);
     if (buf == NULL) {
       *s = 0;
@@ -939,7 +940,7 @@ class StringEnv : public EnvWrapper {
   typedef std::map<std::string, std::string*> FS;
   typedef FS::iterator FSIter;
 
-  std::string* Find(const Slice& f) {
+  std::string* Find(const char* f) {
     FSIter iter = fs_.begin();
     for (; iter != fs_.end(); ++iter) {
       if (Slice(iter->first) == f) {
