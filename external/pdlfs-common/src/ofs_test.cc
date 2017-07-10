@@ -7,22 +7,23 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/ofs.h"
-#include "pdlfs-common/env.h"
-#include "pdlfs-common/osd.h"
 #include "pdlfs-common/testharness.h"
+
+#include "pdlfs-common/env.h"
+#include "pdlfs-common/ofs.h"
+#include "pdlfs-common/osd.h"
 
 namespace pdlfs {
 
-class OsdTest {
+class OfsTest {
  public:
-  OsdTest() {
-    root_ = test::PrepareTmpDir("osd_test");
+  OfsTest() {
+    root_ = test::PrepareTmpDir("ofs_test");
     osd_ = Osd::FromEnv(root_.c_str());
     ofs_ = new Ofs(osd_);
   }
 
-  ~OsdTest() {
+  ~OfsTest() {
     delete ofs_;
     delete osd_;
   }
@@ -49,13 +50,13 @@ class OsdTest {
   Osd* osd_;
 };
 
-TEST(OsdTest, Empty) {
+TEST(OfsTest, Empty) {
   ASSERT_TRUE(!ofs_->FileExists("/mnt/fset/a"));
   ASSERT_TRUE(!Mounted());
   ASSERT_NOTFOUND(Unmount());
 }
 
-TEST(OsdTest, MountUnmount) {
+TEST(OfsTest, MountUnmount) {
   mount_opts_.read_only = true;
   ASSERT_NOTFOUND(Mount());
   mount_opts_.read_only = false;
@@ -77,7 +78,7 @@ TEST(OsdTest, MountUnmount) {
   ASSERT_NOTFOUND(Mount());
 }
 
-TEST(OsdTest, CreateDeleteFile) {
+TEST(OfsTest, CreateDeleteFile) {
   ASSERT_OK(Mount());
   WritableFile* wf;
   ASSERT_OK(ofs_->NewWritableFile("/mnt/fset/a", &wf));
