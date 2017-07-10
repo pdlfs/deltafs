@@ -9,7 +9,7 @@
 
 #include "rados_conn.h"
 
-#include "pdlfs-common/osd_env.h"
+#include "pdlfs-common/ofs.h"
 #include "pdlfs-common/testharness.h"
 
 #include <algorithm>

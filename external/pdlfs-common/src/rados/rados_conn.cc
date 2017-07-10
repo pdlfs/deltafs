@@ -13,7 +13,7 @@
 #include "rados_fio.h"
 #include "rados_osd.h"
 
-#include "pdlfs-common/osd_env.h"
+#include "pdlfs-common/ofs.h"
 
 namespace pdlfs {
 namespace rados {

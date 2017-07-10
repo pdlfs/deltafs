@@ -131,8 +131,8 @@ TEST(BloomTest, VaryingLengths) {
 
     // All added keys must match
     for (int i = 0; i < length; i++) {
-      ASSERT_TRUE(Matches(Key(i, buffer))) << "Length " << length << "; key "
-                                           << i;
+      ASSERT_TRUE(Matches(Key(i, buffer)))
+          << "Length " << length << "; key " << i;
     }
 
     // Check false positive rate

@@ -14,8 +14,8 @@
 #include "pdlfs-common/log_reader.h"
 #include "pdlfs-common/log_writer.h"
 #include "pdlfs-common/map.h"
+#include "pdlfs-common/ofs.h"
 #include "pdlfs-common/osd.h"
-#include "pdlfs-common/osd_env.h"
 #include "pdlfs-common/port.h"
 
 namespace pdlfs {

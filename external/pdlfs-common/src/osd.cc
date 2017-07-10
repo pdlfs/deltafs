@@ -10,8 +10,8 @@
 #include "osd_internal.h"
 
 #include "pdlfs-common/env.h"
+#include "pdlfs-common/ofs.h"
 #include "pdlfs-common/osd.h"
-#include "pdlfs-common/osd_env.h"
 
 namespace pdlfs {
 
