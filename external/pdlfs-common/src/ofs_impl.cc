@@ -7,7 +7,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "osd_internal.h"
+#include "ofs_impl.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/log_scanner.h"

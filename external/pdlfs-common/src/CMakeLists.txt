@@ -17,13 +17,13 @@ set (pdlfs-common-srcs arena.cc blkdb.cc cache.cc coding.cc crc32c.cc
      crc32c_xx.cc dbfiles.cc dcntl.cc ect.cc ectrie/bit_vector.cc
      ectrie/twolevel_bucketing.cc env.cc env_files.cc fio.cc fstypes.cc gigaplus.cc
      hash.cc histogram.cc index_cache.cc lease.cc log_reader.cc log_writer.cc
-     logging.cc lookup_cache.cc mdb.cc murmur.cc osd.cc osd_internal.cc
+     logging.cc lookup_cache.cc mdb.cc murmur.cc osd.cc ofs.cc ofs_impl.cc
      port_posix.cc posix_env.cc rpc.cc slice.cc spooky.cc status.cc
      strutil.cc testharness.cc testutil.cc xxhash.cc xximpl.cc)
 set (pdlfs-common-tests arena_test.cc blkdb_test.cc cache_test.cc
      coding_test.cc crc32c_test.cc dbfiles_test.cc ect_test.cc
      env_test.cc fio_test.cc fstypes_test.cc gigaplus_test.cc hash_test.cc
-     log_test.cc osd_test.cc strutil_test.cc)
+     log_test.cc ofs_test.cc strutil_test.cc)
 
 # leveldb directory sources and tests
 set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
