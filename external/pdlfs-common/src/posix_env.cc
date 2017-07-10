@@ -237,7 +237,7 @@ class PosixEnv : public Env {
             s = IOError(fname, errno);
           }
         } else {
-          s = Status::NotSupported(Slice());
+          *r = new PosixEmptyFile();
         }
       }
       close(fd);

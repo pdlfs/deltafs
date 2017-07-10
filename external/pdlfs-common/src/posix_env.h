@@ -332,4 +332,16 @@ class PosixWritableFile : public WritableFile {
   }
 };
 
+class PosixEmptyFile : public RandomAccessFile {
+ public:
+  PosixEmptyFile() {}
+  virtual ~PosixEmptyFile() {}
+
+  virtual Status Read(uint64_t offset, size_t n, Slice* result,
+                      char* scratch) const {
+    *result = Slice();
+    return Status::OK();
+  }
+};
+
 }  // namespace pdlfs
