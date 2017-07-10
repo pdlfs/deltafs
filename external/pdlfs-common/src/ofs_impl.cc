@@ -9,11 +9,24 @@
 
 #include "ofs_impl.h"
 
-#include "pdlfs-common/coding.h"
 #include "pdlfs-common/log_scanner.h"
 #include "pdlfs-common/mutexlock.h"
 
 namespace pdlfs {
+
+// Type value larger than this is invalid.
+static const int kMaxRecordType = FileSet::kTryDelFile;
+
+std::string Ofs::Impl::OfsName(const FileSet* fset, const Slice& name) {
+  Slice parent = fset->name;
+  size_t n = parent.size() + name.size() + 1;
+  std::string result;
+  result.reserve(n);
+  result.append(parent.data(), parent.size());
+  result.push_back('_');
+  result.append(name.data(), name.size());
+  return result;
+}
 
 static Status Access(const std::string& name, Osd* osd, uint64_t* time) {
   *time = 0;
@@ -154,7 +167,7 @@ static void MakeSnapshot(std::string* result, FileSet* fset, HashSet* garbage) {
     std::string* scratch;
     FileSet::RecordType type;
     virtual void visit(const Slice& fname) {
-      PutOpRecord(scratch, fname, type);
+      PutOp(scratch, fname, type);
       *num_ops = *num_ops + 1;
     }
   };
@@ -237,7 +250,7 @@ bool Ofs::Impl::HasFile(const ResolvedPath& fp) {
   if (fset == NULL) {
     return false;
   } else {
-    std::string internal_name = InternalObjectName(fset, fp.base);
+    std::string internal_name = OfsName(fset, fp.base);
     if (!fset->files.Contains(internal_name)) {
       return false;
     } else {
@@ -355,26 +368,11 @@ Status Ofs::Impl::UnlinkFileSet(const Slice& mntptr, bool deletion) {
 
 std::string Ofs::Impl::TEST_GetObjectName(const ResolvedPath& fp) {
   MutexLock l(&mutex_);
-  FileSet* fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) {
-    return std::string();
-  } else {
-    return InternalObjectName(fset, fp.base);
-  }
-}
-
-Status Ofs::Impl::GetFile(const ResolvedPath& fp, std::string* data) {
-  MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) {
-    return Status::NotFound(Slice());
+  if (fset != NULL) {
+    return OfsName(fset, fp.base);
   } else {
-    std::string name = InternalObjectName(fset, fp.base);
-    if (!fset->files.Contains(name)) {
-      return Status::NotFound(Slice());
-    } else {
-      return osd_->Get(name.c_str(), data);
-    }
+    return std::string();
   }
 }
 
@@ -384,7 +382,7 @@ Status Ofs::Impl::PutFile(const ResolvedPath& fp, const Slice& data) {
   if (fset == NULL) {
     return Status::NotFound(Slice());
   } else {
-    std::string name = InternalObjectName(fset, fp.base);
+    const std::string name = OfsName(fset, fp.base);
     Status s = fset->TryNewFile(name);
     if (s.ok()) {
       s = osd_->Put(name.c_str(), data);
@@ -399,60 +397,13 @@ Status Ofs::Impl::PutFile(const ResolvedPath& fp, const Slice& data) {
   }
 }
 
-Status Ofs::Impl::FileSize(const ResolvedPath& fp, uint64_t* result) {
+Status Ofs::Impl::DeleteFile(const OfsPath& fp) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
     return Status::NotFound(Slice());
   } else {
-    std::string name = InternalObjectName(fset, fp.base);
-    if (!fset->files.Contains(name)) {
-      return Status::NotFound(Slice());
-    } else {
-      return osd_->Size(name.c_str(), result);
-    }
-  }
-}
-
-Status Ofs::Impl::NewSequentialFile(const ResolvedPath& fp,
-                                    SequentialFile** result) {
-  MutexLock l(&mutex_);
-  FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) {
-    return Status::NotFound(Slice());
-  } else {
-    std::string name = InternalObjectName(fset, fp.base);
-    if (!fset->files.Contains(name)) {
-      return Status::NotFound(Slice());
-    } else {
-      return osd_->NewSequentialObj(name.c_str(), result);
-    }
-  }
-}
-
-Status Ofs::Impl::NewRandomAccessFile(const ResolvedPath& fp,
-                                      RandomAccessFile** result) {
-  MutexLock l(&mutex_);
-  FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) {
-    return Status::NotFound(Slice());
-  } else {
-    std::string name = InternalObjectName(fset, fp.base);
-    if (!fset->files.Contains(name)) {
-      return Status::NotFound(Slice());
-    } else {
-      return osd_->NewRandomAccessObj(name.c_str(), result);
-    }
-  }
-}
-
-Status Ofs::Impl::DeleteFile(const ResolvedPath& fp) {
-  MutexLock l(&mutex_);
-  FileSet* const fset = mtable_.Lookup(fp.mntptr);
-  if (fset == NULL) {
-    return Status::NotFound(Slice());
-  } else {
-    std::string name = InternalObjectName(fset, fp.base);
+    const std::string name = OfsName(fset, fp.base);
     if (!fset->files.Contains(name)) {
       return Status::NotFound(Slice());
     } else {
@@ -472,23 +423,22 @@ Status Ofs::Impl::DeleteFile(const ResolvedPath& fp) {
   }
 }
 
-Status Ofs::Impl::NewWritableFile(const ResolvedPath& fp,
-                                  WritableFile** result) {
+Status Ofs::Impl::NewWritableFile(const OfsPath& fp, WritableFile** r) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
     return Status::NotFound(Slice());
   } else {
-    std::string name = InternalObjectName(fset, fp.base);
+    const std::string name = OfsName(fset, fp.base);
     Status s = fset->TryNewFile(name);
     if (s.ok()) {
-      s = osd_->NewWritableObj(name.c_str(), result);
+      s = osd_->NewWritableObj(name.c_str(), r);
       if (s.ok()) {
         s = fset->NewFile(name);
         if (!s.ok()) {
           osd_->Delete(name.c_str());
-          WritableFile* f = *result;
-          *result = NULL;
+          WritableFile* f = *r;
+          *r = NULL;
           f->Close();
           delete f;
         }
@@ -498,29 +448,60 @@ Status Ofs::Impl::NewWritableFile(const ResolvedPath& fp,
   }
 }
 
-Status Ofs::Impl::CopyFile(const ResolvedPath& src, const ResolvedPath& dst) {
+Status Ofs::Impl::GetFile(const OfsPath& fp, std::string* data) {
   MutexLock l(&mutex_);
-  FileSet* const src_fset = mtable_.Lookup(src.mntptr);
-  if (src_fset == NULL) {
-    return Status::NotFound(Slice());
-  }
-  FileSet* const dst_fset = mtable_.Lookup(dst.mntptr);
-  if (dst_fset == NULL) {
-    return Status::NotFound(Slice());
-  }
-  std::string src_name = InternalObjectName(src_fset, src.base);
-  if (!src_fset->files.Contains(src_name)) {
-    return Status::NotFound(Slice());
-  }
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
+  if (fset == NULL) return Status::NotFound(Slice());
+  const std::string name = OfsName(fset, fp.base);
+  if (fset->files.Contains(name)) return osd_->Get(name.c_str(), data);
+  return Status::NotFound(Slice());
+}
 
-  std::string dst_name = InternalObjectName(dst_fset, dst.base);
-  Status s = dst_fset->TryNewFile(dst_name);
+Status Ofs::Impl::FileSize(const OfsPath& fp, uint64_t* result) {
+  MutexLock l(&mutex_);
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
+  if (fset == NULL) return Status::NotFound(Slice());
+  const std::string name = OfsName(fset, fp.base);
+  if (fset->files.Contains(name)) return osd_->Size(name.c_str(), result);
+  return Status::NotFound(Slice());
+}
+
+Status Ofs::Impl::NewSequentialFile(const OfsPath& fp, SequentialFile** r) {
+  MutexLock l(&mutex_);
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
+  if (fset == NULL) return Status::NotFound(Slice());
+  const std::string name = OfsName(fset, fp.base);
+  if (!fset->files.Contains(name)) return Status::NotFound(Slice());
+  return osd_->NewSequentialObj(name.c_str(), r);
+}
+
+Status Ofs::Impl::NewRandomAccessFile(const OfsPath& fp, RandomAccessFile** r) {
+  MutexLock l(&mutex_);
+  FileSet* const fset = mtable_.Lookup(fp.mntptr);
+  if (fset == NULL) return Status::NotFound(Slice());
+  const std::string name = OfsName(fset, fp.base);
+  if (!fset->files.Contains(name)) return Status::NotFound(Slice());
+  return osd_->NewRandomAccessObj(name.c_str(), r);
+}
+
+Status Ofs::Impl::CopyFile(const OfsPath& sp, const OfsPath& dp) {
+  MutexLock l(&mutex_);
+  FileSet* const sset = mtable_.Lookup(sp.mntptr);
+  if (sset == NULL) return Status::NotFound(Slice());
+  FileSet* const dset = mtable_.Lookup(dp.mntptr);
+  if (dset == NULL) return Status::NotFound(Slice());
+
+  const std::string src = OfsName(sset, sp.base);
+  if (!sset->files.Contains(src)) return Status::NotFound(Slice());
+  const std::string dst = OfsName(dset, dp.base);
+
+  Status s = dset->TryNewFile(dst);
   if (s.ok()) {
-    s = osd_->Copy(src_name.c_str(), dst_name.c_str());
+    s = osd_->Copy(src.c_str(), dst.c_str());
     if (s.ok()) {
-      s = dst_fset->NewFile(dst_name);
+      s = dset->NewFile(dst);
       if (!s.ok()) {
-        osd_->Delete(dst_name.c_str());
+        osd_->Delete(dst.c_str());
       }
     }
   }

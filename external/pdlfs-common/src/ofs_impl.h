@@ -120,11 +120,10 @@ class FileSet {
   HashSet files;
 
   // File set logging
-
-  WritableFile* xfile;  // The file backing the write-ahead log
-  log::Writer* xlog;    // Write-ahead logger
-
   static std::string LogRecord(const Slice& fname, RecordType type);
+  WritableFile* xfile;  // The file backing the write-ahead log
+  typedef log::Writer Log;
+  Log* xlog;  // Write-ahead logger
 
  private:
   // No copying allowed
@@ -156,49 +155,42 @@ class Ofs::Impl {
   Status NewRandomAccessFile(const ResolvedPath& fp, RandomAccessFile** result);
   Status NewWritableFile(const ResolvedPath& fp, WritableFile** result);
   std::string TEST_GetObjectName(const ResolvedPath& fp);
-  Status CopyFile(const ResolvedPath& src, const ResolvedPath& dst);
+  Status CopyFile(const ResolvedPath& sp, const ResolvedPath& dp);
 
  private:
-  Osd* osd_;
   port::Mutex mutex_;
   HashMap<FileSet> mtable_;
 
-  static std::string InternalObjectName(const FileSet*, const Slice& name);
+  static std::string OfsName(const FileSet*, const Slice& name);
+  typedef ResolvedPath OfsPath;
 
   // No copying allowed
   void operator=(const Impl&);
   Impl(const Impl&);
+
+  Osd* osd_;
 };
 
-inline std::string Ofs::Impl::InternalObjectName(const FileSet* fset,
-                                                 const Slice& name) {
-  std::string result;
-  const std::string& set_name = fset->name;
-  result.reserve(set_name.size() + 1 + name.size());
-  result.append(set_name);
-  result.push_back('_');
-  AppendSliceTo(&result, name);
-  return result;
-}
-
-// Type value larger than this is invalid.
-static const int kMaxRecordType = FileSet::kTryDelFile;
-
-inline void PutOpRecord(std::string* dst, const Slice& fname,
-                        FileSet::RecordType type) {
+inline void PutOp(std::string* dst, const Slice& fname,
+                  FileSet::RecordType type) {
   dst->push_back(static_cast<char>(type));
   PutLengthPrefixedSlice(dst, fname);
 }
 
+// Format each record in the following way:
+//   timestamp: uint64_t
+//   num_ops: uint32_t
+//   op_type: uint8_t
+//   fname_len: varint32_t
+//   fname: char[n]
 inline std::string FileSet::LogRecord(const Slice& fname,
                                       FileSet::RecordType type) {
-  // record_timestamp(8) + num_ops(4) + op_type(1) + fname_length(1-4)
-  size_t record_size = 8 + 4 + 1 + 4 + fname.size();
+  size_t max_record_size = 8 + 4 + 1 + 4 + fname.size();
   std::string record;
-  record.reserve(record_size);
+  record.reserve(max_record_size);
   PutFixed64(&record, Env::Default()->NowMicros());
   PutFixed32(&record, 1);
-  PutOpRecord(&record, fname, type);
+  PutOp(&record, fname, type);
   return record;
 }
 
