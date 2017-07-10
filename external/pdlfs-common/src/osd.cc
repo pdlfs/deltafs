@@ -17,9 +17,9 @@ namespace pdlfs {
 
 Osd::~Osd() {}
 
-OSDEnv::OSDEnv(Osd* osd) { impl_ = new Impl(osd); }
+Ofs::Ofs(Osd* osd) { impl_ = new Impl(osd); }
 
-OSDEnv::~OSDEnv() { delete impl_; }
+Ofs::~Ofs() { delete impl_; }
 
 MountOptions::MountOptions()
     : read_only(false),
@@ -46,11 +46,11 @@ static bool ResolvePath(const Slice& path, Slice* parent, Slice* base) {
   }
 }
 
-bool OSDEnv::FileSetExists(const Slice& dirname) {
+bool Ofs::FileSetExists(const Slice& dirname) {
   return impl_->HasFileSet(dirname);
 }
 
-bool OSDEnv::FileExists(const Slice& fname) {
+bool Ofs::FileExists(const Slice& fname) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
     return false;
@@ -59,7 +59,7 @@ bool OSDEnv::FileExists(const Slice& fname) {
   }
 }
 
-Status OSDEnv::ReadFileToString(const Slice& fname, std::string* data) {
+Status Ofs::ReadFileToString(const Slice& fname, std::string* data) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
     return Status::InvalidArgument(fname, "path cannot be resolved");
@@ -68,7 +68,7 @@ Status OSDEnv::ReadFileToString(const Slice& fname, std::string* data) {
   }
 }
 
-Status OSDEnv::WriteStringToFile(const Slice& fname, const Slice& data) {
+Status Ofs::WriteStringToFile(const Slice& fname, const Slice& data) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
     return Status::InvalidArgument(fname, "path cannot be resolved");
@@ -77,7 +77,7 @@ Status OSDEnv::WriteStringToFile(const Slice& fname, const Slice& data) {
   }
 }
 
-Status OSDEnv::GetFileSize(const Slice& fname, uint64_t* size) {
+Status Ofs::GetFileSize(const Slice& fname, uint64_t* size) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
     return Status::InvalidArgument(fname, "path cannot be resolved");
@@ -86,7 +86,7 @@ Status OSDEnv::GetFileSize(const Slice& fname, uint64_t* size) {
   }
 }
 
-Status OSDEnv::MountFileSet(const MountOptions& options, const Slice& dirname) {
+Status Ofs::MountFileSet(const MountOptions& options, const Slice& dirname) {
   Slice name;
   if (!options.set_name.empty()) {
     name = options.set_name;
@@ -104,21 +104,20 @@ Status OSDEnv::MountFileSet(const MountOptions& options, const Slice& dirname) {
   return s;
 }
 
-Status OSDEnv::UnmountFileSet(const UnmountOptions& options,
-                              const Slice& dirname) {
+Status Ofs::UnmountFileSet(const UnmountOptions& options,
+                           const Slice& dirname) {
   return impl_->UnlinkFileSet(dirname, options.deletion);
 }
 
-Status OSDEnv::GetChildren(const Slice& dirname,
-                           std::vector<std::string>* names) {
+Status Ofs::GetChildren(const Slice& dirname, std::vector<std::string>* names) {
   return impl_->ListFileSet(dirname, names);
 }
 
-Status OSDEnv::SynFileSet(const Slice& dirname) {
+Status Ofs::SynFileSet(const Slice& dirname) {
   return impl_->SynFileSet(dirname);
 }
 
-Status OSDEnv::DeleteFile(const Slice& fname) {
+Status Ofs::DeleteFile(const Slice& fname) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
     return Status::InvalidArgument(fname, "path cannot be resolved");
@@ -127,7 +126,7 @@ Status OSDEnv::DeleteFile(const Slice& fname) {
   }
 }
 
-Status OSDEnv::CopyFile(const Slice& src, const Slice& dst) {
+Status Ofs::CopyFile(const Slice& src, const Slice& dst) {
   ResolvedPath sfp, dfp;
   if (!ResolvePath(src, &sfp.mntptr, &sfp.base)) {
     return Status::InvalidArgument(src, "path cannot be resolved");
@@ -138,7 +137,7 @@ Status OSDEnv::CopyFile(const Slice& src, const Slice& dst) {
   }
 }
 
-Status OSDEnv::NewSequentialFile(const Slice& fname, SequentialFile** result) {
+Status Ofs::NewSequentialFile(const Slice& fname, SequentialFile** result) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
     return Status::InvalidArgument(fname, "path cannot be resolved");
@@ -147,8 +146,7 @@ Status OSDEnv::NewSequentialFile(const Slice& fname, SequentialFile** result) {
   }
 }
 
-Status OSDEnv::NewRandomAccessFile(const Slice& fname,
-                                   RandomAccessFile** result) {
+Status Ofs::NewRandomAccessFile(const Slice& fname, RandomAccessFile** result) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
     return Status::InvalidArgument(fname, "path cannot be resolved");
@@ -157,7 +155,7 @@ Status OSDEnv::NewRandomAccessFile(const Slice& fname,
   }
 }
 
-Status OSDEnv::NewWritableFile(const Slice& fname, WritableFile** result) {
+Status Ofs::NewWritableFile(const Slice& fname, WritableFile** result) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
     return Status::InvalidArgument(fname, "path cannot be resolved");
@@ -166,7 +164,7 @@ Status OSDEnv::NewWritableFile(const Slice& fname, WritableFile** result) {
   }
 }
 
-std::string OSDEnv::TEST_LookupFile(const Slice& fname) {
+std::string Ofs::TEST_LookupFile(const Slice& fname) {
   ResolvedPath fp;
   if (!ResolvePath(fname, &fp.mntptr, &fp.base)) {
     return std::string();

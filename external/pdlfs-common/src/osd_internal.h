@@ -132,7 +132,7 @@ class FileSet {
   FileSet(const FileSet&);
 };
 
-class OSDEnv::Impl {
+class Ofs::Impl {
  public:
   explicit Impl(Osd* osd) : osd_(osd) {}
 
@@ -170,8 +170,8 @@ class OSDEnv::Impl {
   Impl(const Impl&);
 };
 
-inline std::string OSDEnv::Impl::InternalObjectName(const FileSet* fset,
-                                                    const Slice& name) {
+inline std::string Ofs::Impl::InternalObjectName(const FileSet* fset,
+                                                 const Slice& name) {
   std::string result;
   const std::string& set_name = fset->name;
   result.reserve(set_name.size() + 1 + name.size());

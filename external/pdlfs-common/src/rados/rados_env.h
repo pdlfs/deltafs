@@ -44,7 +44,7 @@ class RadosEnv : public EnvWrapper {
   friend class RadosConn;
   size_t wal_buf_size_;
   std::string rados_root_;
-  OSDEnv* osd_env_;
+  Ofs* ofs_;
   bool owns_osd_;
   Osd* osd_;
 };

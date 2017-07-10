@@ -221,7 +221,7 @@ static Status OpenFileSetForWriting(const std::string& log_name, Osd* osd,
   return s;
 }
 
-bool OSDEnv::Impl::HasFileSet(const Slice& mntptr) {
+bool Ofs::Impl::HasFileSet(const Slice& mntptr) {
   MutexLock l(&mutex_);
   FileSet* fset = mtable_.Lookup(mntptr);
   if (fset == NULL) {
@@ -231,7 +231,7 @@ bool OSDEnv::Impl::HasFileSet(const Slice& mntptr) {
   }
 }
 
-bool OSDEnv::Impl::HasFile(const ResolvedPath& fp) {
+bool Ofs::Impl::HasFile(const ResolvedPath& fp) {
   MutexLock l(&mutex_);
   FileSet* fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
@@ -246,7 +246,7 @@ bool OSDEnv::Impl::HasFile(const ResolvedPath& fp) {
   }
 }
 
-Status OSDEnv::Impl::SynFileSet(const Slice& mntptr) {
+Status Ofs::Impl::SynFileSet(const Slice& mntptr) {
   MutexLock l(&mutex_);
   FileSet* fset = mtable_.Lookup(mntptr);
   if (fset == NULL) {
@@ -260,8 +260,8 @@ Status OSDEnv::Impl::SynFileSet(const Slice& mntptr) {
   }
 }
 
-Status OSDEnv::Impl::ListFileSet(const Slice& mntptr,
-                                 std::vector<std::string>* names) {
+Status Ofs::Impl::ListFileSet(const Slice& mntptr,
+                              std::vector<std::string>* names) {
   struct Visitor : public HashSet::Visitor {
     size_t prefix;
     std::vector<std::string>* names;
@@ -284,7 +284,7 @@ Status OSDEnv::Impl::ListFileSet(const Slice& mntptr,
   }
 }
 
-Status OSDEnv::Impl::LinkFileSet(const Slice& mntptr, FileSet* fset) {
+Status Ofs::Impl::LinkFileSet(const Slice& mntptr, FileSet* fset) {
   MutexLock l(&mutex_);
   if (mtable_.Contains(mntptr)) {
     return Status::AlreadyExists(Slice());
@@ -317,7 +317,7 @@ Status OSDEnv::Impl::LinkFileSet(const Slice& mntptr, FileSet* fset) {
   }
 }
 
-Status OSDEnv::Impl::UnlinkFileSet(const Slice& mntptr, bool deletion) {
+Status Ofs::Impl::UnlinkFileSet(const Slice& mntptr, bool deletion) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(mntptr);
   if (fset == NULL) {
@@ -353,7 +353,7 @@ Status OSDEnv::Impl::UnlinkFileSet(const Slice& mntptr, bool deletion) {
   }
 }
 
-std::string OSDEnv::Impl::TEST_GetObjectName(const ResolvedPath& fp) {
+std::string Ofs::Impl::TEST_GetObjectName(const ResolvedPath& fp) {
   MutexLock l(&mutex_);
   FileSet* fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
@@ -363,7 +363,7 @@ std::string OSDEnv::Impl::TEST_GetObjectName(const ResolvedPath& fp) {
   }
 }
 
-Status OSDEnv::Impl::GetFile(const ResolvedPath& fp, std::string* data) {
+Status Ofs::Impl::GetFile(const ResolvedPath& fp, std::string* data) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
@@ -378,7 +378,7 @@ Status OSDEnv::Impl::GetFile(const ResolvedPath& fp, std::string* data) {
   }
 }
 
-Status OSDEnv::Impl::PutFile(const ResolvedPath& fp, const Slice& data) {
+Status Ofs::Impl::PutFile(const ResolvedPath& fp, const Slice& data) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
@@ -399,7 +399,7 @@ Status OSDEnv::Impl::PutFile(const ResolvedPath& fp, const Slice& data) {
   }
 }
 
-Status OSDEnv::Impl::FileSize(const ResolvedPath& fp, uint64_t* result) {
+Status Ofs::Impl::FileSize(const ResolvedPath& fp, uint64_t* result) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
@@ -414,8 +414,8 @@ Status OSDEnv::Impl::FileSize(const ResolvedPath& fp, uint64_t* result) {
   }
 }
 
-Status OSDEnv::Impl::NewSequentialFile(const ResolvedPath& fp,
-                                       SequentialFile** result) {
+Status Ofs::Impl::NewSequentialFile(const ResolvedPath& fp,
+                                    SequentialFile** result) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
@@ -430,8 +430,8 @@ Status OSDEnv::Impl::NewSequentialFile(const ResolvedPath& fp,
   }
 }
 
-Status OSDEnv::Impl::NewRandomAccessFile(const ResolvedPath& fp,
-                                         RandomAccessFile** result) {
+Status Ofs::Impl::NewRandomAccessFile(const ResolvedPath& fp,
+                                      RandomAccessFile** result) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
@@ -446,7 +446,7 @@ Status OSDEnv::Impl::NewRandomAccessFile(const ResolvedPath& fp,
   }
 }
 
-Status OSDEnv::Impl::DeleteFile(const ResolvedPath& fp) {
+Status Ofs::Impl::DeleteFile(const ResolvedPath& fp) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
@@ -472,8 +472,8 @@ Status OSDEnv::Impl::DeleteFile(const ResolvedPath& fp) {
   }
 }
 
-Status OSDEnv::Impl::NewWritableFile(const ResolvedPath& fp,
-                                     WritableFile** result) {
+Status Ofs::Impl::NewWritableFile(const ResolvedPath& fp,
+                                  WritableFile** result) {
   MutexLock l(&mutex_);
   FileSet* const fset = mtable_.Lookup(fp.mntptr);
   if (fset == NULL) {
@@ -498,8 +498,7 @@ Status OSDEnv::Impl::NewWritableFile(const ResolvedPath& fp,
   }
 }
 
-Status OSDEnv::Impl::CopyFile(const ResolvedPath& src,
-                              const ResolvedPath& dst) {
+Status Ofs::Impl::CopyFile(const ResolvedPath& src, const ResolvedPath& dst) {
   MutexLock l(&mutex_);
   FileSet* const src_fset = mtable_.Lookup(src.mntptr);
   if (src_fset == NULL) {

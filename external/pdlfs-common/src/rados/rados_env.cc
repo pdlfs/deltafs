@@ -15,10 +15,8 @@ namespace pdlfs {
 namespace rados {
 
 RadosEnv::~RadosEnv() {
-  delete osd_env_;
-  if (owns_osd_) {
-    delete osd_;
-  }
+  if (owns_osd_) delete osd_;
+  delete ofs_;
 }
 
 Status RadosEnv::MountDir(const char* dirname, bool create_dir) {
@@ -35,7 +33,7 @@ Status RadosEnv::MountDir(const char* dirname, bool create_dir) {
   options.read_only = !create_dir;
   options.create_if_missing = create_dir;
   options.error_if_exists = false;
-  Status s = osd_env_->MountFileSet(options, dirname);
+  Status s = ofs_->MountFileSet(options, dirname);
   if (s.IsAlreadyExists()) {
     // Force a local mirror
     target()->CreateDir(dirname);  // Ignore errors
@@ -50,8 +48,8 @@ Status RadosEnv::UnmountDir(const char* dirname, bool delete_dir) {
   Status s;
   UnmountOptions options;
   options.deletion = delete_dir;
-  if (!delete_dir) s = osd_env_->SynFileSet(dirname);
-  if (s.ok()) s = osd_env_->UnmountFileSet(options, dirname);
+  if (!delete_dir) s = ofs_->SynFileSet(dirname);
+  if (s.ok()) s = ofs_->UnmountFileSet(options, dirname);
   if (s.IsNotFound()) {
     // Remove local mirror
     target()->DeleteDir(dirname);  // Ignore errors
@@ -76,27 +74,27 @@ bool RadosEnv::FileOnRados(const char* fname) {
 }
 
 bool RadosEnv::FileExists(const char* fname) {
-  if (FileOnRados(fname)) return osd_env_->FileExists(fname);
+  if (FileOnRados(fname)) return ofs_->FileExists(fname);
   return target()->FileExists(fname);
 }
 
 Status RadosEnv::GetFileSize(const char* fname, uint64_t* size) {
-  if (FileOnRados(fname)) return osd_env_->GetFileSize(fname, size);
+  if (FileOnRados(fname)) return ofs_->GetFileSize(fname, size);
   return target()->GetFileSize(fname, size);
 }
 
 Status RadosEnv::DeleteFile(const char* fname) {
-  if (FileOnRados(fname)) return osd_env_->DeleteFile(fname);
+  if (FileOnRados(fname)) return ofs_->DeleteFile(fname);
   return target()->DeleteFile(fname);
 }
 
 Status RadosEnv::NewSequentialFile(const char* fname, SequentialFile** r) {
-  if (FileOnRados(fname)) return osd_env_->NewSequentialFile(fname, r);
+  if (FileOnRados(fname)) return ofs_->NewSequentialFile(fname, r);
   return target()->NewSequentialFile(fname, r);
 }
 
 Status RadosEnv::NewRandomAccessFile(const char* fname, RandomAccessFile** r) {
-  if (FileOnRados(fname)) return osd_env_->NewRandomAccessFile(fname, r);
+  if (FileOnRados(fname)) return ofs_->NewRandomAccessFile(fname, r);
   return target()->NewRandomAccessFile(fname, r);
 }
 
@@ -124,7 +122,7 @@ Status RadosEnv::CopyFile(const char* src, const char* dst) {
   const int src_on_rados = FileOnRados(src);
   const int dst_on_rados = FileOnRados(dst);
   if (src_on_rados ^ dst_on_rados) return Status::NotSupported(Slice());
-  if (src_on_rados) return osd_env_->CopyFile(src, dst);
+  if (src_on_rados) return ofs_->CopyFile(src, dst);
   return target()->CopyFile(src, dst);
 }
 
@@ -145,7 +143,7 @@ Status RadosEnv::GetChildren(const char* dirname, std::vector<std::string>* r) {
     // The previous status is over-written because it is all right for
     // local directory listing to fail since it is possible for a directory
     // to not have a local mirror.
-    s = osd_env_->GetChildren(dirname, &rr);
+    s = ofs_->GetChildren(dirname, &rr);
     if (s.ok()) {
       r->insert(r->end(), rr.begin(), rr.end());
     }
@@ -156,7 +154,7 @@ Status RadosEnv::GetChildren(const char* dirname, std::vector<std::string>* r) {
 Status RadosEnv::NewWritableFile(const char* fname, WritableFile** r) {
   const size_t buf_size = wal_buf_size_;
   if (FileOnRados(fname)) {
-    Status s = osd_env_->NewWritableFile(fname, r);
+    Status s = ofs_->NewWritableFile(fname, r);
     if (s.ok() && buf_size > 0 && TryResolveFileType(fname) == kLogFile) {
       *r = new MinMaxBufferedWritableFile(*r, buf_size, buf_size);
     }
@@ -170,7 +168,7 @@ Status RadosEnv::RenameLocalTmpToRados(const char* tmp, const char* dst) {
   std::string contents;
   Status s = ReadFileToString(target(), tmp, &contents);
   if (s.ok()) {
-    s = osd_env_->WriteStringToFile(dst, contents);  // Atomic
+    s = ofs_->WriteStringToFile(dst, contents);  // Atomic
     if (s.ok()) {
       target()->DeleteFile(tmp);
     }

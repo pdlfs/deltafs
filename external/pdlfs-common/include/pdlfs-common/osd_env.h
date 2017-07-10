@@ -83,16 +83,16 @@ extern Status WriteStringToFileSync(Osd* osd, const Slice& data,
 // The file is actually backed by an object.
 extern Status ReadFileToString(Osd* osd, const char* name, std::string* data);
 
-// We use the OSDEnv to bridge the OSD world to the traditional file system
-// world. This is achieved by mapping each "file" to an underlying object
-// and each "directory" to a special container object that holds references
-// to other objects. The traditional file system namespace is emulated
-// by dynamically mounting container objects at specific tree paths,
-// although we don't expect or allow nested containers.
-class OSDEnv {
+// We use Ofs to bridge the Osd world to the traditional file system world. This
+// is achieved by mapping each "file" to an underlying object and each
+// "directory" to a special container object that holds references to other
+// objects. The traditional file system namespace is emulated by dynamically
+// mounting container objects at specific tree paths, although we don't expect
+// or allow nested containers.
+class Ofs {
  public:
-  OSDEnv(Osd* osd);
-  ~OSDEnv();
+  Ofs(Osd* osd);
+  ~Ofs();
 
   // Return true iff the named file exists in a mounted file set.
   // Note: the real identify of the file is subject to
@@ -149,8 +149,8 @@ class OSDEnv {
 
  private:
   // No copying allowed
-  void operator=(const OSDEnv&);
-  OSDEnv(const OSDEnv&);
+  void operator=(const Ofs&);
+  Ofs(const Ofs&);
 
   struct ResolvedPath {
     Slice mntptr;
