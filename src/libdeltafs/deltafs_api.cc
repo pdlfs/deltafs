@@ -1064,35 +1064,34 @@ int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
 
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
                                    const char* __key) {
-  if (IsDirOpened(__dir)) {
-    if (__key != NULL && __key[0] != 0) {
-      pdlfs::Slice k(__key);
-      if (__dir->mode == O_WRONLY) {
-        if (k == "total_memory_usage") {
-          uint64_t mem = __dir->io.writer->TEST_total_memory_usage();
-          return MakeChar(mem);
-        } else if (k == "filter_size") {
-          uint64_t fsz = __dir->io.writer->TEST_filter_size();
-          return MakeChar(fsz);
-        } else if (k == "index_size") {
-          uint64_t isz = __dir->io.writer->TEST_index_size();
-          return MakeChar(isz);
-        } else if (k == "data_size") {
-          uint64_t dsz = __dir->io.writer->TEST_data_size();
-          return MakeChar(dsz);
-        } else if (k == "num_sstables") {
-          uint64_t tbs = __dir->io.writer->TEST_num_sstables();
-          return MakeChar(tbs);
-        }
-      } else if (__dir->mode == O_RDONLY) {
-        // TODO
-      } else {
-        // Skip
+  if (!IsDirOpened(__dir)) {
+    return NULL;
+  } else if (__key == NULL || __key[0] == 0) {
+    return NULL;
+  } else {
+    pdlfs::Slice k(__key);
+    if (__dir->mode == O_WRONLY) {
+      if (k == "total_memory_usage") {
+        uint64_t mem = __dir->io.writer->TEST_total_memory_usage();
+        return MakeChar(mem);
+      } else if (k == "filter_size") {
+        uint64_t fsz = __dir->io.writer->TEST_filter_size();
+        return MakeChar(fsz);
+      } else if (k == "index_size") {
+        uint64_t isz = __dir->io.writer->TEST_index_size();
+        return MakeChar(isz);
+      } else if (k == "data_size") {
+        uint64_t dsz = __dir->io.writer->TEST_data_size();
+        return MakeChar(dsz);
+      } else if (k == "num_sstables") {
+        uint64_t tbs = __dir->io.writer->TEST_num_sstables();
+        return MakeChar(tbs);
       }
+    } else if (__dir->mode == O_RDONLY) {
+      // TODO
     }
+    return NULL;
   }
-
-  return NULL;
 }
 
 long long deltafs_plfsdir_get_integer_property(deltafs_plfsdir_t* __dir,
