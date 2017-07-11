@@ -46,6 +46,11 @@ static void SetErrno(const pdlfs::Status& s);
 static pdlfs::Status bg_status;
 static pdlfs::port::OnceType once = PDLFS_ONCE_INIT;
 static pdlfs::Client* client = NULL;
+static char* MakeChar(uint64_t i) {
+  char tmp[20];
+  snprintf(tmp, sizeof(tmp), "%llu", static_cast<unsigned long long>(i));
+  return strdup(tmp);
+}
 static inline int NoClient() {
   if (!bg_status.ok()) {
     SetErrno(bg_status);
@@ -873,9 +878,9 @@ int deltafs_plfsdir_set_non_blocking(deltafs_plfsdir_t* __dir, int __flag) {
 int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir,
                                           int __flag) {
   if (__dir != NULL && !__dir->opened) {
-    const bool measure = static_cast<bool>(__flag);
-    __dir->options.measure_writes = measure;
-    __dir->options.measure_reads = measure;
+    const bool measure_io = static_cast<bool>(__flag);
+    __dir->options.measure_writes = measure_io;
+    __dir->options.measure_reads = measure_io;
     return 0;
   } else {
     SetErrno(BadArgs());
@@ -943,7 +948,8 @@ static bool IsDirOpened(deltafs_plfsdir_t* dir) {
     return false;
   }
 }
-}
+
+}  // namespace
 
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
   pdlfs::Status s;
@@ -1060,8 +1066,24 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
                                    const char* __key) {
   if (IsDirOpened(__dir)) {
     if (__key != NULL && __key[0] != 0) {
+      pdlfs::Slice k(__key);
       if (__dir->mode == O_WRONLY) {
-        // TODO
+        if (k == "total_memory_usage") {
+          uint64_t mem = __dir->io.writer->TEST_total_memory_usage();
+          return MakeChar(mem);
+        } else if (k == "filter_size") {
+          uint64_t fsz = __dir->io.writer->TEST_filter_size();
+          return MakeChar(fsz);
+        } else if (k == "index_size") {
+          uint64_t isz = __dir->io.writer->TEST_index_size();
+          return MakeChar(isz);
+        } else if (k == "data_size") {
+          uint64_t dsz = __dir->io.writer->TEST_data_size();
+          return MakeChar(dsz);
+        } else if (k == "num_sstables") {
+          uint64_t tbs = __dir->io.writer->TEST_num_sstables();
+          return MakeChar(tbs);
+        }
       } else if (__dir->mode == O_RDONLY) {
         // TODO
       } else {
