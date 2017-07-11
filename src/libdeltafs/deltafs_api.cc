@@ -870,6 +870,16 @@ int deltafs_plfsdir_set_non_blocking(deltafs_plfsdir_t* __dir, int __flag) {
   }
 }
 
+int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
+  if (__dir != NULL) {
+    int lg_parts = __dir->options.lg_parts;
+    return 1 << lg_parts;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
 namespace {
 
 static pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {

@@ -33,7 +33,6 @@ extern "C" {
  * Main file system api
  * ---------------------
  */
-
 void deltafs_print_sysinfo();
 int deltafs_nonop(); /* Simply trigger client initialization */
 mode_t deltafs_umask(mode_t __mode);
@@ -69,10 +68,9 @@ int deltafs_close(int __fd);
 
 /*
  * ------------------------
- * Light-weight plfsdir api
+ * File system env
  * ------------------------
  */
-
 struct deltafs_env; /* Opaque handle for an opened deltafs env */
 typedef struct deltafs_env deltafs_env_t;
 /* Returns NULL on errors. A heap-allocated env instance otherwise.
@@ -81,6 +79,11 @@ deltafs_env_t* deltafs_env_init(int __argc, void** __argv);
 int deltafs_env_is_system(deltafs_env_t* __env);
 int deltafs_env_close(deltafs_env_t* __env);
 
+/*
+ * ------------------------
+ * Background thread pool
+ * ------------------------
+ */
 struct deltafs_tp; /* Opaque handle for a deltafs thread pool */
 typedef struct deltafs_tp deltafs_tp_t;
 /* Returns NULL on errors. A heap-allocated thread pool instance otherwise.
@@ -92,6 +95,11 @@ int deltafs_tp_pause(deltafs_tp_t* __tp);
 int deltafs_tp_rerun(deltafs_tp_t* __tp);
 int deltafs_tp_close(deltafs_tp_t* __tp);
 
+/*
+ * ------------------------
+ * Light-weight plfsdir api
+ * ------------------------
+ */
 struct deltafs_plfsdir; /* Opaque handle for an opened deltafs plfsdir */
 typedef struct deltafs_plfsdir deltafs_plfsdir_t;
 /* Returns NULL on errors. A heap-allocated plfsdir handle otherwise.
@@ -100,7 +108,9 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf,
                                                  int __mode);
 int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size);
 int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size);
+/* Set file system env. */
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env);
+/* Set background thread pool. */
 int deltafs_plfsdir_set_thread_pool(deltafs_plfsdir_t* __dir,
                                     deltafs_tp_t* __tp);
 int deltafs_plfsdir_set_non_blocking(deltafs_plfsdir_t* __dir, int __flag);
@@ -109,6 +119,8 @@ typedef void (*deltafs_printer_t)(const char* __err, void* __arg);
 int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
                                     deltafs_printer_t __printer,
                                     void* __printer_arg);
+/* Return the total number of configured memtable partitions. */
+int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name);
 int deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
                         size_t __keylen, int __epoch, const char* __value,
