@@ -843,30 +843,59 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   const int my_rank = options.rank;
   Env* const env = options.env;
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.name -> %s (mode=write)", name.c_str());
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.memtable_budget -> %s",
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.name -> %s (mode=write)", name.c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_budget -> %s",
           PrettySize(options.total_memtable_budget).c_str());
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.key_size -> %s",
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_util -> %.2f%%",
+          100 * options.memtable_util);
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.skip_sort -> %s",
+          int(options.skip_sort) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.key_size -> %s",
           PrettySize(options.key_size).c_str());
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.value_size -> %s",
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.value_size -> %s",
           PrettySize(options.value_size).c_str());
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.bf_bits_per_key -> %d",
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.bf_bits_per_key -> %d",
           int(options.bf_bits_per_key));
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.block_size -> %s",
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.block_size -> %s",
           PrettySize(options.block_size).c_str());
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.block_util -> %.2f%%",
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.block_util -> %.2f%%",
           100 * options.block_util);
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.data_buffer -> %s",
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.block_padding -> %s",
+          int(options.block_padding) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.block_batch_size -> %s",
+          PrettySize(options.block_batch_size).c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.data_buffer -> %s",
           PrettySize(options.data_buffer).c_str());
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.index_buffer -> %s",
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.min_data_buffer -> %s",
+          PrettySize(options.min_data_buffer).c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.index_buffer -> %s",
           PrettySize(options.index_buffer).c_str());
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.tail_padding -> %d",
-          int(options.tail_padding));
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.unique_keys -> %d",
-          int(options.unique_keys));
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.num_parts_per_rank -> %u",
-          static_cast<unsigned>(num_parts));
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.my_rank -> %d", my_rank);
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.min_index_buffer -> %s",
+          PrettySize(options.min_index_buffer).c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.tail_padding -> %s",
+          int(options.tail_padding) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.compaction_pool -> %s",
+          options.compaction_pool != NULL
+              ? options.compaction_pool->ToDebugString().c_str()
+              : "None");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.non_blocking -> %s",
+          int(options.non_blocking) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.unique_keys -> %s",
+          int(options.unique_keys) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.compression -> %s",
+          options.compression == kSnappyCompression ? "Snappy" : "None");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.force_compression -> %s",
+          int(options.force_compression) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.skip_checksums -> %s",
+          int(options.skip_checksums) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.measure_writes -> %s",
+          int(options.measure_writes) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.allow_env_threads -> %s",
+          int(options.allow_env_threads) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.is_env_pfs -> %s",
+          int(options.is_env_pfs) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d", int(num_parts));
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", my_rank);
 #endif
   Status status;
   if (options.is_env_pfs) {
@@ -1143,18 +1172,33 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   LogSource* data = NULL;
   Status status;
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.name -> %s (mode=read)", name.c_str());
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.read_size -> %s",
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.name -> %s (mode=read)", name.c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.reader_pool -> %s",
+          options.reader_pool != NULL
+              ? options.reader_pool->ToDebugString().c_str()
+              : "None");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.read_size -> %s",
           PrettySize(options.read_size).c_str());
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.paranoid_checks -> %d",
-          int(options.paranoid_checks));
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.verify_checksums -> %d",
-          int(options.verify_checksums));
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.measure_reads -> %d",
-          int(options.measure_reads));
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.ignore_filters -> %d",
-          int(options.ignore_filters));
-  Verbose(__LOG_ARGS__, 2, "FS: plfsdir.my_rank -> %d", my_rank);
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.parallel_reads -> %s",
+          int(options.parallel_reads) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.paranoid_checks -> %s",
+          int(options.paranoid_checks) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.unique_keys -> %s",
+          int(options.unique_keys) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.ignore_filters -> %s",
+          int(options.ignore_filters) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.verify_checksums -> %s",
+          int(options.verify_checksums) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.skip_checksums -> %s",
+          int(options.skip_checksums) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.measure_reads -> %s",
+          int(options.measure_reads) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.allow_env_threads -> %s",
+          int(options.allow_env_threads) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.is_env_pfs -> %s",
+          int(options.is_env_pfs) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d", int(num_parts));
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", my_rank);
 #endif
   DirReaderImpl* impl = new DirReaderImpl(options, name);
   if (options.measure_reads) {
@@ -1182,9 +1226,26 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   if (options.paranoid_checks) {
     if (status.ok()) {
       impl->options_.lg_parts = static_cast<int>(footer.lg_parts());
+#if VERBOSE >= 2
+      if (impl->options_.lg_parts != options.lg_parts)
+        Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d -> %d",
+                int(num_parts), 1 << impl->options_.lg_parts);
+#endif
       impl->options_.skip_checksums =
           static_cast<bool>(footer.skip_checksums());
+#if VERBOSE >= 2
+      if (impl->options_.skip_checksums != options.skip_checksums)
+        Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.skip_checksums -> %s -> %s",
+                int(options.skip_checksums) ? "Yes" : "No",
+                int(impl->options_.skip_checksums) ? "Yes" : "No");
+#endif
       impl->options_.unique_keys = static_cast<bool>(footer.unique_keys());
+#if VERBOSE >= 2
+      if (impl->options_.unique_keys != options.unique_keys)
+        Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.unique_keys -> %s -> %s",
+                int(options.unique_keys) ? "Yes" : "No",
+                int(impl->options_.unique_keys) ? "Yes" : "No");
+#endif
     }
   }
 
