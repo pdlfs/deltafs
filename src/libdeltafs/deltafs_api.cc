@@ -870,6 +870,19 @@ int deltafs_plfsdir_set_non_blocking(deltafs_plfsdir_t* __dir, int __flag) {
   }
 }
 
+int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir,
+                                          int __flag) {
+  if (__dir != NULL && !__dir->opened) {
+    const bool measure = static_cast<bool>(__flag);
+    __dir->options.measure_writes = measure;
+    __dir->options.measure_reads = measure;
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
 int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
   if (__dir != NULL) {
     int lg_parts = __dir->options.lg_parts;
