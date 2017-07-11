@@ -27,14 +27,14 @@ namespace plfsio {
 IoStats::IoStats() : index_bytes(0), index_ops(0), data_bytes(0), data_ops(0) {}
 
 DirOptions::DirOptions()
-    : total_memtable_budget(32 << 20),
+    : total_memtable_budget(4 << 20),
       memtable_util(1.0),
       skip_sort(false),
       key_size(8),
       value_size(32),
       bf_bits_per_key(8),
-      block_size(128 << 10),
-      block_util(0.999),
+      block_size(32 << 10),
+      block_util(0.996),
       block_padding(true),
       block_batch_size(2 << 20),
       data_buffer(4 << 20),
@@ -91,17 +91,33 @@ DirOptions ParseDirOptions(const char* input) {
       if (ParsePrettyNumber(conf_value, &num)) {
         options.total_memtable_budget = num;
       }
-    } else if (conf_key == "memtable_buffer") {
+    } else if (conf_key == "total_memtable_budget") {
       if (ParsePrettyNumber(conf_value, &num)) {
         options.total_memtable_budget = num;
+      }
+    } else if (conf_key == "compaction_buffer") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.block_batch_size = num;
       }
     } else if (conf_key == "data_buffer") {
       if (ParsePrettyNumber(conf_value, &num)) {
         options.data_buffer = num;
       }
+    } else if (conf_key == "min_data_buffer") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.min_data_buffer = num;
+      }
     } else if (conf_key == "index_buffer") {
       if (ParsePrettyNumber(conf_value, &num)) {
         options.index_buffer = num;
+      }
+    } else if (conf_key == "min_index_buffer") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.min_index_buffer = num;
+      }
+    } else if (conf_key == "block_padding") {
+      if (ParsePrettyBool(conf_value, &flag)) {
+        options.block_padding = flag;
       }
     } else if (conf_key == "tail_padding") {
       if (ParsePrettyBool(conf_value, &flag)) {
@@ -111,9 +127,25 @@ DirOptions ParseDirOptions(const char* input) {
       if (ParsePrettyBool(conf_value, &flag)) {
         options.verify_checksums = flag;
       }
+    } else if (conf_key == "skip_checksums") {
+      if (ParsePrettyBool(conf_value, &flag)) {
+        options.skip_checksums = flag;
+      }
+    } else if (conf_key == "parallel_reads") {
+      if (ParsePrettyBool(conf_value, &flag)) {
+        options.parallel_reads = flag;
+      }
+    } else if (conf_key == "paranoid_checks") {
+      if (ParsePrettyBool(conf_value, &flag)) {
+        options.paranoid_checks = flag;
+      }
     } else if (conf_key == "unique_keys") {
       if (ParsePrettyBool(conf_value, &flag)) {
         options.unique_keys = flag;
+      }
+    } else if (conf_key == "ignore_filters") {
+      if (ParsePrettyBool(conf_value, &flag)) {
+        options.ignore_filters = flag;
       }
     } else if (conf_key == "filter_bits_per_key") {
       if (ParsePrettyNumber(conf_value, &num)) {

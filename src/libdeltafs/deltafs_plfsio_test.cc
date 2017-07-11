@@ -116,6 +116,7 @@ class PlfsIoTest {
     options_.total_memtable_budget = 1 << 20;
     options_.block_batch_size = 256 << 10;
     options_.block_size = 64 << 10;
+    options_.block_util = 0.998;
     options_.verify_checksums = true;
     options_.paranoid_checks = true;
     options_.env = TestEnv();

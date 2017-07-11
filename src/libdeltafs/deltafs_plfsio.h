@@ -43,7 +43,7 @@ struct DirOptions {
   // the memory space for constructing the data blocks and filter blocks of each
   // table. This, however, does *not* include the buffer space for accumulating
   // block writes to ensure an optimized write size.
-  // Default: 32MB
+  // Default: 4MB
   size_t total_memtable_budget;
 
   // Flush memtable as soon as it reaches the specified utilization target.
@@ -73,12 +73,12 @@ struct DirOptions {
   // unit for reading and writing the underlying data log objects.
   // The size of all index and filter blocks are *not* affected
   // by this option.
-  // Default: 128K
+  // Default: 32K
   size_t block_size;
 
   // Start zero padding if current estimated block size reaches the
   // specified utilization target. Only applies to data blocks.
-  // Default: 0.999 (99.9%)
+  // Default: 0.996 (99.6%)
   double block_util;
 
   // Set to false to disable the zero padding of data blocks.
