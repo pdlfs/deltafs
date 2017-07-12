@@ -1043,6 +1043,25 @@ int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch) {
   }
 }
 
+int deltafs_plfsdir_flush(deltafs_plfsdir_t* __dir, int __epoch) {
+  pdlfs::Status s;
+
+  if (!IsDirOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else {
+    DirWriter* writer = __dir->io.writer;
+    s = writer->Flush(__epoch);
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
 int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
   pdlfs::Status s;
 

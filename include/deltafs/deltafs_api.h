@@ -149,6 +149,7 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);
 long long deltafs_plfsdir_get_integer_property(deltafs_plfsdir_t* __dir,
                                                const char* __key);
 int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch);
+int deltafs_plfsdir_flush(deltafs_plfsdir_t* __dir, int __epoch);
 int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir);
 
