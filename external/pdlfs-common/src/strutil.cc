@@ -8,13 +8,13 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/strutil.h"
+#include "pdlfs-common/slice.h"
+
 #include <ctype.h>
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
-
-#include "pdlfs-common/slice.h"
-#include "pdlfs-common/strutil.h"
 
 namespace pdlfs {
 
@@ -63,7 +63,7 @@ bool ConsumeDecimalNumber(Slice* in, uint64_t* val) {
     char c = (*in)[0];
     if (c >= '0' && c <= '9') {
       ++digits;
-      const uint64_t delta = (c - '0');
+      const uint64_t delta = static_cast<unsigned>(c - '0');
       static const uint64_t kMaxUint64 = ~static_cast<uint64_t>(0);
       if (v > kMaxUint64 / 10 ||
           (v == kMaxUint64 / 10 && delta > kMaxUint64 % 10)) {
@@ -80,13 +80,36 @@ bool ConsumeDecimalNumber(Slice* in, uint64_t* val) {
   return (digits > 0);
 }
 
+static bool IsLiteralFalse(const Slice& input) {
+  const char* li[] = {"0",        "OFF",  "NO",   "FALSE", "IGNORED",
+                      "DISABLED", "SKIP", "NONE", "N"};
+  for (size_t i = 0; i < sizeof(li) / sizeof(void*); i++) {
+    if (input == li[i]) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool IsLiteralTrue(const Slice& input) {
+  const char* li[] = {"1", "ON", "YES", "TRUE", "ENABLED", "Y"};
+  for (size_t i = 0; i < sizeof(li) / sizeof(void*); i++) {
+    if (input == li[i]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool ParsePrettyBool(const Slice& value, bool* val) {
-  if (value == "y" || value.starts_with("yes") || value.starts_with("true") ||
-      value.starts_with("enable")) {
+  std::string input = value.ToString();
+  for (size_t i = 0; i < input.size(); i++) {
+    input[i] = static_cast<char>(toupper(input[i]));
+  }
+  if (IsLiteralTrue(input)) {
     *val = true;
     return true;
-  } else if (value == "n" || value.starts_with("no") ||
-             value.starts_with("false") || value.starts_with("disable")) {
+  } else if (IsLiteralFalse(input)) {
     *val = false;
     return true;
   } else {
@@ -94,23 +117,23 @@ bool ParsePrettyBool(const Slice& value, bool* val) {
   }
 }
 
-bool ParsePrettyNumber(const Slice& value, uint64_t* val) {
+bool ParsePrettyNumber(const Slice& value, uint64_t* result) {
   Slice input = value;
   uint64_t base;
   if (!ConsumeDecimalNumber(&input, &base)) {
     return false;
   } else {
     if (input.empty()) {
-      *val = base;
+      *result = base;
       return true;
-    } else if (input.starts_with("k")) {
-      *val = base * 1024;
+    } else if (input[0] == 'K' || input[0] == 'k') {
+      *result = base << 10;
       return true;
-    } else if (input.starts_with("m")) {
-      *val = base * 1024 * 1024;
+    } else if (input[0] == 'M' || input[0] == 'm') {
+      *result = base << 20;
       return true;
-    } else if (input.starts_with("g")) {
-      *val = base * 1024 * 1024 * 1024;
+    } else if (input[0] == 'G' || input[0] == 'g') {
+      *result = base << 30;
       return true;
     } else {
       return false;
@@ -132,11 +155,11 @@ static Slice Trim(const Slice& v) {
   return input;
 }
 
-size_t SplitString(std::vector<std::string>* v, const char* value, char delim,
+size_t SplitString(std::vector<std::string>* v, const char* str, char delim,
                    int max_splits) {
   size_t count = 0;  // Number of resulting substrings
   int splits = 0;    // Number of split operations
-  Slice input = value;
+  Slice input = str;
   while (!input.empty() && (max_splits < 0 || splits < max_splits)) {
     const char* start = input.data();
     const char* limit = strchr(start, delim);
@@ -167,13 +190,13 @@ std::string PrettySize(uint64_t input) {
   const unsigned long long n = static_cast<unsigned long long>(input);
   if (n >= 1024LLU * 1024LLU * 1024LLU) {
     double m = double(n) / 1024 / 1024 / 1024;
-    snprintf(tmp, sizeof(tmp), "%.1fGB (%llu Bytes)", m, n);
+    snprintf(tmp, sizeof(tmp), "%.1f GiB (%llu Bytes)", m, n);
   } else if (n >= 1024LLU * 1024LLU) {
     double m = double(n) / 1024 / 1024;
-    snprintf(tmp, sizeof(tmp), "%.1fMB (%llu Bytes)", m, n);
+    snprintf(tmp, sizeof(tmp), "%.1f MiB (%llu Bytes)", m, n);
   } else if (n >= 1024LLU) {
     double m = double(n) / 1024;
-    snprintf(tmp, sizeof(tmp), "%.1fKB (%llu Bytes)", m, n);
+    snprintf(tmp, sizeof(tmp), "%.1f KiB (%llu Bytes)", m, n);
   } else {
     snprintf(tmp, sizeof(tmp), "%llu Bytes", n);
   }

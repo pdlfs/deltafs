@@ -38,17 +38,18 @@ class StrUtilTest {
 
 TEST(StrUtilTest, ParseBool) {
   ASSERT_EQ(ToBool("y"), "True");
-  ASSERT_EQ(ToBool("yes"), "True");
-  ASSERT_EQ(ToBool("enabled"), "True");
-  ASSERT_EQ(ToBool("true"), "True");
+  ASSERT_EQ(ToBool("Yes"), "True");
+  ASSERT_EQ(ToBool("On"), "True");
+  ASSERT_EQ(ToBool("tRue"), "True");
+  ASSERT_EQ(ToBool("1"), "True");
   ASSERT_EQ(ToBool("n"), "False");
-  ASSERT_EQ(ToBool("no"), "False");
-  ASSERT_EQ(ToBool("disabled"), "False");
-  ASSERT_EQ(ToBool("false"), "False");
-  ASSERT_EQ(ToBool(""), "Unknown");
+  ASSERT_EQ(ToBool("nO"), "False");
+  ASSERT_EQ(ToBool("Off"), "False");
+  ASSERT_EQ(ToBool("faLse"), "False");
+  ASSERT_EQ(ToBool("0"), "False");
   ASSERT_EQ(ToBool("ok"), "Unknown");
+  ASSERT_EQ(ToBool(""), "Unknown");
   ASSERT_EQ(ToBool("default"), "Unknown");
-  ASSERT_EQ(ToBool("1"), "Unknown");
 }
 
 TEST(StrUtilTest, ParseNumber) {
