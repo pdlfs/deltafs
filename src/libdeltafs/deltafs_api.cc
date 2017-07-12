@@ -1008,8 +1008,8 @@ int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
   } else if (__fname[0] == 0) {
     s = BadArgs();
   } else {
-    DirWriter* writer = __dir->io.writer;
     char tmp[16];
+    DirWriter* writer = __dir->io.writer;
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
     pdlfs::Slice k(tmp, __dir->options.key_size);
     const char* data = static_cast<const char*>(__buf);
@@ -1128,7 +1128,8 @@ long long deltafs_plfsdir_get_integer_property(deltafs_plfsdir_t* __dir,
 char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
                           size_t __keylen, size_t* __sz) {
   pdlfs::Status s;
-  char* buf;
+  char* buf = NULL;
+  std::string dst;
 
   if (!IsDirOpened(__dir)) {
     s = BadArgs();
@@ -1140,7 +1141,6 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
     s = BadArgs();
   } else {
     DirReader* reader = __dir->io.reader;
-    std::string dst;
     s = reader->ReadAll(pdlfs::Slice(__key, __keylen), &dst);
     if (s.ok()) {
       buf = static_cast<char*>(malloc(dst.size()));
@@ -1162,7 +1162,8 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
 void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
                               size_t* __sz) {
   pdlfs::Status s;
-  void* buf;
+  char* buf = NULL;
+  std::string dst;
 
   if (!IsDirOpened(__dir)) {
     s = BadArgs();
@@ -1173,9 +1174,8 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
   } else if (__fname[0] == 0) {
     s = BadArgs();
   } else {
-    DirReader* reader = __dir->io.reader;
-    std::string dst;
     char tmp[16];
+    DirReader* reader = __dir->io.reader;
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
     pdlfs::Slice k(tmp, __dir->options.key_size);
     s = reader->ReadAll(k, &dst);
