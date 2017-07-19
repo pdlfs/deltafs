@@ -16,6 +16,9 @@
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/port.h"
 
+#ifndef NDEBUG
+#include <set>
+#endif
 #include <string>
 #include <vector>
 
@@ -110,6 +113,10 @@ class TableLogger {
  private:
   const DirOptions& options_;
   OutputStats output_stats_;
+#ifndef NDEBUG
+  // Used to verify the uniqueness of all input keys
+  std::set<std::string> keys_;
+#endif
   friend class DirLogger;
 
   // No copying allowed

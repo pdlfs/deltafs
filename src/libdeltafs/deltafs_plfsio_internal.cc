@@ -382,6 +382,11 @@ void TableLogger::MakeEpoch() {
   }
 
   if (ok()) {
+#ifndef NDEBUG
+    // Keys are only required to be unique within an epoch
+    keys_.clear();
+#endif
+
     num_tables_ = 0;
     num_epochs_++;
   }
@@ -566,12 +571,10 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   if (!ok()) return;        // Abort
 
   if (!last_key_.empty()) {
+    // Duplicated keys are not allowed
+    if (options_.unique_keys) assert(key != last_key_);
     // Keys within a single table are expected to be added in a sorted order.
     assert(key >= last_key_);
-    if (options_.unique_keys) {
-      // Duplicated keys are not allowed
-      assert(key != last_key_);
-    }
   }
   if (smallest_key_.empty()) {
     smallest_key_ = key.ToString();
@@ -606,6 +609,13 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   last_key_ = key.ToString();
   output_stats_.value_size += value.size();
   output_stats_.key_size += key.size();
+
+#ifndef NDEBUG
+  if (options_.unique_keys) {
+    assert(keys_.count(last_key_) == 0);
+    keys_.insert(last_key_);
+  }
+#endif
 
   data_block_.Add(key, value);
   if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize +
