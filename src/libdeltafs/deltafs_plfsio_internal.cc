@@ -67,26 +67,34 @@ static bool BloomKeyMayMatch(const Slice& key, const Slice& input) {
 class BloomBlock {
  public:
   BloomBlock(size_t bits_per_key, size_t bytes)
-      : bits_per_key_(bits_per_key), bytes_(bytes) {
-    // Reserve memory space
-    const size_t trailer_size = kBlockTrailerSize;
-    space_.reserve(bytes_ + 1 + trailer_size);
-    Reset();
-  }
-
-  ~BloomBlock() {}
-
-  void Reset() {
-    finished_ = false;
-    space_.clear();
-    space_.resize(bytes_, 0);
+      : bits_per_key_(bits_per_key), max_bytes_(bytes) {
     // Round down to reduce probing cost a little bit
     k_ = static_cast<uint32_t>(bits_per_key_ * 0.69);  // 0.69 =~ ln(2)
     if (k_ < 1) k_ = 1;
     if (k_ > 30) k_ = 30;
+    space_.reserve(max_bytes_ + 1);  // Reserve an extra byte for storing the k
+    finished_ = true;                // Pending further initialization
+    bits_ = 0;
+  }
+
+  ~BloomBlock() {}
+
+  void Reset(uint32_t num_keys) {
+    bits_ = static_cast<uint32_t>(num_keys * bits_per_key_);
+    // For small n, we can see a very high false positive rate.
+    // Fix it by enforcing a minimum bloom filter length.
+    if (bits_ < 64) {
+      bits_ = 64;
+    }
+    uint32_t bytes = (bits_ + 7) / 8;
+    finished_ = false;
+    space_.clear();
+    assert(bytes <= max_bytes_);
+    space_.resize(bytes, 0);
     // Remember # of probes in filter
     space_.push_back(static_cast<char>(k_));
-    bits_ = static_cast<uint32_t>(8 * bytes_);
+    // Finalize # bits
+    bits_ = bytes * 8;
   }
 
   void AddKey(const Slice& key) {
@@ -114,7 +122,7 @@ class BloomBlock {
   void operator=(const BloomBlock&);
   BloomBlock(const BloomBlock&);
   const size_t bits_per_key_;  // Number of bits for each key
-  const size_t bytes_;         // Total filter size
+  const size_t max_bytes_;     // Max filter size in bytes
 
   bool finished_;
   std::string space_;
@@ -967,10 +975,12 @@ void DirLogger::CompactMemtable() {
 #ifndef NDEBUG
   uint32_t num_keys = 0;
 #endif
-  if (bf != NULL) bf->Reset();
   buffer->Finish(options_.skip_sort);
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
+  if (bf != NULL) {
+    bf->Reset(buffer->NumEntries());
+  }
   for (; iter->Valid(); iter->Next()) {
 #ifndef NDEBUG
     num_keys++;
