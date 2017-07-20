@@ -9,7 +9,7 @@
 
 #pragma once
 
-// XXX: Reuse formats defined by leveldb
+#include "deltafs_plfsio.h"
 
 #include "../../external/pdlfs-common/src/leveldb/block.h"
 #include "../../external/pdlfs-common/src/leveldb/block_builder.h"
@@ -127,8 +127,8 @@ class Footer {
   unsigned char skip_checksums() const { return skip_checksums_; }
   void set_skip_checksums(unsigned char skip) { skip_checksums_ = skip; }
 
-  unsigned char unique_keys() const { return unique_keys_; }
-  void set_unique_keys(unsigned char uni) { unique_keys_ = uni; }
+  unsigned char mode() const { return mode_; }
+  void set_mode(unsigned char mode) { mode_ = mode; }
 
   // The block handle for the root index.
   const BlockHandle& epoch_index_handle() const { return epoch_index_handle_; }
@@ -150,8 +150,10 @@ class Footer {
   uint32_t num_epoches_;
   uint32_t lg_parts_;
   unsigned char skip_checksums_;
-  unsigned char unique_keys_;
+  unsigned char mode_;
 };
+
+extern std::string ToDebugString(DirMode mode);
 
 inline TableHandle::TableHandle()
     : filter_offset_(~static_cast<uint64_t>(0) /* Invalid offset */),
@@ -170,7 +172,7 @@ inline Footer::Footer()
     : num_epoches_(~static_cast<uint32_t>(0) /* Invalid */),
       lg_parts_(~static_cast<uint32_t>(0) /* Invalid */),
       skip_checksums_(~static_cast<unsigned char>(0) /* Invalid */),
-      unique_keys_(~static_cast<unsigned char>(0) /* Invalid */) {
+      mode_(~static_cast<unsigned char>(0) /* Invalid */) {
   // Empty
 }
 

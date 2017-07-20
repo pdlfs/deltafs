@@ -285,7 +285,7 @@ TEST(PlfsIoTest, NoFilter) {
 }
 
 TEST(PlfsIoTest, NoUniKeys) {
-  options_.unique_keys = false;
+  options_.mode = kMultiMap;
   Write("k1", "v1");
   Write("k1", "v2");
   MakeEpoch();

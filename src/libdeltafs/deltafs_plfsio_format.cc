@@ -15,6 +15,21 @@
 namespace pdlfs {
 namespace plfsio {
 
+std::string ToDebugString(DirMode mode) {
+  switch (mode) {
+    case kMultiMap:
+      return "M/M";
+    case kUniqueOverride:
+      return "U/O";
+    case kUniqueDrop:
+      return "U/D";
+    case kUnique:
+      return "Uni";
+    default:
+      return "Unknown";
+  }
+}
+
 Status ParseEpochKey(const Slice& input, uint32_t* epoch, uint32_t* table) {
   int parsed_epoch;
   int parsed_table;
@@ -99,7 +114,7 @@ void Footer::EncodeTo(std::string* dst) const {
   assert(num_epoches_ != ~static_cast<uint32_t>(0));
   assert(lg_parts_ != ~static_cast<uint32_t>(0));
   assert(skip_checksums_ != ~static_cast<unsigned char>(0));
-  assert(unique_keys_ != ~static_cast<unsigned char>(0));
+  assert(mode_ != ~static_cast<unsigned char>(0));
 
   epoch_index_handle_.EncodeTo(dst);
   dst->resize(BlockHandle::kMaxEncodedLength, 0);  // Padding
@@ -108,7 +123,7 @@ void Footer::EncodeTo(std::string* dst) const {
   PutFixed32(dst, num_epoches_);
   PutFixed32(dst, lg_parts_);
   dst->push_back(static_cast<char>(skip_checksums_));
-  dst->push_back(static_cast<char>(unique_keys_));
+  dst->push_back(static_cast<char>(mode_));
 }
 
 Status Footer::DecodeFrom(Slice* input) {
@@ -132,7 +147,7 @@ Status Footer::DecodeFrom(Slice* input) {
     num_epoches_ = DecodeFixed32(start + kEncodedLength - 10);
     lg_parts_ = DecodeFixed32(start + kEncodedLength - 6);
     skip_checksums_ = static_cast<unsigned char>(start[kEncodedLength - 2]);
-    unique_keys_ = static_cast<unsigned char>(start[kEncodedLength - 1]);
+    mode_ = static_cast<unsigned char>(start[kEncodedLength - 1]);
   }
 
   Status result = epoch_index_handle_.DecodeFrom(input);

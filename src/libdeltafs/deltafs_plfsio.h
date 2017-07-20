@@ -35,6 +35,20 @@ struct IoStats {
   uint64_t data_ops;
 };
 
+// Directory semantics
+enum DirMode {
+  // Each duplicated key insertion within an epoch are considered separate
+  // records
+  kMultiMap = 0x00,
+  // Each duplicated key insertion within an epoch overrides the previous
+  // insertion in the same epoch
+  kUniqueOverride = 0x01,
+  // Duplicated key insertions are silently discarded
+  kUniqueDrop = 0x02,
+  // No duplicated keys
+  kUnique = 0x03
+};
+
 struct DirOptions {
   DirOptions();
 
@@ -160,12 +174,6 @@ struct DirOptions {
   // Default: false
   bool paranoid_checks;
 
-  // True if keys are unique within each epoch.
-  // Keys are unique if each key appears no more than once within
-  // each epoch.
-  // Default: true
-  bool unique_keys;
-
   // Ignore all filters during reads.
   // Default: false
   bool ignore_filters;
@@ -205,6 +213,10 @@ struct DirOptions {
   // User callback for handling background events.
   // Default: NULL
   EventListener* listener;
+
+  // Dir mode
+  // Default: kUnique
+  DirMode mode;
 
   // Env instance used to access objects or files stored in the underlying
   // storage system. If NULL, Env::Default() will be used.

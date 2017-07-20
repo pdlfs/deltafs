@@ -49,7 +49,6 @@ DirOptions::DirOptions()
       non_blocking(false),
       slowdown_micros(0),
       paranoid_checks(false),
-      unique_keys(true),
       ignore_filters(false),
       compression(kNoCompression),
       force_compression(false),
@@ -59,6 +58,7 @@ DirOptions::DirOptions()
       measure_writes(true),
       lg_parts(0),
       listener(NULL),
+      mode(kUnique),
       env(NULL),
       allow_env_threads(false),
       is_env_pfs(true),
@@ -138,10 +138,6 @@ DirOptions ParseDirOptions(const char* input) {
     } else if (conf_key == "paranoid_checks") {
       if (ParsePrettyBool(conf_value, &flag)) {
         options.paranoid_checks = flag;
-      }
-    } else if (conf_key == "unique_keys") {
-      if (ParsePrettyBool(conf_value, &flag)) {
-        options.unique_keys = flag;
       }
     } else if (conf_key == "ignore_filters") {
       if (ParsePrettyBool(conf_value, &flag)) {
@@ -346,8 +342,8 @@ Status DirWriterImpl::Finalize() {
   footer.set_epoch_index_handle(dummy_handle);
 
   footer.set_num_epoches(0);
+  footer.set_mode(static_cast<unsigned char>(options_.mode));
   footer.set_lg_parts(static_cast<uint32_t>(options_.lg_parts));
-  footer.set_unique_keys(static_cast<unsigned char>(options_.unique_keys));
   footer.set_skip_checksums(
       static_cast<unsigned char>(options_.skip_checksums));
 
@@ -912,8 +908,6 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
               : "None");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.non_blocking -> %s",
           int(options.non_blocking) ? "Yes" : "No");
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.unique_keys -> %s",
-          int(options.unique_keys) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.compression -> %s",
           options.compression == kSnappyCompression ? "Snappy" : "None");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.force_compression -> %s",
@@ -926,6 +920,8 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
           int(options.allow_env_threads) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.is_env_pfs -> %s",
           int(options.is_env_pfs) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s",
+          ToDebugString(options.mode).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d", int(num_parts));
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", my_rank);
 #endif
@@ -1215,8 +1211,6 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
           int(options.parallel_reads) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.paranoid_checks -> %s",
           int(options.paranoid_checks) ? "Yes" : "No");
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.unique_keys -> %s",
-          int(options.unique_keys) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.ignore_filters -> %s",
           int(options.ignore_filters) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.verify_checksums -> %s",
@@ -1229,6 +1223,8 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
           int(options.allow_env_threads) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.is_env_pfs -> %s",
           int(options.is_env_pfs) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s",
+          ToDebugString(options.mode).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d", int(num_parts));
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", my_rank);
 #endif
@@ -1271,12 +1267,12 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
                 int(options.skip_checksums) ? "Yes" : "No",
                 int(impl->options_.skip_checksums) ? "Yes" : "No");
 #endif
-      impl->options_.unique_keys = static_cast<bool>(footer.unique_keys());
+      impl->options_.mode = static_cast<DirMode>(footer.mode());
 #if VERBOSE >= 2
-      if (impl->options_.unique_keys != options.unique_keys)
-        Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.unique_keys -> %s -> %s",
-                int(options.unique_keys) ? "Yes" : "No",
-                int(impl->options_.unique_keys) ? "Yes" : "No");
+      if (impl->options_.mode != options.mode)
+        Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s -> %s",
+                ToDebugString(options.mode).c_str(),
+                ToDebugString(impl->options_.mode).c_str());
 #endif
     }
   }

@@ -302,8 +302,8 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   data_sink_->Ref();
 
   // Initialize footer template
+  footer_.set_mode(static_cast<unsigned char>(options_.mode));
   footer_.set_lg_parts(static_cast<uint32_t>(options_.lg_parts));
-  footer_.set_unique_keys(static_cast<unsigned char>(options_.unique_keys));
   footer_.set_skip_checksums(
       static_cast<unsigned char>(options_.skip_checksums));
 
@@ -579,10 +579,15 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   if (!ok()) return;        // Abort
 
   if (!last_key_.empty()) {
-    // Duplicated keys are not allowed
-    if (options_.unique_keys) assert(key != last_key_);
     // Keys within a single table are expected to be added in a sorted order.
     assert(key >= last_key_);
+    if (options_.mode == kUniqueDrop) {
+      if (key == last_key_) {
+        return;
+      }
+    } else if (options_.mode != kMultiMap) {
+      assert(key != last_key_);
+    }
   }
   if (smallest_key_.empty()) {
     smallest_key_ = key.ToString();
@@ -619,7 +624,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   output_stats_.key_size += key.size();
 
 #ifndef NDEBUG
-  if (options_.unique_keys) {
+  if (options_.mode == kUnique) {
     assert(keys_.count(last_key_) == 0);
     keys_.insert(last_key_);
   }
@@ -1150,7 +1155,7 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
 
   Block* block = new Block(contents);
   Iterator* const iter = block->NewIterator(BytewiseComparator());
-  if (options_.unique_keys) {
+  if (options_.mode != kMultiMap) {
     iter->Seek(key);  // Binary search
   } else {
     iter->SeekToFirst();
@@ -1172,7 +1177,7 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
   for (; iter->Valid(); iter->Next()) {
     if (iter->key() == key) {
       opts.saver(opts.arg, key, iter->value());
-      if (options_.unique_keys) {
+      if (options_.mode != kMultiMap) {
         break;  // If keys are unique, we are done
       }
     } else {
@@ -1239,7 +1244,7 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
 
   Block* index_block = new Block(index_contents);
   Iterator* const iter = index_block->NewIterator(BytewiseComparator());
-  if (options_.unique_keys) {
+  if (options_.mode != kMultiMap) {
     iter->Seek(key);  // Binary search
   } else {
     iter->SeekToFirst();
@@ -1259,7 +1264,7 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
 
     if (!status.ok()) {
       break;
-    } else if (options_.unique_keys) {
+    } else if (options_.mode != kMultiMap) {
       break;
     } else if (exhausted) {
       break;
@@ -1361,7 +1366,7 @@ Status Dir::TryGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
         status = Fetch(opts, key, table_handle);
       }
       if (status.ok() && state.found) {
-        if (options_.unique_keys) {
+        if (options_.mode != kMultiMap) {
           break;
         }
       }
@@ -1575,7 +1580,7 @@ static inline bool UnMatch(U a, V b) {
 static Status VerifyOptions(const DirOptions& options, const Footer& footer) {
   if (UnMatch(options.lg_parts, footer.lg_parts()) ||
       UnMatch(options.skip_checksums, footer.skip_checksums()) ||
-      UnMatch(options.unique_keys, footer.unique_keys())) {
+      UnMatch(options.mode, footer.mode())) {
     return Status::AssertionFailed("Option does not match footer");
   } else {
     return Status::OK();
