@@ -148,6 +148,15 @@ Status Footer::DecodeFrom(Slice* input) {
     lg_parts_ = DecodeFixed32(start + kEncodedLength - 6);
     skip_checksums_ = static_cast<unsigned char>(start[kEncodedLength - 2]);
     mode_ = static_cast<unsigned char>(start[kEncodedLength - 1]);
+    switch (mode_) {
+      case kMultiMap:
+      case kUniqueOverride:
+      case kUniqueDrop:
+      case kUnique:
+        break;
+      default:
+        return Status::Corruption("Bad mode");
+    }
   }
 
   Status result = epoch_index_handle_.DecodeFrom(input);
