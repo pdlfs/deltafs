@@ -772,9 +772,9 @@ class PlfsIoBench {
     fprintf(stderr, " Minimum Index I/O Size: %d MB\n",
             int(options_.min_index_buffer) >> 20);
     fprintf(stderr, "  Total SSTable Indexes: %.3f MB (before compression)\n",
-            writer_->TEST_index_size() / ki / ki);
+            writer_->TEST_raw_index_contents() / ki / ki);
     fprintf(stderr, "               Total BF: %.3f MB (before compression)\n",
-            writer_->TEST_filter_size() / ki / ki);
+            writer_->TEST_raw_filter_contents() / ki / ki);
     fprintf(stderr, "     Final Phys Indexes: %.3f MB\n",
             stats.index_bytes / ki / ki);
     fprintf(stderr, "         Compaction Buf: %d MB (x%d)\n",
@@ -784,7 +784,7 @@ class PlfsIoBench {
     fprintf(stderr, "  Minimum Data I/O Size: %d MB\n",
             int(options_.min_data_buffer) >> 20);
     fprintf(stderr, "     Total SSTable Data: %.3f MB\n",
-            writer_->TEST_data_size() / ki / ki);
+            writer_->TEST_raw_data_contents() / ki / ki);
     fprintf(stderr, "        Final Phys Data: %.3f MB\n",
             stats.data_bytes / ki / ki);
     fprintf(stderr, "           Avg I/O Size: %.3f MB\n",

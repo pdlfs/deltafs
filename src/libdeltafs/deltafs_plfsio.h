@@ -371,15 +371,15 @@ class DirWriter {
 
   // Return the aggregate size of all index blocks.
   // Before compression and excluding any padding or checksums.
-  virtual uint64_t TEST_index_size() const = 0;
+  virtual uint64_t TEST_raw_index_contents() const = 0;
 
   // Return the aggregate size of all filter blocks.
   // Before compression and excluding any padding or checksums.
-  virtual uint64_t TEST_filter_size() const = 0;
+  virtual uint64_t TEST_raw_filter_contents() const = 0;
 
   // Return the aggregate size of all data blocks.
   // Excluding any padding or checksums.
-  virtual uint64_t TEST_data_size() const = 0;
+  virtual uint64_t TEST_raw_data_contents() const = 0;
 
   // Open an I/O writer against a specified plfs-style directory.
   // Return OK on success, or a non-OK status on errors.

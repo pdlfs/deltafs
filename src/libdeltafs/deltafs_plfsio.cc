@@ -239,9 +239,9 @@ class DirWriterImpl : public DirWriter {
   virtual uint64_t TEST_max_filter_size() const;
   virtual uint64_t TEST_total_memory_usage() const;
 
-  virtual uint64_t TEST_index_size() const;
-  virtual uint64_t TEST_filter_size() const;
-  virtual uint64_t TEST_data_size() const;
+  virtual uint64_t TEST_raw_index_contents() const;
+  virtual uint64_t TEST_raw_filter_contents() const;
+  virtual uint64_t TEST_raw_data_contents() const;
 
   virtual Status WaitForOne();
   virtual Status Wait();
@@ -795,7 +795,7 @@ uint64_t DirWriterImpl::TEST_total_memory_usage() const {
   return result;
 }
 
-uint64_t DirWriterImpl::TEST_index_size() const {
+uint64_t DirWriterImpl::TEST_raw_index_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
   for (size_t i = 0; i < compaction_stats_.size(); i++) {
@@ -804,7 +804,7 @@ uint64_t DirWriterImpl::TEST_index_size() const {
   return result;
 }
 
-uint64_t DirWriterImpl::TEST_filter_size() const {
+uint64_t DirWriterImpl::TEST_raw_filter_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
   for (size_t i = 0; i < compaction_stats_.size(); i++) {
@@ -813,7 +813,7 @@ uint64_t DirWriterImpl::TEST_filter_size() const {
   return result;
 }
 
-uint64_t DirWriterImpl::TEST_data_size() const {
+uint64_t DirWriterImpl::TEST_raw_data_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
   for (size_t i = 0; i < compaction_stats_.size(); i++) {
