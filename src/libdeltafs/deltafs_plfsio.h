@@ -348,8 +348,20 @@ class DirWriter {
   // Report the I/O stats for logging the data and the indexes.
   virtual IoStats GetIoStats() const = 0;
 
-  // Return the estimated size of each SSTable.
+  // Return the estimated size of each table.
   virtual uint64_t TEST_estimated_sstable_size() const = 0;
+
+  // Return the max size of each filter.
+  virtual uint64_t TEST_max_filter_size() const = 0;
+
+  // Return the total number of keys inserted so far.
+  virtual uint32_t TEST_num_keys() const = 0;
+
+  // Return the total number of keys rejected so far.
+  virtual uint32_t TEST_num_dropped_keys() const = 0;
+
+  // Return the total number of data blocks generated so far.
+  virtual uint32_t TEST_num_data_blocks() const = 0;
 
   // Return the total number of SSTable generated so far.
   virtual uint32_t TEST_num_sstables() const = 0;

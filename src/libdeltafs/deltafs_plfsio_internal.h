@@ -170,8 +170,14 @@ class DirLogger {
 
   // Report compaction stats
   const OutputStats* output_stats() const { return &tb_->output_stats_; }
+
+  uint32_t num_keys() const { return tb_->total_num_keys_; }
+  uint32_t num_dropped_keys() const { return tb_->total_num_dropped_keys_; }
+  uint32_t num_data_blocks() const { return tb_->total_num_blocks_; }
   uint32_t num_tables() const { return tb_->total_num_tables_; }
+
   size_t estimated_table_size() const { return tb_bytes_; }
+  size_t max_filter_size() const { return bf_bytes_; }
   size_t memory_usage() const;  // Report real memory usage
 
   // REQUIRES: mutex_ has been locked
