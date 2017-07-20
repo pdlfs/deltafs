@@ -285,6 +285,9 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
       pending_indx_entry_(false),
       pending_meta_entry_(false),
       pending_root_entry_(false),
+      total_num_keys_(0),
+      total_num_dropped_keys_(0),
+      total_num_blocks_(0),
       total_num_tables_(0),
       num_tables_(0),
       num_epochs_(0),
@@ -570,6 +573,7 @@ void TableLogger::EndBlock() {
     assert(!pending_indx_entry_);
     pending_indx_entry_ = true;
     num_uncommitted_data_++;
+    total_num_blocks_++;
   }
 }
 
@@ -583,7 +587,8 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
     assert(key >= last_key_);
     if (options_.mode == kUniqueDrop) {
       if (key == last_key_) {
-        return;
+        total_num_dropped_keys_++;
+        return;  // Drop
       }
     } else if (options_.mode != kMultiMap) {
       assert(key != last_key_);
@@ -622,7 +627,6 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   last_key_ = key.ToString();
   output_stats_.value_size += value.size();
   output_stats_.key_size += key.size();
-
 #ifndef NDEBUG
   if (options_.mode == kUnique) {
     assert(keys_.count(last_key_) == 0);
@@ -631,6 +635,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 #endif
 
   data_block_.Add(key, value);
+  total_num_keys_++;
   if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize +
           BlockHandle::kMaxEncodedLength >=
       static_cast<size_t>(options_.block_size * options_.block_util)) {
