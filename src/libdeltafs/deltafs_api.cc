@@ -1099,6 +1099,15 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
       } else if (k == "num_dropped_keys") {
         uint64_t nds = __dir->io.writer->TEST_num_dropped_keys();
         return MakeChar(nds);
+      } else if (k == "sstable_filter_bytes") {
+        uint64_t fsz = __dir->io.writer->TEST_raw_filter_contents();
+        return MakeChar(fsz);
+      } else if (k == "sstable_index_bytes") {
+        uint64_t isz = __dir->io.writer->TEST_raw_index_contents();
+        return MakeChar(isz);
+      } else if (k == "sstable_data_bytes") {
+        uint64_t dsz = __dir->io.writer->TEST_raw_data_contents();
+        return MakeChar(dsz);
       } else if (k == "num_data_blocks") {
         uint64_t nbs = __dir->io.writer->TEST_num_data_blocks();
         return MakeChar(nbs);
