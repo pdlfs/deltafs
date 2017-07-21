@@ -242,6 +242,8 @@ class DirWriterImpl : public DirWriter {
   virtual uint64_t TEST_raw_index_contents() const;
   virtual uint64_t TEST_raw_filter_contents() const;
   virtual uint64_t TEST_raw_data_contents() const;
+  virtual uint64_t TEST_key_bytes() const;
+  virtual uint64_t TEST_value_bytes() const;
 
   virtual Status WaitForOne();
   virtual Status Wait();
@@ -818,6 +820,24 @@ uint64_t DirWriterImpl::TEST_raw_data_contents() const {
   uint64_t result = 0;
   for (size_t i = 0; i < compaction_stats_.size(); i++) {
     result += compaction_stats_[i]->data_size;
+  }
+  return result;
+}
+
+uint64_t DirWriterImpl::TEST_value_bytes() const {
+  MutexLock ml(&mutex_);
+  uint64_t result = 0;
+  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+    result += compaction_stats_[i]->value_size;
+  }
+  return result;
+}
+
+uint64_t DirWriterImpl::TEST_key_bytes() const {
+  MutexLock ml(&mutex_);
+  uint64_t result = 0;
+  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+    result += compaction_stats_[i]->key_size;
   }
   return result;
 }

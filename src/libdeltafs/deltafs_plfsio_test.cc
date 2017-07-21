@@ -488,6 +488,7 @@ class PlfsIoBench {
     force_fifo_ = GetOption("FORCE_FIFO", false);
 
     options_.rank = 0;
+    options_.mode = kUniqueDrop;
     options_.lg_parts = GetOption("LG_PARTS", 2);
     options_.skip_sort = ordered_keys_ != 0;
     options_.non_blocking = batched_insertion_ != 0;
@@ -579,7 +580,7 @@ class PlfsIoBench {
     Status status_;
 
     void ToKey(int fid) {
-      snprintf(key_, sizeof(key_), "%08x-%08x-%08x", fid, fid, fid);
+      snprintf(key_, sizeof(key_), "%08x%08x%08x", fid, fid, fid);
     }
 
     void MakeKey() {
@@ -714,7 +715,7 @@ class PlfsIoBench {
     const double k = 1000.0, ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
     const uint64_t total_memory_usage = writer_->TEST_total_memory_usage();
-    fprintf(stderr, "     Total Memory Usage: %.3f MB\n",
+    fprintf(stderr, "     Total Memory Usage: %.3f MiB\n",
             total_memory_usage / ki / ki);
     fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
     const IoStats stats = writer_->GetIoStats();
@@ -748,46 +749,54 @@ class PlfsIoBench {
             options_.compression == kSnappyCompression ? "Yes" : "No");
     fprintf(stderr, "              BF Budget: %d (bits pey key)\n",
             int(options_.bf_bits_per_key));
-    fprintf(stderr, "     Num Files Inserted: %d million\n", num_files_);
-    fprintf(stderr, "        Total File Data: %d MB\n", 48 * num_files_);
-    fprintf(stderr, "  Total MemTable Budget: %d MB\n",
+    fprintf(stderr, "     Num Files Inserted: %d M\n", num_files_);
+    fprintf(stderr, "        Total File Data: %d MiB\n", 48 * num_files_);
+    fprintf(stderr, "  Total MemTable Budget: %d MiB\n",
             int(options_.total_memtable_budget) >> 20);
-    fprintf(stderr, " Estimated SSTable Size: %.3f MB\n",
+    fprintf(stderr, "     Estimated SST Size: %.3f MiB\n",
             writer_->TEST_estimated_sstable_size() / ki / ki);
-    fprintf(stderr, "   Estimated Block Size: %d KB (util: %.1f%%)\n",
+    fprintf(stderr, "            Max BF Size: %.3f KiB\n",
+            writer_->TEST_max_filter_size() / ki);
+    fprintf(stderr, "   Estimated Block Size: %d KiB (target util: %.1f%%)\n",
             int(options_.block_size) >> 10, options_.block_util * 100);
     fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
     fprintf(stderr, "         Num Bg Threads: %d\n", num_threads_);
     if (owns_env) {
-      fprintf(stderr, "    Emulated Link Speed: %d MB/s (per log)\n",
+      fprintf(stderr, "    Emulated Link Speed: %d MiB/s (per log)\n",
               link_speed_);
     } else {
       fprintf(stderr, "    Emulated Link Speed: N/A\n");
     }
-    fprintf(stderr, "            Write Speed: %.3f MB/s (observed by app)\n",
+    fprintf(stderr, "            Write Speed: %.3f MiB/s (observed by app)\n",
             1.0 * k * k * (options_.key_size + options_.value_size) *
                 num_files_ / dura);
-    fprintf(stderr, "              Index Buf: %d MB (x%d)\n",
+    fprintf(stderr, "              Index Buf: %d MiB (x%d)\n",
             int(options_.index_buffer) >> 20, 1 << options_.lg_parts);
-    fprintf(stderr, " Minimum Index I/O Size: %d MB\n",
+    fprintf(stderr, "     Min Index I/O Size: %d MiB\n",
             int(options_.min_index_buffer) >> 20);
-    fprintf(stderr, "  Total SSTable Indexes: %.3f MB (before compression)\n",
+    fprintf(stderr, " Aggregated SST Indexes: %.3f MiB\n",
             writer_->TEST_raw_index_contents() / ki / ki);
-    fprintf(stderr, "               Total BF: %.3f MB (before compression)\n",
+    fprintf(stderr, "          Aggregated BF: %.3f MiB\n",
             writer_->TEST_raw_filter_contents() / ki / ki);
-    fprintf(stderr, "     Final Phys Indexes: %.3f MB\n",
+    fprintf(stderr, "     Final Phys Indexes: %.3f MiB\n",
             stats.index_bytes / ki / ki);
-    fprintf(stderr, "         Compaction Buf: %d MB (x%d)\n",
+    fprintf(stderr, "         Compaction Buf: %d MiB (x%d)\n",
             int(options_.block_batch_size) >> 20, 1 << options_.lg_parts);
-    fprintf(stderr, "               Data Buf: %d MB\n",
+    fprintf(stderr, "               Data Buf: %d MiB\n",
             int(options_.data_buffer) >> 20);
-    fprintf(stderr, "  Minimum Data I/O Size: %d MB\n",
+    fprintf(stderr, "      Min Data I/O Size: %d MiB\n",
             int(options_.min_data_buffer) >> 20);
-    fprintf(stderr, "     Total SSTable Data: %.3f MB\n",
-            writer_->TEST_raw_data_contents() / ki / ki);
-    fprintf(stderr, "        Final Phys Data: %.3f MB\n",
-            stats.data_bytes / ki / ki);
-    fprintf(stderr, "           Avg I/O Size: %.3f MB\n",
+    const uint64_t user_bytes =
+        writer_->TEST_key_bytes() + writer_->TEST_value_bytes();
+    fprintf(stderr, "        Total User Data: %.3f MiB (K+V)\n",
+            1.0 * user_bytes / ki / ki);
+    fprintf(stderr, "    Aggregated SST Data: %.3f MiB (+%.2f%%)\n",
+            1.0 * writer_->TEST_raw_data_contents() / ki / ki,
+            1.0 * writer_->TEST_raw_data_contents() / user_bytes * 100 - 100);
+    fprintf(stderr, "        Final Phys Data: %.3f MiB (+%.2f%%)\n",
+            1.0 * stats.data_bytes / ki / ki,
+            1.0 * stats.data_bytes / user_bytes * 100 - 100);
+    fprintf(stderr, "           Avg I/O Size: %.3f MiB\n",
             1.0 * stats.data_bytes / stats.data_ops / ki / ki);
     if (owns_env) {
       const Histogram* hist = dynamic_cast<FakeEnv*>(env_)->GetHist(".dat");
@@ -798,12 +807,17 @@ class PlfsIoBench {
       fprintf(stderr, "                   MTBW: N/A\n");
     }
     const uint32_t num_tables = writer_->TEST_num_sstables();
-    fprintf(stderr, "         Total SSTables: %d\n", int(num_tables));
-    fprintf(stderr, " SSTables Per Partition: %.1f\n",
+    fprintf(stderr, "              Total SST: %d\n", int(num_tables));
+    fprintf(stderr, "  Avg SST Per Partition: %.1f\n",
             1.0 * num_tables / (1 << options_.lg_parts));
-    fprintf(stderr, "             Value Size: %d bytes\n",
+    fprintf(stderr, "       Total SST Blocks: %d\n",
+            int(writer_->TEST_num_data_blocks()));
+    fprintf(stderr, "         Total SST Keys: %.1f M (%d dropped)\n",
+            1.0 * writer_->TEST_num_keys() / ki / ki,
+            int(writer_->TEST_num_dropped_keys()));
+    fprintf(stderr, "             Value Size: %d Bytes\n",
             int(options_.value_size));
-    fprintf(stderr, "               Key Size: %d bytes\n",
+    fprintf(stderr, "               Key Size: %d Bytes\n",
             int(options_.key_size));
   }
 

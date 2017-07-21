@@ -176,9 +176,10 @@ class DirLogger {
   uint32_t num_data_blocks() const { return tb_->total_num_blocks_; }
   uint32_t num_tables() const { return tb_->total_num_tables_; }
 
+  // Report memory configurations and usage
   size_t estimated_table_size() const { return tb_bytes_; }
   size_t max_filter_size() const { return bf_bytes_; }
-  size_t memory_usage() const;  // Report real memory usage
+  size_t memory_usage() const;  // Report actual memory usage
 
   // REQUIRES: mutex_ has been locked
   bool has_bg_compaction();

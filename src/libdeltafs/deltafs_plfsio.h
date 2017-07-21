@@ -349,9 +349,11 @@ class DirWriter {
   virtual IoStats GetIoStats() const = 0;
 
   // Return the estimated size of each table.
+  // The actual size of each generated may differ.
   virtual uint64_t TEST_estimated_sstable_size() const = 0;
 
   // Return the max size of each filter.
+  // The actual size of each generated filter may be smaller.
   virtual uint64_t TEST_max_filter_size() const = 0;
 
   // Return the total number of keys inserted so far.
@@ -366,20 +368,26 @@ class DirWriter {
   // Return the total number of SSTable generated so far.
   virtual uint32_t TEST_num_sstables() const = 0;
 
-  // Return the total amount of memory reserved by this directory.
-  virtual uint64_t TEST_total_memory_usage() const = 0;
-
-  // Return the aggregate size of all index blocks.
-  // Before compression and excluding any padding or checksums.
+  // Return the aggregated size of all index blocks.
+  // Before compression and excluding any padding or checksum bytes.
   virtual uint64_t TEST_raw_index_contents() const = 0;
 
-  // Return the aggregate size of all filter blocks.
-  // Before compression and excluding any padding or checksums.
+  // Return the aggregated size of all filter blocks.
+  // Before compression and excluding any padding or checksum bytes.
   virtual uint64_t TEST_raw_filter_contents() const = 0;
 
-  // Return the aggregate size of all data blocks.
-  // Excluding any padding or checksums.
+  // Return the aggregated size of all data blocks.
+  // Excluding any padding or checksum bytes.
   virtual uint64_t TEST_raw_data_contents() const = 0;
+
+  // Return the aggregated size of all inserted keys.
+  virtual uint64_t TEST_key_bytes() const = 0;
+
+  // Return the aggregated size of all inserted values.
+  virtual uint64_t TEST_value_bytes() const = 0;
+
+  // Return the total amount of memory reserved by this directory.
+  virtual uint64_t TEST_total_memory_usage() const = 0;
 
   // Open an I/O writer against a specified plfs-style directory.
   // Return OK on success, or a non-OK status on errors.
