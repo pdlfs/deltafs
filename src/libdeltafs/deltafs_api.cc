@@ -1093,15 +1093,15 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
       if (k == "total_memory_usage") {
         uint64_t mem = __dir->io.writer->TEST_total_memory_usage();
         return MakeChar(mem);
-      } else if (k == "filter_size") {
-        uint64_t fsz = __dir->io.writer->TEST_raw_filter_contents();
-        return MakeChar(fsz);
-      } else if (k == "index_size") {
-        uint64_t isz = __dir->io.writer->TEST_raw_index_contents();
-        return MakeChar(isz);
-      } else if (k == "data_size") {
-        uint64_t dsz = __dir->io.writer->TEST_raw_data_contents();
-        return MakeChar(dsz);
+      } else if (k == "num_keys") {
+        uint64_t nks = __dir->io.writer->TEST_num_keys();
+        return MakeChar(nks);
+      } else if (k == "num_dropped_keys") {
+        uint64_t nds = __dir->io.writer->TEST_num_dropped_keys();
+        return MakeChar(nds);
+      } else if (k == "num_data_blocks") {
+        uint64_t nbs = __dir->io.writer->TEST_num_data_blocks();
+        return MakeChar(nbs);
       } else if (k == "num_sstables") {
         uint64_t tbs = __dir->io.writer->TEST_num_sstables();
         return MakeChar(tbs);
