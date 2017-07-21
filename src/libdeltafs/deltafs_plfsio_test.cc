@@ -788,10 +788,13 @@ class PlfsIoBench {
         writer_->TEST_key_bytes() + writer_->TEST_value_bytes();
     fprintf(stderr, "        Total User Data: %.3f MiB (K+V)\n",
             1.0 * user_bytes / ki / ki);
-    fprintf(stderr, "    Aggregated SST Data: %.3f MiB (+%.2f%%)\n",
+    fprintf(stderr,
+            "    Aggregated SST Data: %.3f MiB (+%.2f%% due to formatting)\n",
             1.0 * writer_->TEST_raw_data_contents() / ki / ki,
             1.0 * writer_->TEST_raw_data_contents() / user_bytes * 100 - 100);
-    fprintf(stderr, "        Final Phys Data: %.3f MiB (+%.2f%%)\n",
+    fprintf(stderr,
+            "        Final Phys Data: %.3f MiB (+%.2f%% due to formatting and "
+            "padding)\n",
             1.0 * stats.data_bytes / ki / ki,
             1.0 * stats.data_bytes / user_bytes * 100 - 100);
     fprintf(stderr, "           Avg I/O Size: %.3f MiB\n",
