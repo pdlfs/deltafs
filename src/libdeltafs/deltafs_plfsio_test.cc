@@ -579,19 +579,17 @@ class PlfsIoBench {
     bool ordered_keys_;
     Status status_;
 
-    void ToKey(int fid) {
-      snprintf(key_, sizeof(key_), "%08x%08x%08x", fid, fid, fid);
-    }
-
     void MakeKey() {
       uint32_t offset = base_offset_ + offset_;
-      uint32_t fid;
       if (!ordered_keys_) {
-        fid = xxhash32(&offset, sizeof(offset), 0);
+        uint64_t h = xxhash64(&offset, sizeof(offset), 0);
+        memcpy(key_ + 8, &h, 8);
+        memcpy(key_, &h, 8);
       } else {
-        fid = offset;
+        uint64_t x = htobe64(offset);
+        memcpy(key_ + 8, &x, 8);
+        memcpy(key_, &x, 8);
       }
-      ToKey(fid);
     }
 
     uint32_t offset_;
