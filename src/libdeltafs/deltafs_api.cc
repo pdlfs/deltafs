@@ -902,6 +902,7 @@ namespace {
 
 static pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;
+  dir->options.mode = pdlfs::plfsio::DirMode::kUniqueDrop;
   dir->options.allow_env_threads = false;
   dir->options.is_env_pfs = dir->is_env_pfs;
   dir->options.env = dir->env;
