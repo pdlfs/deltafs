@@ -1091,7 +1091,11 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
   } else {
     pdlfs::Slice k(__key);
     if (__dir->mode == O_WRONLY) {
-      if (k == "total_memory_usage") {
+      if (k == "total_user_data") {
+        uint64_t vsz = __dir->io.writer->TEST_value_bytes();
+        uint64_t ksz = __dir->io.writer->TEST_key_bytes();
+        return MakeChar(ksz + vsz);
+      } else if (k == "total_memory_usage") {
         uint64_t mem = __dir->io.writer->TEST_total_memory_usage();
         return MakeChar(mem);
       } else if (k == "num_keys") {
