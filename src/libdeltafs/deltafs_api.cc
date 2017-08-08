@@ -20,6 +20,7 @@
 #include "pdlfs-common/murmur.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
+#include "pdlfs-common/spooky.h"
 #include "pdlfs-common/status.h"
 
 #include <errno.h>
@@ -641,6 +642,7 @@ namespace {
 
 // Dir options
 typedef pdlfs::plfsio::DirOptions DirOptions;
+#define PLFSIO_HASH_USE_SPOOKY
 
 // Dir writer
 typedef pdlfs::plfsio::DirWriter DirWriter;
@@ -1011,7 +1013,11 @@ int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
   } else {
     char tmp[16];
     DirWriter* writer = __dir->io.writer;
+#ifdef PLFSIO_HASH_USE_SPOOKY
+    pdlfs::Spooky128(__fname, strlen(__fname), 0, 0, tmp);
+#else
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
+#endif
     pdlfs::Slice k(tmp, __dir->options.key_size);
     const char* data = static_cast<const char*>(__buf);
     pdlfs::Slice v(data, __sz);
@@ -1190,7 +1196,11 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
   } else {
     char tmp[16];
     DirReader* reader = __dir->io.reader;
+#ifdef PLFSIO_HASH_USE_SPOOKY
+    pdlfs::Spooky128(__fname, strlen(__fname), 0, 0, tmp);
+#else
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
+#endif
     pdlfs::Slice k(tmp, __dir->options.key_size);
     s = reader->ReadAll(k, &dst);
     if (s.ok()) {
