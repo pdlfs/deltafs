@@ -1,3 +1,16 @@
+/*
+ * Copyright (c) 2015-2017 Carnegie Mellon University.
+ *
+ * All rights reserved.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. See the AUTHORS file for names of contributors.
+ */
+
+#include "pdlfs-common/murmur.h"
+
+namespace pdlfs {
+
 //-----------------------------------------------------------------------------
 // MurmurHash3 was written by Austin Appleby, and is placed in the public
 // domain. The author hereby disclaims copyright to this source code.
@@ -6,11 +19,6 @@
 // algorithms are optimized for their respective platforms. You can still
 // compile and run any of them on any platform, but your performance with the
 // non-native version will be less than optimal.
-
-#include "pdlfs-common/murmur.h"
-
-namespace pdlfs {
-
 namespace {
 
 #define FORCE_INLINE inline __attribute__((always_inline))
@@ -65,7 +73,8 @@ FORCE_INLINE uint64_t fmix64(uint64_t k) {
 
 //-----------------------------------------------------------------------------
 
-void murmur_x86_32(const void* key, int len, uint32_t seed, void* out) {
+void murmur_x86_32(const void* key, const int len, const uint32_t seed,
+                   void* out) {
   const uint8_t* data = (const uint8_t*)key;
   const int nblocks = len / 4;
 

@@ -16,7 +16,7 @@
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/testharness.h"
 
-#include "spooky.h"
+#include "spooky_hash.h"
 
 namespace pdlfs {
 

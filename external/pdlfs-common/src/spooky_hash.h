@@ -45,6 +45,8 @@ typedef uint16_t uint16;
 typedef uint8_t uint8;
 #endif
 
+namespace pdlfs {
+
 class SpookyHash {
  public:
   //
@@ -405,3 +407,5 @@ class SpookyHash {
   size_t m_length;                // total length of the input so far
   uint8 m_remainder;              // length of unhashed data stashed in m_data
 };
+
+}  // namespace pdlfs

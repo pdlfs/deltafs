@@ -1,3 +1,9 @@
-/build/
-/build_config.mk
 /nbproject/
+/cmake-build*/
+/build*/
+/.idea/
+*.dylib
+*.so
+*.a
+*.o
+

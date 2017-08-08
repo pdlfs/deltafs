@@ -83,13 +83,13 @@ typedef enum { XXH_OK = 0, XXH_ERROR } XXH_errorcode;
 *  API modifier
 ******************************/
 /*!XXH_PRIVATE_API
-*  Transforms all publics symbols within `xxhash.c` into private ones.
+*  Transforms all publics symbols within `xxhash_impl.cc` into private ones.
 *  Methodology :
-*  instead of : #include "xxhash.h"
+*  instead of : #include "xxhash_impl.h"
 *  do :
 *     #define XXH_PRIVATE_API
-*     #include "xxhash.c"   // note the .c , instead of .h
-*  also : don't compile and link xxhash.c separately
+*     #include "xxhash_impl.cc"   // note the .cc , instead of .h
+*  also : don't compile and link xxhash_impl.cc separately
 */
 #ifdef XXH_PRIVATE_API
 #if defined(__GNUC__)
@@ -116,12 +116,12 @@ but also want to avoid symbol collisions with another library which also
 includes xxHash,
 
 you can use XXH_NAMESPACE, to automatically prefix any public symbol from
-`xxhash.c`
+`xxhash_impl.cc`
 with the value of XXH_NAMESPACE (so avoid to keep it NULL and avoid numeric
 values).
 
 Note that no change is required within the calling program as long as it also
-includes `xxhash.h` :
+includes `xxhash_impl.h` :
 regular symbol name will be automatically translated by this header.
 */
 #ifdef XXH_NAMESPACE

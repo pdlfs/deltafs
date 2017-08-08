@@ -7,7 +7,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "xximpl.h"
+#include "xxhash_impl.h"
 
 #include "pdlfs-common/xxhash.h"
 
