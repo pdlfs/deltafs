@@ -6,6 +6,9 @@
 # disable sudo, causes us to build in a container environment
 sudo: false
 
+# set OS dist we want, rather than taking the default
+dist: trusty
+
 # setup for a c/c++ based project
 language: cpp
 
