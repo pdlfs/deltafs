@@ -1156,6 +1156,8 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
                      opts.tmp_length);
   if (!status.ok()) {
     return status;
+  } else {
+    opts.stats->seeks++;
   }
 
   Block* block = new Block(contents);
@@ -1204,7 +1206,11 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
 bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& h) {
   Status status;
   BlockContents contents;
-  status = ReadBlock(indx_, options_, h, &contents, true);
+  // We always prefetch and cache all filter blocks in memory
+  // so there is no need to allocate an additional
+  // buffer to store the block contents
+  const bool cached = true;
+  status = ReadBlock(indx_, options_, h, &contents, cached);
   if (status.ok()) {
     bool r = BloomKeyMayMatch(key, contents.data);
     if (contents.heap_allocated) {
@@ -1217,8 +1223,8 @@ bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& h) {
 }
 
 // Retrieve value to a specific key from a given table and call "opts.saver"
-// using the value found. Use filter to reduce block reads if available.
-// Return OK on success and a non-OK status on errors.
+// using the value found. Filter will be consulted if available to avoid
+// unnecessary reads. Return OK on success and a non-OK status on errors.
 Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
                   const TableHandle& h) {
   Status status;
@@ -1242,9 +1248,15 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
   BlockHandle index_handle;
   index_handle.set_offset(h.index_offset());
   index_handle.set_size(h.index_size());
-  status = ReadBlock(indx_, options_, index_handle, &index_contents, true);
+  // We always prefetch and cache all index blocks in memory
+  // so there is no need to allocate an additional
+  // buffer to store the block contents
+  const bool cached = true;
+  status = ReadBlock(indx_, options_, index_handle, &index_contents, cached);
   if (!status.ok()) {
     return status;
+  } else {
+    opts.stats->table_seeks++;
   }
 
   Block* index_block = new Block(index_contents);
@@ -1322,11 +1334,15 @@ static inline Iterator* NewRtIterator(Block* block) {
 }  // namespace
 
 Status Dir::TryGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
-                   GetContext* ctx) {
+                   GetContext* ctx, GetStats* stats) {
   Status status;
   // Load the meta index for the epoch
   BlockContents meta_index_contents;
-  status = ReadBlock(indx_, options_, h, &meta_index_contents, true);
+  // We always prefetch and cache all index blocks in memory
+  // so there is no need to allocate an additional
+  // buffer to store the block contents
+  const bool cached = true;
+  status = ReadBlock(indx_, options_, h, &meta_index_contents, cached);
   if (!status.ok()) {
     return status;
   }
@@ -1359,6 +1375,7 @@ Status Dir::TryGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
     iter->Next();
     if (status.ok()) {
       FetchOptions opts;
+      opts.stats = stats;
       opts.tmp_length = ctx->tmp_length;
       opts.tmp = ctx->tmp;
       if (options_.parallel_reads) {
@@ -1397,10 +1414,14 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
     rt_iter = NewRtIterator(rt_);
   }
   mu_->Unlock();
+  GetStats stats;
+  stats.table_seeks = 0;  // Number of tables touched
+  // Number of data blocks fetched
+  stats.seeks = 0;
   Status status;
   for (uint32_t dummy = epoch; dummy == epoch; dummy++) {
     std::string epoch_key = EpochKey(epoch);
-    // Tru reusing current iterator position if possible
+    // Try reusing current iterator position if possible
     if (!rt_iter->Valid() || rt_iter->key() != epoch_key) {
       rt_iter->Seek(epoch_key);
       if (!rt_iter->Valid()) {
@@ -1414,7 +1435,7 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
     status = h.DecodeFrom(&input);
     rt_iter->Next();
     if (status.ok()) {
-      status = TryGet(key, h, epoch, ctx);
+      status = TryGet(key, h, epoch, ctx, &stats);
     } else {
       // Skip the epoch
     }
@@ -1429,6 +1450,9 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   if (rt_iter != ctx->rt_iter) {
     delete rt_iter;
   }
+  // Increase the total seek count
+  ctx->num_table_seeks += stats.table_seeks;
+  ctx->num_seeks += stats.seeks;
   assert(ctx->num_open_reads > 0);
   ctx->num_open_reads--;
   bg_cv_->SignalAll();
@@ -1491,12 +1515,15 @@ Status Dir::Read(const Slice& key, std::string* dst, char* tmp,
   std::string buffer;
 
   GetContext ctx;
-  ctx.tmp = tmp;
+  ctx.tmp = tmp;  // User-supplied buffer space
   ctx.tmp_length = tmp_length;
-  ctx.num_open_reads = 0;  // Number of outstanding epoch reads
+  ctx.num_open_reads = 0;  // Number of outstanding epoch read operations
   ctx.status = &status;
   ctx.offsets = &offsets;
   ctx.buffer = &buffer;
+  ctx.num_table_seeks = 0;  // Total number of tables touched
+  // Total number of data blocks fetched
+  ctx.num_seeks = 0;
   if (!options_.parallel_reads) {
     // Pre-create the root iterator for serial reads
     ctx.rt_iter = NewRtIterator(rt_);
@@ -1534,7 +1561,7 @@ Status Dir::Read(const Slice& key, std::string* dst, char* tmp,
   }
 
   delete ctx.rt_iter;
-  // Merge read results
+  // Merge sort read results
   if (status.ok()) {
     if (options_.parallel_reads) {
       Merge(&ctx);

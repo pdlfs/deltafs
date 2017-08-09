@@ -302,7 +302,9 @@ class Dir {
 
   typedef void (*Saver)(void* arg, const Slice& key, const Slice& value);
 
+  struct GetStats;
   struct FetchOptions {
+    GetStats* stats;
     // Scratch space for temporary data block storage
     char* tmp;
     // Scratch size
@@ -337,19 +339,27 @@ class Dir {
   // Store an OK status in *ctx->status on success, or a non-OK status on
   // errors.
   struct GetContext {
-    Iterator* rt_iter;
+    Iterator* rt_iter;  // Only used in serial reads
     std::string* dst;
     int num_open_reads;
     std::vector<uint32_t>* offsets;  // Only used during parallel reads
     std::string* buffer;
     Status* status;
-    char* tmp;  // Temporary block storage
+    char* tmp;  // Temporary storage for block contents
     size_t tmp_length;
+    size_t num_table_seeks;  // Total number of tables touched
+    // Total number of data blocks fetched
+    size_t num_seeks;
   };
   void Get(const Slice& key, uint32_t epoch, GetContext* ctx);
 
+  struct GetStats {
+    size_t table_seeks;  // Total number of tables touched for an epoch
+    // Total number of data blocks fetched for an epoch
+    size_t seeks;
+  };
   Status TryGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
-                GetContext* ctx);
+                GetContext* ctx, GetStats* stats);
 
   static void Merge(GetContext* ctx);
 
