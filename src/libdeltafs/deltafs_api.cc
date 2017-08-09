@@ -1146,10 +1146,12 @@ long long deltafs_plfsdir_get_integer_property(deltafs_plfsdir_t* __dir,
 }
 
 char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
-                          size_t __keylen, size_t* __sz) {
+                          size_t __keylen, size_t* __sz, size_t* __table_seeks,
+                          size_t* __seeks) {
   pdlfs::Status s;
-  char* buf = NULL;
+  char buf[256];  // For storing temporary block contents
   std::string dst;
+  char* result = NULL;
 
   if (!IsDirOpened(__dir)) {
     s = BadArgs();
@@ -1161,10 +1163,11 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
     s = BadArgs();
   } else {
     DirReader* reader = __dir->io.reader;
-    s = reader->ReadAll(pdlfs::Slice(__key, __keylen), &dst);
+    s = reader->ReadAll(pdlfs::Slice(__key, __keylen), &dst, buf, sizeof(buf),
+                        __table_seeks, __seeks);
     if (s.ok()) {
-      buf = static_cast<char*>(malloc(dst.size()));
-      memcpy(buf, dst.data(), dst.size());
+      result = static_cast<char*>(malloc(dst.size()));
+      memcpy(result, dst.data(), dst.size());
       if (__sz != NULL) {
         *__sz = dst.size();
       }
@@ -1175,15 +1178,17 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
     DirError(__dir, s);
     return NULL;
   } else {
-    return buf;
+    return result;
   }
 }
 
 void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
-                              size_t* __sz) {
+                              size_t* __sz, size_t* __table_seeks,
+                              size_t* __seeks) {
   pdlfs::Status s;
-  char* buf = NULL;
+  char buf[256];  // For storing temporary block contents
   std::string dst;
+  char* result = NULL;
 
   if (!IsDirOpened(__dir)) {
     s = BadArgs();
@@ -1202,10 +1207,10 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
 #endif
     pdlfs::Slice k(tmp, __dir->options.key_size);
-    s = reader->ReadAll(k, &dst);
+    s = reader->ReadAll(k, &dst, buf, sizeof(buf), __table_seeks, __seeks);
     if (s.ok()) {
-      buf = static_cast<char*>(malloc(dst.size()));
-      memcpy(buf, dst.data(), dst.size());
+      result = static_cast<char*>(malloc(dst.size()));
+      memcpy(result, dst.data(), dst.size());
       if (__sz != NULL) {
         *__sz = dst.size();
       }
@@ -1216,7 +1221,7 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
     DirError(__dir, s);
     return NULL;
   } else {
-    return buf;
+    return result;
   }
 }
 

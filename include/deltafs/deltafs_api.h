@@ -135,12 +135,14 @@ int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
    Stores the size of the value in *__sz.
    The result should be deleted by free(). */
 char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
-                          size_t __keylen, size_t* __sz);
+                          size_t __keylen, size_t* __sz, size_t* __table_seeks,
+                          size_t* __seeks);
 /* Returns NULL if not found. A malloc()ed array otherwise.
    Stores the length of the file in *__sz.
    The result should be deleted by free(). */
 void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
-                              size_t* __sz);
+                              size_t* __sz, size_t* __table_seeks,
+                              size_t* __seeks);
 /* Returns NULL if not found. A malloc()ed array otherwise.
    The result should be deleted by free(). */
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);
