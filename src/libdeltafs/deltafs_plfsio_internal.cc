@@ -1507,7 +1507,7 @@ void Dir::Merge(GetContext* ctx) {
 }
 
 Status Dir::Read(const Slice& key, std::string* dst, char* tmp,
-                 size_t tmp_length) {
+                 size_t tmp_length, ReadStats* stats) {
   mu_->AssertHeld();
   Status status;
   assert(rt_ != NULL);
@@ -1563,6 +1563,10 @@ Status Dir::Read(const Slice& key, std::string* dst, char* tmp,
   delete ctx.rt_iter;
   // Merge sort read results
   if (status.ok()) {
+    if (stats != NULL) {
+      stats->total_table_seeks = ctx.num_table_seeks;
+      stats->total_seeks = ctx.num_seeks;
+    }
     if (options_.parallel_reads) {
       Merge(&ctx);
     }

@@ -276,11 +276,17 @@ class Dir {
   // Return OK on success, or a non-OK status on errors.
   Status Open(LogSource* indx);
 
-  // Obtain the value to a key from all epochs.
-  // All value found will be appended to "dst"
+  // Obtain the value to a key from all epochs. All value found will be appended
+  // to "dst". A caller may optionally provide a temporary buffer for storing
+  // fetched block contents. Read stats will be reported through "*stats".
   // Return OK on success, or a non-OK status on errors.
-  Status Read(const Slice& key, std::string* dst, char* tmp = NULL,
-              size_t tmp_length = 0);
+  struct ReadStats {
+    size_t total_table_seeks;  // Total tables touched
+    // Total data blocks fetched
+    size_t total_seeks;
+  };
+  Status Read(const Slice& key, std::string* dst, char* tmp, size_t tmp_length,
+              ReadStats* stats);
 
   void RebindDataSource(LogSource* data);
 

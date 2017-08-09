@@ -1065,8 +1065,14 @@ class DirReaderImpl : public DirReader {
   DirReaderImpl(const DirOptions& opts, const std::string& name);
   virtual ~DirReaderImpl();
 
-  virtual Status ReadAll(const Slice& fid, std::string* dst, char* tmp,
-                         size_t tmp_length);
+  virtual Status ReadAll(
+      const Slice& fid,
+      std::string* dst,     // Buffer space for storing read results
+      char* tmp,            // Temporary space for storing loaded block contents
+      size_t tmp_length,    // Size of the temporary space
+      size_t* table_seeks,  // Total number of tables touched
+      size_t* seeks         // Total number of data blocks fetched
+      );
 
   virtual IoStats GetIoStats() const;
 
@@ -1181,7 +1187,8 @@ static Status OpenSource(LogSource** result, const std::string& fname, Env* env,
 }
 
 Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
-                              size_t tmp_length) {
+                              size_t tmp_length, size_t* table_seeks,
+                              size_t* seeks) {
   Status status;
   uint32_t hash = Hash(fid.data(), fid.size(), 0);
   uint32_t part = hash & part_mask_;
@@ -1219,8 +1226,17 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
     assert(dirs_[part] != NULL);
     Dir* const dir = dirs_[part];
     dir->Ref();
-    status = dirs_[part]->Read(fid, dst, tmp, tmp_length);
+    Dir::ReadStats stats;
+    status = dirs_[part]->Read(fid, dst, tmp, tmp_length, &stats);
     dir->Unref();
+    if (status.ok()) {
+      if (table_seeks != NULL) {
+        *table_seeks = stats.total_table_seeks;
+      }
+      if (seeks != NULL) {
+        *seeks = stats.total_seeks;
+      }
+    }
     return status;
   } else {
     return status;

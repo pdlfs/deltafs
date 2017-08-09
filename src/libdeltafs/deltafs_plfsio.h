@@ -445,7 +445,8 @@ class DirReader {
 
   // Fetch the entire data from a specific file under a given plfs directory.
   virtual Status ReadAll(const Slice& fid, std::string* dst, char* tmp = NULL,
-                         size_t tmp_length = 0) = 0;
+                         size_t tmp_length = 0, size_t* table_seeks = NULL,
+                         size_t* seeks = NULL) = 0;
 
   // Return the aggregated I/O stats accumulated so far.
   virtual IoStats GetIoStats() const = 0;
