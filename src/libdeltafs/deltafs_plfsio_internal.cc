@@ -499,7 +499,8 @@ void TableLogger::Commit() {
   std::string* const buffer = data_block_.buffer_store();
 
   data_sink_->Lock();
-  assert(buffer->size() <= options_.block_batch_size);  // Verify write size
+  assert(buffer->size() <=
+         options_.block_batch_size);  // Verify buffer size and block alignment
   assert(buffer->size() % options_.block_size == 0);
   const size_t base = data_sink_->Ltell();
   Slice key;
@@ -515,6 +516,10 @@ void TableLogger::Commit() {
       handle_encoding.clear();
       handle.EncodeTo(&handle_encoding);
       assert(offset >= BlockHandle::kMaxEncodedLength);
+      assert(
+          memcmp(&buffer->at(offset - BlockHandle::kMaxEncodedLength),
+                 std::string(size_t(BlockHandle::kMaxEncodedLength), 0).c_str(),
+                 BlockHandle::kMaxEncodedLength) == 0);
       memcpy(&buffer->at(offset - BlockHandle::kMaxEncodedLength),
              handle_encoding.data(), handle_encoding.size());
       if (options_.block_padding) {
@@ -544,6 +549,7 @@ void TableLogger::Commit() {
 
 void TableLogger::EndBlock() {
   assert(!finished_);               // Finish() has not been called
+  if (pending_restart_) return;     // Empty block
   if (data_block_.empty()) return;  // Empty block
   if (!ok()) return;                // Abort
 
@@ -618,10 +624,10 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
 
   // Establish a new data block
   if (pending_restart_) {
-    data_block_.SwitchBuffer(NULL);
+    pending_restart_ = false;
+    data_block_.SwitchBuffer(NULL);  // Restart buffer
     data_block_.Pad(BlockHandle::kMaxEncodedLength);
     data_block_.Reset();
-    pending_restart_ = false;
   }
 
   last_key_ = key.ToString();
