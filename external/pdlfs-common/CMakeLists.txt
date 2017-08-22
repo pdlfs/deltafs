@@ -47,7 +47,7 @@
 #     - SNAPPY_LIBRARY_DIR: optional hint for finding snappy lib
 #
 #
-# note: package config files for external packages must be preinstalled in 
+# note: package config files for external packages must be preinstalled in
 #       CMAKE_INSTALL_PATH or on CMAKE_PREFIX_PATH, except as noted.
 #
 # pdlfs-common extras:
@@ -68,6 +68,9 @@ project (PDLFS-COMMON)
 # add our cmake module directory to the path
 set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
      "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# turn on -std=c++11 if possible
+set (CMAKE_CXX_STANDARD 11)
 
 # pull in pdlfs handling of generic cmake config
 include (cmake-options)
