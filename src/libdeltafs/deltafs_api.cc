@@ -651,7 +651,11 @@ typedef pdlfs::plfsio::DirReader DirReader;
 
 // Default system env.
 static inline pdlfs::Env* DefaultDirEnv() {
-  return pdlfs::port::posix::GetUnBufferedIOEnv();  // Avoid double-buffering
+#if defined(PDLFS_PLATFORM_POSIX)
+  return pdlfs::port::PosixGetUnBufferedIOEnv();  // Avoid double-buffering
+#else
+  return pdlfs::Env::Default();
+#endif
 }
 
 // Default thread pool impl.

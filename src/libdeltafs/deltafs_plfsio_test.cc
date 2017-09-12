@@ -104,11 +104,6 @@ TEST(WriterBufTest, VariableSizedValue) {
   delete iter;
 }
 
-static inline Env* TestEnv() {
-  Env* env = port::posix::GetUnBufferedIOEnv();
-  return env;
-}
-
 class PlfsIoTest {
  public:
   PlfsIoTest() {
@@ -119,7 +114,7 @@ class PlfsIoTest {
     options_.block_util = 0.998;
     options_.verify_checksums = true;
     options_.paranoid_checks = true;
-    options_.env = TestEnv();
+    options_.env = Env::Default();
     writer_ = NULL;
     reader_ = NULL;
     epoch_ = 0;
@@ -349,7 +344,7 @@ class FakeWritableFile : public WritableFileWrapper {
 class FakeEnv : public EnvWrapper {
  public:
   FakeEnv(uint64_t bytes_ps, EventListener* lis)
-      : EnvWrapper(TestEnv()), bytes_ps_(bytes_ps), lis_(lis) {}
+      : EnvWrapper(Env::Default()), bytes_ps_(bytes_ps), lis_(lis) {}
 
   virtual ~FakeEnv() {
     HistIter iter = hists_.begin();
@@ -903,7 +898,7 @@ class StringFile : public SequentialFile, public RandomAccessFile {
 
 class StringEnv : public EnvWrapper {
  public:
-  StringEnv() : EnvWrapper(TestEnv()) {}
+  StringEnv() : EnvWrapper(Env::Default()) {}
 
   virtual ~StringEnv() {
     FSIter iter = fs_.begin();
