@@ -714,34 +714,32 @@ static void InitPosixEnvs() {
 }
 
 namespace port {
-namespace posix {
-Env* GetDevNullEnv() {
+Env* PosixGetDevNullEnv() {
   pthread_once(&once, &InitPosixEnvs);
   return posix_nullio;
 }
 
-Env* GetDefaultEnv() {
+Env* PosixGetDefaultEnv() {
   pthread_once(&once, &InitPosixEnvs);
   return posix_env;
 }
 
-Env* GetUnBufferedIOEnv() {
+Env* PosixGetUnBufferedIOEnv() {
   pthread_once(&once, &InitPosixEnvs);
   return posix_unbufio;
 }
 
-Env* GetDirectIOEnv() {
+Env* PosixGetDirectIOEnv() {
   pthread_once(&once, &InitPosixEnvs);
   return posix_dio;
 }
-}  // namespace posix
 }  // namespace port
 
 Env* Env::Default() {
 #if !defined(PDLFS_PLATFORM_POSIX)
 #error "!!! This code should not compile !!!"
 #else
-  Env* result = port::posix::GetDefaultEnv();
+  Env* result = port::PosixGetDefaultEnv();
   assert(result != NULL);
   return result;
 #endif

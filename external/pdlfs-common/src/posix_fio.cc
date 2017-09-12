@@ -50,7 +50,8 @@ static inline Fio::Handle* NewHandle(int fd) {
   return new PosixFd(fd);
 #else
   intptr_t tmp = static_cast<intptr_t>(fd);
-  return (Handle*)tmp;
+  Fio::Handle* h = reinterpret_cast<Fio::Handle*>(tmp);
+  return h;
 #endif
 }
 
@@ -65,7 +66,8 @@ static inline int ToFd(Fio::Handle* fh) {
   assert(fh != NULL);
   return dynamic_cast<PosixFd*>(fh)->fd;
 #else
-  return (intptr_t)fh;
+  intptr_t tmp = reinterpret_cast<intptr_t>(fh);
+  return static_cast<int>(tmp);
 #endif
 }
 
