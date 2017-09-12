@@ -10,7 +10,7 @@
 
 #include "posix_env.h"
 #include "posix_logger.h"
-#include "posix_sock.h"
+#include "posix_netdev.h"
 
 #include <dirent.h>
 #include <pthread.h>
@@ -470,10 +470,15 @@ class PosixEnv : public Env {
   }
 
   virtual Status FetchHostIPAddrs(std::vector<std::string>* ips) {
-    PosixSock sock;
-    Status s = sock.OpenSocket();
-    if (s.ok()) s = sock.LoadSocketConfig();
-    if (s.ok()) s = sock.GetHostIPAddresses(ips);
+    PosixIf sock;
+    std::vector<Ifr> results;
+    Status s = sock.Open();
+    if (s.ok()) {
+      sock.IfConf(&results);
+      for (size_t i = 0; i < results.size(); i++) {
+        ips->push_back(results[i].ip);
+      }
+    }
     return s;
   }
 
@@ -483,6 +488,8 @@ class PosixEnv : public Env {
   MmapLimiter mmap_limit_;
 };
 
+// A simple Env wrapper that implements all I/O with direct I/O.
+// Currently only enabled on Linux.
 #if defined(PDLFS_OS_LINUX)
 class PosixDirectIOWrapper : public EnvWrapper {
  public:
@@ -562,6 +569,27 @@ class PosixUnBufferedIOWrapper : public EnvWrapper {
     }
   }
 };
+
+// A simple Env wrapper that redirects all I/O to dev null.
+#if defined(PDLFS_OS_LINUX)
+class PosixDevNullWrapper : public EnvWrapper {
+ public:
+  explicit PosixDevNullWrapper(Env* base) : EnvWrapper(base) {}
+  virtual ~PosixDevNullWrapper() { abort(); }
+
+  virtual Status NewWritableFile(const char* fname, WritableFile** r) {
+    return target()->NewWritableFile("dev/null", r);
+  }
+
+  virtual Status NewRandomAccessFile(const char* fname, RandomAccessFile** r) {
+    return target()->NewRandomAccessFile("/dev/null", r);
+  }
+
+  virtual Status NewSequentialFile(const char* fname, SequentialFile** r) {
+    return target()->NewSequentialFile("/dev/null", r);
+  }
+};
+#endif
 
 static pthread_t Pthread(void* (*func)(void*), void* arg, void* attr) {
   pthread_t th;
@@ -664,13 +692,19 @@ ThreadPool* ThreadPool::NewFixed(int num_threads, bool eager_init, void* attr) {
 
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 
+static Env* posix_nullio;
 static Env* posix_dio;
 static Env* posix_unbufio;
 static Env* posix_env;
 
-static void InitGlobalPosixEnvs() {
+static void InitPosixEnvs() {
   Env* base = new PosixEnv;
   posix_unbufio = new PosixUnBufferedIOWrapper(base);
+#if defined(PDLFS_OS_LINUX)
+  posix_nullio = new PosixDevNullWrapper(base);
+#else
+  posix_nullio = NULL;
+#endif
 #if defined(PDLFS_OS_LINUX)
   posix_dio = new PosixDirectIOWrapper(base);
 #else
@@ -681,18 +715,23 @@ static void InitGlobalPosixEnvs() {
 
 namespace port {
 namespace posix {
+Env* GetDevNullEnv() {
+  pthread_once(&once, &InitPosixEnvs);
+  return posix_nullio;
+}
+
 Env* GetDefaultEnv() {
-  pthread_once(&once, &InitGlobalPosixEnvs);
+  pthread_once(&once, &InitPosixEnvs);
   return posix_env;
 }
 
 Env* GetUnBufferedIOEnv() {
-  pthread_once(&once, &InitGlobalPosixEnvs);
+  pthread_once(&once, &InitPosixEnvs);
   return posix_unbufio;
 }
 
 Env* GetDirectIOEnv() {
-  pthread_once(&once, &InitGlobalPosixEnvs);
+  pthread_once(&once, &InitPosixEnvs);
   return posix_dio;
 }
 }  // namespace posix
