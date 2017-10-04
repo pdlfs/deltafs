@@ -9,14 +9,21 @@
 
 #pragma once
 
-#include <bbos/bbos_api.h>
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/status.h"
+
+#if defined(DELTAFS_BBOS)
+#include <bbos/bbos_api.h>
+#endif
 
 namespace pdlfs {
 namespace bbos {
 
-// Env factory methods
+// Factory method
+
+// Create a new bbos client instance with an existing mercury context.
+// The existing mercury context may be NULL so a new and private mercury context
+// will be created by bbos.
 extern Status BbosInit(Env**, const char* hg_local, const char* hg_remote,
                        void* hg_class, void* hg_ctx);
 
@@ -33,16 +40,17 @@ enum BbosType {
 extern Status BbosError(const std::string& err_msg, int err_num);
 
 // Determine object type according to a given file name
-inline BbosType TryResolveBbosType(const Slice& name) {
-  if (name.ends_with(".idx")) {
+inline BbosType TryResolveBbosType(const std::string& name) {
+  if (name.rfind(".idx") != std::string::npos) {
     return BbosType::kIndex;
-  } else if (name.ends_with(".dat")) {
+  } else if (name.rfind(".dat") != std::string::npos) {
     return BbosType::kData;
   } else {
     return BbosType::kDefault;
   }
 }
 
+#if defined(DELTAFS_BBOS)
 // Thread-unsafe sequential read-only file abstraction built on top of bbos
 class BbosSequentialFile : public SequentialFile {
  private:
@@ -150,6 +158,7 @@ class BbosWritableFile : public WritableFile {
     return Status::OK();  // Do nothing
   }
 };
+#endif
 
 }  // namespace bbos
 }  // namespace pdlfs

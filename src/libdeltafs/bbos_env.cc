@@ -23,6 +23,7 @@ std::string BbosName(const char* fname) {
   return result;
 }
 
+#if defined(DELTAFS_BBOS)
 // Map bbos errors to deltafs errors
 Status BbosError(const std::string& err_msg, int err_num) {
   switch (err_num) {
@@ -63,13 +64,15 @@ class BbosEnv : public Env {
 
   virtual Status NewWritableFile(const char* fname, WritableFile** r) {
     const std::string obj_name = BbosName(fname);
-    int ret = bbos_mkobj(
-        bb_handle_, obj_name.c_str(),
-        static_cast<bbos_mkobj_flag_t>(TryResolveBbosType(obj_name)));
+    const BbosType obj_type = TryResolveBbosType(obj_name);
+    int ret = bbos_mkobj(bb_handle_, obj_name.c_str(),
+                         static_cast<bbos_mkobj_flag_t>(obj_type));
     if (ret != BB_SUCCESS) {
       std::string bbos_err_msg("cannot create bbos object '");
       bbos_err_msg += obj_name;
-      bbos_err_msg += "'";
+      bbos_err_msg += "', type=";
+      bbos_err_msg +=
+          (obj_type == BbosType::kIndex) ? "READ_OPTIMIZED" : "WRITE_OPTIMIZED";
       *r = NULL;
       return BbosError(bbos_err_msg, ret);
     } else {
@@ -162,6 +165,7 @@ class BbosEnv : public Env {
 // The following method creates a new bbos Env object
 // each time it is called. The result should be deleted by the caller
 // when it is no longer needed.
+// Both hg_class and hg_ctx may be NULL.
 Status BbosInit(Env** result, const char* hg_local, const char* hg_remote,
                 void* hg_class, void* hg_ctx) {
   *result = NULL;
@@ -175,7 +179,8 @@ Status BbosInit(Env** result, const char* hg_local, const char* hg_remote,
   } else if (hg_class != NULL && hg_ctx != NULL) {
     int ret = bbos_init_ext(hg_local, hg_remote, hg_class, hg_ctx, &bb_handle);
     if (ret != BB_SUCCESS) {
-      s = BbosError("cannot create bbos handle", ret);
+      s = BbosError(
+          "cannot create bbos handle with an existing mercury context", ret);
     }
   } else {
     int ret = bbos_init(hg_local, hg_remote, &bb_handle);
@@ -190,6 +195,7 @@ Status BbosInit(Env** result, const char* hg_local, const char* hg_remote,
 
   return s;
 }
+#endif
 
 }  // namespace bbos
 }  // namespace pdlfs
