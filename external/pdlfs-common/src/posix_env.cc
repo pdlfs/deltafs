@@ -578,7 +578,7 @@ class PosixDevNullWrapper : public EnvWrapper {
   virtual ~PosixDevNullWrapper() { abort(); }
 
   virtual Status NewWritableFile(const char* fname, WritableFile** r) {
-    return target()->NewWritableFile("dev/null", r);
+    return target()->NewWritableFile("/dev/null", r);
   }
 
   virtual Status NewRandomAccessFile(const char* fname, RandomAccessFile** r) {
