@@ -34,6 +34,7 @@ set (DELTAFS_REQUIRED_PACKAGES "deltafs-common")
 # optional deltafs-bb
 if (DELTAFS_BBOS)
     list (APPEND deltafs-srcs bbos_env.cc)
+    list (APPEND deltafs-tests bbos_env_test.cc)
     list (APPEND DELTAFS_REQUIRED_PACKAGES bbos)
 endif ()
 
