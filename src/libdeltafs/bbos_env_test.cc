@@ -20,8 +20,8 @@ static const char* argv0;  // Program name
 namespace pdlfs {
 namespace bbos {
 
-static void VLOG(int err, const char* fmt, va_list va) {
-  if (err) fprintf(stderr, "[ERROR] ");
+static void va_log(int err, const char* fmt, va_list va) {
+  if (err) fprintf(stderr, "ERROR: ");
   fprintf(stderr, "%s: ", argv0);
   vfprintf(stderr, fmt, va);
   fprintf(stderr, "\n");
@@ -32,7 +32,7 @@ static void VLOG(int err, const char* fmt, va_list va) {
 static void FATAL(const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  VLOG(1, fmt, ap);
+  va_log(1, fmt, ap);
   va_end(ap);
 }
 
@@ -40,7 +40,7 @@ static void FATAL(const char* fmt, ...) {
 static void NOTICE(const char* fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  VLOG(0, fmt, ap);
+  va_log(0, fmt, ap);
   va_end(ap);
 }
 
