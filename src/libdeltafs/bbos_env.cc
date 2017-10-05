@@ -72,9 +72,10 @@ class BbosEnv : public Env {
     if (ret != BB_SUCCESS) {
       std::string bbos_err_msg("cannot create bbos object '");
       bbos_err_msg += obj_name;
-      bbos_err_msg += "', type=";
+      bbos_err_msg += "' (type=";
       bbos_err_msg +=
           (obj_type == BbosType::kIndex) ? "READ_OPTIMIZED" : "WRITE_OPTIMIZED";
+      bbos_err_msg += ")";
       *r = NULL;
       return BbosError(bbos_err_msg, ret);
     } else {

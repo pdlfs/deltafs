@@ -89,8 +89,8 @@ BbosBench::BbosBench() : base_env_(NULL), env_(NULL) {
   NOTICE("creating bbos env (hg_local=%s, hg_remote=%s) ...", hg_lo_,
          hg_remote_);
   Status s = BbosInit(&env_, hg_lo_, hg_remote_, NULL, NULL);
-  ASSERT_OK(s) << "cannot init bbos";
-  ASSERT_TRUE(env_ != NULL) << "bbos handle is null";
+  ASSERT_OK(s) << "\n  > cannot init bbos";
+  ASSERT_TRUE(env_ != NULL) << "\n  > bbos handle is null";
   NOTICE("creating ok!");
 }
 
@@ -106,7 +106,7 @@ void BbosBench::LogAndApply() {
   num_chunks = GetBbosIntOption("BBOS_NUM_CHUNKS", 8);
   NOTICE("creating bbos object: %s.dat ...", prefix.c_str());
   s = env_->NewWritableFile(std::string(prefix + ".dat").c_str(), &data_sink);
-  ASSERT_OK(s) << "cannot create writable non-index object";
+  ASSERT_OK(s) << "\n  > cannot create writable non-index object";
   NOTICE("creating ok!");
 
   std::string buffer;
@@ -115,9 +115,9 @@ void BbosBench::LogAndApply() {
   for (int i = 0; i < int(num_chunks); i++) {
     NOTICE("chuck %d ...", i);
     s = data_sink->Append(buffer);
-    ASSERT_OK(s) << "cannot write into object";
+    ASSERT_OK(s) << "\n  > cannot write into object";
     s = data_sink->Flush();
-    ASSERT_OK(s) << "cannot flush object";
+    ASSERT_OK(s) << "\n  > cannot flush object";
     NOTICE("ok!");
   }
   data_sink->Close();
