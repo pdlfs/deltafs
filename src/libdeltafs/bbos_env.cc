@@ -28,16 +28,18 @@ std::string BbosName(const char* fname) {
 Status BbosError(const std::string& err_msg, int err_num) {
   switch (err_num) {
     case BB_INVALID_READ:
-      return Status::IOError(err_msg, "read past EOF");
+      return Status::IOError(err_msg, "past EOF (BB_INVALID_READ)");
     case BB_ERROBJ:
-      return Status::IOError(
-          err_msg, "cannot create object");  // XXX: object already exists?
+      return Status::IOError(err_msg, "unable to create object (BB_ERROBJ)");
     case BB_ENOCONTAINER:
-      return Status::NotFound(err_msg, "container object not found");
+      return Status::NotFound(
+          err_msg, "underlying container not found (BB_ENOCONTAINER)");
     case BB_ENOOBJ:
-      return Status::NotFound(err_msg, "no such object");
+      return Status::NotFound(err_msg, "no such object (BB_ENOOBJ)");
+    case BB_FAILED:
+      return Status::IOError(err_msg, "general error (BB_FAILED)");
     default:
-      return Status::Corruption(err_msg, "bbos error");
+      return Status::Corruption(err_msg);
   }
 }
 
