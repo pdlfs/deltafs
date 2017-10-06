@@ -201,7 +201,8 @@ static inline uint32_t LE_LOAD32(const uint8_t* p) {
   return DecodeFixed32(reinterpret_cast<const char*>(p));
 }
 
-uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
+// Optimized to handle 4 bytes at a time.
+uint32_t ExtendSW(uint32_t crc, const char* buf, size_t size) {
   const uint8_t* p = reinterpret_cast<const uint8_t*>(buf);
   const uint8_t* e = p + size;
   uint32_t l = crc ^ 0xffffffffu;
@@ -247,16 +248,6 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
 #undef STEP4
 #undef STEP1
   return l ^ 0xffffffffu;
-}
-
-extern uint32_t crc32c_xx(uint32_t, const void*, size_t);
-
-uint32_t ExtendHW(uint32_t init_crc, const char* data, size_t n) {
-#ifdef PDLFS_PLATFORM_POSIX
-  return crc32c_xx(init_crc, data, n);
-#else
-  return Extend(init_crc, data, n);
-#endif
 }
 
 }  // namespace crc32c

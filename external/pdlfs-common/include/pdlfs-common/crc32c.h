@@ -19,20 +19,15 @@ namespace crc32c {
 // Return the crc32c of concat(A, data[0,n-1]) where init_crc is the
 // crc32c of some string A.  Extend() is often used to maintain the
 // crc32c of a stream of data.
+// If hardware acceleration (via SSE4_2) is possible during runtime, crc32c
+// calculation will be dynamically switched to a hardware-assisted
+// implementation. Otherwise, a pure software-based implementation will be used.
 extern uint32_t Extend(uint32_t init_crc, const char* data, size_t n);
 
 // Return the crc32c of data[0,n-1]
 inline uint32_t Value(const char* data, size_t n) { return Extend(0, data, n); }
 
-// A faster crc32c implementation with optimizations that use special Intel
-// SSE4.2 hardware instructions if they are available at runtime.
-extern uint32_t ExtendHW(uint32_t init_crc, const char* data, size_t n);
-
-// Return the crc32c of data[0,n-1] using hardware instructions.
-inline uint32_t ValueHW(const char* data, size_t n) {
-  return ExtendHW(0, data, n);
-}
-
+// Internal to implementation. API user should ignore.
 static const uint32_t kMaskDelta = 0xa282ead8ul;
 
 // Return a masked representation of crc.
