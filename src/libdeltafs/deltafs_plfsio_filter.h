@@ -16,7 +16,6 @@
 #include <stdint.h>
 
 namespace pdlfs {
-
 namespace plfsio {
 
 inline uint32_t BloomHash(const Slice& key) {
@@ -35,14 +34,14 @@ class BloomBlock {
   // functions it should use on each inserted key to set the bits.
   // When creating a bloom filter block, the caller also specifies the total
   // amount of memory to reserve for the underlying bitmap.
-  BloomBlock(size_t bits_per_key, size_t max_bytes);
+  BloomBlock(size_t bits_per_key, size_t bytes_to_reserve);
   ~BloomBlock();
 
   // A bloom filter must be reset before keys may be inserted.
   // When resetting a bloom filter, the caller specifies the total number of
   // keys it will be inserting into the bloom filter. This allows the bloom
-  // filter to decide how many bits to allocate for the underlying bitmap.
-  // Note that the underlying bitmap won't be resized before the next reset.
+  // filter to decide how many bits to use for the underlying bitmap.
+  // The underlying bitmap won't be re-sized before the next reset.
   void Reset(uint32_t num_keys);
 
   // Insert a key into the bloom filter.
@@ -61,14 +60,49 @@ class BloomBlock {
   void operator=(const BloomBlock&);
   BloomBlock(const BloomBlock&);
   const size_t bits_per_key_;  // Number of bits for each key
-  const size_t max_bytes_;     // Max filter size in bytes
 
   bool finished_;  // If Finish() has been called
   std::string space_;
-  // Size of the underlying bitmap
+  // Size of the underlying bitmap in bits
   uint32_t bits_;
   // Number of hash functions
   uint32_t k_;
+};
+
+// A simple filter backed by a bitmap.
+class BitmapBlock {
+ public:
+  BitmapBlock(size_t key_bits);  // Key size in bits
+  ~BitmapBlock();
+
+  // A bitmap filter must be reset before keys may be inserted.
+  // When resetting a bitmap filter, the caller specifies the total number of
+  // keys it will be inserting into the bitmap filter. This allows the bitmap
+  // filter to estimate the density of its bit array and to prepare for
+  // incoming keys.
+  void Reset(uint32_t num_keys);
+
+  // Insert a key into the bitmap filter.
+  // REQUIRES: Reset(num_keys) has been called.
+  // REQUIRES: Finish() has not been called.
+  void AddKey(const Slice& key);
+
+  // Finalize the block data and return its contents.
+  Slice Finish();
+
+  // Return the underlying buffer space.
+  std::string* buffer_store() { return &space_; }
+
+ private:
+  // No copying allowed
+  void operator=(const BitmapBlock&);
+  BitmapBlock(const BitmapBlock&);
+  const size_t key_bits_;  // Key size in bits
+
+  bool finished_;  // If Finish() has been called
+  std::string space_;
+  // Size of the underlying bitmap in bits
+  uint32_t bits_;
 };
 
 }  // namespace plfsio

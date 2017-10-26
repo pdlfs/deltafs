@@ -14,14 +14,15 @@
 namespace pdlfs {
 namespace plfsio {
 
-BloomBlock::BloomBlock(size_t bits_per_key, size_t total_bytes)
-    : bits_per_key_(bits_per_key), max_bytes_(total_bytes) {
+BloomBlock::BloomBlock(size_t bits_per_key, size_t bytes_to_reserve)
+    : bits_per_key_(bits_per_key) {
   // Round down to reduce probing cost a little bit
   k_ = static_cast<uint32_t>(bits_per_key_ * 0.69);  // 0.69 =~ ln(2)
   if (k_ < 1) k_ = 1;
   if (k_ > 30) k_ = 30;
-  space_.reserve(max_bytes_ + 1);  // Reserve an extra byte for storing the k
-  finished_ = true;                // Pending further initialization
+  // Reserve an extra byte for storing the k
+  space_.reserve(bytes_to_reserve + 1);
+  finished_ = true;  // Pending further initialization
   bits_ = 0;
 }
 
@@ -37,7 +38,6 @@ void BloomBlock::Reset(uint32_t num_keys) {
   uint32_t bytes = (bits_ + 7) / 8;
   finished_ = false;
   space_.clear();
-  assert(bytes <= max_bytes_);
   space_.resize(bytes, 0);
   // Remember # of probes in filter
   space_.push_back(static_cast<char>(k_));
@@ -92,6 +92,8 @@ bool BloomKeyMayMatch(const Slice& key, const Slice& input) {
 
   return true;
 }
+
+BitmapBlock::~BitmapBlock() {}
 
 }  // namespace plfsio
 }  // namespace pdlfs
