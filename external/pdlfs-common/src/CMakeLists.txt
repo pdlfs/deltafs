@@ -87,9 +87,6 @@ endif ()
 if (TARGET mercury AND PDLFS_MERCURY_RPC)
     list (APPEND PDLFS_REQUIRED_PACKAGES mercury)   # for *-config.cmake
     list (APPEND pdlfs-xtra-libs mercury)           # for build
-    # XXX: mercury doesn't set its INTERFACE_INCLUDE_DIRECTORIES property
-    # XXX: so we have to do it here...
-    list (APPEND pdlfs-xtra-incs ${MERCURY_INCLUDE_DIR})
 endif ()
 
 if (TARGET rados AND PDLFS_RADOS)
@@ -331,7 +328,5 @@ endforeach ()
 
 # mercury test also directly uses mercury API... add that to test target
 if (TARGET mercury_test AND PDLFS_MERCURY_RPC)
-    target_include_directories (mercury_test PRIVATE ${MERCURY_INCLUDE_DIR})
     target_link_libraries (mercury_test mercury)
 endif ()
-

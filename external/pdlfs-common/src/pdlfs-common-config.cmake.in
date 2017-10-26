@@ -40,9 +40,6 @@ foreach (lcv ${PDLFS_REQUIRED_XDUALIMPORTS})
     xdual_import (${lcv} REQUIRED)
 endforeach ()
 
-# XXX: as long as we hide mercury behind our API we don't need to worry
-# about target_include_directories our lib with ${MERCURY_INCLUDE_DIR}
-
 # check for user requested components (which we map to linked in packages)
 foreach (comp ${@PDLFS_NAME@_FIND_COMPONENTS})
     if (NOT ";${PDLFS_ALL_COMPONENTS};" MATCHES ";${comp};")
