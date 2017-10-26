@@ -664,7 +664,7 @@ DirLogger::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
   buf1_.Reserve(entries_per_tb_, tb_bytes_);
 
   if (options_.bf_bits_per_key != 0) {
-    filter_ = new BloomBlock(options_.bf_bits_per_key, bf_bytes_);
+    filter_ = new BloomBlock(options_, bf_bytes_);
   }
 
   mem_buf_ = &buf0_;

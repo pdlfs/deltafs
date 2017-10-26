@@ -8,14 +8,15 @@
  */
 
 #include "deltafs_plfsio_filter.h"
+#include "deltafs_plfsio.h"
 
 #include <assert.h>
 
 namespace pdlfs {
 namespace plfsio {
 
-BloomBlock::BloomBlock(size_t bits_per_key, size_t bytes_to_reserve)
-    : bits_per_key_(bits_per_key) {
+BloomBlock::BloomBlock(const DirOptions& options, size_t bytes_to_reserve)
+    : bits_per_key_(options.bf_bits_per_key) {
   // Round down to reduce probing cost a little bit
   k_ = static_cast<uint32_t>(bits_per_key_ * 0.69);  // 0.69 =~ ln(2)
   if (k_ < 1) k_ = 1;
@@ -93,7 +94,98 @@ bool BloomKeyMayMatch(const Slice& key, const Slice& input) {
   return true;
 }
 
-BitmapBlock::~BitmapBlock() {}
+// Encoding a bitmap as-is, uncompressed. Used for debugging only.
+// Not intended for production.
+// The first byte is used to store the key size in # bits.
+class UncompressedFormat {
+ public:
+  explicit UncompressedFormat(const DirOptions& options, std::string* space)
+      : key_bits_(options.key_size * 8), space_(space) {
+    bits_ = 1u << key_bits_;  // Max number of keys
+  }
+
+  void Reset(uint32_t num_keys) {
+    space_->clear();
+    // Remember the key size in # bits
+    space_->push_back(static_cast<char>(key_bits_));
+    const size_t bytes = (bits_ + 7) / 8;  // Bitmap size (uncompressed)
+    space_->resize(1 + bytes, 0);
+  }
+
+  // Set the i-th bit to "1". If the i-th bit is already set,
+  // no action needs to be taken.
+  void Set(uint32_t i) {
+    assert(i < bits_);  // Must not flow out of the key space
+    (*space_)[1 + (i / 8)] |= 1 << (i % 8);
+  }
+
+  // Finalize the buffer and return the final representation.
+  Slice Finish() { return *space_; }
+
+ private:
+  // Key size in bits
+  const size_t key_bits_;
+  // Underlying space for the bitmap
+  std::string* const space_;
+  // Total bits in the bitmap
+  size_t bits_;
+};
+
+template class BitmapBlock<UncompressedFormat>;
+
+template <typename T>
+BitmapBlock<T>::BitmapBlock(const DirOptions& options, size_t bytes_to_reserve)
+    : key_bits_(options.key_size * 8) {
+  // Reserve an extra byte for storing the key size in bits
+  space_.reserve(bytes_to_reserve + 1);
+  fmt_ = new T(options, &space_);
+  finished_ = true;  // Pending further initialization
+  mask_ = ~static_cast<uint32_t>(0) << key_bits_;
+  mask_ = ~mask_;
+}
+
+template <typename T>
+void BitmapBlock<T>::Reset(uint32_t num_keys) {
+  assert(fmt_ != NULL);
+  fmt_->Reset(num_keys);
+  finished_ = false;
+}
+
+// Insert a key (1-4 bytes) into the bitmap filter. If the key has more than 4
+// bytes, the rest bytes are ignored. If a key has less than 4 bytes, it will be
+// zero-padded to 4 bytes.
+// Inserting a key is achieved by first converting the key into an int, i,
+// and then setting the i-th bit of the bitmap to "1".
+// To convert a key into an int, the first 4 bytes of the key is interpreted as
+// the little-endian representation of a 32-bit int. As illustrated below,
+// the conversion may be seen as using the "first" 32 bits of the byte array to
+// construct an int.
+//
+// [07.06.05.04.03.02.01.00]  [15.14.13.12.11.10.09.08] [...] [...]
+//  <------------ byte 0 ->    <------------ byte 1 ->
+//
+template <typename T>
+void BitmapBlock<T>::AddKey(const Slice& key) {
+  assert(!finished_);  // Finish() has not been called
+  char tmp[4] = {0};
+  memcpy(tmp, key.data(), std::min(key.size(), sizeof(tmp)));
+  uint32_t i = DecodeFixed32(tmp);
+  i &= mask_;
+  assert(fmt_ != NULL);
+  fmt_->Set(i);
+}
+
+template <typename T>
+Slice BitmapBlock<T>::Finish() {
+  assert(fmt_ != NULL);
+  finished_ = true;
+  return fmt_->Finish();
+}
+
+template <typename T>
+BitmapBlock<T>::~BitmapBlock() {
+  delete fmt_;
+}
 
 }  // namespace plfsio
 }  // namespace pdlfs

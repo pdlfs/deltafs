@@ -22,6 +22,8 @@ inline uint32_t BloomHash(const Slice& key) {
   return Hash(key.data(), key.size(), 0xbc9f1d34);  // Magic
 }
 
+class DirOptions;
+
 // Return false iff the target key is guaranteed to not exist in a given bloom
 // filter.
 extern bool BloomKeyMayMatch(const Slice& key, const Slice& input);
@@ -29,12 +31,12 @@ extern bool BloomKeyMayMatch(const Slice& key, const Slice& input);
 // A simple bloom filter implementation
 class BloomBlock {
  public:
-  // Create a bloom filter block and set the number of bits to allocate
-  // for each incoming key. This allows the bloom filter to decide how many hash
-  // functions it should use on each inserted key to set the bits.
-  // When creating a bloom filter block, the caller also specifies the total
-  // amount of memory to reserve for the underlying bitmap.
-  BloomBlock(size_t bits_per_key, size_t bytes_to_reserve);
+  // Create a bloom filter block using a given set of options.
+  // When creating the block, the caller also specifies the total amount of
+  // memory to reserve for storing the underlying bitmap.
+  // Insufficient memory reservation may cause dynamic memory allocation
+  // at a later time.
+  BloomBlock(const DirOptions& options, size_t bytes_to_reserve);
   ~BloomBlock();
 
   // A bloom filter must be reset before keys may be inserted.
@@ -69,10 +71,20 @@ class BloomBlock {
   uint32_t k_;
 };
 
+// Bitmap compression formats.
+class UncompressedFormat;
+
 // A simple filter backed by a bitmap.
+template <typename T = UncompressedFormat>
 class BitmapBlock {
  public:
-  BitmapBlock(size_t key_bits);  // Key size in bits
+  // Create a bitmap filter block using a given set of options.
+  // When creating the block, the caller also specifies the total amount of
+  // memory to reserve for storing the bitmap.
+  // The bitmap may be stored in a compressed format.
+  // Insufficient memory reservation may cause dynamic memory allocation
+  // at a later time.
+  BitmapBlock(const DirOptions& options, size_t bytes_to_reserve);
   ~BitmapBlock();
 
   // A bitmap filter must be reset before keys may be inserted.
@@ -101,8 +113,10 @@ class BitmapBlock {
 
   bool finished_;  // If Finish() has been called
   std::string space_;
-  // Size of the underlying bitmap in bits
-  uint32_t bits_;
+  // Pre-computed mask for incoming keys
+  uint32_t mask_;
+  // Compression format
+  T* fmt_;
 };
 
 }  // namespace plfsio
