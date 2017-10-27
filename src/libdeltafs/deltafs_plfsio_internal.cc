@@ -589,8 +589,11 @@ Status TableLogger::Finish() {
   return status_;
 }
 
-DirLogger::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
-                     port::CondVar* cv)
+template class DirLogger<BloomBlock>;
+
+template <typename T>
+DirLogger<T>::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
+                        port::CondVar* cv)
     : options_(options),
       bg_cv_(cv),
       mu_(mu),
@@ -664,13 +667,14 @@ DirLogger::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
   buf1_.Reserve(entries_per_tb_, tb_bytes_);
 
   if (options_.bf_bits_per_key != 0) {
-    filter_ = new BloomBlock(options_, bf_bytes_);
+    filter_ = new T(options_, bf_bytes_);
   }
 
   mem_buf_ = &buf0_;
 }
 
-DirLogger::~DirLogger() {
+template <typename T>
+DirLogger<T>::~DirLogger() {
   mu_->AssertHeld();
   while (has_bg_compaction_) {
     bg_cv_->Wait();
@@ -678,35 +682,34 @@ DirLogger::~DirLogger() {
   delete tb_;
   if (data_ != NULL) data_->Unref();
   if (indx_ != NULL) indx_->Unref();
-  BloomBlock* bf = static_cast<BloomBlock*>(filter_);
-  if (bf != NULL) {
-    delete bf;
-  }
+  delete filter_;
 }
 
-Status DirLogger::Open(LogSink* data, LogSink* indx) {
-  assert(!opened_);  // Open() has not been called before
+template <typename T>
+Status DirLogger<T>::Open(LogSink* data, LogSink* indx) {
+  // Open() has not been called before
+  assert(!opened_);
   opened_ = true;
-
   data_ = data;
   indx_ = indx;
+
   data_->Ref();
   indx_->Ref();
-
   tb_ = new TableLogger(options_, data_, indx_);
 
-  // We always return OK
   return Status::OK();
 }
 
 // True iff there is an on-going background compaction.
-bool DirLogger::has_bg_compaction() {
+template <typename T>
+bool DirLogger<T>::has_bg_compaction() {
   mu_->AssertHeld();
   return has_bg_compaction_;
 }
 
 // Report background compaction status.
-Status DirLogger::bg_status() {
+template <typename T>
+Status DirLogger<T>::bg_status() {
   mu_->AssertHeld();
   return bg_status_;
 }
@@ -715,7 +718,8 @@ Status DirLogger::bg_status() {
 // By default, log files are reference counted and are implicitly closed when
 // de-referenced by the last opener. Optionally, caller may force the
 // fsync and closing of all log files.
-Status DirLogger::SyncAndClose() {
+template <typename T>
+Status DirLogger<T>::SyncAndClose() {
   mu_->AssertHeld();
   assert(opened_);
   const bool sync = true;
@@ -736,7 +740,8 @@ Status DirLogger::SyncAndClose() {
 // Otherwise, **wait** until a compaction is scheduled unless
 // options_.non_blocking is set. After a compaction has been scheduled,
 // **wait** until it finishes unless no_wait has been set.
-Status DirLogger::Flush(const FlushOptions& flush_options) {
+template <typename T>
+Status DirLogger<T>::Flush(const FlushOptions& flush_options) {
   mu_->AssertHeld();
   assert(opened_);
   // Wait for buffer space
@@ -768,7 +773,8 @@ Status DirLogger::Flush(const FlushOptions& flush_options) {
   return status;
 }
 
-Status DirLogger::Add(const Slice& key, const Slice& value) {
+template <typename T>
+Status DirLogger<T>::Add(const Slice& key, const Slice& value) {
   mu_->AssertHeld();
   assert(opened_);
   Status status = Prepare();
@@ -776,7 +782,10 @@ Status DirLogger::Add(const Slice& key, const Slice& value) {
   return status;
 }
 
-Status DirLogger::Prepare(bool force, bool epoch_flush, bool finalize) {
+template <typename T>
+Status DirLogger<T>::Prepare(bool force /* force minor memtable flush */,
+                             bool epoch_flush /* force epoch flush */,
+                             bool finalize) {
   mu_->AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
@@ -818,7 +827,8 @@ Status DirLogger::Prepare(bool force, bool epoch_flush, bool finalize) {
   return status;
 }
 
-void DirLogger::MaybeScheduleCompaction() {
+template <typename T>
+void DirLogger<T>::MaybeScheduleCompaction() {
   mu_->AssertHeld();
 
   // Do not schedule more if we are in error status
@@ -845,13 +855,15 @@ void DirLogger::MaybeScheduleCompaction() {
   }
 }
 
-void DirLogger::BGWork(void* arg) {
+template <typename T>
+void DirLogger<T>::BGWork(void* arg) {
   DirLogger* ins = reinterpret_cast<DirLogger*>(arg);
   MutexLock ml(ins->mu_);
   ins->DoCompaction();
 }
 
-void DirLogger::DoCompaction() {
+template <typename T>
+void DirLogger<T>::DoCompaction() {
   mu_->AssertHeld();
   assert(has_bg_compaction_);
   assert(imm_buf_ != NULL);
@@ -865,14 +877,15 @@ void DirLogger::DoCompaction() {
   bg_cv_->SignalAll();
 }
 
-void DirLogger::CompactMemtable() {
+template <typename T>
+void DirLogger<T>::CompactMemtable() {
   mu_->AssertHeld();
   WriteBuffer* const buffer = imm_buf_;
   assert(buffer != NULL);
   const bool is_final = imm_buf_is_final_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   TableLogger* const tb = tb_;
-  BloomBlock* const bf = static_cast<BloomBlock*>(filter_);
+  T* const bf = filter_;
   mu_->Unlock();
   const uint64_t start = CurrentTimeMicros();
   if (options_.listener != NULL) {
@@ -944,7 +957,8 @@ void DirLogger::CompactMemtable() {
   return;
 }
 
-size_t DirLogger::memory_usage() const {
+template <typename T>
+size_t DirLogger<T>::memory_usage() const {
   mu_->AssertHeld();
   if (opened_) {
     size_t result = 0;
@@ -955,9 +969,7 @@ size_t DirLogger::memory_usage() const {
     stores.push_back(tb_->meta_block_.buffer_store());
     stores.push_back(tb_->indx_block_.buffer_store());
     stores.push_back(tb_->data_block_.buffer_store());
-    if (filter_ != NULL) {
-      stores.push_back(static_cast<BloomBlock*>(filter_)->buffer_store());
-    }
+    if (filter_ != NULL) stores.push_back(filter_->buffer_store());
     stores.push_back(tb_->indx_logger_.buffer_store());
     for (size_t i = 0; i < stores.size(); i++) {
       result += stores[i]->capacity();

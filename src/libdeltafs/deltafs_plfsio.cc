@@ -282,7 +282,7 @@ class DirWriterImpl : public DirWriter {
   WritableFileStats io_stats_;
   std::vector<const OutputStats*> compaction_stats_;
   std::vector<std::string*> write_bufs_;
-  DirLogger** dirs_;
+  DirLogger<>** dirs_;
   LogSink* data_;
 };
 
@@ -502,11 +502,11 @@ Status DirWriterImpl::TryFlush(bool epoch_flush, bool finalize) {
   mutex_.AssertHeld();
   assert(has_pending_flush_);
   Status status;
-  std::vector<DirLogger*> remaining;
+  std::vector<DirLogger<>*> remaining;
   for (size_t i = 0; i < num_parts_; i++) remaining.push_back(dirs_[i]);
-  std::vector<DirLogger*> waiting_list;
+  std::vector<DirLogger<>*> waiting_list;
 
-  DirLogger::FlushOptions flush_options(epoch_flush, finalize);
+  DirLogger<>::FlushOptions flush_options(epoch_flush, finalize);
   while (!remaining.empty()) {
     waiting_list.clear();
     for (size_t i = 0; i < remaining.size(); i++) {
@@ -993,7 +993,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   }
 
   DirWriterImpl* impl = new DirWriterImpl(options);
-  std::vector<DirLogger*> tmp_dirs(num_parts, NULL);
+  std::vector<DirLogger<>*> tmp_dirs(num_parts, NULL);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
   std::vector<const OutputStats*> compaction_stats;
@@ -1008,7 +1008,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
     port::Mutex* const mtx = NULL;  // No synchronization needed for index files
     for (size_t i = 0; i < num_parts; i++) {
       tmp_dirs[i] =
-          new DirLogger(impl->options_, i, &impl->mutex_, &impl->bg_cv_);
+          new DirLogger<>(impl->options_, i, &impl->mutex_, &impl->bg_cv_);
       WritableFileStats* idx_io_stats =
           options.measure_writes ? &tmp_dirs[i]->io_stats_ : NULL;
       size_t idx_min = options.min_index_buffer;
@@ -1027,7 +1027,7 @@ Status DirWriter::Open(const DirOptions& opts, const std::string& name,
   }
 
   if (status.ok()) {
-    DirLogger** dirs = new DirLogger*[num_parts];
+    DirLogger<>** dirs = new DirLogger<>*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {
       assert(tmp_dirs[i] != NULL);
       dirs[i] = tmp_dirs[i];

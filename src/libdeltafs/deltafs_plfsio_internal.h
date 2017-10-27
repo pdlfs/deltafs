@@ -16,11 +16,11 @@
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/port.h"
 
-#ifndef NDEBUG
-#include <set>
-#endif
 #include <string>
 #include <vector>
+#ifndef NDEBUG
+#include <set>  // For potential key collision detection
+#endif
 
 namespace pdlfs {
 namespace plfsio {
@@ -117,6 +117,7 @@ class TableLogger {
   // Used to verify the uniqueness of all input keys
   std::set<std::string> keys_;
 #endif
+  template <typename T>
   friend class DirLogger;
 
   // No copying allowed
@@ -158,9 +159,12 @@ class TableLogger {
   bool finished_;
 };
 
+class BloomBlock;
+
 // Sequentially format and write data as multiple sorted runs
 // of indexed tables. Implementation is thread-safe and
 // uses background threads.
+template <typename T = BloomBlock>
 class DirLogger {
  public:
   DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
@@ -253,7 +257,7 @@ class DirLogger {
   uint32_t num_flush_completed_;
   bool has_bg_compaction_;
   Status bg_status_;
-  void* filter_;  // void* since different types of filter might be used
+  T* filter_;  // T* to allow distinct types of filters to be used
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;
   bool imm_buf_is_epoch_flush_;
