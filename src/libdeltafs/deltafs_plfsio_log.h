@@ -14,10 +14,15 @@
 
 #include <string>
 
+// Logging facilitates for the write-ahead index log.
+// Each index log consists of a list of log entries that we call chunks.
+// There are different types of chunks. Each chunk is written atomically, with a
+// crc32c checksum.
+
 namespace pdlfs {
 namespace plfsio {
 
-// Fixed number of bytes for chunk headers
+// Fixed # bytes for each chunk header.
 static const size_t kChunkHeaderSize = 9;
 
 // Write blocks as log chunks that can be repaired and replayed by a future
@@ -38,13 +43,20 @@ class LogWriter {
   LogWriter(const DirOptions& options, LogSink* sink);
   ~LogWriter();
 
+  // Append a regular block into the write-ahead log.
+  // Return OK on success, or a non-OK status on errors.
   Status Write(ChunkType chunk_type, const Slice& block_contents,
                BlockHandle* handle);
 
+  // Append a special epoch stone into the write-ahead log.
+  // Return OK on success, or a non-OK status on errors.
   Status SealEpoch(const Slice& epoch_stone);
 
+  // Append a special footer block into the write-ahead log.
+  // Return OK on success, or a non-OK status on error.
   Status Finish(const Slice& footer);
 
+  // Return the underlying buffer space.
   std::string* buffer_store() { return &compressed_; }
 
  private:

@@ -53,9 +53,9 @@ struct DirOptions {
   DirOptions();
 
   // Total memory reserved for write buffering.
-  // This includes both the buffer space for creating and sorting memtables and
-  // the memory space for constructing the data blocks and filter blocks of each
-  // table. This, however, does *not* include the buffer space for accumulating
+  // This includes both the buffer space for memtables and the buffer space for
+  // constructing the data blocks and filter blocks of each table.
+  // This, however, does *not* include the buffer space for accumulating
   // block writes to ensure an optimized write size.
   // Default: 4MB
   size_t total_memtable_budget;
@@ -65,7 +65,7 @@ struct DirOptions {
   double memtable_util;
 
   // Skip sorting memtables.
-  // This is useful when the input data is known to be pre-sorted.
+  // This is useful when the input data is inserted in-order.
   // Default: false
   bool skip_sort;
 
