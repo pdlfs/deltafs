@@ -427,6 +427,10 @@ class DirWriter {
   virtual Status Finish() = 0;
 
  private:
+  template <typename T>
+  static Status InternalOpen(T* impl, const DirOptions& options,
+                             const std::string& dirname);
+
   // No copying allowed
   void operator=(const DirWriter&);
   DirWriter(const DirWriter&);

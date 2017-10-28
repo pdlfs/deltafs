@@ -226,6 +226,7 @@ class DirLogger {
 
  private:
   WritableFileStats io_stats_;
+  template <typename TT>
   friend class DirWriterImpl;
   friend class DirWriter;
   ~DirLogger();
