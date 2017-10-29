@@ -240,7 +240,7 @@ class DirWriterImpl : public DirWriter {
   virtual uint32_t TEST_num_data_blocks() const;
 
   virtual uint64_t TEST_estimated_sstable_size() const;
-  virtual uint64_t TEST_max_filter_size() const;
+  virtual uint64_t TEST_planned_filter_size() const;
   virtual uint64_t TEST_total_memory_usage() const;
 
   virtual uint64_t TEST_raw_index_contents() const;
@@ -763,17 +763,17 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_estimated_sstable_size() const {
   MutexLock ml(&mutex_);
   if (num_parts_ != 0) {
-    return dirs_[0]->estimated_table_size();
+    return dirs_[0]->estimated_sstable_size();
   } else {
     return 0;
   }
 }
 
 template <typename T>
-uint64_t DirWriterImpl<T>::TEST_max_filter_size() const {
+uint64_t DirWriterImpl<T>::TEST_planned_filter_size() const {
   MutexLock ml(&mutex_);
   if (num_parts_ != 0) {
-    return dirs_[0]->max_filter_size();
+    return dirs_[0]->planned_filter_size();
   } else {
     return 0;
   }

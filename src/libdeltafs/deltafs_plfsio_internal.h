@@ -28,12 +28,14 @@ namespace plfsio {
 // Non-thread-safe append-only in-memory table.
 class WriteBuffer {
  public:
-  explicit WriteBuffer() : num_entries_(0), finished_(false) {}
+  explicit WriteBuffer(const DirOptions& options);
   ~WriteBuffer() {}
 
   size_t memory_usage() const;  // Report real memory usage
+  // Report estimated memory usage per entry
+  size_t bytes_per_entry() const;
 
-  void Reserve(uint32_t num_entries, size_t buffer_size);
+  void Reserve(size_t bytes_to_reserve);
   size_t CurrentBufferSize() const { return buffer_.size(); }
   uint32_t NumEntries() const { return num_entries_; }
   void Add(const Slice& key, const Slice& value);
@@ -43,6 +45,10 @@ class WriteBuffer {
 
  private:
   struct STLLessThan;
+  // Estimated memory usage per entry (including overhead due to varint
+  // encoding)
+  size_t bytes_per_entry_;
+
   // Starting offsets of inserted entries
   std::vector<uint32_t> offsets_;
   std::string buffer_;
@@ -181,8 +187,8 @@ class DirLogger {
   uint32_t num_tables() const { return tb_->total_num_tables_; }
 
   // Report memory configurations and usage
-  size_t estimated_table_size() const { return tb_bytes_; }
-  size_t max_filter_size() const { return bf_bytes_; }
+  size_t estimated_sstable_size() const { return tb_bytes_; }
+  size_t planned_filter_size() const { return ft_bytes_; }
   size_t memory_usage() const;  // Report actual memory usage
 
   // REQUIRES: mutex_ has been locked
@@ -247,8 +253,8 @@ class DirLogger {
   const DirOptions& options_;
   port::CondVar* const bg_cv_;
   port::Mutex* const mu_;
-  size_t bf_bits_;
-  size_t bf_bytes_;          // Target bloom filter size
+  size_t ft_bits_;
+  size_t ft_bytes_;          // Target bloom filter size
   uint32_t entries_per_tb_;  // Number of entries packed per table
   size_t tb_bytes_;          // Target table size
   size_t part_;              // Partition index

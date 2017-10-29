@@ -103,6 +103,7 @@ struct DirOptions {
 
   // Bloom filter bits per key.
   // This option is only used when bloom filter is enabled.
+  // Set to 0 to disable bloom filters.
   // Default: 8 bits
   size_t bf_bits_per_key;
 
@@ -378,13 +379,15 @@ class DirWriter {
   // Report the I/O stats for logging the data and the indexes.
   virtual IoStats GetIoStats() const = 0;
 
-  // Return the estimated size of each table.
-  // The actual size of each generated may differ.
+  // Return the estimated size of each sst.
+  // This is the amount of memory we reserve for each sst.
+  // The actual memory, and storage, used by each sst may differ.
   virtual uint64_t TEST_estimated_sstable_size() const = 0;
 
-  // Return the max size of each filter.
-  // The actual size of each generated filter may be smaller.
-  virtual uint64_t TEST_max_filter_size() const = 0;
+  // Return the planned size of each filter.
+  // This is the amount of memory we reserve for the filter associated with each
+  // sst. The actual memory, and storage, used by each filter may differ.
+  virtual uint64_t TEST_planned_filter_size() const = 0;
 
   // Return the total number of keys inserted so far.
   virtual uint32_t TEST_num_keys() const = 0;

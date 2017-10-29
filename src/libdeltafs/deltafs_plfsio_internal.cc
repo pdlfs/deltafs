@@ -29,6 +29,17 @@ static inline uint64_t CurrentTimeMicros() {
   return Env::Default()->NowMicros();
 }
 
+WriteBuffer::WriteBuffer(const DirOptions& options)
+    : num_entries_(0), finished_(false) {
+  bytes_per_entry_ =
+      static_cast<size_t>(
+          VarintLength(options.key_size)) +  // Varint key length encoding
+      options.key_size +
+      static_cast<size_t>(
+          VarintLength(options.value_size)) +  // Varint value length
+      options.value_size;
+}
+
 class WriteBuffer::Iter : public Iterator {
  public:
   explicit Iter(const WriteBuffer* write_buffer)
@@ -136,8 +147,11 @@ void WriteBuffer::Reset() {
   buffer_.clear();
 }
 
-void WriteBuffer::Reserve(uint32_t num_entries, size_t buffer_size) {
-  buffer_.reserve(buffer_size);
+void WriteBuffer::Reserve(size_t bytes_to_reserve) {
+  buffer_.reserve(bytes_to_reserve);  // Memory for write buffer
+  const uint32_t num_entries =
+      static_cast<uint32_t>(ceil(double(bytes_to_reserve) / bytes_per_entry_));
+  // Also reserve memory for the offset array
   offsets_.reserve(num_entries);
 }
 
@@ -149,6 +163,10 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
   PutLengthPrefixedSlice(&buffer_, value);
   offsets_.push_back(static_cast<uint32_t>(offset));
   num_entries_++;
+}
+
+size_t WriteBuffer::bytes_per_entry() const {
+  return bytes_per_entry_;  // Not including the 4-byte memory for the offset
 }
 
 size_t WriteBuffer::memory_usage() const {
@@ -610,6 +628,8 @@ DirLogger<T>::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
       imm_buf_(NULL),
       imm_buf_is_epoch_flush_(false),
       imm_buf_is_final_(false),
+      buf0_(options),
+      buf1_(options),
       tb_(NULL),
       data_(NULL),
       indx_(NULL),
@@ -626,52 +646,52 @@ DirLogger<T>::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
   // the real, filter will waste memory and each
   // write buffer will be allocated with
   // less memory.
-  size_t overhead_per_entry = static_cast<size_t>(
-      VarintLength(options_.key_size) + VarintLength(options_.value_size) +
-      sizeof(uint32_t)  // Offset of an entry in buffer
-      );
-  size_t bytes_per_entry =
-      options_.key_size + options_.value_size + overhead_per_entry;
+  assert(buf0_.bytes_per_entry() == buf1_.bytes_per_entry());
+  size_t bytes_per_entry = buf0_.bytes_per_entry();  // Estimated memory usage
 
-  size_t bits_per_entry = 8 * bytes_per_entry;
+  size_t total_bits_per_entry =  // Due to double buffering and filtering
+      2 * (8 * bytes_per_entry) + options_.filter_bits_per_key;
 
-  size_t total_bits_per_entry =
-      options_.bf_bits_per_key + 2 * bits_per_entry;  // Due to double buffering
-
-  size_t table_buffer =  // Total write buffer for each memtable partition
+  size_t memory =  // Total write buffer for each memtable partition
       options_.total_memtable_budget /
           static_cast<uint32_t>(1 << options_.lg_parts) -
       options_.block_batch_size;  // Reserved for compaction
 
-  // Estimated amount of entries per table
+  // Estimated number of entries per table according to configured key size,
+  // value size, and filter size.
   entries_per_tb_ = static_cast<uint32_t>(
-      ceil(8.0 * double(table_buffer) / double(total_bits_per_entry)));
+      ceil(8.0 * double(memory) / double(total_bits_per_entry)));
 
-  tb_bytes_ = entries_per_tb_ * (bytes_per_entry - sizeof(uint32_t));
-  // Compute bloom filter size (in both bits and bytes)
-  bf_bits_ = entries_per_tb_ * options_.bf_bits_per_key;
-  // For small n, we can see a very high false positive rate.
-  // Fix it by enforcing a minimum bloom filter length.
-  if (bf_bits_ > 0 && bf_bits_ < 64) {
-    bf_bits_ = 64;
-  }
+  // Memory reserved for each table.
+  // This portion of memory is part of the entire memtable budget stated in
+  // user options. The actual memory, and storage, used may differ.
+  tb_bytes_ = entries_per_tb_ * bytes_per_entry;
 
-  bf_bytes_ = (bf_bits_ + 7) / 8;
-  bf_bits_ = bf_bytes_ * 8;
+  // Memory reserved for the filter associated with each table.
+  // This portion of memory is part of the entire memtable budget stated in
+  // user options. The actual memory, and storage, used for filters may differ.
+  ft_bits_ = entries_per_tb_ * options_.filter_bits_per_key;
+
+  ft_bytes_ = (ft_bits_ + 7) / 8;
+  ft_bits_ = ft_bytes_ * 8;
 
 #if VERBOSE >= 2
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable.tb_size -> %d x %s",
           2 * (1 << options_.lg_parts), PrettySize(tb_bytes_).c_str());
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable.bf_size -> %d x %s",
-          2 * (1 << options_.lg_parts), PrettySize(bf_bytes_).c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable.ft_size -> %d x %s",
+          2 * (1 << options_.lg_parts), PrettySize(ft_bytes_).c_str());
 #endif
 
   // Allocate memory
-  buf0_.Reserve(entries_per_tb_, tb_bytes_);
-  buf1_.Reserve(entries_per_tb_, tb_bytes_);
+  buf0_.Reserve(tb_bytes_);
+  buf1_.Reserve(tb_bytes_);
 
-  if (options_.bf_bits_per_key != 0) {
-    filter_ = new T(options_, bf_bytes_);
+  if (options_.filter == kNoFilter) {
+    // Skip filter
+  } else if (options_.filter != kBloomFilter && options_.bf_bits_per_key != 0) {
+    filter_ = new T(options_, ft_bytes_);
+  } else {
+    // Skip filter
   }
 
   mem_buf_ = &buf0_;

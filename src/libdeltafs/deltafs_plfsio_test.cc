@@ -33,23 +33,32 @@
 namespace pdlfs {
 namespace plfsio {
 
-class WriterBufTest {
+template <size_t value_size = 32>
+class WriteBufTest {
  public:
-  explicit WriterBufTest(uint32_t seed = 301) : num_entries_(0), rnd_(seed) {}
-
-  Iterator* Flush() {
-    buffer_.Finish();
-    ASSERT_EQ(buffer_.NumEntries(), num_entries_);
-    return buffer_.NewIterator();
+  explicit WriteBufTest(uint32_t seed = 301) : num_entries_(0), rnd_(seed) {
+    options_.value_size = value_size;
+    options_.key_size = 8;
+    buf_ = new WriteBuffer(options_);
   }
 
-  void Add(uint64_t seq, int value_size = 32) {
+  ~WriteBufTest() {
+    delete buf_;  // Done
+  }
+
+  Iterator* Flush() {
+    buf_->Finish();
+    ASSERT_EQ(buf_->NumEntries(), num_entries_);
+    return buf_->NewIterator();
+  }
+
+  void Add(uint64_t seq) {
     std::string key;
     PutFixed64(&key, seq);
     std::string value;
     test::RandomString(&rnd_, value_size, &value);
     kv_.insert(std::make_pair(key, value));
-    buffer_.Add(key, value);
+    buf_->Add(key, value);
     num_entries_++;
   }
 
@@ -72,31 +81,18 @@ class WriterBufTest {
   }
 
   std::map<std::string, std::string> kv_;
-
+  DirOptions options_;
+  WriteBuffer* buf_;
   uint32_t num_entries_;
-  WriteBuffer buffer_;
   Random rnd_;
 };
 
-TEST(WriterBufTest, FixedSizedValue) {
+TEST(WriteBufTest<>, FixedSizedValue) {
   Add(3);
   Add(2);
   Add(1);
   Add(5);
   Add(4);
-
-  Iterator* iter = Flush();
-  CheckFirst(iter);
-  CheckLast(iter);
-  delete iter;
-}
-
-TEST(WriterBufTest, VariableSizedValue) {
-  Add(3, 16);
-  Add(2, 18);
-  Add(1, 20);
-  Add(5, 14);
-  Add(4, 18);
 
   Iterator* iter = Flush();
   CheckFirst(iter);
@@ -498,6 +494,7 @@ class PlfsIoBench {
         static_cast<size_t>(GetOption("BLOCK_BATCH_SIZE", 4) << 20);
     options_.block_util = GetOption("BLOCK_UTIL", 996) / 1000.0;
     options_.bf_bits_per_key = static_cast<size_t>(GetOption("BF_BITS", 14));
+    options_.filter_bits_per_key = options_.bf_bits_per_key;
     options_.value_size = static_cast<size_t>(GetOption("VALUE_SIZE", 40));
     options_.key_size = static_cast<size_t>(GetOption("KEY_SIZE", 8));
     options_.data_buffer =
@@ -748,8 +745,8 @@ class PlfsIoBench {
             int(options_.total_memtable_budget) >> 20);
     fprintf(stderr, "     Estimated SST Size: %.3f MiB\n",
             writer_->TEST_estimated_sstable_size() / ki / ki);
-    fprintf(stderr, "            Max BF Size: %.3f KiB\n",
-            writer_->TEST_max_filter_size() / ki);
+    fprintf(stderr, "        Planned FT Size: %.3f KiB\n",
+            writer_->TEST_planned_filter_size() / ki);
     fprintf(stderr, "   Estimated Block Size: %d KiB (target util: %.1f%%)\n",
             int(options_.block_size) >> 10, options_.block_util * 100);
     fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
