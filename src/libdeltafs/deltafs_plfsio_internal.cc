@@ -593,6 +593,8 @@ template class DirLogger<BloomBlock>;
 
 template class DirLogger<BitmapBlock<UncompressedFormat> >;
 
+template class DirLogger<EmptyFilterBlock>;
+
 template <typename T>
 DirLogger<T>::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
                         port::CondVar* cv)

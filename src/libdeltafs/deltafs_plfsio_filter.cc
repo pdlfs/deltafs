@@ -187,5 +187,12 @@ BitmapBlock<T>::~BitmapBlock() {
   delete fmt_;
 }
 
+EmptyFilterBlock::EmptyFilterBlock(const DirOptions&, size_t) {
+  space_.resize(0);
+#if __cplusplus >= 201103L
+  space_.shrink_to_fit();  // not available before c++11
+#endif
+}
+
 }  // namespace plfsio
 }  // namespace pdlfs

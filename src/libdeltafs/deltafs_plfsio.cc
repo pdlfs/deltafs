@@ -1124,7 +1124,14 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       delete impl;
     }
   } else {
-    // TODO
+    DirWriterImpl<EmptyFilterBlock>* impl =
+        new DirWriterImpl<EmptyFilterBlock>(options);
+    status = InternalOpen(impl, options, dirname);
+    if (status.ok()) {
+      *result = impl;
+    } else {
+      delete impl;
+    }
   }
 
   return status;

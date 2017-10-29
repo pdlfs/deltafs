@@ -119,5 +119,26 @@ class BitmapBlock {
   T* fmt_;
 };
 
+// An empty filter that achieves nothing.
+class EmptyFilterBlock {
+ public:
+  // Empty filter. Does not reserve memory.
+  EmptyFilterBlock(const DirOptions& options, size_t bytes_to_reserve);
+  ~EmptyFilterBlock() {}
+
+  // Reset filter state.
+  void Reset(uint32_t num_keys) {}
+  // Insert a key into the filter. Does nothing.
+  void AddKey(const Slice& key) {}
+  // Finalize filter contents.
+  Slice Finish() { return Slice(); }
+
+  // Return the underlying buffer space.
+  std::string* buffer_store() { return &space_; }
+
+ private:
+  std::string space_;
+};
+
 }  // namespace plfsio
 }  // namespace pdlfs
