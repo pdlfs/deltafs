@@ -49,6 +49,17 @@ enum DirMode {
   kUnique = 0x03
 };
 
+// Directory filter types. Bitmap-based filters are optimized
+// for workloads with compact key spaces.
+enum FilterType {
+  // Do not use any filters
+  kNoFilter = 0x00,
+  // Use bloom filters
+  kBloomFilter = 0x01,
+  // Use uncompressed bitmap filters
+  kBitmapFilter = 0x02
+};
+
 struct DirOptions {
   DirOptions();
 
@@ -77,10 +88,29 @@ struct DirOptions {
   // Default: 32 bytes
   size_t value_size;
 
+  // Filter type to be applied to directory storage.
+  // Default: kBloomFilter
+  FilterType filter;
+
+  // Number of bits to reserve per key for filter memory.
+  // The actual amount of memory, and storage, used for each key in filters
+  // may differ from the reserved memory.
+  // The reserved memory is part of the entire memtable budget. Set to 0 to
+  // avoid pre-reserving memory for filters so all filter memory will be
+  // allocated separately (no longer bounded by the budget).
+  // Default: 0 bit
+  size_t filter_bits_per_key;
+
   // Bloom filter bits per key.
-  // Set to zero to disable the use of bloom filters.
+  // This option is only used when bloom filter is enabled.
   // Default: 8 bits
   size_t bf_bits_per_key;
+
+  // Total number of bits in each key.
+  // Used to bound the domain size of the key space.
+  // This option is only used when bitmap filter is enabled.
+  // Default: 24 bits
+  size_t bm_key_bits;
 
   // Approximate size of user data packed per data block.
   // Note that block is used both as the packaging format and as the logical I/O

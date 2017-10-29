@@ -9,6 +9,7 @@
 
 #include "deltafs_plfsio.h"
 #include "deltafs_plfsio_batch.h"
+#include "deltafs_plfsio_filter.h"
 #include "deltafs_plfsio_internal.h"
 
 #include "pdlfs-common/env_files.h"
@@ -32,7 +33,9 @@ DirOptions::DirOptions()
       skip_sort(false),
       key_size(8),
       value_size(32),
+      filter_bits_per_key(0),
       bf_bits_per_key(8),
+      bm_key_bits(24),
       block_size(32 << 10),
       block_util(0.996),
       block_padding(true),
@@ -223,8 +226,6 @@ static std::string DataFileName(const std::string& parent, int rank) {
   return parent + tmp;
 }
 
-class BloomBlock;
-
 template <typename T = BloomBlock>
 class DirWriterImpl : public DirWriter {
  public:
@@ -262,7 +263,7 @@ class DirWriterImpl : public DirWriter {
   bool HasCompaction();
   Status ObtainCompactionStatus();
   Status WaitForCompaction();
-  Status TryFlush(bool epoch_flush = false, bool finalize = false);
+  Status TryFlush(bool ef = false, bool fi = false);
   Status TryBatchWrites(BatchCursor* cursor);
   Status TryAppend(const Slice& fid, const Slice& data);
   Status EnsureDataPadding(LogSink* sink, size_t footer_size);
@@ -513,15 +514,15 @@ Status DirWriterImpl<T>::TryBatchWrites(BatchCursor* cursor) {
 // compaction scheduled. Will not wait for all compactions to finish.
 // Return OK on success, or a non-OK status on errors.
 template <typename T>
-Status DirWriterImpl<T>::TryFlush(bool epoch_flush, bool finalize) {
+Status DirWriterImpl<T>::TryFlush(bool ef, bool fi) {
   mutex_.AssertHeld();
   assert(has_pending_flush_);
   Status status;
-  std::vector<DirLogger<>*> remaining;
+  std::vector<DirLogger<T>*> remaining;
   for (size_t i = 0; i < num_parts_; i++) remaining.push_back(dirs_[i]);
-  std::vector<DirLogger<>*> waiting_list;
+  std::vector<DirLogger<T>*> waiting_list;
 
-  DirLogger<>::FlushOptions flush_options(epoch_flush, finalize);
+  typename DirLogger<T>::FlushOptions flush_options(ef, fi);
   while (!remaining.empty()) {
     waiting_list.clear();
     for (size_t i = 0; i < remaining.size(); i++) {
@@ -1102,12 +1103,28 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", options.rank);
 #endif
 
-  DirWriterImpl<>* impl = new DirWriterImpl<>(options);
-  Status status = InternalOpen(impl, options, dirname);
-  if (status.ok()) {
-    *result = impl;
+  Status status;
+  // Port to different filter types
+  if (options.filter == kBloomFilter) {
+    DirWriterImpl<BloomBlock>* impl = new DirWriterImpl<BloomBlock>(options);
+    status = InternalOpen(impl, options, dirname);
+    if (status.ok()) {
+      *result = impl;
+    } else {
+      delete impl;
+    }
+  } else if (options.filter == kBitmapFilter) {
+    typedef BitmapBlock<UncompressedFormat> UncompressedBitmapBlock;
+    DirWriterImpl<UncompressedBitmapBlock>* impl =
+        new DirWriterImpl<UncompressedBitmapBlock>(options);
+    status = InternalOpen(impl, options, dirname);
+    if (status.ok()) {
+      *result = impl;
+    } else {
+      delete impl;
+    }
   } else {
-    delete impl;
+    // TODO
   }
 
   return status;

@@ -100,7 +100,7 @@ bool BloomKeyMayMatch(const Slice& key, const Slice& input) {
 class UncompressedFormat {
  public:
   explicit UncompressedFormat(const DirOptions& options, std::string* space)
-      : key_bits_(options.key_size * 8), space_(space) {
+      : key_bits_(options.bm_key_bits), space_(space) {
     bits_ = 1u << key_bits_;  // Max number of keys
   }
 
@@ -135,7 +135,7 @@ template class BitmapBlock<UncompressedFormat>;
 
 template <typename T>
 BitmapBlock<T>::BitmapBlock(const DirOptions& options, size_t bytes_to_reserve)
-    : key_bits_(options.key_size * 8) {
+    : key_bits_(options.bm_key_bits) {
   // Reserve an extra byte for storing the key size in bits
   space_.reserve(bytes_to_reserve + 1);
   fmt_ = new T(options, &space_);
