@@ -254,7 +254,8 @@ TableLogger::~TableLogger() {
 
 void TableLogger::MakeEpoch() {
   assert(!finished_);  // Finish() has not been called
-  EndTable(static_cast<BloomBlock*>(NULL), kUnknown);
+  EndTable(static_cast<EmptyFilterBlock*>(NULL),
+           static_cast<ChunkType>(EmptyFilterBlock::chunk_type()));
   if (!ok()) {
     return;  // Abort
   } else if (num_tables_ == 0) {
@@ -955,8 +956,8 @@ void DirLogger<T>::CompactMemtable() {
   if (tb->ok()) {
     // Paranoid checks
     assert(num_keys == buffer->NumEntries());
-    tb->EndTable(bf, kSbfChunk);  // Inject the filter into the table
-
+    // Inject the filter into the table
+    tb->EndTable(bf, static_cast<ChunkType>(T::chunk_type()));
     if (is_epoch_flush) {
       tb->MakeEpoch();
     }

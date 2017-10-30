@@ -8,6 +8,8 @@
  */
 
 #include "deltafs_plfsio_filter.h"
+#include "deltafs_plfsio_format.h"
+
 #include "deltafs_plfsio.h"
 
 #include <assert.h>
@@ -28,6 +30,10 @@ BloomBlock::BloomBlock(const DirOptions& options, size_t bytes_to_reserve)
 }
 
 BloomBlock::~BloomBlock() {}
+
+int BloomBlock::chunk_type() {
+  return static_cast<int>(ChunkType::kSbfChunk);  // Standard bloom filter
+}
 
 void BloomBlock::Reset(uint32_t num_keys) {
   bits_ = static_cast<uint32_t>(num_keys * bits_per_key_);
@@ -174,6 +180,11 @@ class VarintFormat {
 template class BitmapBlock<VarintFormat>;
 
 template <typename T>
+int BitmapBlock<T>::chunk_type() {
+  return static_cast<int>(ChunkType::kBmpChunk);
+}
+
+template <typename T>
 BitmapBlock<T>::BitmapBlock(const DirOptions& options, size_t bytes_to_reserve)
     : key_bits_(options.bm_key_bits) {
   // Reserve an extra byte for storing the key size in bits
@@ -225,6 +236,10 @@ Slice BitmapBlock<T>::Finish() {
 template <typename T>
 BitmapBlock<T>::~BitmapBlock() {
   delete fmt_;
+}
+
+int EmptyFilterBlock::chunk_type() {
+  return static_cast<int>(ChunkType::kUnknown);
 }
 
 EmptyFilterBlock::EmptyFilterBlock(const DirOptions&, size_t) {

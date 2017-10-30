@@ -38,8 +38,9 @@ enum ChunkType {
   kUnknown = 0x00,  // Useless padding that should be ignored
 
   // Standard indexing block types
-  kIdxChunk = 0x01,
+  kIdxChunk = 0x01,  // SST indexes
   kSbfChunk = 0x02,  // Standard bloom filters
+  kBmpChunk = 0x03,  // Bitmap filters
 
   // Meta indexing block types
   kMetaChunk = 0x71,  // Meta indexes for each epoch

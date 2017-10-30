@@ -56,6 +56,7 @@ class BloomBlock {
 
   // Return the underlying buffer space.
   std::string* buffer_store() { return &space_; }
+  static int chunk_type();  // Return the corresponding chunk type
 
  private:
   // No copying allowed
@@ -105,6 +106,7 @@ class BitmapBlock {
 
   // Return the underlying buffer space.
   std::string* buffer_store() { return &space_; }
+  static int chunk_type();  // Return the corresponding chunk type
 
  private:
   // No copying allowed
@@ -136,6 +138,7 @@ class EmptyFilterBlock {
 
   // Return the underlying buffer space.
   std::string* buffer_store() { return &space_; }
+  static int chunk_type();  // Return the corresponding chunk type
 
  private:
   std::string space_;
