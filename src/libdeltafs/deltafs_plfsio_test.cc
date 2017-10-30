@@ -127,15 +127,15 @@ class FilterTest {
     }
   }
 
-  bool KeyMayMatch(uint64_t seq) const {
+  bool KeyMayMatch(uint32_t seq) const {
     std::string key;
-    PutFixed64(&key, seq);
+    PutFixed32(&key, seq);
     return tester(key, data_);
   }
 
-  void AddKey(uint64_t seq) {
+  void AddKey(uint32_t seq) {
     std::string key;
-    PutFixed64(&key, seq);
+    PutFixed32(&key, seq);
     ft_->AddKey(key);
   }
 
@@ -147,17 +147,63 @@ class FilterTest {
 // Bloom filter
 typedef FilterTest<BloomBlock, BloomKeyMayMatch> BloomFilterTest;
 
-TEST(BloomFilterTest, RandomKeys) {
+TEST(BloomFilterTest, BF_Empty) {
+  Reset(1024);
+  Finish();
+}
+
+TEST(BloomFilterTest, BF_RandomKeys) {
   Random rnd(301);
   Reset(1024);
-  std::vector<uint64_t> keys;
-  for (uint64_t i = 1; i <= 1024; i++) {
-    uint64_t key = rnd.Next64();  // Random key
+  std::vector<uint32_t> keys;
+  for (int i = 0; i < 1024; i++) {
+    uint32_t key = rnd.Next();  // Random 32-bit keys
     keys.push_back(key);
     AddKey(key);
   }
   Finish();
-  std::vector<uint64_t>::iterator it = keys.begin();
+  std::vector<uint32_t>::iterator it = keys.begin();
+  for (; it != keys.end(); ++it) {
+    ASSERT_TRUE(KeyMayMatch(*it));
+  }
+}
+
+// Uncompressed bitmap filter
+typedef FilterTest<BitmapBlock<UncompressedFormat>, BitmapKeyMustMatch>
+    UncompressedBitmapFilterTest;
+
+TEST(UncompressedBitmapFilterTest, BMP_U_Empty) {
+  Reset(1024);
+  Finish();
+}
+
+TEST(UncompressedBitmapFilterTest, BMP_U_RandomKeys_1K) {
+  Random rnd(301);
+  Reset(1024);
+  std::vector<uint32_t> keys;
+  for (int i = 0; i < 1024; i++) {
+    uint32_t key = rnd.Uniform(1 << 24);  // Random 24-bit keys
+    keys.push_back(key);
+    AddKey(key);
+  }
+  Finish();
+  std::vector<uint32_t>::iterator it = keys.begin();
+  for (; it != keys.end(); ++it) {
+    ASSERT_TRUE(KeyMayMatch(*it));
+  }
+}
+
+TEST(UncompressedBitmapFilterTest, BMP_U_RandomKeys_16K) {
+  Random rnd(301);
+  Reset(65536);
+  std::vector<uint32_t> keys;
+  for (int i = 0; i < 65536; i++) {
+    uint32_t key = rnd.Uniform(1 << 24);  // Random 24-bit keys
+    keys.push_back(key);
+    AddKey(key);
+  }
+  Finish();
+  std::vector<uint32_t>::iterator it = keys.begin();
   for (; it != keys.end(); ++it) {
     ASSERT_TRUE(KeyMayMatch(*it));
   }
