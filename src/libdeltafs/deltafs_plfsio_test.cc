@@ -114,7 +114,7 @@ class FilterTest {
   }
 
   void Reset(uint32_t num_keys) {
-    if (ft_ == NULL) ft_ = new T(options_, 0);
+    if (ft_ == NULL) ft_ = new T(options_, 0);  // Does not reserve memory
     ft_->Reset(num_keys);
   }
 
@@ -173,8 +173,11 @@ typedef FilterTest<BitmapBlock<UncompressedFormat>, BitmapKeyMustMatch>
     UncompressedBitmapFilterTest;
 
 TEST(UncompressedBitmapFilterTest, BMP_U_Empty) {
+  Random rnd(301);
   Reset(1024);
   Finish();
+  ASSERT_FALSE(KeyMayMatch(rnd.Uniform(1 << 24)));
+  ASSERT_FALSE(KeyMayMatch(1u << 24));
 }
 
 TEST(UncompressedBitmapFilterTest, BMP_U_RandomKeys) {
@@ -202,6 +205,9 @@ TEST(UncompressedBitmapFilterTest, BMP_U_RandomKeys) {
     }
     for (it = non_keys.begin(); it != non_keys.end(); ++it) {
       ASSERT_FALSE(KeyMayMatch(*it));
+    }
+    for (uint32_t i = 0; i < num_keys; i++) {
+      ASSERT_FALSE(KeyMayMatch((1u << 24) + i));
     }
   }
 }
