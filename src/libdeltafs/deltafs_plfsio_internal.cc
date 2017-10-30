@@ -614,12 +614,6 @@ Status TableLogger::Finish() {
   return status_;
 }
 
-template class DirLogger<BloomBlock>;
-
-template class DirLogger<BitmapBlock<UncompressedFormat> >;
-
-template class DirLogger<EmptyFilterBlock>;
-
 template <typename T>
 DirLogger<T>::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
                         port::CondVar* cv)
@@ -1010,6 +1004,12 @@ size_t DirLogger<T>::memory_usage() const {
     return 0;
   }
 }
+
+template class DirLogger<BloomBlock>;
+
+template class DirLogger<BitmapBlock<UncompressedFormat> >;
+
+template class DirLogger<EmptyFilterBlock>;
 
 static Status ReadBlock(LogSource* source, const DirOptions& options,
                         const BlockHandle& handle, BlockContents* result,

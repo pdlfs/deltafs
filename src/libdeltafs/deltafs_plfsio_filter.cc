@@ -137,8 +137,6 @@ class UncompressedFormat {
   size_t bits_;
 };
 
-template class BitmapBlock<UncompressedFormat>;
-
 // Encoding a bitmap using varint.
 // The first byte is used to store the key size in # bits.
 class VarintFormat {
@@ -176,8 +174,6 @@ class VarintFormat {
   // The actual memory used may differ due to compression.
   size_t bits_;
 };
-
-template class BitmapBlock<VarintFormat>;
 
 template <typename T>
 int BitmapBlock<T>::chunk_type() {
@@ -237,6 +233,10 @@ template <typename T>
 BitmapBlock<T>::~BitmapBlock() {
   delete fmt_;
 }
+
+template class BitmapBlock<UncompressedFormat>;
+
+template class BitmapBlock<VarintFormat>;
 
 int EmptyFilterBlock::chunk_type() {
   return static_cast<int>(ChunkType::kUnknown);
