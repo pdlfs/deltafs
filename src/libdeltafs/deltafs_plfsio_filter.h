@@ -18,6 +18,9 @@
 namespace pdlfs {
 namespace plfsio {
 
+// Return true if a key may match a given filter.
+typedef bool (*FilterTester)(const Slice& key, const Slice& input);
+
 inline uint32_t BloomHash(const Slice& key) {
   return Hash(key.data(), key.size(), 0xbc9f1d34);  // Magic
 }

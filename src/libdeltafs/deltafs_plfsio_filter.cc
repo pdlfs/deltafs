@@ -24,7 +24,9 @@ BloomBlock::BloomBlock(const DirOptions& options, size_t bytes_to_reserve)
   if (k_ < 1) k_ = 1;
   if (k_ > 30) k_ = 30;
   // Reserve an extra byte for storing the k
-  space_.reserve(bytes_to_reserve + 1);
+  if (bytes_to_reserve != 0) {
+    space_.reserve(bytes_to_reserve + 1);
+  }
   finished_ = true;  // Pending further initialization
   bits_ = 0;
 }
@@ -184,7 +186,9 @@ template <typename T>
 BitmapBlock<T>::BitmapBlock(const DirOptions& options, size_t bytes_to_reserve)
     : key_bits_(options.bm_key_bits) {
   // Reserve an extra byte for storing the key size in bits
-  space_.reserve(bytes_to_reserve + 1);
+  if (bytes_to_reserve != 0) {
+    space_.reserve(bytes_to_reserve + 1);
+  }
   fmt_ = new T(options, &space_);
   finished_ = true;  // Pending further initialization
   mask_ = ~static_cast<uint32_t>(0) << key_bits_;

@@ -9,6 +9,7 @@
 
 #include "deltafs_plfsio_batch.h"
 #include "deltafs_plfsio_events.h"
+#include "deltafs_plfsio_filter.h"
 #include "deltafs_plfsio_internal.h"
 
 #include "pdlfs-common/histogram.h"
@@ -98,6 +99,68 @@ TEST(WriteBufTest<>, FixedSizedValue) {
   CheckFirst(iter);
   CheckLast(iter);
   delete iter;
+}
+
+template <typename T, FilterTester tester>
+class FilterTest {
+ public:
+  FilterTest() : ft_(NULL) {
+    options_.bf_bits_per_key = 10;  // Override the defaults
+    options_.bm_key_bits = 24;
+  }
+
+  ~FilterTest() {
+    delete ft_;  // Done
+  }
+
+  void Reset(uint32_t num_keys) {
+    if (ft_ == NULL) ft_ = new T(options_, 0);
+    ft_->Reset(num_keys);
+  }
+
+  void Finish() {
+    data_.clear();
+    if (ft_ != NULL) {
+      data_ = ft_->Finish().ToString();
+      delete ft_;
+      ft_ = NULL;
+    }
+  }
+
+  bool KeyMayMatch(uint64_t seq) const {
+    std::string key;
+    PutFixed64(&key, seq);
+    return tester(key, data_);
+  }
+
+  void AddKey(uint64_t seq) {
+    std::string key;
+    PutFixed64(&key, seq);
+    ft_->AddKey(key);
+  }
+
+  std::string data_;  // Final filter contents
+  DirOptions options_;
+  T* ft_;
+};
+
+// Bloom filter
+typedef FilterTest<BloomBlock, BloomKeyMayMatch> BloomFilterTest;
+
+TEST(BloomFilterTest, RandomKeys) {
+  Random rnd(301);
+  Reset(1024);
+  std::vector<uint64_t> keys;
+  for (uint64_t i = 1; i <= 1024; i++) {
+    uint64_t key = rnd.Next64();  // Random key
+    keys.push_back(key);
+    AddKey(key);
+  }
+  Finish();
+  std::vector<uint64_t>::iterator it = keys.begin();
+  for (; it != keys.end(); ++it) {
+    ASSERT_TRUE(KeyMayMatch(*it));
+  }
 }
 
 class PlfsIoTest {
