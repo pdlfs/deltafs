@@ -25,7 +25,7 @@ extern const char* GetLengthPrefixedSlice(const char* p, const char* limit,
 namespace plfsio {
 
 // Return current time in microseconds.
-static inline uint64_t CurrentTimeMicros() {
+static inline uint64_t GetCurrentTimeMicros() {
   return Env::Default()->NowMicros();
 }
 
@@ -918,7 +918,7 @@ void DirLogger<T>::CompactMemtable() {
   TableLogger* const tb = tb_;
   T* const bf = filter_;
   mu_->Unlock();
-  const uint64_t start = CurrentTimeMicros();
+  const uint64_t start = GetCurrentTimeMicros();
   if (options_.listener != NULL) {
     CompactionEvent event;
     event.type = kCompactionStart;
@@ -966,7 +966,7 @@ void DirLogger<T>::CompactMemtable() {
     }
   }
 
-  const uint64_t end = CurrentTimeMicros();
+  const uint64_t end = GetCurrentTimeMicros();
   if (options_.listener != NULL) {
     CompactionEvent event;
     event.type = kCompactionEnd;

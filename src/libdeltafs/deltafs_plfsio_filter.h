@@ -22,7 +22,7 @@ inline uint32_t BloomHash(const Slice& key) {
   return Hash(key.data(), key.size(), 0xbc9f1d34);  // Magic
 }
 
-class DirOptions;
+struct DirOptions;
 
 // Return false iff the target key is guaranteed to not exist in a given bloom
 // filter.
