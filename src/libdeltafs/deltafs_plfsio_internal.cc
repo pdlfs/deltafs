@@ -29,15 +29,20 @@ static inline uint64_t CurrentTimeMicros() {
   return Env::Default()->NowMicros();
 }
 
+// Create a new write buffer and determine an estimated memory usage per
+// entry. For small entries, there is a 2-byte overhead per entry.
+// This overhead is necessary for supporting variable length
+// key-value pairs.
 WriteBuffer::WriteBuffer(const DirOptions& options)
     : num_entries_(0), finished_(false) {
-  bytes_per_entry_ =
+  const size_t entry_size =  // Estimated, actual entry sizes may differ
+      options.key_size + options.value_size;
+  bytes_per_entry_ =  // Memory usage per entry
       static_cast<size_t>(
-          VarintLength(options.key_size)) +  // Varint key length encoding
-      options.key_size +
+          VarintLength(options.key_size)) +  // Varint encoding for key lengths
       static_cast<size_t>(
-          VarintLength(options.value_size)) +  // Varint value length
-      options.value_size;
+          VarintLength(options.value_size)) +  // For value lengths
+      entry_size;
 }
 
 class WriteBuffer::Iter : public Iterator {
@@ -148,8 +153,9 @@ void WriteBuffer::Reset() {
 }
 
 void WriteBuffer::Reserve(size_t bytes_to_reserve) {
-  buffer_.reserve(bytes_to_reserve);  // Memory for write buffer
-  const uint32_t num_entries =
+  // Reserve memory for the write buffer
+  buffer_.reserve(bytes_to_reserve);
+  const uint32_t num_entries =  // Estimated, actual counts may differ
       static_cast<uint32_t>(ceil(double(bytes_to_reserve) / bytes_per_entry_));
   // Also reserve memory for the offset array
   offsets_.reserve(num_entries);
