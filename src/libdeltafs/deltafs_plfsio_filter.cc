@@ -128,6 +128,16 @@ class UncompressedFormat {
   // Return the final buffer size.
   size_t Finish() { return space_->size(); }
 
+  // Return true iff the i-th bit is set in the given bitmap.
+  static bool Test(uint32_t i, size_t key_bits, const Slice& input) {
+    const size_t bits = input.size() * 8;
+    if (i < bits) {
+      return 0 != (input[i / 8] & (1 << (i % 8)));
+    } else {
+      return false;
+    }
+  }
+
  private:
   // Key size in bits
   const size_t key_bits_;
@@ -260,8 +270,25 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
     return false;  // Empty bitmap
   }
 
-  // TODO
-  return true;
+  Slice bitmap =
+      input;  // Net bitmap representation (maybe in a compressed form)
+  bitmap.remove_suffix(2);
+  uint32_t i = BitmapIndex(key);
+
+  // Recover the domain space
+  const size_t key_bits = static_cast<unsigned char>(input[input.size() - 2]);
+
+  size_t bits = 1u << key_bits;
+  if (i >= bits) {
+    return false;  // Out of bound
+  }
+
+  const int compression = input[input.size() - 1];
+  if (compression == 0) {
+    return UncompressedFormat::Test(i, key_bits, bitmap);
+  } else {
+    return true;  // TODO
+  }
 }
 
 int EmptyFilterBlock::chunk_type() {
