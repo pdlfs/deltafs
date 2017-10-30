@@ -117,7 +117,7 @@ install:
               -DBUILD_TESTS=ON \
               -DPDLFS_GFLAGS=ON \
               -DPDLFS_GLOG=ON \
-              -DPDLFS_MARGO_RPC=ON \
+              -DPDLFS_MARGO_RPC=OFF \
               -DPDLFS_MERCURY_RPC=ON \
               -DPDLFS_RADOS=OFF \
               -DPDLFS_SNAPPY=ON \
