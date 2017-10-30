@@ -73,6 +73,7 @@ class BloomBlock {
 
 // Bitmap compression formats.
 class UncompressedFormat;
+class VarintFormat;
 
 // A simple filter backed by a bitmap.
 template <typename T = UncompressedFormat>

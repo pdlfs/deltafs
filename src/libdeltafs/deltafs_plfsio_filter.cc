@@ -99,9 +99,9 @@ bool BloomKeyMayMatch(const Slice& key, const Slice& input) {
 // The first byte is used to store the key size in # bits.
 class UncompressedFormat {
  public:
-  explicit UncompressedFormat(const DirOptions& options, std::string* space)
+  UncompressedFormat(const DirOptions& options, std::string* space)
       : key_bits_(options.bm_key_bits), space_(space) {
-    bits_ = 1u << key_bits_;  // Max number of keys
+    bits_ = 1u << key_bits_;  // Logic domain space (total # unique keys)
   }
 
   void Reset(uint32_t num_keys) {
@@ -132,6 +132,46 @@ class UncompressedFormat {
 };
 
 template class BitmapBlock<UncompressedFormat>;
+
+// Encoding a bitmap using varint.
+// The first byte is used to store the key size in # bits.
+class VarintFormat {
+ public:
+  VarintFormat(const DirOptions& options, std::string* space)
+      : key_bits_(options.bm_key_bits), space_(space) {
+    bits_ = 1u << key_bits_;  // Logic domain space (total # unique keys)
+  }
+
+  // Reset filter state and resize buffer space.
+  // Use num_keys to estimate bitmap density.
+  void Reset(uint32_t num_keys) {
+    // TODO
+  }
+
+  // Set the i-th bit to "1". If the i-th bit is already set,
+  // no action needs to be taken.
+  void Set(uint32_t i) {
+    // TODO
+  }
+
+  // Finalize the filter.
+  // Return the final representation.
+  Slice Finish() {
+    // TODO
+    return *space_;
+  }
+
+ private:
+  // Key size in bits
+  const size_t key_bits_;  // Domain space
+  // Underlying space for the bitmap
+  std::string* const space_;
+  // Logic bits in the bitmap.
+  // The actual memory used may differ due to compression.
+  size_t bits_;
+};
+
+template class BitmapBlock<VarintFormat>;
 
 template <typename T>
 BitmapBlock<T>::BitmapBlock(const DirOptions& options, size_t bytes_to_reserve)
