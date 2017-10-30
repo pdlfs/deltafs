@@ -75,6 +75,9 @@ class BloomBlock {
   uint32_t k_;
 };
 
+// Return true if the target key matches a given bitmap filter.
+bool BitmapKeyMustMatch(const Slice& key, const Slice& input);
+
 // Bitmap compression formats.
 class UncompressedFormat;
 class VarintFormat;
