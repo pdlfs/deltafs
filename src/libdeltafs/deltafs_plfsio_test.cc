@@ -177,35 +177,32 @@ TEST(UncompressedBitmapFilterTest, BMP_U_Empty) {
   Finish();
 }
 
-TEST(UncompressedBitmapFilterTest, BMP_U_RandomKeys_1K) {
+TEST(UncompressedBitmapFilterTest, BMP_U_RandomKeys) {
   Random rnd(301);
-  Reset(1024);
-  std::vector<uint32_t> keys;
-  for (int i = 0; i < 1024; i++) {
-    uint32_t key = rnd.Uniform(1 << 24);  // Random 24-bit keys
-    keys.push_back(key);
-    AddKey(key);
-  }
-  Finish();
-  std::vector<uint32_t>::iterator it = keys.begin();
-  for (; it != keys.end(); ++it) {
-    ASSERT_TRUE(KeyMayMatch(*it));
-  }
-}
-
-TEST(UncompressedBitmapFilterTest, BMP_U_RandomKeys_16K) {
-  Random rnd(301);
-  Reset(65536);
-  std::vector<uint32_t> keys;
-  for (int i = 0; i < 65536; i++) {
-    uint32_t key = rnd.Uniform(1 << 24);  // Random 24-bit keys
-    keys.push_back(key);
-    AddKey(key);
-  }
-  Finish();
-  std::vector<uint32_t>::iterator it = keys.begin();
-  for (; it != keys.end(); ++it) {
-    ASSERT_TRUE(KeyMayMatch(*it));
+  for (size_t num_keys = 1024; num_keys <= 65536; num_keys *= 4) {
+    Reset(num_keys);
+    std::set<uint32_t> keys;
+    while (keys.size() != num_keys) {
+      keys.insert(rnd.Uniform(1 << 24));  // Random 24-bit keys
+    }
+    std::set<uint32_t>::iterator it = keys.begin();
+    for (; it != keys.end(); ++it) {
+      AddKey(*it);
+    }
+    Finish();
+    for (it = keys.begin(); it != keys.end(); ++it) {
+      ASSERT_TRUE(KeyMayMatch(*it));
+    }
+    std::set<uint32_t> non_keys;
+    while (non_keys.size() != keys.size()) {
+      uint32_t key = rnd.Uniform(1 << 24);
+      if (keys.count(key) == 0) {
+        non_keys.insert(key);
+      }
+    }
+    for (it = non_keys.begin(); it != non_keys.end(); ++it) {
+      ASSERT_FALSE(KeyMayMatch(*it));
+    }
   }
 }
 
