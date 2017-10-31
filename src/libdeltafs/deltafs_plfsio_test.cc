@@ -29,6 +29,7 @@
 #endif
 
 #include <map>
+#include <set>
 #include <vector>
 
 namespace pdlfs {
