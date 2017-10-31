@@ -108,6 +108,8 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf,
                                                  int __mode);
 int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size);
 int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size);
+/* Enforce multimap semantics */
+int deltafs_plfsdir_set_multimap(deltafs_plfsdir_t* __dir, int __flag);
 /* Set file system env. */
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env);
 /* Set background thread pool. */

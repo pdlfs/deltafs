@@ -779,6 +779,8 @@ struct deltafs_plfsdir {
     DirReader* reader;
     void* x;
   } io;
+  // If the multi-map mode should be used
+  bool multi;
   bool is_env_pfs;
   bool opened;  // If deltafs_plfsdir_open() has been called
   DirOptions options;
@@ -801,12 +803,23 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf,
     dir->io.x = NULL;
     dir->mode = __mode;
     dir->is_env_pfs = true;
+    dir->multi = false;
     dir->env = DefaultDirEnv();
     dir->pool = NULL;
     return dir;
   } else {
     SetErrno(BadArgs());
     return NULL;
+  }
+}
+
+int deltafs_plfsdir_set_multimap(deltafs_plfsdir_t* __dir, int __flag) {
+  if (__dir != NULL && !__dir->opened) {
+    __dir->multi = static_cast<bool>(__flag);
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
   }
 }
 
@@ -906,13 +919,20 @@ int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
 
 namespace {
 
+typedef pdlfs::plfsio::DirMode DirMode;
+
 static pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;
+  if (dir->multi) {
+    // Allow multiple insertions per key within a single epoch
+    dir->options.mode = DirMode::kMultiMap;
+  } else {  // By default, each key is inserted at most once within each epoch
 #ifndef NDEBUG
-  dir->options.mode = pdlfs::plfsio::DirMode::kUniqueDrop;
+    dir->options.mode = DirMode::kUniqueDrop;  // Drop duplicates
 #else
-  dir->options.mode = pdlfs::plfsio::DirMode::kUnique;
+    dir->options.mode = DirMode::kUnique;
 #endif
+  }
   dir->options.allow_env_threads = false;
   dir->options.is_env_pfs = dir->is_env_pfs;
   dir->options.env = dir->env;
