@@ -12,7 +12,7 @@ cmake=1               # for bootstrapping
 autopkg=1             # automake, autoconf, libtool
 gcc=1                 # used only on linux
 misc=1                # snappy gflags glog (small stuff only)
-ssio=2                # margo  (pulls in all margo's depends too)
+ssio=3                # mercury/margo  (pulls in all required depends too)
 mpich=1               # gets its own version because it is big
 
 # get current set of versions
@@ -204,7 +204,8 @@ if [ x$CACHE_PREBUILD = x ]; then
         echo "ssio packages are ok ($ssio)"
     else
         echo "ssio packages are out of date ($oldssio != $ssio)... rebuilding"
-        make margo
+        ### make margo   # margo is still work-in-progress
+        make mercury
         echo $ssio > $verdir/ssio
         echo "ssio updated to $ssio"
     fi
