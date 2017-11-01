@@ -33,13 +33,21 @@ enum LogType {
   kIndex = 0x01  // Sequential reads expected
 };
 
+// Log rotation types
+enum RotationType {
+  // Do not rotate log files
+  kNoRotation = 0x00,
+  // Log rotation is controlled by external user code
+  kUsrCtrl = 0x01
+};
+
 // Options for naming, write buffering, and rolling.
 struct LogOptions {
   // Rank # of the calling process
   int rank;
 
   // Sub-partition index # of the log
-  // Set to "-1" to indicate there is no sub-partitions.
+  // Set to "-1" to indicate there is no sub-partitions
   int sub_partition;
 
   // Max write buffering in bytes
@@ -50,12 +58,25 @@ struct LogOptions {
   // Set to "0" to disable
   size_t min_buf;
 
-  // True if log rolling is enabled.
-  bool rolling;
+  // Log rotation
+  RotationType rotation;
 
   // Type of the log
   LogType type;
+
+  // Allow synchronization among multiple threads
+  port::Mutex* mu;
+
+  // Enable I/O monitoring
+  WritableFileStats* stats;
+
+  // Low-level storage abstraction
+  Env* env;
 };
+
+typedef MinMaxBufferedWritableFile BufferedLogFile;
+
+class RollingLogFile;
 
 // Abstraction for writing data to storage.
 // Implementation is not thread-safe. External synchronization is needed for
@@ -63,16 +84,18 @@ struct LogOptions {
 class LogSink {
  public:
   LogSink(const LogOptions& options, const std::string& prefix,
-          RollingLogFile* vf, Env* env, port::Mutex* mu)
+          BufferedLogFile* buf, RollingLogFile* vf)
       : options_(options),
         prefix_(prefix),
-        mu_(mu),
+        mu_(options_.mu),
+        buf_(buf),
         vf_(vf),
-        env_(env),
+        env_(options_.env),
         offset_(0),
         file_(NULL),
         refs_(0) {}
 
+  // Return the current logic write offset.
   uint64_t Ltell() const {
     if (mu_ != NULL) mu_->AssertHeld();
     return offset_;
@@ -148,24 +171,26 @@ class LogSink {
   void Unref();
 
  private:
-  ~LogSink();  // Triggers Lclose()
+  ~LogSink();  // Triggers Finish()
   // No copying allowed
   void operator=(const LogSink&);
   LogSink(const LogSink&);
   std::string LogName() const;
   Status Finish();  // Internally used by Lclose()
-  class RollingLogFile;
 
   // Constant after construction
   const LogOptions options_;
   const std::string prefix_;  // Parent directory name
   port::Mutex* const mu_;
-  // NULL if log rolling is disabled
+  BufferedLogFile* const buf_;  // NULL is write buffering is disabled
+  // NULL if log rotation is disabled
   RollingLogFile* const vf_;
   Env* const env_;
 
   // State below is protected by mu_
+  Status finish_status_;
   uint64_t offset_;  // Logic write offset, monotonically increasing
+  uint64_t prev_offset_;
   // NULL if Finish() has been called
   WritableFile* file_;
   uint32_t refs_;
