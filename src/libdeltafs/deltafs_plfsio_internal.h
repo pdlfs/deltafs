@@ -39,7 +39,7 @@ class WriteBuffer {
   void Reserve(size_t bytes_to_reserve);
   size_t CurrentBufferSize() const { return buffer_.size(); }
   uint32_t NumEntries() const { return num_entries_; }
-  void Add(const Slice& key, const Slice& value);
+  bool Add(const Slice& key, const Slice& value);
   Iterator* NewIterator() const;
   void Finish(bool skip_sort = false);
   void Reset();

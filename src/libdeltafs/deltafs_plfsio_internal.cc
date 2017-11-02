@@ -161,7 +161,7 @@ void WriteBuffer::Reserve(size_t bytes_to_reserve) {
   offsets_.reserve(num_entries);
 }
 
-void WriteBuffer::Add(const Slice& key, const Slice& value) {
+bool WriteBuffer::Add(const Slice& key, const Slice& value) {
   assert(!finished_);       // Finish() has not been called
   assert(key.size() != 0);  // Key cannot be empty
   const size_t offset = buffer_.size();
@@ -169,6 +169,7 @@ void WriteBuffer::Add(const Slice& key, const Slice& value) {
   PutLengthPrefixedSlice(&buffer_, value);
   offsets_.push_back(static_cast<uint32_t>(offset));
   num_entries_++;
+  return true;
 }
 
 size_t WriteBuffer::bytes_per_entry() const {
