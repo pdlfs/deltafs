@@ -130,7 +130,7 @@ static std::string Lsuffix(LogType type) {
 static std::string Lset(int index) {
   char tmp[20];
   if (index != -1) {
-    snprintf(tmp, sizeof(tmp), "R-%04x", index);
+    snprintf(tmp, sizeof(tmp), "T-%04x", index);
     return tmp;
   } else {
     return "";
@@ -153,7 +153,7 @@ LogSink::~LogSink() {
 }
 
 Status LogSink::Lrotate(int index, bool sync) {
-  if (vf_ == NULL) {
+  if (rlog_ == NULL) {
     return Status::AssertionFailed("Log rotation not enabled", filename_);
   } else if (file_ == NULL) {
     return Status::AssertionFailed("Log already closed", filename_);
@@ -164,8 +164,8 @@ Status LogSink::Lrotate(int index, bool sync) {
 
     Status status;
     // Potentially buffered data must be written out
-    if (buf_ != NULL) {
-      status = buf_->EmptyBuffer();
+    if (buf_file_ != NULL) {
+      status = buf_file_->EmptyBuffer();
     } else {
       status = file_->Flush();  // Pre-catch potential storage errors
     }
@@ -183,7 +183,7 @@ Status LogSink::Lrotate(int index, bool sync) {
     std::string filename = Lname(prefix_, index, options_);
     status = env_->NewWritableFile(filename.c_str(), &new_base);
     if (status.ok()) {
-      status = vf_->Rotate(new_base);
+      status = rlog_->Rotate(new_base);
       if (status.ok()) {
         prev_off_ = off_;  // Remember previous write offset
         filename_ = filename;
@@ -211,8 +211,8 @@ Status LogSink::Lclose(bool sync) {
     if (mu_ != NULL) {
       mu_->AssertHeld();
     }
-    if (buf_ != NULL) {
-      status = buf_->EmptyBuffer();  // Force buffer flush
+    if (buf_file_ != NULL) {
+      status = buf_file_->EmptyBuffer();  // Force buffer flush
     } else {
       status = file_->Flush();
     }
@@ -295,9 +295,9 @@ Status LogSink::Open(const LogOptions& options, const std::string& prefix,
   } else {
     file = base;
   }
-  BufferedLogFile* wb = NULL;
+  BufferedFile* wb = NULL;
   if (options.min_buf != 0) {
-    wb = new BufferedLogFile(file, options.min_buf, options.max_buf);
+    wb = new BufferedFile(file, options.min_buf, options.max_buf);
     file = wb;
   } else {
     // No write buffering?

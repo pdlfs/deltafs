@@ -32,6 +32,7 @@ enum LogType {
 };
 
 // Log rotation types
+// Log stored as separated files.
 enum RotationType {
   // Do not rotate log files
   kNoRotation = 0x00,
@@ -39,7 +40,7 @@ enum RotationType {
   kUsrCtrl = 0x01
 };
 
-// Options for naming, write buffering, and rolling.
+// Options for monitoring, naming, buffering, and file rotation.
 struct LogOptions {
   LogOptions();
 
@@ -74,7 +75,7 @@ struct LogOptions {
   Env* env;
 };
 
-typedef MinMaxBufferedWritableFile BufferedLogFile;
+typedef MinMaxBufferedWritableFile BufferedFile;
 
 class RollingLogFile;
 
@@ -83,16 +84,16 @@ class RollingLogFile;
 // multi-threaded access.
 class LogSink {
   LogSink(const LogOptions& options, const std::string& prefix,
-          BufferedLogFile* buf, RollingLogFile* vf)
+          BufferedFile* buf, RollingLogFile* vf)
       : options_(options),
         prefix_(prefix),
+        buf_file_(buf),
+        rlog_(vf),
         mu_(options_.mu),
-        buf_(buf),
-        vf_(vf),
         env_(options_.env),
         prev_off_(0),
         off_(0),
-        file_(NULL),  // Set by Open()
+        file_(NULL),  // Initialized by Open()
         refs_(0) {}
 
  public:
@@ -154,10 +155,10 @@ class LogSink {
     }
   }
 
-  // Return the buffer space.
+  // Return the memory space for write buffering.
   std::string* buffer_store() {
-    if (buf_ != NULL) {
-      return buf_->buffer_store();
+    if (buf_file_ != NULL) {
+      return buf_file_->buffer_store();
     } else {
       return NULL;
     }
@@ -184,10 +185,11 @@ class LogSink {
   // Constant after construction
   const LogOptions options_;
   const std::string prefix_;  // Parent directory name
-  port::Mutex* const mu_;
-  BufferedLogFile* const buf_;  // NULL is write buffering is disabled
+  // NULL if write buffering is disabled
+  BufferedFile* const buf_file_;
   // NULL if log rotation is disabled
-  RollingLogFile* const vf_;
+  RollingLogFile* const rlog_;
+  port::Mutex* const mu_;
   Env* const env_;
 
   // State below is protected by mu_
