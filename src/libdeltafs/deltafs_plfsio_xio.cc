@@ -74,8 +74,7 @@ class RollingLogFile : public WritableFile {
   Status Rotate(WritableFile* new_base) {
     Status status;
     if (base_ != NULL) {
-      // Write data out and catch potential errors
-      status = base_->Flush();
+      status = base_->Flush();  // Pre-close file and catch potential errors
       if (status.ok()) {
         base_->Close();  // Ignore errors
         delete base_;
@@ -102,7 +101,7 @@ class RollingLogFile : public WritableFile {
 static std::string Lrank(int rank) {
   char tmp[20];
   if (rank != -1) {
-    snprintf(tmp, sizeof(tmp), "/L-%08x", rank);
+    snprintf(tmp, sizeof(tmp), "L-%08x", rank);
     return tmp;
   } else {
     return "????????";
@@ -115,7 +114,7 @@ static std::string Lpart(int sub_partition) {
     snprintf(tmp, sizeof(tmp), ".%02x", sub_partition);
     return tmp;
   } else {
-    return ".xx";
+    return "";
   }
 }
 
@@ -127,20 +126,21 @@ static std::string Lsuffix(LogType type) {
   }
 }
 
-static std::string Lindex(int index) {
+static std::string Lset(int index) {
   char tmp[20];
   if (index != -1) {
-    snprintf(tmp, sizeof(tmp), "/R-%04x", index);
+    snprintf(tmp, sizeof(tmp), "R-%04x", index);
     return tmp;
   } else {
-    return "/";
+    return "";
   }
 }
 
 static std::string Lname(const std::string& prefix, int index,  // Rolling index
                          const LogOptions& options) {
   std::string result = prefix;
-  result += Lindex(index) + Lrank(options.rank) + Lsuffix(options.type);
+  result += "/" + Lset(index) + "/" + Lrank(options.rank);
+  result += Lsuffix(options.type);
   result += Lpart(options.sub_partition);
   return result;
 }
@@ -153,33 +153,39 @@ LogSink::~LogSink() {
 
 Status LogSink::Lrotate(int index, bool sync) {
   if (vf_ == NULL) {
-    return Status::AssertionFailed("Log rotation not enabled", LogName());
+    return Status::AssertionFailed("Log rotation not enabled", filename_);
   } else if (file_ == NULL) {
-    return Status::AssertionFailed("Log already closed", LogName());
+    return Status::AssertionFailed("Log already closed", filename_);
   } else {
     if (mu_ != NULL) {
       mu_->AssertHeld();
     }
 
-    Status status = file_->Flush();  // Catch background storage errors
-    // Potentially memory buffered data must be flushed out
-    // at this moment
-    if (buf_ != NULL && status.ok()) status = buf_->EmptyBuffer();
+    Status status;
+    // Potentially buffered data must be written out
+    if (buf_ != NULL) {
+      status = buf_->EmptyBuffer();
+    } else {
+      status = file_->Flush();  // Pre-catch potential storage errors
+    }
+    // Force data sync if requested
     if (sync && status.ok()) status = file_->Sync();
     if (!status.ok()) {
       return status;
     }
 
     WritableFile* new_base;
-    std::string p = prefix_ + Lindex(index);
-    env_->CreateDir(p.c_str());  // Ignore error since the directory might exist
-    std::string fname = Lname(prefix_, index, options_);
-    status = env_->NewWritableFile(fname.c_str(), &new_base);
+    std::string p = prefix_ + "/" + Lset(index);
+    env_->CreateDir(
+        p.c_str());  // Ignore error since the directory may exist already
+    std::string filename = Lname(prefix_, index, options_);
+    status = env_->NewWritableFile(filename.c_str(), &new_base);
     if (status.ok()) {
       status = vf_->Rotate(new_base);
       if (status.ok()) {
-        prev_offset_ = offset_;  // Remember previous write offset
-      } else {
+        prev_off_ = off_;  // Remember previous write offset
+        filename_ = filename;
+      } else {  // This does not remove the file
         new_base->Close();
         delete new_base;
       }
@@ -187,6 +193,12 @@ Status LogSink::Lrotate(int index, bool sync) {
 
     return status;
   }
+}
+
+uint64_t LogSink::Ptell() const {
+  uint64_t result = off_ - prev_off_;
+  assert(off_ >= prev_off_);
+  return result;
 }
 
 Status LogSink::Lclose(bool sync) {
@@ -197,8 +209,11 @@ Status LogSink::Lclose(bool sync) {
     if (mu_ != NULL) {
       mu_->AssertHeld();
     }
-    status = file_->Flush();  // Background storage errors can be caught here
-    if (buf_ != NULL && status.ok()) status = buf_->EmptyBuffer();
+    if (buf_ != NULL) {
+      status = buf_->EmptyBuffer();  // Force buffer flush
+    } else {
+      status = file_->Flush();
+    }
     if (sync && status.ok()) status = file_->Sync();
     if (status.ok()) {
       // Transient storage errors that might happen during
@@ -217,7 +232,7 @@ Status LogSink::Lclose(bool sync) {
 // must be called before Finish().
 Status LogSink::Finish() {
   assert(file_ != NULL);
-  // Buffered data will be written to storage. Data
+  // Delayed writes are likely sent to storage. Data
   // durability is not promised.
   Status status = file_->Close();
   delete file_;
@@ -233,11 +248,54 @@ void LogSink::Unref() {
   }
 }
 
-Status LogSink::Open(LogSink** result, const LogOptions& options, Env* env,
-                     const std::string& prefix, port::Mutex* io_mutex,
-                     std::vector<std::string*>* io_bufs,
-                     WritableFileStats* io_stats) {
-  return Status::OK();
+Status LogSink::Open(const LogOptions& options, const std::string& prefix,
+                     LogSink** result) {
+  *result = NULL;
+  int index = -1;  // Initial log rolling index
+  if (options.rotation != kNoRotation) {
+    index = 0;
+  }
+  Env* const env = options.env;
+  std::string p = prefix + "/" + Lset(index);
+  env->CreateDir(
+      p.c_str());  // Ignore error since the directory may exist already
+  std::string filename = Lname(prefix, index, options);
+  WritableFile* base = NULL;
+  Status status = env->NewWritableFile(filename.c_str(), &base);
+  if (status.ok()) {
+    assert(base != NULL);
+  } else {
+    return status;
+  }
+
+  RollingLogFile* vf = NULL;
+  if (options.rotation != kNoRotation) {
+    vf = new RollingLogFile(base);
+    base = vf;
+  }
+
+  WritableFile* file;
+  // Link to external stats for I/O monitoring
+  if (options.stats != NULL) {
+    file = new MeasuredWritableFile(options.stats, base);
+  } else {
+    file = base;
+  }
+  BufferedLogFile* wb = NULL;
+  if (options.min_buf != 0) {
+    wb = new BufferedLogFile(file, options.min_buf, options.max_buf);
+    file = wb;
+  } else {
+    // No write buffering?
+  }
+
+  LogSink* sink = new LogSink(options, prefix, wb, vf);
+  sink->filename_ = filename;
+  sink->file_ = file;
+  sink->Ref();
+
+  *result = sink;
+  return status;
 }
 }
 

@@ -82,7 +82,6 @@ class RollingLogFile;
 // Implementation is not thread-safe. External synchronization is needed for
 // multi-threaded access.
 class LogSink {
- public:
   LogSink(const LogOptions& options, const std::string& prefix,
           BufferedLogFile* buf, RollingLogFile* vf)
       : options_(options),
@@ -91,14 +90,21 @@ class LogSink {
         buf_(buf),
         vf_(vf),
         env_(options_.env),
-        offset_(0),
-        file_(NULL),
+        prev_off_(0),
+        off_(0),
+        file_(NULL),  // Set by Open()
         refs_(0) {}
+
+ public:
+  // Open a sink object according to the given set of options.
+  // Return OK on success, or a non-OK status on errors.
+  static Status Open(const LogOptions& options, const std::string& prefix,
+                     LogSink** result);
 
   // Return the current logic write offset.
   uint64_t Ltell() const {
     if (mu_ != NULL) mu_->AssertHeld();
-    return offset_;
+    return off_;
   }
 
   void Lock() {
@@ -113,17 +119,17 @@ class LogSink {
   // REQUIRES: Lclose() has not been called.
   Status Lwrite(const Slice& data) {
     if (file_ == NULL) {
-      return Status::AssertionFailed("Log already closed", LogName());
+      return Status::AssertionFailed("Log already closed", filename_);
     } else {
       if (mu_ != NULL) {
         mu_->AssertHeld();
       }
       Status result = file_->Append(data);
       if (result.ok()) {
-        // File implementation may delay the writing
+        // File implementation may ignore the flush
         result = file_->Flush();
         if (result.ok()) {
-          offset_ += data.size();
+          off_ += data.size();
         }
       }
       return result;
@@ -148,17 +154,15 @@ class LogSink {
     }
   }
 
-  // Open a sink object according to the given set of options.
-  // Return OK on success, or a non-OK status on errors.
-  static Status Open(
-      LogSink** result, const LogOptions& options, Env* env,
-      const std::string& prefix,  // Parent directory name
-      port::Mutex* io_mutex =
-          NULL,  // Allow synchronization among multiple threads
-      std::vector<std::string*>* io_bufs =
-          NULL,  // Enable memory consumption monitoring
-      WritableFileStats* io_stats = NULL  // Enable I/O monitoring
-      );
+  // Return the buffer space.
+  std::string* buffer_store() {
+    if (buf_ != NULL) {
+      return buf_->buffer_store();
+    } else {
+      return NULL;
+    }
+  }
+
   // Close the log so no further writes will be accepted.
   // Return OK on success, or a non-OK status on errors.
   // If sync is set to true, will force data sync before closing the log.
@@ -175,7 +179,6 @@ class LogSink {
   // No copying allowed
   void operator=(const LogSink&);
   LogSink(const LogSink&);
-  std::string LogName() const;
   Status Finish();  // Internally used by Lclose()
 
   // Constant after construction
@@ -189,10 +192,11 @@ class LogSink {
 
   // State below is protected by mu_
   Status finish_status_;
-  uint64_t offset_;  // Logic write offset, monotonically increasing
-  uint64_t prev_offset_;
+  uint64_t prev_off_;
+  uint64_t off_;  // Logic write offset, monotonically increasing
   // NULL if Finish() has been called
   WritableFile* file_;
+  std::string filename_;  // Name of the current log file
   uint32_t refs_;
 };
 }
