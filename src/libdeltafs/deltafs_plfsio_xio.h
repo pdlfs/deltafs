@@ -22,8 +22,6 @@
 namespace pdlfs {
 namespace plfsio {
 
-namespace xio {
-
 // Log types
 enum LogType {
   // Default type, contains data blocks
@@ -43,6 +41,8 @@ enum RotationType {
 
 // Options for naming, write buffering, and rolling.
 struct LogOptions {
+  LogOptions();
+
   // Rank # of the calling process
   int rank;
 
@@ -199,7 +199,6 @@ class LogSink {
   std::string filename_;  // Name of the current log file
   uint32_t refs_;
 };
-}
 
 }  // namespace plfsio
 }  // namespace pdlfs

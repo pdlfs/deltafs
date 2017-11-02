@@ -12,6 +12,7 @@
 #include "deltafs_plfsio.h"
 #include "deltafs_plfsio_format.h"
 #include "deltafs_plfsio_log.h"
+#include "deltafs_plfsio_xio.h"
 
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/port.h"

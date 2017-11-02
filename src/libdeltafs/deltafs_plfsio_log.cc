@@ -8,6 +8,7 @@
  */
 
 #include "deltafs_plfsio_log.h"
+#include "deltafs_plfsio_xio.h"
 
 namespace pdlfs {
 namespace plfsio {

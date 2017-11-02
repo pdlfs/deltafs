@@ -9,10 +9,11 @@
 
 #include "deltafs_plfsio_xio.h"
 
+#include "pdlfs-common/logging.h"
+#include "pdlfs-common/strutil.h"
+
 namespace pdlfs {
 namespace plfsio {
-
-namespace xio {
 
 class RollingLogFile : public WritableFile {
  public:
@@ -139,8 +140,8 @@ static std::string Lset(int index) {
 static std::string Lname(const std::string& prefix, int index,  // Rolling index
                          const LogOptions& options) {
   std::string result = prefix;
-  result += "/" + Lset(index) + "/" + Lrank(options.rank);
-  result += Lsuffix(options.type);
+  if (index != -1) result += "/" + Lset(index);
+  result += "/" + Lrank(options.rank) + Lsuffix(options.type);
   result += Lpart(options.sub_partition);
   return result;
 }
@@ -176,8 +177,9 @@ Status LogSink::Lrotate(int index, bool sync) {
 
     WritableFile* new_base;
     std::string p = prefix_ + "/" + Lset(index);
-    env_->CreateDir(
-        p.c_str());  // Ignore error since the directory may exist already
+    if (index != -1)
+      env_->CreateDir(
+          p.c_str());  // Ignore error since the directory may exist already
     std::string filename = Lname(prefix_, index, options_);
     status = env_->NewWritableFile(filename.c_str(), &new_base);
     if (status.ok()) {
@@ -248,6 +250,17 @@ void LogSink::Unref() {
   }
 }
 
+LogOptions::LogOptions()
+    : rank(0),
+      sub_partition(-1),
+      max_buf(4096),
+      min_buf(4096),
+      rotation(kNoRotation),
+      type(kData),
+      mu(NULL),
+      stats(NULL),
+      env(Env::Default()) {}
+
 Status LogSink::Open(const LogOptions& options, const std::string& prefix,
                      LogSink** result) {
   *result = NULL;
@@ -257,8 +270,9 @@ Status LogSink::Open(const LogOptions& options, const std::string& prefix,
   }
   Env* const env = options.env;
   std::string p = prefix + "/" + Lset(index);
-  env->CreateDir(
-      p.c_str());  // Ignore error since the directory may exist already
+  if (index != -1)
+    env->CreateDir(
+        p.c_str());  // Ignore error since the directory may exist already
   std::string filename = Lname(prefix, index, options);
   WritableFile* base = NULL;
   Status status = env->NewWritableFile(filename.c_str(), &base);
@@ -289,6 +303,10 @@ Status LogSink::Open(const LogOptions& options, const std::string& prefix,
     // No write buffering?
   }
 
+#if VERBOSE >= 3
+  Verbose(__LOG_ARGS__, 3, "Writing into %s, buffer=%s", filename.c_str(),
+          PrettySize(options.max_buf).c_str());
+#endif
   LogSink* sink = new LogSink(options, prefix, wb, vf);
   sink->filename_ = filename;
   sink->file_ = file;
@@ -296,7 +314,6 @@ Status LogSink::Open(const LogOptions& options, const std::string& prefix,
 
   *result = sink;
   return status;
-}
 }
 
 }  // namespace plfsio

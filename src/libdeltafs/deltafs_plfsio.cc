@@ -164,41 +164,6 @@ DirOptions ParseDirOptions(const char* input) {
   return options;
 }
 
-void LogSink::Unref() {
-  assert(refs_ > 0);
-  refs_--;
-  if (refs_ == 0) {
-    delete this;
-  }
-}
-
-LogSink::~LogSink() {
-  mu_ = NULL;
-  if (file_ != NULL) {
-    Lclose();
-  }
-}
-
-Status LogSink::Lclose(bool sync) {
-  Status status;
-  if (file_ != NULL) {
-    if (mu_ != NULL) mu_->AssertHeld();
-    if (sync) status = file_->Sync();
-    if (status.ok()) {
-      status = Close();
-    }
-  }
-  return status;
-}
-
-Status LogSink::Close() {
-  assert(file_ != NULL);
-  Status status = file_->Close();
-  delete file_;
-  file_ = NULL;
-  return status;
-}
-
 void LogSource::Unref() {
   assert(refs_ > 0);
   refs_--;
@@ -286,8 +251,7 @@ class DirWriterImpl : public DirWriter {
   bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
   WritableFileStats io_stats_;
-  std::vector<const OutputStats*> compaction_stats_;
-  std::vector<std::string*> write_bufs_;
+  const OutputStats** compaction_stats_;
   DirLogger<T>** dirs_;
   LogSink* data_;
 };
@@ -824,8 +788,9 @@ uint64_t DirWriterImpl<T>::TEST_total_memory_usage() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) result += dirs_[i]->memory_usage();
-  for (size_t i = 0; i < write_bufs_.size(); i++) {
-    result += write_bufs_[i]->capacity();
+  result += data_->buffer_store()->capacity();
+  for (size_t i = 0; i < num_parts_; i++) {
+    result += dirs_[i]->indx_->buffer_store()->capacity();
   }
   return result;
 }
@@ -834,7 +799,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_raw_index_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+  for (size_t i = 0; i < num_parts_; i++) {
     result += compaction_stats_[i]->index_size;
   }
   return result;
@@ -844,7 +809,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_raw_filter_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+  for (size_t i = 0; i < num_parts_; i++) {
     result += compaction_stats_[i]->filter_size;
   }
   return result;
@@ -854,7 +819,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_raw_data_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+  for (size_t i = 0; i < num_parts_; i++) {
     result += compaction_stats_[i]->data_size;
   }
   return result;
@@ -864,7 +829,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_value_bytes() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+  for (size_t i = 0; i < num_parts_; i++) {
     result += compaction_stats_[i]->value_size;
   }
   return result;
@@ -874,7 +839,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_key_bytes() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+  for (size_t i = 0; i < num_parts_; i++) {
     result += compaction_stats_[i]->key_size;
   }
   return result;
@@ -912,58 +877,8 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   return result;
 }
 
-static void PrintSinkInfo(const std::string& name, size_t mem_size) {
-#if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Writing %s, buffer reserved: %s", name.c_str(),
-          PrettySize(mem_size).c_str());
-#endif
-}
-
-// Try opening a log sink and store its handle in *result.
-static Status OpenSink(
-    LogSink** result, const std::string& fname, Env* env,
-    size_t max_buf = 0,  // Max write buffering
-    size_t min_buf = 0,  // Min write size
-    port::Mutex* io_mutex =
-        NULL,  // Forces external synchronization among multiple threads
-    std::vector<std::string*>* write_bufs =
-        NULL,  // Facilitate the measurement of memory usage,
-    WritableFileStats* io_stats = NULL  // Enable I/O monitoring
-    ) {
-  *result = NULL;
-  WritableFile* base = NULL;
-  Status status = env->NewWritableFile(fname.c_str(), &base);
-  if (status.ok()) {
-    assert(base != NULL);
-  } else {
-    return status;
-  }
-
-  WritableFile* file;  // Bind to an external stats for monitoring
-  if (io_stats != NULL) {
-    file = new MeasuredWritableFile(io_stats, base);
-  } else {
-    file = base;
-  }
-  if (min_buf != 0) {
-    MinMaxBufferedWritableFile* buffered =
-        new MinMaxBufferedWritableFile(file, min_buf, max_buf);
-    write_bufs->push_back(buffered->buffer_store());
-    file = buffered;
-  } else {
-    // No writer buffer?
-  }
-
-  PrintSinkInfo(fname, max_buf);
-  LogSink* sink = new LogSink(fname, file, io_mutex);
-  sink->Ref();
-
-  *result = sink;
-  return status;
-}
-
-// Open a directory writer instance according to the instantiated type T.
-// Return OK on success, or a non-OK status on errors.
+// Open a directory writer instance according to the instantiated implementation
+// type T. Return OK on success, or a non-OK status on errors.
 template <typename T>
 Status DirWriter::InternalOpen(T* impl, const DirOptions& options,
                                const std::string& dirname) {
@@ -979,30 +894,35 @@ Status DirWriter::InternalOpen(T* impl, const DirOptions& options,
   std::vector<DirLogger<typename T::FilterType>*> plfsdirs(num_parts, NULL);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
-  std::vector<const OutputStats*> compaction_stats;
-  std::vector<std::string*> write_bufs;
-  WritableFileStats* io_stats =
-      options.measure_writes ? &impl->io_stats_ : NULL;
-  size_t min = options.min_data_buffer;
-  size_t max = options.data_buffer;
-  status = OpenSink(&data[0], DataFileName(dirname, my_rank), env, max, min,
-                    &impl->io_mutex_, &write_bufs, io_stats);
+  std::vector<const OutputStats*> output_stats;
+  LogOptions io_opts;
+  io_opts.rank = my_rank;
+  io_opts.type = LogType::kData;
+  if (options.measure_writes) io_opts.stats = &impl->io_stats_;
+  io_opts.mu = &impl->io_mutex_;
+  io_opts.min_buf = options.min_data_buffer;
+  io_opts.max_buf = options.data_buffer;
+  io_opts.env = env;
+  status = LogSink::Open(io_opts, dirname, &data[0]);
   if (status.ok()) {
-    port::Mutex* const mtx = NULL;  // No synchronization needed for index files
     for (size_t i = 0; i < num_parts; i++) {
       plfsdirs[i] = new DirLogger<typename T::FilterType>(
           impl->options_, i, &impl->mutex_, &impl->bg_cv_);
-      WritableFileStats* idx_io_stats =
-          options.measure_writes ? &plfsdirs[i]->io_stats_ : NULL;
-      size_t idx_min = options.min_index_buffer;
-      size_t idx_max = options.index_buffer;
-      status = OpenSink(&index[i], IndexFileName(dirname, my_rank, int(i)), env,
-                        idx_max, idx_min, mtx, &write_bufs, idx_io_stats);
+      LogOptions idx_opts;
+      idx_opts.rank = my_rank;
+      idx_opts.sub_partition = static_cast<int>(i);
+      idx_opts.type = LogType::kIndex;
+      if (options.measure_writes) idx_opts.stats = &plfsdirs[i]->io_stats_;
+      idx_opts.mu = NULL;
+      idx_opts.min_buf = options.min_index_buffer;
+      idx_opts.max_buf = options.index_buffer;
+      idx_opts.env = env;
+      status = LogSink::Open(idx_opts, dirname, &index[i]);
       plfsdirs[i]->Ref();
       if (status.ok()) {
         plfsdirs[i]->Open(data[0], index[i]);
         const OutputStats* os = plfsdirs[i]->output_stats();
-        compaction_stats.push_back(os);
+        output_stats.push_back(os);
       } else {
         break;
       }
@@ -1010,19 +930,18 @@ Status DirWriter::InternalOpen(T* impl, const DirOptions& options,
   }
 
   if (status.ok()) {
+    const OutputStats** compaction_stats = new const OutputStats*[num_parts];
     DirLogger<typename T::FilterType>** dirs =
         new DirLogger<typename T::FilterType>*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {
       assert(plfsdirs[i] != NULL);
+      compaction_stats[i] = output_stats[i];
       dirs[i] = plfsdirs[i];
       dirs[i]->Ref();
     }
     impl->data_ = data[0];
     impl->data_->Ref();
-    impl->compaction_stats_.swap(compaction_stats);
-    // Weak references to log buffers that must not be deleted
-    // during the lifetime of this directory.
-    impl->write_bufs_.swap(write_bufs);
+    impl->compaction_stats_ = compaction_stats;
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
     impl->dirs_ = dirs;
