@@ -804,7 +804,14 @@ Status DirLogger<T>::Add(const Slice& key, const Slice& value) {
   mu_->AssertHeld();
   assert(opened_);
   Status status = Prepare();
-  if (status.ok()) mem_buf_->Add(key, value);
+  while (status.ok()) {
+    // Implementation may reject a key-value insertion
+    if (!mem_buf_->Add(key, value)) {
+      status = Prepare();
+    } else {
+      break;
+    }
+  }
   return status;
 }
 
