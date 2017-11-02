@@ -158,6 +158,11 @@ struct DirOptions {
   // Default: 4MB
   size_t min_index_buffer;
 
+  // Auto rotate log files at the end of each epoch.
+  // Only data logs are rotated.
+  // Default: false
+  bool epoch_log_rotation;
+
   // Add necessary padding to the end of each log object to ensure the
   // final object size is always some multiple of the write size.
   // Required by some underlying object stores.

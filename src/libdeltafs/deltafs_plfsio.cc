@@ -44,6 +44,7 @@ DirOptions::DirOptions()
       min_data_buffer(4 << 20),
       index_buffer(4 << 20),
       min_index_buffer(4 << 20),
+      epoch_log_rotation(false),
       tail_padding(false),
       compaction_pool(NULL),
       reader_pool(NULL),
@@ -277,6 +278,7 @@ DirWriterImpl<T>::~DirWriterImpl() {
       dirs_[i]->Unref();
     }
   }
+  delete[] compaction_stats_;
   delete[] dirs_;
   if (data_ != NULL) {
     data_->Unref();
@@ -471,11 +473,11 @@ Status DirWriterImpl<T>::TryBatchWrites(BatchCursor* cursor) {
   return status;
 }
 
-// Attempt to force a minor compaction on all directory partitions
-// simultaneously. If a partition cannot be compacted immediately due to a lack
-// of buffer space, skip it and add it to a waiting list so it can be
-// reattempted later. Return immediately as soon as all partitions have a minor
-// compaction scheduled. Will not wait for all compactions to finish.
+// Attempt to schedule a minor compaction on all directory partitions
+// simultaneously. If a compaction cannot be scheduled immediately due to a lack
+// of buffer space, it will be added to a waiting list so it can be reattempted
+// later. Return immediately as soon as all partitions have a minor compaction
+// scheduled. Will not wait for all compactions to finish.
 // Return OK on success, or a non-OK status on errors.
 template <typename T>
 Status DirWriterImpl<T>::TryFlush(bool ef, bool fi) {
@@ -575,6 +577,8 @@ Status DirWriterImpl<T>::EpochFlush(int epoch) {
     } else {
       has_pending_flush_ = true;
       const bool epoch_flush = true;
+      // Schedule a minor compaction for epoch flush
+      // Does not wait for completion
       status = TryFlush(epoch_flush);
       if (status.ok()) num_epochs_++;
       has_pending_flush_ = false;
@@ -582,6 +586,26 @@ Status DirWriterImpl<T>::EpochFlush(int epoch) {
       break;
     }
   }
+
+  // TODO: Future work
+  //  #1. TryFlush() is not idempotent, so if an epoch flush gets an error in
+  //  the
+  //    middle, the epoch num in different directory partitions may differ
+  //  #2. Better to allow log rotation to happen asynchronously --- no
+  //    need to wait for compaction to finish
+  //  #3. change LogSink->Lrotate() to create log files lazily
+  if (options_.epoch_log_rotation && status.ok()) {
+    // If log rotation is requested, must wait
+    // until compaction completes
+    status = WaitForCompaction();
+    if (status.ok()) {
+      data_->Lock();
+      // Prepare for the next epoch
+      status = data_->Lrotate(epoch + 1);
+      data_->Unlock();
+    }
+  }
+
   return status;
 }
 
@@ -898,6 +922,7 @@ Status DirWriter::InternalOpen(T* impl, const DirOptions& options,
   LogOptions io_opts;
   io_opts.rank = my_rank;
   io_opts.type = LogType::kData;
+  if (options.epoch_log_rotation) io_opts.rotation = kExtCtrl;
   if (options.measure_writes) io_opts.stats = &impl->io_stats_;
   io_opts.mu = &impl->io_mutex_;
   io_opts.min_buf = options.min_data_buffer;

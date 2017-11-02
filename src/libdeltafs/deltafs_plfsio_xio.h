@@ -37,7 +37,7 @@ enum RotationType {
   // Do not rotate log files
   kNoRotation = 0x00,
   // Log rotation is controlled by external user code
-  kUsrCtrl = 0x01
+  kExtCtrl = 0x01
 };
 
 // Options for monitoring, naming, buffering, and file rotation.
