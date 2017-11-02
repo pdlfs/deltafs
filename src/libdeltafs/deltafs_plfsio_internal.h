@@ -17,11 +17,9 @@
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/port.h"
 
+#include <set>
 #include <string>
 #include <vector>
-#ifndef NDEBUG
-#include <set>  // For potential key collision detection
-#endif
 
 namespace pdlfs {
 namespace plfsio {
@@ -97,15 +95,6 @@ class TableLogger {
   Status status() const { return status_; }
 
   void Add(const Slice& key, const Slice& value);
-  Status Finish();
-
-  // End the current block and force the start of a new data block.
-  // REQUIRES: Finish() has not been called.
-  void EndBlock();
-
-  // Flush buffered data blocks and finalize their indexes.
-  // REQUIRES: Finish() has not been called.
-  void Commit();
 
   // Force the start of a new table.
   // Caller may optionally specify a corresponding filter block.
@@ -117,7 +106,19 @@ class TableLogger {
   // REQUIRES: Finish() has not been called.
   void MakeEpoch();
 
+  // Finalize table contents.
+  // No further writes.
+  Status Finish();
+
  private:
+  // End the current block and force the start of a new data block.
+  // REQUIRES: Finish() has not been called.
+  void EndBlock();
+
+  // Flush buffered data blocks and finalize their indexes.
+  // REQUIRES: Finish() has not been called.
+  void Commit();
+
   const DirOptions& options_;
   OutputStats output_stats_;
 #ifndef NDEBUG
