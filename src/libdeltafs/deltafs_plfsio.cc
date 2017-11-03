@@ -1394,51 +1394,5 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   return status;
 }
 
-static Status DeleteLogStream(const std::string& fname, Env* env) {
-#if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Removing %s ...", fname.c_str());
-#endif
-  return env->DeleteFile(fname.c_str());
-}
-
-Status DestroyDir(const std::string& dirname, const DirOptions& opts) {
-  Status status;
-  DirOptions options = SanitizeReadOptions(opts);
-  Env* const env = options.env;
-  if (options.is_env_pfs) {
-    std::vector<std::string> names;
-    status = env->GetChildren(dirname.c_str(), &names);
-    if (status.ok()) {
-      for (size_t i = 0; i < names.size(); i++) {
-        if (!Slice(names[i]).starts_with(".")) {
-          status = DeleteLogStream(dirname + "/" + names[i], env);
-          if (!status.ok()) {
-            break;
-          }
-        }
-      }
-
-      env->DeleteDir(dirname.c_str());
-    }
-  } else {
-    const size_t num_parts = 1u << options.lg_parts;
-    const int my_rank = options.rank;
-    std::vector<std::string> names;
-    names.push_back(DataFileName(dirname, my_rank));
-    for (size_t part = 0; part < num_parts; part++) {
-      names.push_back(IndexFileName(dirname, my_rank, part));
-    }
-    if (status.ok()) {
-      for (size_t i = 0; i < names.size(); i++) {
-        status = DeleteLogStream(names[i], env);
-        if (!status.ok()) {
-          break;
-        }
-      }
-    }
-  }
-  return status;
-}
-
 }  // namespace plfsio
 }  // namespace pdlfs

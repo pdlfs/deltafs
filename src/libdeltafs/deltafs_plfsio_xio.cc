@@ -8,9 +8,13 @@
  */
 
 #include "deltafs_plfsio_xio.h"
+#include "deltafs_plfsio.h"
 
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/strutil.h"
+
+#include <algorithm>
+#include <vector>
 
 namespace pdlfs {
 namespace plfsio {
@@ -313,6 +317,71 @@ Status LogSink::Open(const LogOptions& options, const std::string& prefix,
   sink->Ref();
 
   *result = sink;
+  return status;
+}
+
+static DirOptions SanitizeDirOptions(const DirOptions& opts) {
+  DirOptions result = opts;
+  if (result.env == NULL) {
+    result.env = Env::Default();
+  }
+  return result;
+}
+
+static Status Delete(const char* filename, Env* env) {
+#if VERBOSE >= 3
+  Verbose(__LOG_ARGS__, 3, "Removing %s ...", filename);
+#endif
+  return env->DeleteFile(filename);
+}
+
+Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
+  Status status;
+  DirOptions options = SanitizeDirOptions(opts);
+  std::vector<std::string> garbage;  // Pending deletion
+  Env* const env = options.env;
+  if (options.is_env_pfs) {
+    std::vector<std::string> names;
+    status = env->GetChildren(prefix.c_str(), &names);
+    if (status.ok()) {
+      for (size_t i = 0; i < names.size() && status.ok(); i++) {
+        if (!names[i].empty() && names[i][0] != '.') {
+          std::string entry = prefix + "/" + names[i];
+          if (names[i][0] == 'L') {
+            garbage.push_back(entry);
+          } else if (names[i][0] == 'T') {
+            std::vector<std::string> subnames;
+            status = env->GetChildren(entry.c_str(), &subnames);
+            if (status.ok()) {
+              for (size_t ii = 0; ii < subnames.size(); ii++) {
+                if (!subnames[ii].empty() && subnames[ii][0] != '.') {
+                  if (subnames[ii][0] == 'L') {
+                    garbage.push_back(entry + "/" + subnames[ii]);
+                  } else {
+                    // Skip
+                  }
+                }
+              }
+            }
+          } else {
+            // Skip
+          }
+        }
+      }
+    }
+  }
+
+  if (status.ok()) {
+    std::sort(garbage.begin(), garbage.end());
+    std::vector<std::string>::iterator it;
+    for (it = garbage.begin(); it != garbage.end(); ++it) {
+      status = Delete(it->c_str(), env);
+      if (!status.ok()) {
+        break;
+      }
+    }
+  }
+
   return status;
 }
 
