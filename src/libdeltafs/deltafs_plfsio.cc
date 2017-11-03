@@ -905,7 +905,7 @@ Status DirWriter::InternalOpen(T* impl, const DirOptions& options,
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
   std::vector<const OutputStats*> output_stats;
-  LogOptions io_opts;
+  LogSink::LogOptions io_opts;
   io_opts.rank = my_rank;
   io_opts.type = LogType::kData;
   if (options.epoch_log_rotation) io_opts.rotation = kExtCtrl;
@@ -919,7 +919,7 @@ Status DirWriter::InternalOpen(T* impl, const DirOptions& options,
     for (size_t i = 0; i < num_parts; i++) {
       plfsdirs[i] = new DirLogger<typename T::FilterType>(
           impl->options_, i, &impl->mutex_, &impl->bg_cv_);
-      LogOptions idx_opts;
+      LogSink::LogOptions idx_opts;
       idx_opts.rank = my_rank;
       idx_opts.sub_partition = static_cast<int>(i);
       idx_opts.type = LogType::kIndex;

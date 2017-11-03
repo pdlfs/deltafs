@@ -141,8 +141,9 @@ static std::string Lset(int index) {
   }
 }
 
+template <typename T>
 static std::string Lname(const std::string& prefix, int index,  // Rolling index
-                         const LogOptions& options) {
+                         const T& options) {
   std::string result = prefix;
   if (index != -1) result += "/" + Lset(index);
   result += "/" + Lrank(options.rank) + Lsuffix(options.type);
@@ -254,7 +255,7 @@ void LogSink::Unref() {
   }
 }
 
-LogOptions::LogOptions()
+LogSink::LogOptions::LogOptions()
     : rank(0),
       sub_partition(-1),
       max_buf(4096),
