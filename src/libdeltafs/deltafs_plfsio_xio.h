@@ -202,5 +202,31 @@ class LogSink {
   uint32_t refs_;
 };
 
+// Abstraction for reading data from a log file, which may
+// consist of several pieces due to log rotation.
+class LogSource {
+ public:
+  LogSource(RandomAccessFile* f, uint64_t s) : file_(f), size_(s), refs_(0) {}
+
+  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) {
+    return file_->Read(offset, n, result, scratch);
+  }
+
+  uint64_t Size() const { return size_; }
+
+  void Ref() { refs_++; }
+  void Unref();
+
+ private:
+  ~LogSource();
+  // No copying allowed
+  void operator=(const LogSource&);
+  LogSource(const LogSource&);
+
+  RandomAccessFile* file_;
+  uint64_t size_;
+  uint32_t refs_;
+};
+
 }  // namespace plfsio
 }  // namespace pdlfs

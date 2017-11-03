@@ -276,32 +276,6 @@ struct DirOptions {
 // Parse a given configuration string to structured options.
 extern DirOptions ParseDirOptions(const char* conf);
 
-// Abstraction for a thread-unsafe and possibly-buffered
-// random access log file.
-class LogSource {
- public:
-  LogSource(RandomAccessFile* f, uint64_t s) : file_(f), size_(s), refs_(0) {}
-
-  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) {
-    return file_->Read(offset, n, result, scratch);
-  }
-
-  uint64_t Size() const { return size_; }
-
-  void Ref() { refs_++; }
-  void Unref();
-
- private:
-  ~LogSource();
-  // No copying allowed
-  void operator=(const LogSource&);
-  LogSource(const LogSource&);
-
-  RandomAccessFile* file_;
-  uint64_t size_;
-  uint32_t refs_;
-};
-
 // Destroy the contents of the specified directory.
 // Be very careful using this method.
 extern Status DestroyDir(const std::string& dirname, const DirOptions& options);

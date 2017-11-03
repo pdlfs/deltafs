@@ -320,6 +320,20 @@ Status LogSink::Open(const LogOptions& options, const std::string& prefix,
   return status;
 }
 
+void LogSource::Unref() {
+  assert(refs_ > 0);
+  refs_--;
+  if (refs_ == 0) {
+    delete this;
+  }
+}
+
+LogSource::~LogSource() {
+  if (file_ != NULL) {
+    delete file_;
+  }
+}
+
 static DirOptions SanitizeDirOptions(const DirOptions& opts) {
   DirOptions result = opts;
   if (result.env == NULL) {
@@ -338,7 +352,7 @@ static Status Delete(const char* filename, Env* env) {
 Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
   Status status;
   DirOptions options = SanitizeDirOptions(opts);
-  std::vector<std::string> garbage;  // Pending deletion
+  std::vector<std::string> garbage;  // Log files pending deletion
   Env* const env = options.env;
   if (options.is_env_pfs) {
     std::vector<std::string> names;
@@ -347,9 +361,7 @@ Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
       for (size_t i = 0; i < names.size() && status.ok(); i++) {
         if (!names[i].empty() && names[i][0] != '.') {
           std::string entry = prefix + "/" + names[i];
-          if (names[i][0] == 'L') {
-            garbage.push_back(entry);
-          } else if (names[i][0] == 'T') {
+          if (names[i][0] == 'T') {  // Log rotation set
             std::vector<std::string> subnames;
             status = env->GetChildren(entry.c_str(), &subnames);
             if (status.ok()) {
@@ -363,6 +375,9 @@ Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
                 }
               }
             }
+
+          } else if (names[i][0] == 'L') {
+            garbage.push_back(entry);  // Regular log file
           } else {
             // Skip
           }
