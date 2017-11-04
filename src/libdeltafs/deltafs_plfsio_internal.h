@@ -219,7 +219,8 @@ class DirLogger {
   };
   Status Flush(const FlushOptions& options);
 
-  // Sync and pre-close log files before de-referencing them
+  // Sync and close all associated log sinks.
+  // DOES NOT REQUIRE MUTEX TO BE LOCKED (CALLED IN I/O CONTEXT ONLY)
   Status SyncAndClose();
 
   void Ref() { refs_++; }
@@ -301,7 +302,7 @@ class Dir {
   Status Read(const Slice& key, std::string* dst, char* tmp, size_t tmp_length,
               ReadStats* stats);
 
-  void InstallDataSource(LogSource *data);
+  void InstallDataSource(LogSource* data);
 
   void Ref() { refs_++; }
 

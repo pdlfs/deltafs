@@ -135,9 +135,9 @@ class Footer {
   const BlockHandle& epoch_index_handle() const { return epoch_index_handle_; }
   void set_epoch_index_handle(const BlockHandle& h) { epoch_index_handle_ = h; }
 
-  // Total number of epoches
-  uint32_t num_epoches() const { return num_epoches_; }
-  void set_num_epoches(uint32_t num) { num_epoches_ = num; }
+  // Total number of epochs
+  uint32_t num_epochs() const { return num_epochs_; }
+  void set_num_epochs(uint32_t num) { num_epochs_ = num; }
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* input);
@@ -148,11 +148,13 @@ class Footer {
 
  private:
   BlockHandle epoch_index_handle_;
-  uint32_t num_epoches_;
+  uint32_t num_epochs_;
   uint32_t lg_parts_;
   unsigned char skip_checksums_;
   unsigned char mode_;
 };
+
+extern std::string FooterFileName(const std::string& dirname);
 
 extern std::string ToDebugString(DirMode mode);
 
@@ -170,7 +172,7 @@ inline EpochStone::EpochStone()
 }
 
 inline Footer::Footer()
-    : num_epoches_(~static_cast<uint32_t>(0) /* Invalid */),
+    : num_epochs_(~static_cast<uint32_t>(0) /* Invalid */),
       lg_parts_(~static_cast<uint32_t>(0) /* Invalid */),
       skip_checksums_(~static_cast<unsigned char>(0) /* Invalid */),
       mode_(~static_cast<unsigned char>(0) /* Invalid */) {

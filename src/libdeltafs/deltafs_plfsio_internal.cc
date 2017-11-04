@@ -608,7 +608,7 @@ Status TableLogger::Finish() {
 
   // Write the final footer
   footer.set_epoch_index_handle(root_index_handle);
-  footer.set_num_epoches(num_epochs_);
+  footer.set_num_epochs(num_epochs_);
   footer.EncodeTo(&footer_buf);
   status_ = indx_logger_.Finish(footer_buf);
 
@@ -740,21 +740,20 @@ Status DirLogger<T>::bg_status() {
   return bg_status_;
 }
 
-// Pre-close all linked log files.
-// By default, log files are reference counted and are implicitly closed when
-// de-referenced by the last opener. Optionally, caller may force the
-// fsync and closing of all log files.
+// Sync and pre-close all linked log files.
+// By default, log files are reference-counted and are implicitly closed when
+// de-referenced by the last opener. Optionally, a caller may force data
+// sync and pre-closing all log files.
 template <typename T>
 Status DirLogger<T>::SyncAndClose() {
-  mu_->AssertHeld();
-  assert(opened_);
-  const bool sync = true;
+  Status status;
+  if (!opened_) return status;
+  assert(data_ != NULL);
   data_->Lock();
-  Status status = data_->Lclose(sync);
+  status = data_->Lclose(true);
   data_->Unlock();
-  if (status.ok()) {
-    status = indx_->Lclose(sync);
-  }
+  assert(indx_ != NULL);
+  if (status.ok()) status = indx_->Lclose(true);
   return status;
 }
 
@@ -1612,7 +1611,7 @@ Status Dir::Open(LogSource* indx) {
     return status;
   }
 
-  num_epoches_ = footer.num_epoches();
+  num_epoches_ = footer.num_epochs();
   rt_ = new Block(contents);
   indx_ = indx;
   indx_->Ref();

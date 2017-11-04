@@ -229,6 +229,7 @@ class DirWriterImpl : public DirWriter {
   const OutputStats** compaction_stats_;
   DirLogger<T>** dirs_;
   LogSink* data_;
+  Env* env_;
 };
 
 template <typename T>
@@ -243,7 +244,8 @@ DirWriterImpl<T>::DirWriterImpl(const DirOptions& o, const std::string& d)
       has_pending_flush_(false),
       finished_(false),
       dirs_(NULL),
-      data_(NULL) {}
+      data_(NULL),
+      env_(options_.env) {}
 
 template <typename T>
 DirWriterImpl<T>::~DirWriterImpl() {
@@ -293,6 +295,9 @@ Status DirWriterImpl<T>::EnsureDataPadding(LogSink* sink, size_t footer_size) {
 template <typename T>
 Status DirWriterImpl<T>::Finalize() {
   mutex_.AssertHeld();
+  uint32_t total_epochs = static_cast<uint32_t>(num_epochs_);
+  std::string ff = FooterFileName(dirname_);
+  mutex_.Unlock();  // Unlock during i/o operations
   BlockHandle dummy_handle;
   Footer footer;
 
@@ -300,7 +305,7 @@ Status DirWriterImpl<T>::Finalize() {
   dummy_handle.set_size(0);
   footer.set_epoch_index_handle(dummy_handle);
 
-  footer.set_num_epoches(0);
+  footer.set_num_epochs(total_epochs);
   footer.set_mode(static_cast<unsigned char>(options_.mode));
   footer.set_lg_parts(static_cast<uint32_t>(options_.lg_parts));
   footer.set_skip_checksums(
@@ -328,6 +333,11 @@ Status DirWriterImpl<T>::Finalize() {
     }
   }
 
+  if (status.ok()) {
+    status = WriteStringToFileSync(env_, footer_buf, ff.c_str());
+  }
+
+  mutex_.Lock();
   return status;
 }
 
@@ -525,6 +535,7 @@ Status DirWriterImpl<T>::Finish() {
       break;
     }
   }
+
   return status;
 }
 

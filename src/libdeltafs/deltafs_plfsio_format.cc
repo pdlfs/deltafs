@@ -15,6 +15,10 @@
 namespace pdlfs {
 namespace plfsio {
 
+std::string FooterFileName(const std::string& dirname) {
+  return dirname + "/DIR.info";
+}
+
 std::string ToDebugString(DirMode mode) {
   switch (mode) {
     case kMultiMap:
@@ -111,7 +115,7 @@ Status EpochStone::DecodeFrom(Slice* input) {
 }
 
 void Footer::EncodeTo(std::string* dst) const {
-  assert(num_epoches_ != ~static_cast<uint32_t>(0));
+  assert(num_epochs_ != ~static_cast<uint32_t>(0));
   assert(lg_parts_ != ~static_cast<uint32_t>(0));
   assert(skip_checksums_ != ~static_cast<unsigned char>(0));
   assert(mode_ != ~static_cast<unsigned char>(0));
@@ -120,7 +124,7 @@ void Footer::EncodeTo(std::string* dst) const {
   dst->resize(BlockHandle::kMaxEncodedLength, 0);  // Padding
   PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber & 0xFFFFFFFFU));
   PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber >> 32));
-  PutFixed32(dst, num_epoches_);
+  PutFixed32(dst, num_epochs_);
   PutFixed32(dst, lg_parts_);
   dst->push_back(static_cast<char>(skip_checksums_));
   dst->push_back(static_cast<char>(mode_));
@@ -144,7 +148,7 @@ Status Footer::DecodeFrom(Slice* input) {
   if (magic != kTableMagicNumber) {
     return Status::Corruption("Bad magic number");
   } else {
-    num_epoches_ = DecodeFixed32(start + kEncodedLength - 10);
+    num_epochs_ = DecodeFixed32(start + kEncodedLength - 10);
     lg_parts_ = DecodeFixed32(start + kEncodedLength - 6);
     skip_checksums_ = static_cast<unsigned char>(start[kEncodedLength - 2]);
     mode_ = static_cast<unsigned char>(start[kEncodedLength - 1]);
