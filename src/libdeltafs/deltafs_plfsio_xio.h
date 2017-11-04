@@ -261,8 +261,17 @@ class LogSource {
     return status;
   }
 
-  // Return the total data size
-  uint64_t Size() const {
+  // Return the size of a given file
+  uint64_t Size(size_t index = 0) const {
+    if (index < num_files_) {
+      return files_[index].second;
+    } else {
+      return 0;
+    }
+  }
+
+  // Return accumulated file size (total data size)
+  uint64_t TotalSize() const {
     uint64_t result = 0;
     for (size_t i = 0; i < num_files_; i++) {
       result += files_[i].second;
