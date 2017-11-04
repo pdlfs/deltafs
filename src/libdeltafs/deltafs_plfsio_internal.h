@@ -301,7 +301,7 @@ class Dir {
   Status Read(const Slice& key, std::string* dst, char* tmp, size_t tmp_length,
               ReadStats* stats);
 
-  void RebindDataSource(LogSource* data);
+  void InstallDataSource(LogSource *data);
 
   void Ref() { refs_++; }
 

@@ -165,19 +165,6 @@ DirOptions ParseDirOptions(const char* input) {
   return options;
 }
 
-static std::string IndexFileName(const std::string& parent, int rank,
-                                 int partition) {
-  char tmp[30];
-  snprintf(tmp, sizeof(tmp), "/L-%08x.idx.%02x", rank, partition);
-  return parent + tmp;
-}
-
-static std::string DataFileName(const std::string& parent, int rank) {
-  char tmp[30];
-  snprintf(tmp, sizeof(tmp), "/L-%08x.dat", rank);
-  return parent + tmp;
-}
-
 template <typename T = BloomBlock>
 class DirWriterImpl : public DirWriter {
  public:
@@ -1120,79 +1107,6 @@ DirReaderImpl::~DirReaderImpl() {
   }
 }
 
-static void PrintSourceInfo(const std::string& name, size_t mem_size) {
-#if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Reading %s, cache size: %s", name.c_str(),
-          PrettySize(mem_size).c_str());
-#endif
-}
-
-static Status LoadSource(LogSource** result, const std::string& fname, Env* env,
-                         size_t read_size = 8 << 20,
-                         SequentialFileStats* stats = NULL) {
-  *result = NULL;
-  SequentialFile* base = NULL;
-  uint64_t size = 0;
-  Status status = env->NewSequentialFile(fname.c_str(), &base);
-  if (status.ok()) {
-    status = env->GetFileSize(fname.c_str(), &size);
-    if (!status.ok()) {
-      delete base;
-    }
-  }
-  if (status.ok()) {
-    SequentialFile* file;  // Bind to an external stats for monitoring
-    if (stats != NULL) {
-      file = new MeasuredSequentialFile(stats, base);
-    } else {
-      file = base;
-    }
-    WholeFileBufferedRandomAccessFile* buffered_file =
-        new WholeFileBufferedRandomAccessFile(file, size, read_size);
-    status = buffered_file->Load();
-    if (status.ok()) {
-      PrintSourceInfo(fname, size);
-      LogSource* src = new LogSource(buffered_file, size);
-      src->Ref();
-
-      *result = src;
-    } else {
-      delete buffered_file;
-    }
-  }
-
-  return status;
-}
-
-static Status OpenSource(LogSource** result, const std::string& fname, Env* env,
-                         RandomAccessFileStats* stats = NULL) {
-  *result = NULL;
-  RandomAccessFile* base = NULL;
-  uint64_t size = 0;
-  Status status = env->NewRandomAccessFile(fname.c_str(), &base);
-  if (status.ok()) {
-    status = env->GetFileSize(fname.c_str(), &size);
-    if (!status.ok()) {
-      delete base;
-    }
-  }
-  if (status.ok()) {
-    RandomAccessFile* file;  // Bind to an external stats for monitoring
-    if (stats != NULL) {
-      file = new MeasuredRandomAccessFile(stats, base);
-    } else {
-      file = base;
-    }
-    PrintSourceInfo(fname, 0);
-    LogSource* src = new LogSource(file, size);
-    src->Ref();
-
-    *result = src;
-  }
-
-  return status;
-}
-
 Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
                               size_t tmp_length, size_t* table_seeks,
                               size_t* seeks) {
@@ -1202,24 +1116,25 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
   assert(part < num_parts_);
   MutexLock ml(&mutex_);
   if (dirs_[part] == NULL) {
-    mutex_.Unlock();  // Unlock when load dir indexes
+    mutex_.Unlock();  // Unlock when fetching dir indexes
     LogSource* indx = NULL;
     Dir* dir = new Dir(options_, &mutex_, &cond_cv_);
     dir->Ref();
-    SequentialFileStats* io_stats =
-        options_.measure_reads ? &dir->io_stats_ : NULL;
-    const size_t io_size = options_.read_size;
-    status = LoadSource(&indx, IndexFileName(name_, options_.rank, part),
-                        options_.env, io_size, io_stats);
+    LogSource::LogOptions idx_opts;
+    idx_opts.type = LogType::kIndex;
+    idx_opts.sub_partition = static_cast<int>(part);
+    idx_opts.rank = options_.rank;
+    if (options_.measure_reads) idx_opts.seq_stats = &dir->io_stats_;
+    idx_opts.io_size = options_.read_size;
+    idx_opts.env = options_.env;
+    status = LogSource::Open(idx_opts, name_, &indx);
     if (status.ok()) {
       status = dir->Open(indx);
     }
     mutex_.Lock();
     if (status.ok()) {
-      dir->RebindDataSource(data_);
-      if (dirs_[part] != NULL) {
-        dirs_[part]->Unref();
-      }
+      dir->InstallDataSource(data_);
+      if (dirs_[part] != NULL) dirs_[part]->Unref();
       dirs_[part] = dir;
       dirs_[part]->Ref();
     }
@@ -1312,15 +1227,16 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d", int(num_parts));
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", my_rank);
 #endif
-  DirReaderImpl* impl = new DirReaderImpl(options, name);
-  if (options.measure_reads) {
-    status =
-        OpenSource(&data, DataFileName(name, my_rank), env, &impl->io_stats_);
-  } else {
-    status = OpenSource(&data, DataFileName(name, my_rank), env);
-  }
-  char space[Footer::kEncodedLength];
   Footer footer;
+  char space[Footer::kEncodedLength];
+  DirReaderImpl* impl = new DirReaderImpl(options, name);
+  LogSource::LogOptions io_opts;
+  io_opts.rank = my_rank;
+  io_opts.type = LogType::kData;
+  io_opts.sub_partition = -1;
+  if (options.measure_reads) io_opts.stats = &impl->io_stats_;
+  io_opts.env = env;
+  status = LogSource::Open(io_opts, name, &data);
   Slice input;
   if (!status.ok()) {
     // Error

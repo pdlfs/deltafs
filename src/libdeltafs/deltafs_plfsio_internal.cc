@@ -1554,7 +1554,7 @@ Dir::~Dir() {
   delete rt_;
 }
 
-void Dir::RebindDataSource(LogSource* data) {
+void Dir::InstallDataSource(LogSource* data) {
   if (data != data_) {
     if (data_ != NULL) data_->Unref();
     data_ = data;

@@ -202,6 +202,7 @@ Status LogSink::Lrotate(int index, bool sync) {
   }
 }
 
+// Return the current physical write offset.
 uint64_t LogSink::Ptell() const {
   uint64_t result = off_ - prev_off_;
   assert(off_ >= prev_off_);
@@ -255,6 +256,7 @@ void LogSink::Unref() {
   }
 }
 
+// Default options for writing log data.
 LogSink::LogOptions::LogOptions()
     : rank(0),
       sub_partition(-1),
@@ -266,19 +268,19 @@ LogSink::LogOptions::LogOptions()
       stats(NULL),
       env(Env::Default()) {}
 
-Status LogSink::Open(const LogOptions& options, const std::string& prefix,
+Status LogSink::Open(const LogOptions& opts, const std::string& prefix,
                      LogSink** result) {
   *result = NULL;
   int index = -1;  // Initial log rolling index
-  if (options.rotation != kNoRotation) {
+  if (opts.rotation != kNoRotation) {
     index = 0;
   }
-  Env* const env = options.env;
+  Env* const env = opts.env;
   std::string p = prefix + "/" + Lset(index);
   if (index != -1)
     env->CreateDir(
         p.c_str());  // Ignore error since the directory may exist already
-  std::string filename = Lname(prefix, index, options);
+  std::string filename = Lname(prefix, index, opts);
   WritableFile* base = NULL;
   Status status = env->NewWritableFile(filename.c_str(), &base);
   if (status.ok()) {
@@ -288,21 +290,21 @@ Status LogSink::Open(const LogOptions& options, const std::string& prefix,
   }
 
   RollingLogFile* vf = NULL;
-  if (options.rotation != kNoRotation) {
+  if (opts.rotation != kNoRotation) {
     vf = new RollingLogFile(base);
     base = vf;
   }
 
   WritableFile* file;
   // Link to external stats for I/O monitoring
-  if (options.stats != NULL) {
-    file = new MeasuredWritableFile(options.stats, base);
+  if (opts.stats != NULL) {
+    file = new MeasuredWritableFile(opts.stats, base);
   } else {
     file = base;
   }
   BufferedFile* wb = NULL;
-  if (options.min_buf != 0) {
-    wb = new BufferedFile(file, options.min_buf, options.max_buf);
+  if (opts.min_buf != 0) {
+    wb = new BufferedFile(file, opts.min_buf, opts.max_buf);
     file = wb;
   } else {
     // No write buffering?
@@ -310,9 +312,9 @@ Status LogSink::Open(const LogOptions& options, const std::string& prefix,
 
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Writing into %s, buffer=%s", filename.c_str(),
-          PrettySize(options.max_buf).c_str());
+          PrettySize(opts.max_buf).c_str());
 #endif
-  LogSink* sink = new LogSink(options, prefix, wb, vf);
+  LogSink* sink = new LogSink(opts, prefix, wb, vf);
   sink->filename_ = filename;
   sink->file_ = file;
   sink->Ref();
@@ -330,9 +332,140 @@ void LogSource::Unref() {
 }
 
 LogSource::~LogSource() {
-  if (file_ != NULL) {
-    delete file_;
+  delete[] sizes_;
+  for (size_t i = 0; i < num_pieces_; i++) {
+    delete files_[i];
   }
+  delete[] files_;
+}
+
+// Default options for read logged data.
+LogSource::LogOptions::LogOptions()
+    : rank(0),
+      sub_partition(-1),
+      num_rotas(-1),
+      type(kData),
+      seq_stats(NULL),
+      stats(NULL),
+      io_size(4096),
+      env(Env::Default()) {}
+
+static Status OpenWithEagerSeqReads(
+    const std::string& filename, size_t io_size, Env* env,
+    SequentialFileStats* stats,
+    std::vector<std::pair<RandomAccessFile*, uint64_t> >* result) {
+  SequentialFile* base = NULL;
+  uint64_t size = 0;
+  Status status = env->NewSequentialFile(filename.c_str(), &base);
+  if (status.ok()) {
+    status = env->GetFileSize(filename.c_str(), &size);
+    if (!status.ok()) {
+      delete base;
+    }
+  }
+  if (!status.ok()) {
+    return status;
+  }
+
+  SequentialFile* file = base;
+  if (stats != NULL) {
+    file = new MeasuredSequentialFile(stats, base);
+  }
+  WholeFileBufferedRandomAccessFile* cached_file =
+      new WholeFileBufferedRandomAccessFile(file, size, io_size);
+  status = cached_file->Load();
+  if (!status.ok()) {
+    delete cached_file;
+    return status;
+  }
+
+#if VERBOSE >= 3
+  Verbose(__LOG_ARGS__, 3, "Reading from %s (eagerly pre-fetched), size=%s",
+          filename.c_str(), PrettySize(size).c_str());
+#endif
+  result->push_back(std::make_pair(cached_file, size));
+  return status;
+}
+
+static Status RandomAccessOpen(
+    const std::string& filename, Env* env, RandomAccessFileStats* stats,
+    std::vector<std::pair<RandomAccessFile*, uint64_t> >* result) {
+  RandomAccessFile* base = NULL;
+  uint64_t size = 0;
+  Status status = env->NewRandomAccessFile(filename.c_str(), &base);
+  if (status.ok()) {
+    status = env->GetFileSize(filename.c_str(), &size);
+    if (!status.ok()) {
+      delete base;
+    }
+  }
+  if (!status.ok()) {
+    return status;
+  }
+
+  RandomAccessFile* file = base;
+  if (stats != NULL) {
+    file = new MeasuredRandomAccessFile(stats, base);
+  }
+#if VERBOSE >= 3
+  Verbose(__LOG_ARGS__, 3, "Reading from %s (random access), size=%s",
+          filename.c_str(), PrettySize(size).c_str());
+#endif
+  result->push_back(std::make_pair(file, size));
+  return status;
+}
+
+// Eagerly pre-fetch the entire file data in case of index logs.
+// Return OK on success, or a non-OK status on errors.
+static Status TryOpenIt(
+    const std::string& f, const LogSource::LogOptions& opts,
+    std::vector<std::pair<RandomAccessFile*, uint64_t> >* r) {
+  if (opts.type == LogType::kIndex)
+    return OpenWithEagerSeqReads(f, opts.io_size, opts.env, opts.seq_stats, r);
+  return RandomAccessOpen(f, opts.env, opts.stats, r);
+};
+
+Status LogSource::Open(const LogOptions& opts, const std::string& prefix,
+                       LogSource** result) {
+  *result = NULL;
+  Status status;
+  std::vector<std::pair<RandomAccessFile*, uint64_t> > sources;
+  if (opts.num_rotas == -1) {
+    status = TryOpenIt(Lname(prefix, opts.num_rotas, opts), opts, &sources);
+  } else {
+    for (int i = 0; i < opts.num_rotas; i++) {
+      status = TryOpenIt(Lname(prefix, i, opts), opts, &sources);
+      if (!status.ok()) {
+        break;
+      }
+    }
+  }
+
+  if (status.ok()) {
+    LogSource* src = new LogSource(opts);
+    RandomAccessFile** files = new RandomAccessFile*[sources.size()];
+    uint64_t* sizes = new uint64_t[sources.size()];
+    for (size_t i = 0; i < sources.size(); i++) {
+      sizes[i] = sources[i].second;
+      files[i] = sources[i].first;
+    }
+    src->num_pieces_ = sources.size();
+    src->files_ = files;
+    src->sizes_ = sizes;
+    src->Ref();
+
+    sources.clear();
+    *result = src;
+  }
+
+  // In case of errors, delete any allocated resources
+  std::vector<std::pair<RandomAccessFile*, uint64_t> >::iterator it;
+  for (it = sources.begin(); it != sources.end(); ++it) {
+    RandomAccessFile* f = it->first;
+    delete f;
+  }
+
+  return status;
 }
 
 static DirOptions SanitizeDirOptions(const DirOptions& opts) {
@@ -387,6 +520,7 @@ Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
     }
   }
 
+  // Bulk file deletes
   if (status.ok()) {
     std::sort(garbage.begin(), garbage.end());
     std::vector<std::string>::iterator it;

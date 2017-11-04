@@ -79,7 +79,7 @@ class LogSink {
     // Allow synchronization among multiple threads
     port::Mutex* mu;
 
-    // Enable I/O monitoring
+    // Enable i/o stats monitoring
     WritableFileStats* stats;
 
     // Low-level storage abstraction
@@ -103,7 +103,7 @@ class LogSink {
  public:
   // Create a log sink instance for writing data according to the given set of
   // options. Return OK on success, or a non-OK status on errors.
-  static Status Open(const LogOptions& options, const std::string& prefix,
+  static Status Open(const LogOptions& opts, const std::string& prefix,
                      LogSink** result);
 
   // Return the current logic write offset.
@@ -182,7 +182,7 @@ class LogSink {
  private:
   ~LogSink();  // Triggers Finish()
   // No copying allowed
-  void operator=(const LogSink&);
+  void operator=(const LogSink& s);
   LogSink(const LogSink&);
   Status Finish();  // Internally used by Lclose()
 
@@ -210,7 +210,10 @@ class LogSink {
 // consist of several pieces due to log rotation.
 class LogSource {
  public:
+  // Options for naming, pre-fetching, and monitoring.
   struct LogOptions {
+    LogOptions();
+
     // Rank # of the calling process
     int rank;
 
@@ -218,14 +221,23 @@ class LogSource {
     // Set to "-1" to indicate there is no sub-partitions
     int sub_partition;
 
-    // Number of log rotation pieces.
-    // Set to "-1" to indicate the log wasn't rotated
-    int num_pieces;
+    // Number of log rotations performed.
+    // Set to "-1" to indicate the log was never rotated
+    int num_rotas;
 
     // Type of the log.
-    // For index logs, the entire log data will be pre-loaded
+    // For index logs, the entire log data will be eagerly fetched
     // and cached in memory
     LogType type;
+
+    // For i/o stats monitoring (sequential reads)
+    SequentialFileStats* seq_stats;
+
+    // For i/o stats monitoring
+    RandomAccessFileStats* stats;
+
+    // Bulk read size
+    size_t io_size;
 
     // Low-level storage abstraction
     Env* env;
@@ -233,28 +245,44 @@ class LogSource {
 
   // Create a log source instance for reading data according to a given set of
   // options. Return OK on success, or a non-OK status on errors.
-  static Status Open(const LogOptions& options, const std::string& prefix,
+  static Status Open(const LogOptions& opts, const std::string& prefix,
                      LogSource** result);
 
-  LogSource(RandomAccessFile* f, uint64_t s) : file_(f), size_(s), refs_(0) {}
-
-  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) {
-    return file_->Read(offset, n, result, scratch);
+  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch,
+              size_t index = 0) {
+    Status status;
+    if (index < num_pieces_) {
+      status = files_[index]->Read(offset, n, result, scratch);
+    } else {
+      *result = Slice();  // Return empty data
+    }
+    return status;
   }
 
-  uint64_t Size() const { return size_; }
+  // Return the total data size
+  uint64_t Size() const {
+    uint64_t result = 0;
+    for (size_t i = 0; i < num_pieces_; i++) {
+      result += sizes_[i];
+    }
+    return result;
+  }
 
   void Ref() { refs_++; }
   void Unref();
 
  private:
+  explicit LogSource(const LogOptions& opts)
+      : options_(opts), num_pieces_(0), files_(NULL), sizes_(NULL), refs_(0) {}
   ~LogSource();
   // No copying allowed
-  void operator=(const LogSource&);
+  void operator=(const LogSource& s);
   LogSource(const LogSource&);
 
-  RandomAccessFile* file_;
-  uint64_t size_;
+  const LogOptions options_;  // Constant after construction
+  size_t num_pieces_;
+  RandomAccessFile** files_;
+  uint64_t* sizes_;
   uint32_t refs_;
 };
 
