@@ -9,6 +9,7 @@
 
 #include "deltafs_plfsio_xio.h"
 #include "deltafs_plfsio.h"
+#include "deltafs_plfsio_format.h"
 
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/strutil.h"
@@ -485,6 +486,7 @@ Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
   Status status;
   DirOptions options = SanitizeDirOptions(opts);
   std::vector<std::string> garbage;  // Log files pending deletion
+  garbage.push_back(FooterFileName(prefix));
   Env* const env = options.env;
   if (options.is_env_pfs) {
     std::vector<std::string> names;
