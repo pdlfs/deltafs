@@ -13,6 +13,7 @@
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/port.h"
 
+#include <map>
 #include <string>
 
 // This module provides the abstraction for accessing data stored in
@@ -87,14 +88,14 @@ class LogSink {
   };
 
  private:
-  LogSink(const LogOptions& options, const std::string& prefix,
+  LogSink(const LogOptions& opts, const std::string& p,  // Parent directory
           BufferedFile* buf, RollingLogFile* vf)
-      : options_(options),
-        prefix_(prefix),
+      : opts_(opts),
+        prefix_(p),
         buf_file_(buf),
         rlog_(vf),
-        mu_(options_.mu),
-        env_(options_.env),
+        mu_(opts_.mu),
+        env_(opts_.env),
         prev_off_(0),
         off_(0),
         file_(NULL),  // Initialized by Open()
@@ -187,7 +188,7 @@ class LogSink {
   Status Finish();  // Internally used by Lclose()
 
   // Constant after construction
-  const LogOptions options_;
+  const LogOptions opts_;
   const std::string prefix_;  // Parent directory name
   // NULL if write buffering is disabled
   BufferedFile* const buf_file_;
@@ -251,8 +252,9 @@ class LogSource {
   Status Read(uint64_t offset, size_t n, Slice* result, char* scratch,
               size_t index = 0) {
     Status status;
-    if (index < num_pieces_) {
-      status = files_[index]->Read(offset, n, result, scratch);
+    if (index < num_files_) {
+      RandomAccessFile* const f = files_[index].first;
+      status = f->Read(offset, n, result, scratch);  // May return cached data
     } else {
       *result = Slice();  // Return empty data
     }
@@ -262,8 +264,8 @@ class LogSource {
   // Return the total data size
   uint64_t Size() const {
     uint64_t result = 0;
-    for (size_t i = 0; i < num_pieces_; i++) {
-      result += sizes_[i];
+    for (size_t i = 0; i < num_files_; i++) {
+      result += files_[i].second;
     }
     return result;
   }
@@ -272,17 +274,18 @@ class LogSource {
   void Unref();
 
  private:
-  explicit LogSource(const LogOptions& opts)
-      : options_(opts), num_pieces_(0), files_(NULL), sizes_(NULL), refs_(0) {}
+  LogSource(const LogOptions& opts, const std::string& p)
+      : opts_(opts), prefix_(p), files_(NULL), num_files_(0), refs_(0) {}
   ~LogSource();
   // No copying allowed
   void operator=(const LogSource& s);
   LogSource(const LogSource&);
 
-  const LogOptions options_;  // Constant after construction
-  size_t num_pieces_;
-  RandomAccessFile** files_;
-  uint64_t* sizes_;
+  // Constant after construction
+  const LogOptions opts_;
+  const std::string prefix_;  // Parent directory name
+  std::pair<RandomAccessFile*, uint64_t>* files_;
+  size_t num_files_;
   uint32_t refs_;
 };
 

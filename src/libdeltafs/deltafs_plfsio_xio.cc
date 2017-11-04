@@ -185,7 +185,7 @@ Status LogSink::Lrotate(int index, bool sync) {
     if (index != -1)
       env_->CreateDir(
           p.c_str());  // Ignore error since the directory may exist already
-    std::string filename = Lname(prefix_, index, options_);
+    std::string filename = Lname(prefix_, index, opts_);
     status = env_->NewWritableFile(filename.c_str(), &new_base);
     if (status.ok()) {
       status = rlog_->Rotate(new_base);
@@ -332,9 +332,8 @@ void LogSource::Unref() {
 }
 
 LogSource::~LogSource() {
-  delete[] sizes_;
-  for (size_t i = 0; i < num_pieces_; i++) {
-    delete files_[i];
+  for (size_t i = 0; i < num_files_; i++) {
+    delete files_[i].first;
   }
   delete[] files_;
 }
@@ -442,16 +441,15 @@ Status LogSource::Open(const LogOptions& opts, const std::string& prefix,
   }
 
   if (status.ok()) {
-    LogSource* src = new LogSource(opts);
-    RandomAccessFile** files = new RandomAccessFile*[sources.size()];
-    uint64_t* sizes = new uint64_t[sources.size()];
+    LogSource* src = new LogSource(opts, prefix);
+    std::pair<RandomAccessFile*, uint64_t>* files =
+        new std::pair<RandomAccessFile*, uint64_t>[ sources.size() ];
     for (size_t i = 0; i < sources.size(); i++) {
-      sizes[i] = sources[i].second;
-      files[i] = sources[i].first;
+      files[i].second = static_cast<uint64_t>(sources[i].second);
+      files[i].first = sources[i].first;
     }
-    src->num_pieces_ = sources.size();
+    src->num_files_ = sources.size();
     src->files_ = files;
-    src->sizes_ = sizes;
     src->Ref();
 
     sources.clear();
