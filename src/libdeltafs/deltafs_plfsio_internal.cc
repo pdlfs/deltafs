@@ -690,7 +690,7 @@ DirLogger<T>::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
 
   if (options_.filter == kNoFilter) {
     // Skip filter
-  } else if (options_.filter != kBloomFilter && options_.bf_bits_per_key != 0) {
+  } else if (options_.filter != kBloomFilter || options_.bf_bits_per_key != 0) {
     filter_ = new T(options_, ft_bytes_);
   } else {
     // Skip filter
