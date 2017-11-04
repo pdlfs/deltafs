@@ -312,15 +312,15 @@ Status DirWriterImpl<T>::Finalize() {
       static_cast<unsigned char>(options_.skip_checksums));
 
   Status status;
-  std::string footer_buf;
-  footer.EncodeTo(&footer_buf);
+  std::string ftdata;
+  footer.EncodeTo(&ftdata);
   if (options_.tail_padding) {
-    status = EnsureDataPadding(data_, footer_buf.size());
+    status = EnsureDataPadding(data_, ftdata.size());
   }
 
   if (status.ok()) {
     data_->Lock();
-    status = data_->Lwrite(footer_buf);
+    status = data_->Lwrite(ftdata);
     data_->Unlock();
   }
 
@@ -333,8 +333,9 @@ Status DirWriterImpl<T>::Finalize() {
     }
   }
 
-  if (status.ok()) {
-    status = WriteStringToFileSync(env_, footer_buf, ff.c_str());
+  // Install a special footer entry per directory
+  if (options_.rank == 0 && status.ok()) {
+    status = WriteStringToFileSync(env_, ftdata, ff.c_str());
   }
 
   mutex_.Lock();
