@@ -80,7 +80,7 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input);
 
 // Bitmap compression formats.
 class UncompressedFormat;
-class VarintFormat;
+class VariantFormat;
 
 // A simple filter backed by a bitmap.
 template <typename T = UncompressedFormat>

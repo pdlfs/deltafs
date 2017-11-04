@@ -13,6 +13,8 @@
 #include "deltafs_plfsio.h"
 
 #include <assert.h>
+#include <typeinfo>       // operator typeid
+#include <algorithm>
 
 namespace pdlfs {
 namespace plfsio {
@@ -148,32 +150,102 @@ class UncompressedFormat {
 };
 
 // Encoding a bitmap using a modified varint scheme.
-class VarintFormat {
+class VariantFormat {
  public:
-  VarintFormat(const DirOptions& options, std::string* space)
+  VariantFormat(const DirOptions& options, std::string* space)
       : key_bits_(options.bm_key_bits), space_(space) {
     bits_ = 1u << key_bits_;  // Logic domain space (total # unique keys)
+    bucket_num_ = 1u << (key_bits_-8);
   }
 
   // Reset filter state and resize buffer space.
   // Use num_keys to estimate bitmap density.
   void Reset(uint32_t num_keys) {
     space_->clear();
-    // TODO
+    // Calculate bucket size in probability
+    bucket_size_ = (num_keys+bucket_num_-1)/bucket_num_ + 1; // Extra byte to store the number of key in the bucket
+    working_space_.resize(bucket_size_ * bucket_num_, 0);
+    // Calculate the approximate final result size
+    size_t approx_size = (num_keys*10 + 7)/8; // Assume 10 bits/key
+    space_->reserve(approx_size);
   }
 
   // Set the i-th bit to "1". If the i-th bit is already set,
   // no action needs to be taken.
   void Set(uint32_t i) {
-    // TODO
+    int bucket_index = i >> 8;
+    // Read bucket key number
+    unsigned char key_index = working_space_[bucket_index*bucket_size_];
+    if(key_index < bucket_size_-1) {
+      // Append to the bucket
+      working_space_[bucket_index*bucket_size_+key_index+1] = i & ((1 << 8)-1);
+    } else {
+      // Append to overflow vector
+      overflowed.push_back(i);
+    }
+    // Update the bucket key number
+    working_space_[bucket_index*bucket_size_] = key_index+1;
   }
 
   // Finalize the bitmap representation.
   // Return the final buffer size.
   size_t Finish() {
-    size_t len = space_->size();
-    // TODO
-    return len;
+    // Reverse sort to pop from back
+    std::sort(overflowed.begin(), overflowed.end(),std::greater<size_t>());
+    size_t last_one = 0;
+    // For every bucket
+    for(size_t i = 0; i < bucket_num_; i++) {
+      // Bucket key size
+      unsigned char key_num = working_space_[bucket_size_*i];
+      size_t offset = bucket_size_*i + 1;
+      // Sort the bucket key
+      std::sort(working_space_.begin() + offset,
+                working_space_.begin() + offset + std::min((size_t)key_num, bucket_size_-1));
+      for(int j = 0; j < key_num; j++) {
+        size_t distance;
+        if(j < bucket_size_-1) {
+          distance = (unsigned char)working_space_[offset+j] + (i<<8) - last_one; // in bucket
+        }
+        else {
+          distance = overflowed.back() - last_one; // overflow
+          overflowed.pop_back();
+        }
+        last_one += distance;
+        // Encoding the distance to variable length encode.
+        unsigned char b = (unsigned char)(distance % 128);
+        while (distance / 128 > 0) {
+          // Set continue bit
+          b |= 1 << 7;
+          space_->push_back(b);
+          distance /= 128;
+          b = (unsigned char)(distance % 128);
+        }
+        space_->push_back(b);
+      }
+    }
+    return space_->size();
+  }
+
+  // Return true iff the i-th bit is set in the given bitmap.
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
+    size_t index = 0;
+    for(size_t i = 0; i < input.size(); i++) {
+      size_t runLen = 0;
+      size_t bytes = 0;
+      while((input[i] & (1<<7)) !=0) {
+        runLen += (size_t)(input[i] & ((1<<7)-1)) << (bytes*7);
+        i++;
+        bytes++;
+      }
+      runLen += (size_t)input[i] << (bytes*7);
+      if(index + runLen == bit)
+        return true;
+      else if (index + runLen > bit)
+        return false;
+      else
+        index += runLen;
+    }
+    return false;
   }
 
  private:
@@ -184,6 +256,14 @@ class VarintFormat {
   // Logic bits in the bitmap.
   // The actual memory used may differ due to compression.
   size_t bits_;
+
+  // Space for working space.
+  std::string working_space_;
+
+  // Variable specified for construction.
+  size_t bucket_num_;
+  size_t bucket_size_;
+  std::vector<size_t> overflowed;
 };
 
 template <typename T>
@@ -249,7 +329,11 @@ Slice BitmapBlock<T>::Finish() {
   // Remember the size of the domain space
   space_.push_back(static_cast<char>(key_bits_));
   // Remember the compression type
-  space_.push_back(static_cast<char>(0));
+  if(typeid(T)== typeid(UncompressedFormat)) {
+    space_.push_back(static_cast<char>(0));
+  } else if (typeid(T)== typeid(VariantFormat)) {
+    space_.push_back(static_cast<char>(1));
+  }
   return space_;
 }
 
@@ -260,7 +344,7 @@ BitmapBlock<T>::~BitmapBlock() {
 
 template class BitmapBlock<UncompressedFormat>;
 
-template class BitmapBlock<VarintFormat>;
+template class BitmapBlock<VariantFormat>;
 
 // Return true if the target key matches a given bitmap filter. Unlike bloom
 // filters, bitmap filters are designed with no false positives.
@@ -286,8 +370,10 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   const int compression = input[input.size() - 1];
   if (compression == 0) {
     return UncompressedFormat::Test(i, key_bits, bitmap);
+  } else if (compression == 1) {
+    return VariantFormat::Test(i, key_bits, bitmap);
   } else {
-    return true;  // TODO
+    return true;
   }
 }
 

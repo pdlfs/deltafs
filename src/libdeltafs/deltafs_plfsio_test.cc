@@ -213,6 +213,61 @@ TEST(UncompressedBitmapFilterTest, BMP_U_RandomKeys) {
   }
 }
 
+// Variant bitmap filter
+typedef FilterTest<BitmapBlock<VariantFormat>, BitmapKeyMustMatch>
+ VariantBitmapFilterTest;
+
+TEST(VariantBitmapFilterTest, BMP_V_Empty) {
+  Random rnd(301);
+  Reset(1024);
+  Finish();
+  ASSERT_FALSE(KeyMayMatch(rnd.Uniform(1 << 24)));
+  ASSERT_FALSE(KeyMayMatch(1u << 24));
+}
+
+TEST(VariantBitmapFilterTest, BMP_V_OneKey) {
+  size_t num_keys = 1;
+  Reset(num_keys);
+  AddKey(21343);
+  Finish();
+  ASSERT_FALSE(KeyMayMatch(21342));
+  ASSERT_TRUE(KeyMayMatch(21343));
+  ASSERT_FALSE(KeyMayMatch(21344));
+}
+
+TEST(VariantBitmapFilterTest, BMP_V_RandomKeys) {
+  Random rnd(301);
+  for (size_t num_keys = 1024; num_keys <= 65536; num_keys *= 4) {
+    Reset(num_keys);
+    std::set<uint32_t> keys;
+    while (keys.size() != num_keys) {
+      keys.insert(rnd.Uniform(1 << 24));  // Random 24-bit keys
+    }
+    std::set<uint32_t>::iterator it = keys.begin();
+    for (; it != keys.end(); ++it) {
+      AddKey(*it);
+    }
+    Finish();
+    for (it = keys.begin(); it != keys.end(); ++it) {
+      ASSERT_TRUE(KeyMayMatch(*it));
+    }
+    std::set<uint32_t> non_keys;
+    while (non_keys.size() != keys.size()) {
+      uint32_t key = rnd.Uniform(1 << 24);
+      if (keys.count(key) == 0) {
+        non_keys.insert(key);
+      }
+    }
+    for (it = non_keys.begin(); it != non_keys.end(); ++it) {
+      ASSERT_FALSE(KeyMayMatch(*it));
+    }
+    for (uint32_t i = 0; i < num_keys; i++) {
+      ASSERT_FALSE(KeyMayMatch((1u << 24) + i));
+    }
+  }
+}
+
+
 class PlfsIoTest {
  public:
   PlfsIoTest() {
