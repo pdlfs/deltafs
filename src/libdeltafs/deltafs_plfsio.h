@@ -371,11 +371,9 @@ class DirWriter {
 
  private:
   template <typename T>
-  static Status InternalOpen(T* impl, const DirOptions& options,
-                             const std::string& dirname);
+  static Status TryDirOpen(T* impl);
 
-  // No copying allowed
-  void operator=(const DirWriter&);
+  void operator=(const DirWriter& d);  // No copying allowed
   DirWriter(const DirWriter&);
 };
 

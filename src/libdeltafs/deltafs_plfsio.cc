@@ -168,7 +168,7 @@ DirOptions ParseDirOptions(const char* input) {
 template <typename T = BloomBlock>
 class DirWriterImpl : public DirWriter {
  public:
-  DirWriterImpl(const DirOptions& options);
+  DirWriterImpl(const DirOptions& opts, const std::string& dirname);
   virtual ~DirWriterImpl();
 
   virtual IoStats GetIoStats() const;
@@ -215,6 +215,7 @@ class DirWriterImpl : public DirWriter {
   mutable port::Mutex mutex_;
   port::CondVar bg_cv_;
   port::CondVar cv_;
+  const std::string dirname_;
   int num_epochs_;
   uint32_t num_parts_;
   uint32_t part_mask_;
@@ -231,10 +232,11 @@ class DirWriterImpl : public DirWriter {
 };
 
 template <typename T>
-DirWriterImpl<T>::DirWriterImpl(const DirOptions& options)
-    : options_(options),
+DirWriterImpl<T>::DirWriterImpl(const DirOptions& o, const std::string& d)
+    : options_(o),
       bg_cv_(&mutex_),
       cv_(&mutex_),
+      dirname_(d),
       num_epochs_(0),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
@@ -877,15 +879,17 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
 // Open a directory writer instance according to the instantiated implementation
 // type T. Return OK on success, or a non-OK status on errors.
 template <typename T>
-Status DirWriter::InternalOpen(T* impl, const DirOptions& options,
-                               const std::string& dirname) {
+Status DirWriter::TryDirOpen(T* impl) {
   Status status;
-  const uint32_t num_parts = static_cast<uint32_t>(1 << options.lg_parts);
-  const int my_rank = options.rank;
-  Env* const env = options.env;
-  if (options.is_env_pfs) {
+  assert(impl != NULL);
+  assert(dynamic_cast<DirWriter*>(impl) != NULL);
+  const DirOptions* const options = &impl->options_;
+  const uint32_t num_parts = static_cast<uint32_t>(1 << options->lg_parts);
+  const int my_rank = options->rank;
+  Env* const env = options->env;
+  if (options->is_env_pfs) {
     // Ignore error since it may already exist
-    env->CreateDir(dirname.c_str());
+    env->CreateDir(impl->dirname_.c_str());
   }
 
   std::vector<DirLogger<typename T::FilterType>*> plfsdirs(num_parts, NULL);
@@ -895,13 +899,13 @@ Status DirWriter::InternalOpen(T* impl, const DirOptions& options,
   LogSink::LogOptions io_opts;
   io_opts.rank = my_rank;
   io_opts.type = LogType::kData;
-  if (options.epoch_log_rotation) io_opts.rotation = kExtCtrl;
-  if (options.measure_writes) io_opts.stats = &impl->io_stats_;
+  if (options->epoch_log_rotation) io_opts.rotation = kExtCtrl;
+  if (options->measure_writes) io_opts.stats = &impl->io_stats_;
   io_opts.mu = &impl->io_mutex_;
-  io_opts.min_buf = options.min_data_buffer;
-  io_opts.max_buf = options.data_buffer;
+  io_opts.min_buf = options->min_data_buffer;
+  io_opts.max_buf = options->data_buffer;
   io_opts.env = env;
-  status = LogSink::Open(io_opts, dirname, &data[0]);
+  status = LogSink::Open(io_opts, impl->dirname_, &data[0]);
   if (status.ok()) {
     for (size_t i = 0; i < num_parts; i++) {
       plfsdirs[i] = new DirLogger<typename T::FilterType>(
@@ -910,12 +914,12 @@ Status DirWriter::InternalOpen(T* impl, const DirOptions& options,
       idx_opts.rank = my_rank;
       idx_opts.sub_partition = static_cast<int>(i);
       idx_opts.type = LogType::kIndex;
-      if (options.measure_writes) idx_opts.stats = &plfsdirs[i]->io_stats_;
+      if (options->measure_writes) idx_opts.stats = &plfsdirs[i]->io_stats_;
       idx_opts.mu = NULL;
-      idx_opts.min_buf = options.min_index_buffer;
-      idx_opts.max_buf = options.index_buffer;
+      idx_opts.min_buf = options->min_index_buffer;
+      idx_opts.max_buf = options->index_buffer;
       idx_opts.env = env;
-      status = LogSink::Open(idx_opts, dirname, &index[i]);
+      status = LogSink::Open(idx_opts, impl->dirname_, &index[i]);
       plfsdirs[i]->Ref();
       if (status.ok()) {
         plfsdirs[i]->Open(data[0], index[i]);
@@ -1023,8 +1027,9 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
   Status status;
   // Port to different filter types
   if (options.filter == kBloomFilter) {
-    DirWriterImpl<BloomBlock>* impl = new DirWriterImpl<BloomBlock>(options);
-    status = InternalOpen(impl, options, dirname);
+    DirWriterImpl<BloomBlock>* impl =
+        new DirWriterImpl<BloomBlock>(options, dirname);
+    status = TryDirOpen(impl);
     if (status.ok()) {
       *result = impl;
     } else {
@@ -1033,8 +1038,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
   } else if (options.filter == kBitmapFilter) {
     typedef BitmapBlock<UncompressedFormat> UncompressedBitmapBlock;
     DirWriterImpl<UncompressedBitmapBlock>* impl =
-        new DirWriterImpl<UncompressedBitmapBlock>(options);
-    status = InternalOpen(impl, options, dirname);
+        new DirWriterImpl<UncompressedBitmapBlock>(options, dirname);
+    status = TryDirOpen(impl);
     if (status.ok()) {
       *result = impl;
     } else {
@@ -1042,8 +1047,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
     }
   } else {
     DirWriterImpl<EmptyFilterBlock>* impl =
-        new DirWriterImpl<EmptyFilterBlock>(options);
-    status = InternalOpen(impl, options, dirname);
+        new DirWriterImpl<EmptyFilterBlock>(options, dirname);
+    status = TryDirOpen(impl);
     if (status.ok()) {
       *result = impl;
     } else {
