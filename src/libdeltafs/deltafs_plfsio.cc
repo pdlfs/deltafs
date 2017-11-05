@@ -333,9 +333,11 @@ Status DirWriterImpl<T>::Finalize() {
     }
   }
 
-  // Install a special footer entry per directory
-  if (options_.rank == 0 && status.ok()) {
-    status = WriteStringToFileSync(env_, ftdata, ff.c_str());
+  // Install a special per-directory footer
+  if (status.ok()) {
+    if (options_.rank == 0) {  // Rank 0 only
+      status = WriteStringToFileSync(env_, ftdata, ff.c_str());
+    }
   }
 
   mutex_.Lock();
@@ -1206,17 +1208,17 @@ static DirOptions SanitizeReadOptions(const DirOptions& options) {
   return result;
 }
 
-Status DirReader::Open(const DirOptions& opts, const std::string& name,
+Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
                        DirReader** result) {
   *result = NULL;
   DirOptions options = SanitizeReadOptions(opts);
   const uint32_t num_parts = 1u << options.lg_parts;
   const int my_rank = options.rank;
   Env* const env = options.env;
-  LogSource* data = NULL;
   Status status;
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.name -> %s (mode=read)", name.c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.name -> %s (mode=read)",
+          dirname.c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.reader_pool -> %s",
           options.reader_pool != NULL
               ? options.reader_pool->ToDebugString().c_str()
@@ -1245,52 +1247,58 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", my_rank);
 #endif
   Footer footer;
-  char space[Footer::kEncodedLength];
-  DirReaderImpl* impl = new DirReaderImpl(options, name);
+  char tmp[Footer::kEncodedLength];
+  std::string primary;  // Primary copy of the footer
+  status = ReadFileToString(env, FooterFileName(dirname).c_str(), &primary);
+  if (!status.ok()) {
+    return status;
+  } else if (primary.size() != Footer::kEncodedLength) {
+    return Status::Corruption("Footer file size is wrong");
+  }
+  Slice input = primary;
+  status = footer.DecodeFrom(&input);
+  if (!status.ok()) {
+    return status;
+  }
+
+  // Override a subset of user-provided options
+  if (options.paranoid_checks) {
+    if (static_cast<int>(footer.lg_parts()) != options.lg_parts)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.memtable_parts -> %d (was %d)",
+           1 << footer.lg_parts(), int(num_parts));
+    options.lg_parts = static_cast<int>(footer.lg_parts());
+    if (static_cast<bool>(footer.skip_checksums()) != options.skip_checksums)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.skip_checksums -> %s (was %s)",
+           static_cast<bool>(footer.skip_checksums()) ? "Yes" : "No",
+           options.skip_checksums ? "Yes" : "No");
+    options.skip_checksums = static_cast<bool>(footer.skip_checksums());
+    if (static_cast<DirMode>(footer.mode()) != options.mode)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.mode -> %s (was %s)",
+           ToDebugString(static_cast<DirMode>(footer.mode())).c_str(),
+           ToDebugString(options.mode).c_str());
+    options.mode = static_cast<DirMode>(footer.mode());
+  }
+
+  LogSource* data = NULL;
+  DirReaderImpl* impl = new DirReaderImpl(options, dirname);
   LogSource::LogOptions io_opts;
   io_opts.rank = my_rank;
   io_opts.type = LogType::kData;
   io_opts.sub_partition = -1;
   if (options.measure_reads) io_opts.stats = &impl->io_stats_;
   io_opts.env = env;
-  status = LogSource::Open(io_opts, name, &data);
-  Slice input;
+  status = LogSource::Open(io_opts, dirname, &data);
   if (!status.ok()) {
     // Error
-  } else if (data->Size() < sizeof(space)) {
-    status = Status::Corruption("Dir data too short to be valid");
+  } else if (data->Size() < Footer::kEncodedLength) {
+    status = Status::Corruption("Dir data log file too short to be valid");
   } else if (options.paranoid_checks) {
-    status =
-        data->Read(data->Size() - sizeof(space), sizeof(space), &input, space);
+    uint64_t off = data->Size() - Footer::kEncodedLength;
+    status = data->Read(off, Footer::kEncodedLength, &input, tmp);
     if (status.ok()) {
-      status = footer.DecodeFrom(&input);
-    }
-  }
-
-  // Update options
-  if (options.paranoid_checks) {
-    if (status.ok()) {
-      impl->options_.lg_parts = static_cast<int>(footer.lg_parts());
-#if VERBOSE >= 2
-      if (impl->options_.lg_parts != options.lg_parts)
-        Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d -> %d",
-                int(num_parts), 1 << impl->options_.lg_parts);
-#endif
-      impl->options_.skip_checksums =
-          static_cast<bool>(footer.skip_checksums());
-#if VERBOSE >= 2
-      if (impl->options_.skip_checksums != options.skip_checksums)
-        Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.skip_checksums -> %s -> %s",
-                int(options.skip_checksums) ? "Yes" : "No",
-                int(impl->options_.skip_checksums) ? "Yes" : "No");
-#endif
-      impl->options_.mode = static_cast<DirMode>(footer.mode());
-#if VERBOSE >= 2
-      if (impl->options_.mode != options.mode)
-        Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s -> %s",
-                ToDebugString(options.mode).c_str(),
-                ToDebugString(impl->options_.mode).c_str());
-#endif
+      if (input.ToString() != primary) {
+        status = Status::Corruption("Footer replica corrupted");
+      }
     }
   }
 

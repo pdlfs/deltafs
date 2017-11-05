@@ -385,7 +385,7 @@ class DirReader {
 
   // Open an I/O reader against a specific plfs-style directory.
   // Return OK on success, or a non-OK status on errors.
-  static Status Open(const DirOptions& options, const std::string& name,
+  static Status Open(const DirOptions& options, const std::string& dirname,
                      DirReader** result);
 
   // Fetch the entire data from a specific file under a given plfs directory.
