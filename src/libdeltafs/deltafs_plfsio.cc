@@ -1029,8 +1029,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
           int(options.is_env_pfs) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s",
           ToDebugString(options.mode).c_str());
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d",
-          1 << options.lg_parts);
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d (lg_parts=%d)",
+          1 << options.lg_parts, options.lg_parts);
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", options.rank);
 #endif
 
@@ -1198,6 +1198,8 @@ DirReader::~DirReader() {}
 
 static DirOptions SanitizeReadOptions(const DirOptions& options) {
   DirOptions result = options;
+  if (result.num_epochs < 0) result.num_epochs = -1;
+  if (result.lg_parts < 0) result.lg_parts = -1;
   if (result.env == NULL) {
     result.env = Env::Default();
   }
@@ -1208,7 +1210,8 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
                        DirReader** result) {
   *result = NULL;
   DirOptions options = SanitizeReadOptions(opts);
-  const uint32_t num_parts = 1u << options.lg_parts;
+  uint32_t num_parts = 0;
+  if (options.lg_parts != -1) num_parts = 1u << options.lg_parts;
   const int my_rank = options.rank;
   Env* const env = options.env;
   Status status;
@@ -1239,13 +1242,15 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
           int(options.is_env_pfs) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s",
           ToDebugString(options.mode).c_str());
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d", int(num_parts));
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d (lg_parts=%d)",
+          int(num_parts), options.lg_parts);
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", my_rank);
 #endif
   Footer footer;
   char tmp[Footer::kEncodedLength];
   std::string primary;  // Primary copy of the footer
-  if (options.paranoid_checks) {
+  if (options.lg_parts == -1 || options.num_epochs == -1 ||
+      options.paranoid_checks) {
     status = ReadFileToString(env, FooterFileName(dirname).c_str(), &primary);
     if (!status.ok()) {
       return status;
@@ -1263,6 +1268,7 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
       Warn(__LOG_ARGS__, "Dfs.plfsdir.memtable_parts -> %d (was %d)",
            1 << footer.lg_parts(), int(num_parts));
     options.lg_parts = static_cast<int>(footer.lg_parts());
+    num_parts = 1u << options.lg_parts;
     if (static_cast<bool>(footer.skip_checksums()) != options.skip_checksums)
       Warn(__LOG_ARGS__, "Dfs.plfsdir.skip_checksums -> %s (was %s)",
            static_cast<bool>(footer.skip_checksums()) ? "Yes" : "No",
