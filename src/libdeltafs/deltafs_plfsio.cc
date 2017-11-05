@@ -1249,20 +1249,20 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
   Footer footer;
   char tmp[Footer::kEncodedLength];
   std::string primary;  // Primary copy of the footer
-  status = ReadFileToString(env, FooterFileName(dirname).c_str(), &primary);
-  if (!status.ok()) {
-    return status;
-  } else if (primary.size() != Footer::kEncodedLength) {
-    return Status::Corruption("Footer file size is wrong");
-  }
-  Slice input = primary;
-  status = footer.DecodeFrom(&input);
-  if (!status.ok()) {
-    return status;
-  }
-
-  // Override a subset of user-provided options
   if (options.paranoid_checks) {
+    status = ReadFileToString(env, FooterFileName(dirname).c_str(), &primary);
+    if (!status.ok()) {
+      return status;
+    } else if (primary.size() != Footer::kEncodedLength) {
+      return Status::Corruption("Footer file size is wrong");
+    }
+    Slice input = primary;
+    status = footer.DecodeFrom(&input);
+    if (!status.ok()) {
+      return status;
+    }
+
+    // Override a subset of user-provided options
     if (static_cast<int>(footer.lg_parts()) != options.lg_parts)
       Warn(__LOG_ARGS__, "Dfs.plfsdir.memtable_parts -> %d (was %d)",
            1 << footer.lg_parts(), int(num_parts));
@@ -1294,6 +1294,7 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
     status = Status::Corruption("Dir data log file too short to be valid");
   } else if (options.paranoid_checks) {
     uint64_t off = data->Size() - Footer::kEncodedLength;
+    Slice input;
     status = data->Read(off, Footer::kEncodedLength, &input, tmp);
     if (status.ok()) {
       if (input.ToString() != primary) {
