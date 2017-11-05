@@ -133,7 +133,6 @@ class TableLogger {
   TableLogger(const TableLogger&);
 
   Status status_;
-  Footer footer_;  // Footer template
   std::string smallest_key_;
   std::string largest_key_;
   std::string last_key_;

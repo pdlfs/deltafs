@@ -170,6 +170,8 @@ class Footer {
   unsigned char mode_;
 };
 
+extern Footer ToFooter(const DirOptions& options);
+
 extern std::string FooterFileName(const std::string& dirname);
 
 extern std::string ToDebugString(DirMode mode);

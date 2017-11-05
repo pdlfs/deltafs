@@ -228,12 +228,6 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   indx_sink_->Ref();
   data_sink_->Ref();
 
-  // Initialize footer template
-  footer_.set_mode(static_cast<unsigned char>(options_.mode));
-  footer_.set_lg_parts(static_cast<uint32_t>(options_.lg_parts));
-  footer_.set_skip_checksums(
-      static_cast<unsigned char>(options_.skip_checksums));
-
   // Allocate memory
   const size_t estimated_index_size_per_table = 4 << 10;
   indx_block_.Reserve(estimated_index_size_per_table);
@@ -585,7 +579,7 @@ Status TableLogger::Finish() {
   finished_ = true;
   if (!ok()) return status_;
   std::string footer_buf;
-  Footer footer(footer_);
+  Footer footer = ToFooter(options_);
 
   assert(!pending_indx_entry_);
   assert(!pending_meta_entry_);

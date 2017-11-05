@@ -298,18 +298,13 @@ Status DirWriterImpl<T>::Finalize() {
   uint32_t total_epochs = static_cast<uint32_t>(num_epochs_);
   std::string ff = FooterFileName(dirname_);
   mutex_.Unlock();  // Unlock during i/o operations
+  Footer footer = ToFooter(options_);
   BlockHandle dummy_handle;
-  Footer footer;
 
   dummy_handle.set_offset(0);
   dummy_handle.set_size(0);
   footer.set_epoch_index_handle(dummy_handle);
-
   footer.set_num_epochs(total_epochs);
-  footer.set_mode(static_cast<unsigned char>(options_.mode));
-  footer.set_lg_parts(static_cast<uint32_t>(options_.lg_parts));
-  footer.set_skip_checksums(
-      static_cast<unsigned char>(options_.skip_checksums));
 
   Status status;
   std::string ftdata;
