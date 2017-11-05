@@ -147,7 +147,7 @@ Status Footer::DecodeFrom(Slice* input) {
   if (size < kEncodedLength) {
     return Status::Corruption("Truncated dir footer");
   } else {
-    const char* magic_ptr = start + kEncodedLength - 18;
+    const char* magic_ptr = start + BlockHandle::kMaxEncodedLength;
     const uint32_t magic_lo = DecodeFixed32(magic_ptr);
     const uint32_t magic_hi = DecodeFixed32(magic_ptr + 4);
     magic = ((static_cast<uint64_t>(magic_hi) << 32) |
