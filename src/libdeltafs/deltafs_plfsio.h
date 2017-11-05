@@ -240,11 +240,19 @@ struct DirOptions {
   // Default: true
   bool measure_writes;
 
-  // Number of partitions to divide the data. Specified in logarithmic
-  // number so each x will give 2**x partitions.
-  // REQUIRES: 0 <= lg_parts <= 8
-  // Default: 0
-  int lg_parts;
+  // Number of epochs to read during the read phase.
+  // If set to -1, will use the value obtained from the footer.
+  // Ignored in the write phase.
+  // Default: -1
+  int num_epochs;
+
+  // Number of partitions to divide the data during the write phase.
+  // Specified in logarithmic number so each x will give 2**x partitions.
+  // Number of partitions to read during the read phase.
+  // If set to -1 during the read phase, will use
+  // the value obtained from the footer.
+  // Default: -1
+  int lg_parts;  // between [0, 8]
 
   // User callback for handling background events.
   // Default: NULL
