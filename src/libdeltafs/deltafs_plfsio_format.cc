@@ -115,17 +115,26 @@ Status EpochStone::DecodeFrom(Slice* input) {
 }
 
 void Footer::EncodeTo(std::string* dst) const {
-  assert(num_epochs_ != ~static_cast<uint32_t>(0));
+  static const unsigned char kInvalidUchar = ~static_cast<unsigned char>(0);
   assert(lg_parts_ != ~static_cast<uint32_t>(0));
-  assert(skip_checksums_ != ~static_cast<unsigned char>(0));
-  assert(mode_ != ~static_cast<unsigned char>(0));
+  assert(num_epochs_ != ~static_cast<uint32_t>(0));
+  assert(value_size_ != ~static_cast<uint32_t>(0));
+  assert(key_size_ != ~static_cast<uint32_t>(0));
+  assert(fixed_kv_length_ != kInvalidUchar);
+  assert(epoch_log_rotation_ != kInvalidUchar);
+  assert(skip_checksums_ != kInvalidUchar);
+  assert(mode_ != kInvalidUchar);
 
   epoch_index_handle_.EncodeTo(dst);
   dst->resize(BlockHandle::kMaxEncodedLength, 0);  // Padding
   PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber & 0xFFFFFFFFU));
   PutFixed32(dst, static_cast<uint32_t>(kTableMagicNumber >> 32));
-  PutFixed32(dst, num_epochs_);
   PutFixed32(dst, lg_parts_);
+  PutFixed32(dst, num_epochs_);
+  PutFixed32(dst, value_size_);
+  PutFixed32(dst, key_size_);
+  dst->push_back(static_cast<char>(fixed_kv_length_));
+  dst->push_back(static_cast<char>(epoch_log_rotation_));
   dst->push_back(static_cast<char>(skip_checksums_));
   dst->push_back(static_cast<char>(mode_));
 }
@@ -136,7 +145,7 @@ Status Footer::DecodeFrom(Slice* input) {
   uint64_t magic;
 
   if (size < kEncodedLength) {
-    return Status::Corruption("Truncated log footer");
+    return Status::Corruption("Truncated dir footer");
   } else {
     const char* magic_ptr = start + kEncodedLength - 18;
     const uint32_t magic_lo = DecodeFixed32(magic_ptr);
@@ -146,10 +155,14 @@ Status Footer::DecodeFrom(Slice* input) {
   }
 
   if (magic != kTableMagicNumber) {
-    return Status::Corruption("Bad magic number");
+    return Status::Corruption("Bad dir footer magic number");
   } else {
-    num_epochs_ = DecodeFixed32(start + kEncodedLength - 10);
-    lg_parts_ = DecodeFixed32(start + kEncodedLength - 6);
+    lg_parts_ = DecodeFixed32(start + kEncodedLength - 20);
+    num_epochs_ = DecodeFixed32(start + kEncodedLength - 16);
+    value_size_ = DecodeFixed32(start + kEncodedLength - 12);
+    key_size_ = DecodeFixed32(start + kEncodedLength - 8);
+    fixed_kv_length_ = static_cast<unsigned char>(start[kEncodedLength - 4]);
+    epoch_log_rotation_ = static_cast<unsigned char>(start[kEncodedLength - 3]);
     skip_checksums_ = static_cast<unsigned char>(start[kEncodedLength - 2]);
     mode_ = static_cast<unsigned char>(start[kEncodedLength - 1]);
     switch (mode_) {
@@ -159,7 +172,7 @@ Status Footer::DecodeFrom(Slice* input) {
       case kUnique:
         break;
       default:
-        return Status::Corruption("Bad mode");
+        return Status::Corruption("Bad dir mode");
     }
   }
 
