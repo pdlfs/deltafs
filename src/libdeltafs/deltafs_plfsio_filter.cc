@@ -150,9 +150,9 @@ class UncompressedFormat {
 };
 
 // Encoding a bitmap using a modified varint scheme.
-class VariantFormat {
+class VarintFormat {
  public:
-  VariantFormat(const DirOptions& options, std::string* space)
+  VarintFormat(const DirOptions& options, std::string* space)
       : key_bits_(options.bm_key_bits), space_(space) {
     bits_ = 1u << key_bits_;  // Logic domain space (total # unique keys)
     bucket_num_ = 1u << (key_bits_-8);
@@ -331,7 +331,7 @@ Slice BitmapBlock<T>::Finish() {
   // Remember the compression type
   if(typeid(T)== typeid(UncompressedFormat)) {
     space_.push_back(static_cast<char>(0));
-  } else if (typeid(T)== typeid(VariantFormat)) {
+  } else if (typeid(T)== typeid(VarintFormat)) {
     space_.push_back(static_cast<char>(1));
   }
   return space_;
@@ -344,7 +344,7 @@ BitmapBlock<T>::~BitmapBlock() {
 
 template class BitmapBlock<UncompressedFormat>;
 
-template class BitmapBlock<VariantFormat>;
+template class BitmapBlock<VarintFormat>;
 
 // Return true if the target key matches a given bitmap filter. Unlike bloom
 // filters, bitmap filters are designed with no false positives.
@@ -371,7 +371,7 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   if (compression == 0) {
     return UncompressedFormat::Test(i, key_bits, bitmap);
   } else if (compression == 1) {
-    return VariantFormat::Test(i, key_bits, bitmap);
+    return VarintFormat::Test(i, key_bits, bitmap);
   } else {
     return true;
   }
