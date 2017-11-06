@@ -270,6 +270,14 @@ class LogSource {
     }
   }
 
+  size_t LastFileIndex() const {
+    if (num_files_ == 0) {
+      return ~static_cast<size_t>(0);  // Invalid
+    } else {
+      return num_files_ - 1;
+    }
+  }
+
   // Return accumulated file size (total data size)
   uint64_t TotalSize() const {
     uint64_t result = 0;

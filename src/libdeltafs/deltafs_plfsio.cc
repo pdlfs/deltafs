@@ -1300,18 +1300,19 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
   io_opts.rank = my_rank;
   io_opts.type = LogType::kData;
   io_opts.sub_partition = -1;
-  if (options.epoch_log_rotation) io_opts.num_rotas = options.num_epochs;
+  if (options.epoch_log_rotation) io_opts.num_rotas = options.num_epochs + 1;
   if (options.measure_reads) io_opts.stats = &impl->io_stats_;
   io_opts.env = env;
   status = LogSource::Open(io_opts, dirname, &data);
   if (!status.ok()) {
     // Error
-  } else if (data->Size() < Footer::kEncodedLength) {
+  } else if (data->Size(data->LastFileIndex()) < Footer::kEncodedLength) {
     status = Status::Corruption("Dir data log file too short to be valid");
   } else if (options.paranoid_checks) {
-    uint64_t off = data->Size() - Footer::kEncodedLength;
     Slice input;
-    status = data->Read(off, Footer::kEncodedLength, &input, tmp);
+    uint64_t off = data->Size(data->LastFileIndex()) - Footer::kEncodedLength;
+    status = data->Read(off, Footer::kEncodedLength, &input, tmp,
+                        data->LastFileIndex());
     if (status.ok()) {
       if (input.ToString() != primary) {
         status = Status::Corruption("Footer replica corrupted");
