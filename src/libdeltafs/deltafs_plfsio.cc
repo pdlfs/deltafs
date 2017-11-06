@@ -1210,8 +1210,8 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
                        DirReader** result) {
   *result = NULL;
   DirOptions options = SanitizeReadOptions(opts);
-  uint32_t num_parts = 0;
-  if (options.lg_parts != -1) num_parts = 1u << options.lg_parts;
+  uint32_t num_parts =  // May have to be lazy initialized from the footer
+      options.lg_parts == -1 ? 0 : 1u << options.lg_parts;
   const int my_rank = options.rank;
   Env* const env = options.env;
   Status status;
@@ -1236,12 +1236,15 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
           int(options.skip_checksums) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.measure_reads -> %s",
           int(options.measure_reads) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.epoch_log_rotation -> %s",
+          int(options.epoch_log_rotation) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.allow_env_threads -> %s",
           int(options.allow_env_threads) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.is_env_pfs -> %s",
           int(options.is_env_pfs) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s",
           ToDebugString(options.mode).c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.num_epochs -> %d", options.num_epochs);
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d (lg_parts=%d)",
           int(num_parts), options.lg_parts);
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", my_rank);
@@ -1264,21 +1267,31 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
     }
 
     // Override a subset of user-provided options
-    if (static_cast<int>(footer.lg_parts()) != options.lg_parts)
-      Warn(__LOG_ARGS__, "Dfs.plfsdir.memtable_parts -> %d (was %d)",
-           1 << footer.lg_parts(), int(num_parts));
-    options.lg_parts = static_cast<int>(footer.lg_parts());
-    num_parts = 1u << options.lg_parts;
     if (static_cast<bool>(footer.skip_checksums()) != options.skip_checksums)
       Warn(__LOG_ARGS__, "Dfs.plfsdir.skip_checksums -> %s (was %s)",
            static_cast<bool>(footer.skip_checksums()) ? "Yes" : "No",
            options.skip_checksums ? "Yes" : "No");
     options.skip_checksums = static_cast<bool>(footer.skip_checksums());
+    if (static_cast<bool>(footer.epoch_log_rotation()) !=
+        options.epoch_log_rotation)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.epoch_log_rotation -> %s (was %s)",
+           static_cast<bool>(footer.epoch_log_rotation()) ? "Yes" : "No",
+           options.epoch_log_rotation ? "Yes" : "No");
+    options.epoch_log_rotation = static_cast<bool>(footer.epoch_log_rotation());
     if (static_cast<DirMode>(footer.mode()) != options.mode)
       Warn(__LOG_ARGS__, "Dfs.plfsdir.mode -> %s (was %s)",
            ToDebugString(static_cast<DirMode>(footer.mode())).c_str(),
            ToDebugString(options.mode).c_str());
     options.mode = static_cast<DirMode>(footer.mode());
+    if (static_cast<int>(footer.num_epochs()) != options.num_epochs)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.num_epochs -> %d (was %d)",
+           static_cast<int>(footer.num_epochs()), options.num_epochs);
+    options.num_epochs = static_cast<int>(footer.num_epochs());
+    if (static_cast<int>(footer.lg_parts()) != options.lg_parts)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.memtable_parts -> %d (was %d)",
+           1 << footer.lg_parts(), int(num_parts));
+    options.lg_parts = static_cast<int>(footer.lg_parts());
+    num_parts = 1u << options.lg_parts;
   }
 
   LogSource* data = NULL;
@@ -1287,6 +1300,7 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
   io_opts.rank = my_rank;
   io_opts.type = LogType::kData;
   io_opts.sub_partition = -1;
+  if (options.epoch_log_rotation) io_opts.num_rotas = options.num_epochs;
   if (options.measure_reads) io_opts.stats = &impl->io_stats_;
   io_opts.env = env;
   status = LogSource::Open(io_opts, dirname, &data);
