@@ -421,7 +421,9 @@ void TableLogger::Commit() {
   assert(buffer->size() <=
          options_.block_batch_size);  // Verify buffer size and block alignment
   assert(buffer->size() % options_.block_size == 0);
-  const size_t base = data_sink_->Ltell();
+  // Data log file may be rotated so we must
+  // use physical offset
+  const size_t base = data_sink_->Ptell();
   Slice key;
   int num_index_committed = 0;
   Slice input = uncommitted_indexes_;
@@ -1014,8 +1016,8 @@ template class DirLogger<EmptyFilterBlock>;
 
 static Status ReadBlock(LogSource* source, const DirOptions& options,
                         const BlockHandle& handle, BlockContents* result,
-                        bool cached = false, char* tmp = NULL,
-                        size_t tmp_length = 0) {
+                        bool cached = false, uint32_t file_index = 0,
+                        char* tmp = NULL, size_t tmp_length = 0) {
   result->data = Slice();
   result->heap_allocated = false;
   result->cachable = false;
@@ -1030,7 +1032,7 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
     buf = new char[m];
   }
   Slice contents;
-  Status status = source->Read(handle.offset(), m, &contents, buf);
+  Status status = source->Read(handle.offset(), m, &contents, buf, file_index);
   if (status.ok()) {
     if (contents.size() != m) {
       status = Status::Corruption("Truncated block read");
@@ -1101,8 +1103,8 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
   *exhausted = false;
   Status status;
   BlockContents contents;
-  status = ReadBlock(data_, options_, h, &contents, false, opts.tmp,
-                     opts.tmp_length);
+  status = ReadBlock(data_, options_, h, &contents, false, opts.file_index,
+                     opts.tmp, opts.tmp_length);
   if (!status.ok()) {
     return status;
   } else {
@@ -1311,32 +1313,37 @@ Status Dir::DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
         break;  // No such table
       }
     }
-    ParaSaverState state;
-    state.epoch = epoch;
-    state.offsets = ctx->offsets;
-    state.buffer = ctx->buffer;
-    state.mu = mu_;
-    state.dst = ctx->dst;
-    state.found = false;
+    ParaSaverState arg;
+    arg.epoch = epoch;
+    arg.offsets = ctx->offsets;
+    arg.buffer = ctx->buffer;
+    arg.mu = mu_;
+    arg.dst = ctx->dst;
+    arg.found = false;
     TableHandle table_handle;
     Slice input = iter->value();
     status = table_handle.DecodeFrom(&input);
     iter->Next();
     if (status.ok()) {
       FetchOptions opts;
+      if (options_.epoch_log_rotation) {
+        opts.file_index = epoch;
+      } else {
+        opts.file_index = 0;
+      }
       opts.stats = stats;
       opts.tmp_length = ctx->tmp_length;
       opts.tmp = ctx->tmp;
       if (options_.parallel_reads) {
         opts.saver = ParaSaveValue;
-        opts.arg = &state;
+        opts.arg = &arg;
         status = Fetch(opts, key, table_handle);
       } else {
         opts.saver = SaveValue;
-        opts.arg = &state;
+        opts.arg = &arg;
         status = Fetch(opts, key, table_handle);
       }
-      if (status.ok() && state.found) {
+      if (status.ok() && arg.found) {
         if (options_.mode != kMultiMap) {
           break;
         }

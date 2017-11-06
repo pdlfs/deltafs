@@ -324,6 +324,8 @@ class Dir {
   struct GetStats;
   struct FetchOptions {
     GetStats* stats;
+    // Log rotation #
+    uint32_t file_index;  // For data log only
     // Scratch space for temporary data block storage
     char* tmp;
     // Scratch size
