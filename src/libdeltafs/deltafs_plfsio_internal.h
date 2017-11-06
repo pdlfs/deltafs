@@ -377,8 +377,8 @@ class Dir {
     // Total number of data blocks fetched for an epoch
     size_t seeks;
   };
-  Status TryGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
-                GetContext* ctx, GetStats* stats);
+  Status DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
+               GetContext* ctx, GetStats* stats);
 
   static void Merge(GetContext* ctx);
 

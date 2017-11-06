@@ -1282,8 +1282,8 @@ static inline Iterator* NewRtIterator(Block* block) {
 
 }  // namespace
 
-Status Dir::TryGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
-                   GetContext* ctx, GetStats* stats) {
+Status Dir::DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
+                  GetContext* ctx, GetStats* stats) {
   Status status;
   // Load the meta index for the epoch
   BlockContents meta_index_contents;
@@ -1384,7 +1384,7 @@ void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
     status = h.DecodeFrom(&input);
     rt_iter->Next();
     if (status.ok()) {
-      status = TryGet(key, h, epoch, ctx, &stats);
+      status = DoGet(key, h, epoch, ctx, &stats);
     } else {
       // Skip the epoch
     }
@@ -1435,9 +1435,13 @@ struct Dir::STLLessThan {
 };
 
 void Dir::Merge(GetContext* ctx) {
-  std::vector<uint32_t>::iterator begin = ctx->offsets->begin();
-  std::vector<uint32_t>::iterator end = ctx->offsets->end();
-  std::sort(begin, end, STLLessThan(*ctx->buffer));
+  std::vector<uint32_t>::iterator begin;
+  begin = ctx->offsets->begin();
+  std::vector<uint32_t>::iterator end;
+  end = ctx->offsets->end();
+  // A key might appear multiple times within each
+  // epoch so the sort must be stable.
+  std::stable_sort(begin, end, STLLessThan(*ctx->buffer));
 
   uint32_t ignored;
   Slice value;
