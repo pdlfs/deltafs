@@ -190,27 +190,25 @@ class VarintFormat {
   // Finalize the bitmap representation.
   // Return the final buffer size.
   size_t Finish() {
-    // Reverse sort to pop from back
-    std::sort(overflowed.begin(), overflowed.end(),std::greater<size_t>());
+    std::sort(overflowed.begin(), overflowed.end());
+    size_t overflowed_idx = 0;
     size_t last_one = 0;
     // For every bucket
     for(size_t i = 0; i < bucket_num_; i++) {
       // Bucket key size
       unsigned char key_num = working_space_[bucket_size_*i];
       size_t offset = bucket_size_*i + 1;
-      // Sort the bucket key
-      std::sort(working_space_.begin() + offset,
-                working_space_.begin() + offset + std::min((size_t)key_num, bucket_size_-1));
-      for(int j = 0; j < key_num; j++) {
-        size_t distance;
-        if(j < bucket_size_-1) {
-          distance = (unsigned char)working_space_[offset+j] + (i<<8) - last_one; // in bucket
-        }
-        else {
-          distance = overflowed.back() - last_one; // overflow
-          overflowed.pop_back();
-        }
-        last_one += distance;
+      std::vector<size_t> bucket_keys;
+      for(int j = 0; j< key_num; j++) {
+        if(j < bucket_size_-1)
+          bucket_keys.push_back((unsigned char)working_space_[offset+j] + (i<<8));
+        else
+          bucket_keys.push_back(overflowed[overflowed_idx++]);
+      }
+      std::sort(bucket_keys.begin(), bucket_keys.end());
+      for(auto it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
+        size_t distance = *it-last_one;
+        last_one = *it;
         // Encoding the distance to variable length encode.
         unsigned char b = (unsigned char)(distance % 128);
         while (distance / 128 > 0) {

@@ -213,11 +213,11 @@ TEST(UncompressedBitmapFilterTest, BMP_U_RandomKeys) {
   }
 }
 
-// Variant bitmap filter
-typedef FilterTest<BitmapBlock<VariantFormat>, BitmapKeyMustMatch>
- VariantBitmapFilterTest;
+// Varint bitmap filter
+typedef FilterTest<BitmapBlock<VarintFormat>, BitmapKeyMustMatch>
+ VarintBitmapFilterTest;
 
-TEST(VariantBitmapFilterTest, BMP_V_Empty) {
+TEST(VarintBitmapFilterTest, BMP_V_Empty) {
   Random rnd(301);
   Reset(1024);
   Finish();
@@ -225,7 +225,7 @@ TEST(VariantBitmapFilterTest, BMP_V_Empty) {
   ASSERT_FALSE(KeyMayMatch(1u << 24));
 }
 
-TEST(VariantBitmapFilterTest, BMP_V_OneKey) {
+TEST(VarintBitmapFilterTest, BMP_V_OneKey) {
   size_t num_keys = 1;
   Reset(num_keys);
   AddKey(21343);
@@ -235,35 +235,34 @@ TEST(VariantBitmapFilterTest, BMP_V_OneKey) {
   ASSERT_FALSE(KeyMayMatch(21344));
 }
 
-TEST(VariantBitmapFilterTest, BMP_V_RandomKeys) {
+TEST(VarintBitmapFilterTest, BMP_V_RandomKeys) {
   Random rnd(301);
-  for (size_t num_keys = 1024; num_keys <= 65536; num_keys *= 4) {
-    Reset(num_keys);
-    std::set<uint32_t> keys;
-    while (keys.size() != num_keys) {
-      keys.insert(rnd.Uniform(1 << 24));  // Random 24-bit keys
+  size_t num_keys = 1024;
+  Reset(num_keys);
+  std::set<uint32_t> keys;
+  while (keys.size() != num_keys) {
+    keys.insert(rnd.Uniform(1 << 24));  // Random 24-bit keys
+  }
+  std::set<uint32_t>::iterator it = keys.begin();
+  for (; it != keys.end(); ++it) {
+    AddKey(*it);
+  }
+  Finish();
+  for (it = keys.begin(); it != keys.end(); ++it) {
+    ASSERT_TRUE(KeyMayMatch(*it));
+  }
+  std::set<uint32_t> non_keys;
+  while (non_keys.size() != keys.size()) {
+    uint32_t key = rnd.Uniform(1 << 24);
+    if (keys.count(key) == 0) {
+      non_keys.insert(key);
     }
-    std::set<uint32_t>::iterator it = keys.begin();
-    for (; it != keys.end(); ++it) {
-      AddKey(*it);
-    }
-    Finish();
-    for (it = keys.begin(); it != keys.end(); ++it) {
-      ASSERT_TRUE(KeyMayMatch(*it));
-    }
-    std::set<uint32_t> non_keys;
-    while (non_keys.size() != keys.size()) {
-      uint32_t key = rnd.Uniform(1 << 24);
-      if (keys.count(key) == 0) {
-        non_keys.insert(key);
-      }
-    }
-    for (it = non_keys.begin(); it != non_keys.end(); ++it) {
-      ASSERT_FALSE(KeyMayMatch(*it));
-    }
-    for (uint32_t i = 0; i < num_keys; i++) {
-      ASSERT_FALSE(KeyMayMatch((1u << 24) + i));
-    }
+  }
+  for (it = non_keys.begin(); it != non_keys.end(); ++it) {
+    ASSERT_FALSE(KeyMayMatch(*it));
+  }
+  for (uint32_t i = 0; i < num_keys; i++) {
+    ASSERT_FALSE(KeyMayMatch((1u << 24) + i));
   }
 }
 
@@ -1248,6 +1247,83 @@ class PlfsBfBench : protected PlfsIoBench {
   Histogram seeks_;
 };
 
+template <typename T, FilterTester tester>
+class PlfsFilterBench {
+ public:
+  PlfsFilterBench(double ratio): ratio_(ratio), rnd_(301) {
+    options_.bf_bits_per_key = 10;  // Override the defaults
+    options_.bm_key_bits = 24;
+    ft_ = new T(options_, 0);  // Does not reserve memory
+  }
+
+  ~PlfsFilterBench() {
+    delete ft_;
+  }
+
+#if defined(PDLFS_PLATFORM_POSIX)
+  static inline double ToSecs(const struct timeval* tv) {
+    return tv->tv_sec + tv->tv_usec / 1000.0 / 1000.0;
+  }
+#endif
+
+  void LogAndApply() {
+    const double k = 1000.0;
+//    std::vector<uint32_t> keys;
+    size_t key_num = (1<<24)*ratio_;
+    ft_->Reset(key_num);
+    const uint64_t start = Env::Default()->NowMicros();
+    fprintf(stderr, "Inserting key...\n");
+    for(int i = 0; i<key_num; i++) {
+      if(i % (key_num >> 4)==0) {
+        fprintf(stderr, "\r%.2f%%\n", 100.0 * i / key_num);
+      }
+      uint32_t key = rnd_.Uniform(1 << 24);  // Random 24-bit keys
+//      keys.push_back(key);
+      std::string key_seq;
+      PutFixed32(&key_seq, key);
+      ft_->AddKey(key_seq);
+    }
+    size_t size = ft_->Finish().size();
+
+    fprintf(stderr, "Done!\n");
+    const uint64_t end = Env::Default()->NowMicros();
+    const uint64_t dura = end - start;
+
+    fprintf(stderr, "            filter size: %zu bytes\n", size);
+    fprintf(stderr, "             key number: %zu \n", key_num);
+    fprintf(stderr, "           bits per key: %.3f bits/key\n", size*8.0/key_num);
+
+#if defined(PDLFS_PLATFORM_POSIX)
+    struct rusage usage;
+    int r1 = getrusage(RUSAGE_SELF, &usage);
+    ASSERT_EQ(r1, 0);
+    fprintf(stderr, "          User CPU Time: %.3f s\n",
+            ToSecs(&usage.ru_utime));
+    fprintf(stderr, "        System CPU Time: %.3f s\n",
+            ToSecs(&usage.ru_stime));
+#endif
+#if defined(PDLFS_OS_LINUX)
+    cpu_set_t cpu_set;
+    CPU_ZERO(&cpu_set);
+    int r2 = sched_getaffinity(getpid(), sizeof(cpu_set), &cpu_set);
+    ASSERT_EQ(r2, 0);
+    fprintf(stderr, "          Num CPU Cores: %d\n", CPU_COUNT(&cpu_set));
+    fprintf(stderr, "              CPU Usage: %.1f%%\n",
+            k * k * (ToSecs(&usage.ru_utime) + ToSecs(&usage.ru_stime)) /
+                CPU_COUNT(&cpu_set) / dura * 100);
+#endif
+  }
+ private:
+  double ratio_;
+  Random rnd_;
+  DirOptions options_;
+  T* ft_;
+
+};
+
+typedef PlfsFilterBench<BitmapBlock<VarintFormat>, BitmapKeyMustMatch> VarintBench;
+typedef PlfsFilterBench<BitmapBlock<UncompressedFormat>, BitmapKeyMustMatch> UncompressedBench;
+
 }  // namespace plfsio
 }  // namespace pdlfs
 
@@ -1259,7 +1335,7 @@ class PlfsBfBench : protected PlfsIoBench {
 #endif
 
 static inline void BM_Usage() {
-  fprintf(stderr, "Use --bench=io or --bench=bf to select a benchmark.\n");
+  fprintf(stderr, "Use --bench=io or --bench=bf or --bench=filter to select a benchmark.\n");
 }
 
 static void BM_LogAndApply(int* argc, char*** argv) {
@@ -1281,6 +1357,9 @@ static void BM_LogAndApply(int* argc, char*** argv) {
     bench.LogAndApply();
   } else if (bench_name == "--bench=bf") {
     pdlfs::plfsio::PlfsBfBench bench;
+    bench.LogAndApply();
+  } else if (bench_name == "--bench=filter") {
+    pdlfs::plfsio::VarintBench bench(0.02);
     bench.LogAndApply();
   } else {
     BM_Usage();
