@@ -365,7 +365,6 @@ void TableLogger::EndTable(T* filter_block, ChunkType filter_type) {
   BlockHandle filter_handle;
   if (filter_block != NULL) {
     Slice filer_contents = filter_block->Finish();
-    fprintf(stderr, "filter size: %zu \n", filer_contents.size());
     status_ = indx_logger_.Write(filter_type, filer_contents, &filter_handle);
     if (ok()) {
       const uint64_t filter_size = filer_contents.size();
@@ -377,7 +376,7 @@ void TableLogger::EndTable(T* filter_block, ChunkType filter_type) {
       return;  // Abort
     }
   } else {
-    filter_handle.set_offset(0);  // No filter configured
+    filter_handle.set_offset(0);  //
     filter_handle.set_size(0);
   }
 
@@ -690,7 +689,7 @@ DirLogger<T>::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
 
   if (options_.filter == kNoFilter) {
     // Skip filter
-  } else if (options_.filter != kBloomFilter && options_.bf_bits_per_key != 0) {
+  } else if (options_.filter != kBloomFilter || options_.bf_bits_per_key != 0) {
     filter_ = new T(options_, ft_bytes_);
   } else {
     // Skip filter

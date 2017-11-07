@@ -800,6 +800,7 @@ class PlfsIoBench {
       owns_env = true;
     }
     options_.env = env_;
+    // Set filter type for io benchmark
     options_.filter = kBloomFilter;
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
@@ -1357,7 +1358,7 @@ static void BM_LogAndApply(int* argc, char*** argv) {
     pdlfs::plfsio::PlfsBfBench bench;
     bench.LogAndApply();
   } else if (bench_name == "--bench=filter") {
-    pdlfs::plfsio::UncompressedBench bench(0.02);
+    pdlfs::plfsio::VarintBench bench(0.01);
     bench.LogAndApply();
   } else {
     BM_Usage();
