@@ -1268,7 +1268,6 @@ class PlfsFilterBench {
 
   void LogAndApply() {
     const double k = 1000.0;
-//    std::vector<uint32_t> keys;
     size_t key_num = (1<<24)*ratio_;
     ft_->Reset(key_num);
     const uint64_t start = Env::Default()->NowMicros();
@@ -1278,7 +1277,6 @@ class PlfsFilterBench {
         fprintf(stderr, "\r%.2f%%\n", 100.0 * i / key_num);
       }
       uint32_t key = rnd_.Uniform(1 << 24);  // Random 24-bit keys
-//      keys.push_back(key);
       std::string key_seq;
       PutFixed32(&key_seq, key);
       ft_->AddKey(key_seq);
