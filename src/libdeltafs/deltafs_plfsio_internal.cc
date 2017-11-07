@@ -365,6 +365,7 @@ void TableLogger::EndTable(T* filter_block, ChunkType filter_type) {
   BlockHandle filter_handle;
   if (filter_block != NULL) {
     Slice filer_contents = filter_block->Finish();
+    fprintf(stderr, "filter size: %zu \n", filer_contents.size());
     status_ = indx_logger_.Write(filter_type, filer_contents, &filter_handle);
     if (ok()) {
       const uint64_t filter_size = filer_contents.size();
@@ -1008,6 +1009,8 @@ size_t DirLogger<T>::memory_usage() const {
 template class DirLogger<BloomBlock>;
 
 template class DirLogger<BitmapBlock<UncompressedFormat> >;
+
+template class DirLogger<BitmapBlock<VarintFormat> >;
 
 template class DirLogger<EmptyFilterBlock>;
 

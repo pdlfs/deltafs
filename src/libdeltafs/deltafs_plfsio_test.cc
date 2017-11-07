@@ -800,6 +800,7 @@ class PlfsIoBench {
       owns_env = true;
     }
     options_.env = env_;
+    options_.filter = kBloomFilter;
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
     const uint64_t start = env_->NowMicros();
@@ -1274,7 +1275,7 @@ class PlfsFilterBench {
     fprintf(stderr, "Inserting key...\n");
     for(int i = 0; i<key_num; i++) {
       if(i % (key_num >> 4)==0) {
-        fprintf(stderr, "\r%.2f%%\n", 100.0 * i / key_num);
+        fprintf(stderr, "\r%.2f%%", 100.0 * i / key_num);
       }
       uint32_t key = rnd_.Uniform(1 << 24);  // Random 24-bit keys
       std::string key_seq;
@@ -1283,7 +1284,7 @@ class PlfsFilterBench {
     }
     size_t size = ft_->Finish().size();
 
-    fprintf(stderr, "Done!\n");
+    fprintf(stderr, "\nDone!\n");
     const uint64_t end = Env::Default()->NowMicros();
     const uint64_t dura = end - start;
 
@@ -1307,8 +1308,7 @@ class PlfsFilterBench {
     ASSERT_EQ(r2, 0);
     fprintf(stderr, "          Num CPU Cores: %d\n", CPU_COUNT(&cpu_set));
     fprintf(stderr, "              CPU Usage: %.1f%%\n",
-            k * k * (ToSecs(&usage.ru_utime) + ToSecs(&usage.ru_stime)) /
-                CPU_COUNT(&cpu_set) / dura * 100);
+            k * k * (ToSecs(&usage.ru_utime) + ToSecs(&usage.ru_stime)) / dura * 100);
 #endif
   }
  private:
@@ -1357,7 +1357,7 @@ static void BM_LogAndApply(int* argc, char*** argv) {
     pdlfs::plfsio::PlfsBfBench bench;
     bench.LogAndApply();
   } else if (bench_name == "--bench=filter") {
-    pdlfs::plfsio::VarintBench bench(0.02);
+    pdlfs::plfsio::UncompressedBench bench(0.02);
     bench.LogAndApply();
   } else {
     BM_Usage();

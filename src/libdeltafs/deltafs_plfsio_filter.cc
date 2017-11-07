@@ -162,6 +162,7 @@ class VarintFormat {
   // Use num_keys to estimate bitmap density.
   void Reset(uint32_t num_keys) {
     space_->clear();
+    working_space_.clear();
     // Calculate bucket size in probability
     bucket_size_ = (num_keys+bucket_num_-1)/bucket_num_ + 1; // Extra byte to store the number of key in the bucket
     working_space_.resize(bucket_size_ * bucket_num_, 0);

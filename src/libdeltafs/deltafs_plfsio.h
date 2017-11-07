@@ -57,7 +57,9 @@ enum FilterType {
   // Use bloom filters
   kBloomFilter = 0x01,
   // Use uncompressed bitmap filters
-  kBitmapFilter = 0x02
+  kBitmapFilter = 0x02,
+  // Use Varint bitmap filters
+  kVarintFilter = 0x03
 };
 
 struct DirOptions {
