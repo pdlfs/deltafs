@@ -801,7 +801,7 @@ class PlfsIoBench {
     }
     options_.env = env_;
     // Set filter type for io benchmark
-    options_.filter = kBloomFilter;
+    options_.filter = kVarintFilter;
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
     const uint64_t start = env_->NowMicros();

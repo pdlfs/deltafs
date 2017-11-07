@@ -163,6 +163,7 @@ class VarintFormat {
   void Reset(uint32_t num_keys) {
     space_->clear();
     working_space_.clear();
+    overflowed.clear();
     // Calculate bucket size in probability
     bucket_size_ = (num_keys+bucket_num_-1)/bucket_num_ + 1; // Extra byte to store the number of key in the bucket
     working_space_.resize(bucket_size_ * bucket_num_, 0);
@@ -197,7 +198,7 @@ class VarintFormat {
     // For every bucket
     for(size_t i = 0; i < bucket_num_; i++) {
       // Bucket key size
-      unsigned char key_num = working_space_[bucket_size_*i];
+      unsigned char key_num = (unsigned char)working_space_[bucket_size_*i];
       size_t offset = bucket_size_*i + 1;
       std::vector<size_t> bucket_keys;
       for(int j = 0; j< key_num; j++) {
