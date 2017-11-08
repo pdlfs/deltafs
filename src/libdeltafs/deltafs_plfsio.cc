@@ -120,6 +120,10 @@ DirOptions ParseDirOptions(const char* input) {
       if (ParsePrettyNumber(conf_value, &num)) {
         options.min_index_buffer = num;
       }
+    } else if (conf_key == "block_size") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.block_size = num;
+      }
     } else if (conf_key == "block_padding") {
       if (ParsePrettyBool(conf_value, &flag)) {
         options.block_padding = flag;
@@ -150,7 +154,15 @@ DirOptions ParseDirOptions(const char* input) {
       }
     } else if (conf_key == "filter_bits_per_key") {
       if (ParsePrettyNumber(conf_value, &num)) {
+        options.filter_bits_per_key = num;
+      }
+    } else if (conf_key == "bf_bits_per_key") {
+      if (ParsePrettyNumber(conf_value, &num)) {
         options.bf_bits_per_key = num;
+      }
+    } else if (conf_key == "bm_key_bits") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.bm_key_bits = num;
       }
     } else if (conf_key == "value_size") {
       if (ParsePrettyNumber(conf_value, &num)) {
