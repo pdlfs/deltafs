@@ -442,7 +442,18 @@ TEST(PlfsIoTest, NoFilter) {
   ASSERT_EQ(Read("k6"), "v6");
 }
 
-TEST(PlfsIoTest, NoUniKeys) {
+TEST(PlfsIoTest, LogRotation) {
+  options_.epoch_log_rotation = true;
+  Write("k1", "v1");
+  MakeEpoch();
+  Write("k1", "v1");
+  MakeEpoch();
+  Write("k1", "v1");
+  MakeEpoch();
+  Finish();
+}
+
+TEST(PlfsIoTest, MultiMap) {
   options_.mode = kMultiMap;
   Write("k1", "v1");
   Write("k1", "v2");

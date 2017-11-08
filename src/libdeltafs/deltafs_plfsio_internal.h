@@ -12,15 +12,14 @@
 #include "deltafs_plfsio.h"
 #include "deltafs_plfsio_format.h"
 #include "deltafs_plfsio_log.h"
+#include "deltafs_plfsio_xio.h"
 
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/port.h"
 
+#include <set>
 #include <string>
 #include <vector>
-#ifndef NDEBUG
-#include <set>  // For potential key collision detection
-#endif
 
 namespace pdlfs {
 namespace plfsio {
@@ -38,7 +37,7 @@ class WriteBuffer {
   void Reserve(size_t bytes_to_reserve);
   size_t CurrentBufferSize() const { return buffer_.size(); }
   uint32_t NumEntries() const { return num_entries_; }
-  void Add(const Slice& key, const Slice& value);
+  bool Add(const Slice& key, const Slice& value);
   Iterator* NewIterator() const;
   void Finish(bool skip_sort = false);
   void Reset();
@@ -96,15 +95,6 @@ class TableLogger {
   Status status() const { return status_; }
 
   void Add(const Slice& key, const Slice& value);
-  Status Finish();
-
-  // End the current block and force the start of a new data block.
-  // REQUIRES: Finish() has not been called.
-  void EndBlock();
-
-  // Flush buffered data blocks and finalize their indexes.
-  // REQUIRES: Finish() has not been called.
-  void Commit();
 
   // Force the start of a new table.
   // Caller may optionally specify a corresponding filter block.
@@ -116,7 +106,19 @@ class TableLogger {
   // REQUIRES: Finish() has not been called.
   void MakeEpoch();
 
+  // Finalize table contents.
+  // No further writes.
+  Status Finish();
+
  private:
+  // End the current block and force the start of a new data block.
+  // REQUIRES: Finish() has not been called.
+  void EndBlock();
+
+  // Flush buffered data blocks and finalize their indexes.
+  // REQUIRES: Finish() has not been called.
+  void Commit();
+
   const DirOptions& options_;
   OutputStats output_stats_;
 #ifndef NDEBUG
@@ -131,7 +133,6 @@ class TableLogger {
   TableLogger(const TableLogger&);
 
   Status status_;
-  Footer footer_;  // Footer template
   std::string smallest_key_;
   std::string largest_key_;
   std::string last_key_;
@@ -217,7 +218,8 @@ class DirLogger {
   };
   Status Flush(const FlushOptions& options);
 
-  // Sync and pre-close log files before de-referencing them
+  // Sync and close all associated log sinks.
+  // DOES NOT REQUIRE MUTEX TO BE LOCKED (CALLED IN I/O CONTEXT ONLY)
   Status SyncAndClose();
 
   void Ref() { refs_++; }
@@ -299,7 +301,7 @@ class Dir {
   Status Read(const Slice& key, std::string* dst, char* tmp, size_t tmp_length,
               ReadStats* stats);
 
-  void RebindDataSource(LogSource* data);
+  void InstallDataSource(LogSource* data);
 
   void Ref() { refs_++; }
 
@@ -322,6 +324,8 @@ class Dir {
   struct GetStats;
   struct FetchOptions {
     GetStats* stats;
+    // Log rotation #
+    uint32_t file_index;  // For data log only
     // Scratch space for temporary data block storage
     char* tmp;
     // Scratch size
@@ -375,8 +379,8 @@ class Dir {
     // Total number of data blocks fetched for an epoch
     size_t seeks;
   };
-  Status TryGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
-                GetContext* ctx, GetStats* stats);
+  Status DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
+               GetContext* ctx, GetStats* stats);
 
   static void Merge(GetContext* ctx);
 

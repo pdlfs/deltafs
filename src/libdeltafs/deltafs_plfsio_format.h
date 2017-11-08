@@ -125,8 +125,20 @@ class Footer {
   uint32_t lg_parts() const { return lg_parts_; }
   void set_lg_parts(uint32_t lg) { lg_parts_ = lg; }
 
+  uint32_t key_size() const { return key_size_; }
+  void set_key_size(uint32_t k) { key_size_ = k; }
+
+  uint32_t value_size() const { return value_size_; }
+  void set_value_size(uint32_t v) { value_size_ = v; }
+
+  unsigned char fixed_kv_length() const { return fixed_kv_length_; }
+  void set_fixed_kv_length(unsigned char f) { fixed_kv_length_ = f; }
+
+  unsigned char epoch_log_rotation() const { return epoch_log_rotation_; }
+  void set_epoch_log_rotation(unsigned char r) { epoch_log_rotation_ = r; }
+
   unsigned char skip_checksums() const { return skip_checksums_; }
-  void set_skip_checksums(unsigned char skip) { skip_checksums_ = skip; }
+  void set_skip_checksums(unsigned char s) { skip_checksums_ = s; }
 
   unsigned char mode() const { return mode_; }
   void set_mode(unsigned char mode) { mode_ = mode; }
@@ -135,24 +147,32 @@ class Footer {
   const BlockHandle& epoch_index_handle() const { return epoch_index_handle_; }
   void set_epoch_index_handle(const BlockHandle& h) { epoch_index_handle_ = h; }
 
-  // Total number of epoches
-  uint32_t num_epoches() const { return num_epoches_; }
-  void set_num_epoches(uint32_t num) { num_epoches_ = num; }
+  // Total number of epochs
+  uint32_t num_epochs() const { return num_epochs_; }
+  void set_num_epochs(uint32_t num) { num_epochs_ = num; }
 
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* input);
 
   // Encoded length of a Footer. It consists of one encoded block
-  // handle, a couple of options, and a magic number.
-  enum { kEncodedLength = BlockHandle::kMaxEncodedLength + 10 + 8 };
+  // handle, a set of options (20 bytes in total), and a magic number (8 bytes).
+  enum { kEncodedLength = BlockHandle::kMaxEncodedLength + 20 + 8 };
 
  private:
   BlockHandle epoch_index_handle_;
-  uint32_t num_epoches_;
-  uint32_t lg_parts_;
+  uint32_t lg_parts_;  // Lg number of log sub-partitions
+  uint32_t num_epochs_;
+  uint32_t value_size_;
+  uint32_t key_size_;
+  unsigned char fixed_kv_length_;
+  unsigned char epoch_log_rotation_;  // If log rotation has been enabled
   unsigned char skip_checksums_;
   unsigned char mode_;
 };
+
+extern Footer ToFooter(const DirOptions& options);
+
+extern std::string FooterFileName(const std::string& dirname);
 
 extern std::string ToDebugString(DirMode mode);
 
@@ -170,8 +190,12 @@ inline EpochStone::EpochStone()
 }
 
 inline Footer::Footer()
-    : num_epoches_(~static_cast<uint32_t>(0) /* Invalid */),
-      lg_parts_(~static_cast<uint32_t>(0) /* Invalid */),
+    : lg_parts_(~static_cast<uint32_t>(0) /* Invalid */),
+      num_epochs_(~static_cast<uint32_t>(0) /* Invalid */),
+      value_size_(~static_cast<uint32_t>(0) /* Invalid */),
+      key_size_(~static_cast<uint32_t>(0) /* Invalid */),
+      fixed_kv_length_(~static_cast<unsigned char>(0) /* Invalid */),
+      epoch_log_rotation_(~static_cast<unsigned char>(0) /* Invalid */),
       skip_checksums_(~static_cast<unsigned char>(0) /* Invalid */),
       mode_(~static_cast<unsigned char>(0) /* Invalid */) {
   // Empty

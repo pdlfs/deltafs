@@ -160,6 +160,11 @@ struct DirOptions {
   // Default: 4MB
   size_t min_index_buffer;
 
+  // Auto rotate log files at the end of each epoch.
+  // Only data logs are rotated.
+  // Default: false
+  bool epoch_log_rotation;
+
   // Add necessary padding to the end of each log object to ensure the
   // final object size is always some multiple of the write size.
   // Required by some underlying object stores.
@@ -237,11 +242,19 @@ struct DirOptions {
   // Default: true
   bool measure_writes;
 
-  // Number of partitions to divide the data. Specified in logarithmic
-  // number so each x will give 2**x partitions.
-  // REQUIRES: 0 <= lg_parts <= 8
-  // Default: 0
-  int lg_parts;
+  // Number of epochs to read during the read phase.
+  // If set to -1, will use the value obtained from the footer.
+  // Ignored in the write phase.
+  // Default: -1
+  int num_epochs;
+
+  // Number of partitions to divide the data during the write phase.
+  // Specified in logarithmic number so each x will give 2**x partitions.
+  // Number of partitions to read during the read phase.
+  // If set to -1 during the read phase, will use
+  // the value obtained from the footer.
+  // Default: -1
+  int lg_parts;  // between [0, 8]
 
   // User callback for handling background events.
   // Default: NULL
@@ -272,101 +285,6 @@ struct DirOptions {
 
 // Parse a given configuration string to structured options.
 extern DirOptions ParseDirOptions(const char* conf);
-
-// Abstraction for a thread-unsafe and possibly-buffered
-// append-only log stream.
-class LogSink {
- public:
-  LogSink(const std::string& filename, WritableFile* f, port::Mutex* mu = NULL)
-      : mu_(mu), filename_(filename), file_(f), offset_(0), refs_(0) {}
-
-  uint64_t Ltell() const {
-    if (mu_ != NULL) mu_->AssertHeld();
-    return offset_;
-  }
-
-  void Lock() {
-    if (mu_ != NULL) {
-      mu_->Lock();
-    }
-  }
-
-  Status Lwrite(const Slice& data) {
-    if (file_ == NULL) {
-      return Status::AssertionFailed("File already closed", filename_);
-    } else {
-      if (mu_ != NULL) {
-        mu_->AssertHeld();
-      }
-      Status result = file_->Append(data);
-      if (result.ok()) {
-        result = file_->Flush();
-        if (result.ok()) {
-          offset_ += data.size();
-        }
-      }
-      return result;
-    }
-  }
-
-  Status Lsync() {
-    Status status;
-    if (file_ != NULL) {
-      if (mu_ != NULL) mu_->AssertHeld();
-      status = file_->Sync();
-    }
-    return status;
-  }
-
-  void Unlock() {
-    if (mu_ != NULL) {
-      mu_->Unlock();
-    }
-  }
-
-  Status Lclose(bool sync = false);
-  void Ref() { refs_++; }
-  void Unref();
-
- private:
-  ~LogSink();
-  // No copying allowed
-  void operator=(const LogSink&);
-  LogSink(const LogSink&);
-  Status Close();
-
-  port::Mutex* mu_;  // Constant after construction
-  const std::string filename_;
-  WritableFile* file_;  // State protected by mu_
-  uint64_t offset_;
-  uint32_t refs_;
-};
-
-// Abstraction for a thread-unsafe and possibly-buffered
-// random access log file.
-class LogSource {
- public:
-  LogSource(RandomAccessFile* f, uint64_t s) : file_(f), size_(s), refs_(0) {}
-
-  Status Read(uint64_t offset, size_t n, Slice* result, char* scratch) {
-    return file_->Read(offset, n, result, scratch);
-  }
-
-  uint64_t Size() const { return size_; }
-
-  void Ref() { refs_++; }
-  void Unref();
-
- private:
-  ~LogSource();
-  // No copying allowed
-  void operator=(const LogSource&);
-  LogSource(const LogSource&);
-
-  RandomAccessFile* file_;
-  uint64_t size_;
-  uint32_t refs_;
-};
 
 // Destroy the contents of the specified directory.
 // Be very careful using this method.
@@ -463,11 +381,9 @@ class DirWriter {
 
  private:
   template <typename T>
-  static Status InternalOpen(T* impl, const DirOptions& options,
-                             const std::string& dirname);
+  static Status TryDirOpen(T* impl);
 
-  // No copying allowed
-  void operator=(const DirWriter&);
+  void operator=(const DirWriter& d);  // No copying allowed
   DirWriter(const DirWriter&);
 };
 
@@ -479,7 +395,7 @@ class DirReader {
 
   // Open an I/O reader against a specific plfs-style directory.
   // Return OK on success, or a non-OK status on errors.
-  static Status Open(const DirOptions& options, const std::string& name,
+  static Status Open(const DirOptions& options, const std::string& dirname,
                      DirReader** result);
 
   // Fetch the entire data from a specific file under a given plfs directory.

@@ -44,6 +44,7 @@ DirOptions::DirOptions()
       min_data_buffer(4 << 20),
       index_buffer(4 << 20),
       min_index_buffer(4 << 20),
+      epoch_log_rotation(false),
       tail_padding(false),
       compaction_pool(NULL),
       reader_pool(NULL),
@@ -59,7 +60,8 @@ DirOptions::DirOptions()
       skip_checksums(false),
       measure_reads(true),
       measure_writes(true),
-      lg_parts(0),
+      num_epochs(-1),
+      lg_parts(-1),
       listener(NULL),
       mode(kUnique),
       env(NULL),
@@ -164,72 +166,10 @@ DirOptions ParseDirOptions(const char* input) {
   return options;
 }
 
-void LogSink::Unref() {
-  assert(refs_ > 0);
-  refs_--;
-  if (refs_ == 0) {
-    delete this;
-  }
-}
-
-LogSink::~LogSink() {
-  mu_ = NULL;
-  if (file_ != NULL) {
-    Lclose();
-  }
-}
-
-Status LogSink::Lclose(bool sync) {
-  Status status;
-  if (file_ != NULL) {
-    if (mu_ != NULL) mu_->AssertHeld();
-    if (sync) status = file_->Sync();
-    if (status.ok()) {
-      status = Close();
-    }
-  }
-  return status;
-}
-
-Status LogSink::Close() {
-  assert(file_ != NULL);
-  Status status = file_->Close();
-  delete file_;
-  file_ = NULL;
-  return status;
-}
-
-void LogSource::Unref() {
-  assert(refs_ > 0);
-  refs_--;
-  if (refs_ == 0) {
-    delete this;
-  }
-}
-
-LogSource::~LogSource() {
-  if (file_ != NULL) {
-    delete file_;
-  }
-}
-
-static std::string IndexFileName(const std::string& parent, int rank,
-                                 int partition) {
-  char tmp[30];
-  snprintf(tmp, sizeof(tmp), "/L-%08x.idx.%02x", rank, partition);
-  return parent + tmp;
-}
-
-static std::string DataFileName(const std::string& parent, int rank) {
-  char tmp[30];
-  snprintf(tmp, sizeof(tmp), "/L-%08x.dat", rank);
-  return parent + tmp;
-}
-
 template <typename T = BloomBlock>
 class DirWriterImpl : public DirWriter {
  public:
-  DirWriterImpl(const DirOptions& options);
+  DirWriterImpl(const DirOptions& opts, const std::string& dirname);
   virtual ~DirWriterImpl();
 
   virtual IoStats GetIoStats() const;
@@ -276,6 +216,7 @@ class DirWriterImpl : public DirWriter {
   mutable port::Mutex mutex_;
   port::CondVar bg_cv_;
   port::CondVar cv_;
+  const std::string dirname_;
   int num_epochs_;
   uint32_t num_parts_;
   uint32_t part_mask_;
@@ -286,24 +227,26 @@ class DirWriterImpl : public DirWriter {
   bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
   WritableFileStats io_stats_;
-  std::vector<const OutputStats*> compaction_stats_;
-  std::vector<std::string*> write_bufs_;
+  const OutputStats** compaction_stats_;
   DirLogger<T>** dirs_;
   LogSink* data_;
+  Env* env_;
 };
 
 template <typename T>
-DirWriterImpl<T>::DirWriterImpl(const DirOptions& options)
-    : options_(options),
+DirWriterImpl<T>::DirWriterImpl(const DirOptions& o, const std::string& d)
+    : options_(o),
       bg_cv_(&mutex_),
       cv_(&mutex_),
+      dirname_(d),
       num_epochs_(0),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
       has_pending_flush_(false),
       finished_(false),
       dirs_(NULL),
-      data_(NULL) {}
+      data_(NULL),
+      env_(options_.env) {}
 
 template <typename T>
 DirWriterImpl<T>::~DirWriterImpl() {
@@ -313,6 +256,7 @@ DirWriterImpl<T>::~DirWriterImpl() {
       dirs_[i]->Unref();
     }
   }
+  delete[] compaction_stats_;
   delete[] dirs_;
   if (data_ != NULL) {
     data_->Unref();
@@ -352,29 +296,27 @@ Status DirWriterImpl<T>::EnsureDataPadding(LogSink* sink, size_t footer_size) {
 template <typename T>
 Status DirWriterImpl<T>::Finalize() {
   mutex_.AssertHeld();
+  uint32_t total_epochs = static_cast<uint32_t>(num_epochs_);
+  std::string ff = FooterFileName(dirname_);
+  mutex_.Unlock();  // Unlock during i/o operations
+  Footer footer = ToFooter(options_);
   BlockHandle dummy_handle;
-  Footer footer;
 
   dummy_handle.set_offset(0);
   dummy_handle.set_size(0);
   footer.set_epoch_index_handle(dummy_handle);
-
-  footer.set_num_epoches(0);
-  footer.set_mode(static_cast<unsigned char>(options_.mode));
-  footer.set_lg_parts(static_cast<uint32_t>(options_.lg_parts));
-  footer.set_skip_checksums(
-      static_cast<unsigned char>(options_.skip_checksums));
+  footer.set_num_epochs(total_epochs);
 
   Status status;
-  std::string footer_buf;
-  footer.EncodeTo(&footer_buf);
+  std::string ftdata;
+  footer.EncodeTo(&ftdata);
   if (options_.tail_padding) {
-    status = EnsureDataPadding(data_, footer_buf.size());
+    status = EnsureDataPadding(data_, ftdata.size());
   }
 
   if (status.ok()) {
     data_->Lock();
-    status = data_->Lwrite(footer_buf);
+    status = data_->Lwrite(ftdata);
     data_->Unlock();
   }
 
@@ -387,6 +329,14 @@ Status DirWriterImpl<T>::Finalize() {
     }
   }
 
+  // Install a special per-directory footer
+  if (status.ok()) {
+    if (options_.rank == 0) {  // Rank 0 only
+      status = WriteStringToFileSync(env_, ftdata, ff.c_str());
+    }
+  }
+
+  mutex_.Lock();
   return status;
 }
 
@@ -507,11 +457,11 @@ Status DirWriterImpl<T>::TryBatchWrites(BatchCursor* cursor) {
   return status;
 }
 
-// Attempt to force a minor compaction on all directory partitions
-// simultaneously. If a partition cannot be compacted immediately due to a lack
-// of buffer space, skip it and add it to a waiting list so it can be
-// reattempted later. Return immediately as soon as all partitions have a minor
-// compaction scheduled. Will not wait for all compactions to finish.
+// Attempt to schedule a minor compaction on all directory partitions
+// simultaneously. If a compaction cannot be scheduled immediately due to a lack
+// of buffer space, it will be added to a waiting list so it can be reattempted
+// later. Return immediately as soon as all partitions have a minor compaction
+// scheduled. Will not wait for all compactions to finish.
 // Return OK on success, or a non-OK status on errors.
 template <typename T>
 Status DirWriterImpl<T>::TryFlush(bool ef, bool fi) {
@@ -584,6 +534,7 @@ Status DirWriterImpl<T>::Finish() {
       break;
     }
   }
+
   return status;
 }
 
@@ -611,6 +562,8 @@ Status DirWriterImpl<T>::EpochFlush(int epoch) {
     } else {
       has_pending_flush_ = true;
       const bool epoch_flush = true;
+      // Schedule a minor compaction for epoch flush
+      // Does not wait for completion
       status = TryFlush(epoch_flush);
       if (status.ok()) num_epochs_++;
       has_pending_flush_ = false;
@@ -618,6 +571,26 @@ Status DirWriterImpl<T>::EpochFlush(int epoch) {
       break;
     }
   }
+
+  // TODO: Future work
+  //  #1. TryFlush() is not idempotent, so if an epoch flush gets an error in
+  //  the
+  //    middle, the epoch num in different directory partitions may differ
+  //  #2. Better to allow log rotation to happen asynchronously --- no
+  //    need to wait for compaction to finish
+  //  #3. change LogSink->Lrotate() to create log files lazily
+  if (options_.epoch_log_rotation && status.ok()) {
+    // If log rotation is requested, must wait
+    // until compaction completes
+    status = WaitForCompaction();
+    if (status.ok()) {
+      data_->Lock();
+      // Prepare for the next epoch
+      status = data_->Lrotate(epoch + 1);
+      data_->Unlock();
+    }
+  }
+
   return status;
 }
 
@@ -824,8 +797,9 @@ uint64_t DirWriterImpl<T>::TEST_total_memory_usage() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) result += dirs_[i]->memory_usage();
-  for (size_t i = 0; i < write_bufs_.size(); i++) {
-    result += write_bufs_[i]->capacity();
+  result += data_->buffer_store()->capacity();
+  for (size_t i = 0; i < num_parts_; i++) {
+    result += dirs_[i]->indx_->buffer_store()->capacity();
   }
   return result;
 }
@@ -834,7 +808,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_raw_index_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+  for (size_t i = 0; i < num_parts_; i++) {
     result += compaction_stats_[i]->index_size;
   }
   return result;
@@ -844,7 +818,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_raw_filter_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+  for (size_t i = 0; i < num_parts_; i++) {
     result += compaction_stats_[i]->filter_size;
   }
   return result;
@@ -854,7 +828,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_raw_data_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+  for (size_t i = 0; i < num_parts_; i++) {
     result += compaction_stats_[i]->data_size;
   }
   return result;
@@ -864,7 +838,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_value_bytes() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+  for (size_t i = 0; i < num_parts_; i++) {
     result += compaction_stats_[i]->value_size;
   }
   return result;
@@ -874,7 +848,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_key_bytes() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < compaction_stats_.size(); i++) {
+  for (size_t i = 0; i < num_parts_; i++) {
     result += compaction_stats_[i]->key_size;
   }
   return result;
@@ -912,97 +886,55 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   return result;
 }
 
-static void PrintSinkInfo(const std::string& name, size_t mem_size) {
-#if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Writing %s, buffer reserved: %s", name.c_str(),
-          PrettySize(mem_size).c_str());
-#endif
-}
-
-// Try opening a log sink and store its handle in *result.
-static Status OpenSink(
-    LogSink** result, const std::string& fname, Env* env,
-    size_t max_buf = 0,  // Max write buffering
-    size_t min_buf = 0,  // Min write size
-    port::Mutex* io_mutex =
-        NULL,  // Forces external synchronization among multiple threads
-    std::vector<std::string*>* write_bufs =
-        NULL,  // Facilitate the measurement of memory usage,
-    WritableFileStats* io_stats = NULL  // Enable I/O monitoring
-    ) {
-  *result = NULL;
-  WritableFile* base = NULL;
-  Status status = env->NewWritableFile(fname.c_str(), &base);
-  if (status.ok()) {
-    assert(base != NULL);
-  } else {
-    return status;
-  }
-
-  WritableFile* file;  // Bind to an external stats for monitoring
-  if (io_stats != NULL) {
-    file = new MeasuredWritableFile(io_stats, base);
-  } else {
-    file = base;
-  }
-  if (min_buf != 0) {
-    MinMaxBufferedWritableFile* buffered =
-        new MinMaxBufferedWritableFile(file, min_buf, max_buf);
-    write_bufs->push_back(buffered->buffer_store());
-    file = buffered;
-  } else {
-    // No writer buffer?
-  }
-
-  PrintSinkInfo(fname, max_buf);
-  LogSink* sink = new LogSink(fname, file, io_mutex);
-  sink->Ref();
-
-  *result = sink;
-  return status;
-}
-
-// Open a directory writer instance according to the instantiated type T.
-// Return OK on success, or a non-OK status on errors.
+// Open a directory writer instance according to the instantiated implementation
+// type T. Return OK on success, or a non-OK status on errors.
 template <typename T>
-Status DirWriter::InternalOpen(T* impl, const DirOptions& options,
-                               const std::string& dirname) {
+Status DirWriter::TryDirOpen(T* impl) {
   Status status;
-  const uint32_t num_parts = static_cast<uint32_t>(1 << options.lg_parts);
-  const int my_rank = options.rank;
-  Env* const env = options.env;
-  if (options.is_env_pfs) {
+  assert(impl != NULL);
+  assert(dynamic_cast<DirWriter*>(impl) != NULL);
+  const DirOptions* const options = &impl->options_;
+  const uint32_t num_parts = static_cast<uint32_t>(1 << options->lg_parts);
+  const int my_rank = options->rank;
+  Env* const env = options->env;
+  if (options->is_env_pfs) {
     // Ignore error since it may already exist
-    env->CreateDir(dirname.c_str());
+    env->CreateDir(impl->dirname_.c_str());
   }
 
   std::vector<DirLogger<typename T::FilterType>*> plfsdirs(num_parts, NULL);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
-  std::vector<const OutputStats*> compaction_stats;
-  std::vector<std::string*> write_bufs;
-  WritableFileStats* io_stats =
-      options.measure_writes ? &impl->io_stats_ : NULL;
-  size_t min = options.min_data_buffer;
-  size_t max = options.data_buffer;
-  status = OpenSink(&data[0], DataFileName(dirname, my_rank), env, max, min,
-                    &impl->io_mutex_, &write_bufs, io_stats);
+  std::vector<const OutputStats*> output_stats;
+  LogSink::LogOptions io_opts;
+  io_opts.rank = my_rank;
+  io_opts.type = LogType::kData;
+  if (options->epoch_log_rotation) io_opts.rotation = kExtCtrl;
+  if (options->measure_writes) io_opts.stats = &impl->io_stats_;
+  io_opts.mu = &impl->io_mutex_;
+  io_opts.min_buf = options->min_data_buffer;
+  io_opts.max_buf = options->data_buffer;
+  io_opts.env = env;
+  status = LogSink::Open(io_opts, impl->dirname_, &data[0]);
   if (status.ok()) {
-    port::Mutex* const mtx = NULL;  // No synchronization needed for index files
     for (size_t i = 0; i < num_parts; i++) {
       plfsdirs[i] = new DirLogger<typename T::FilterType>(
           impl->options_, i, &impl->mutex_, &impl->bg_cv_);
-      WritableFileStats* idx_io_stats =
-          options.measure_writes ? &plfsdirs[i]->io_stats_ : NULL;
-      size_t idx_min = options.min_index_buffer;
-      size_t idx_max = options.index_buffer;
-      status = OpenSink(&index[i], IndexFileName(dirname, my_rank, int(i)), env,
-                        idx_max, idx_min, mtx, &write_bufs, idx_io_stats);
+      LogSink::LogOptions idx_opts;
+      idx_opts.rank = my_rank;
+      idx_opts.sub_partition = static_cast<int>(i);
+      idx_opts.type = LogType::kIndex;
+      if (options->measure_writes) idx_opts.stats = &plfsdirs[i]->io_stats_;
+      idx_opts.mu = NULL;
+      idx_opts.min_buf = options->min_index_buffer;
+      idx_opts.max_buf = options->index_buffer;
+      idx_opts.env = env;
+      status = LogSink::Open(idx_opts, impl->dirname_, &index[i]);
       plfsdirs[i]->Ref();
       if (status.ok()) {
         plfsdirs[i]->Open(data[0], index[i]);
         const OutputStats* os = plfsdirs[i]->output_stats();
-        compaction_stats.push_back(os);
+        output_stats.push_back(os);
       } else {
         break;
       }
@@ -1010,19 +942,18 @@ Status DirWriter::InternalOpen(T* impl, const DirOptions& options,
   }
 
   if (status.ok()) {
+    const OutputStats** compaction_stats = new const OutputStats*[num_parts];
     DirLogger<typename T::FilterType>** dirs =
         new DirLogger<typename T::FilterType>*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {
       assert(plfsdirs[i] != NULL);
+      compaction_stats[i] = output_stats[i];
       dirs[i] = plfsdirs[i];
       dirs[i]->Ref();
     }
     impl->data_ = data[0];
     impl->data_->Ref();
-    impl->compaction_stats_.swap(compaction_stats);
-    // Weak references to log buffers that must not be deleted
-    // during the lifetime of this directory.
-    impl->write_bufs_.swap(write_bufs);
+    impl->compaction_stats_ = compaction_stats;
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
     impl->dirs_ = dirs;
@@ -1098,16 +1029,17 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
           int(options.is_env_pfs) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s",
           ToDebugString(options.mode).c_str());
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d",
-          1 << options.lg_parts);
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d (lg_parts=%d)",
+          1 << options.lg_parts, options.lg_parts);
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", options.rank);
 #endif
 
   Status status;
   // Port to different filter types
   if (options.filter == kBloomFilter) {
-    DirWriterImpl<BloomBlock>* impl = new DirWriterImpl<BloomBlock>(options);
-    status = InternalOpen(impl, options, dirname);
+    DirWriterImpl<BloomBlock>* impl =
+        new DirWriterImpl<BloomBlock>(options, dirname);
+    status = TryDirOpen(impl);
     if (status.ok()) {
       *result = impl;
     } else {
@@ -1116,8 +1048,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
   } else if (options.filter == kBitmapFilter) {
     typedef BitmapBlock<UncompressedFormat> UncompressedBitmapBlock;
     DirWriterImpl<UncompressedBitmapBlock>* impl =
-        new DirWriterImpl<UncompressedBitmapBlock>(options);
-    status = InternalOpen(impl, options, dirname);
+        new DirWriterImpl<UncompressedBitmapBlock>(options, dirname);
+    status = TryDirOpen(impl);
     if (status.ok()) {
       *result = impl;
     } else {
@@ -1135,8 +1067,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
     }
   } else {
     DirWriterImpl<EmptyFilterBlock>* impl =
-        new DirWriterImpl<EmptyFilterBlock>(options);
-    status = InternalOpen(impl, options, dirname);
+        new DirWriterImpl<EmptyFilterBlock>(options, dirname);
+    status = TryDirOpen(impl);
     if (status.ok()) {
       *result = impl;
     } else {
@@ -1200,79 +1132,6 @@ DirReaderImpl::~DirReaderImpl() {
   }
 }
 
-static void PrintSourceInfo(const std::string& name, size_t mem_size) {
-#if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Reading %s, cache size: %s", name.c_str(),
-          PrettySize(mem_size).c_str());
-#endif
-}
-
-static Status LoadSource(LogSource** result, const std::string& fname, Env* env,
-                         size_t read_size = 8 << 20,
-                         SequentialFileStats* stats = NULL) {
-  *result = NULL;
-  SequentialFile* base = NULL;
-  uint64_t size = 0;
-  Status status = env->NewSequentialFile(fname.c_str(), &base);
-  if (status.ok()) {
-    status = env->GetFileSize(fname.c_str(), &size);
-    if (!status.ok()) {
-      delete base;
-    }
-  }
-  if (status.ok()) {
-    SequentialFile* file;  // Bind to an external stats for monitoring
-    if (stats != NULL) {
-      file = new MeasuredSequentialFile(stats, base);
-    } else {
-      file = base;
-    }
-    WholeFileBufferedRandomAccessFile* buffered_file =
-        new WholeFileBufferedRandomAccessFile(file, size, read_size);
-    status = buffered_file->Load();
-    if (status.ok()) {
-      PrintSourceInfo(fname, size);
-      LogSource* src = new LogSource(buffered_file, size);
-      src->Ref();
-
-      *result = src;
-    } else {
-      delete buffered_file;
-    }
-  }
-
-  return status;
-}
-
-static Status OpenSource(LogSource** result, const std::string& fname, Env* env,
-                         RandomAccessFileStats* stats = NULL) {
-  *result = NULL;
-  RandomAccessFile* base = NULL;
-  uint64_t size = 0;
-  Status status = env->NewRandomAccessFile(fname.c_str(), &base);
-  if (status.ok()) {
-    status = env->GetFileSize(fname.c_str(), &size);
-    if (!status.ok()) {
-      delete base;
-    }
-  }
-  if (status.ok()) {
-    RandomAccessFile* file;  // Bind to an external stats for monitoring
-    if (stats != NULL) {
-      file = new MeasuredRandomAccessFile(stats, base);
-    } else {
-      file = base;
-    }
-    PrintSourceInfo(fname, 0);
-    LogSource* src = new LogSource(file, size);
-    src->Ref();
-
-    *result = src;
-  }
-
-  return status;
-}
-
 Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
                               size_t tmp_length, size_t* table_seeks,
                               size_t* seeks) {
@@ -1282,24 +1141,25 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
   assert(part < num_parts_);
   MutexLock ml(&mutex_);
   if (dirs_[part] == NULL) {
-    mutex_.Unlock();  // Unlock when load dir indexes
+    mutex_.Unlock();  // Unlock when fetching dir indexes
     LogSource* indx = NULL;
     Dir* dir = new Dir(options_, &mutex_, &cond_cv_);
     dir->Ref();
-    SequentialFileStats* io_stats =
-        options_.measure_reads ? &dir->io_stats_ : NULL;
-    const size_t io_size = options_.read_size;
-    status = LoadSource(&indx, IndexFileName(name_, options_.rank, part),
-                        options_.env, io_size, io_stats);
+    LogSource::LogOptions idx_opts;
+    idx_opts.type = LogType::kIndex;
+    idx_opts.sub_partition = static_cast<int>(part);
+    idx_opts.rank = options_.rank;
+    if (options_.measure_reads) idx_opts.seq_stats = &dir->io_stats_;
+    idx_opts.io_size = options_.read_size;
+    idx_opts.env = options_.env;
+    status = LogSource::Open(idx_opts, name_, &indx);
     if (status.ok()) {
       status = dir->Open(indx);
     }
     mutex_.Lock();
     if (status.ok()) {
-      dir->RebindDataSource(data_);
-      if (dirs_[part] != NULL) {
-        dirs_[part]->Unref();
-      }
+      dir->InstallDataSource(data_);
+      if (dirs_[part] != NULL) dirs_[part]->Unref();
       dirs_[part] = dir;
       dirs_[part]->Ref();
     }
@@ -1348,23 +1208,26 @@ DirReader::~DirReader() {}
 
 static DirOptions SanitizeReadOptions(const DirOptions& options) {
   DirOptions result = options;
+  if (result.num_epochs < 0) result.num_epochs = -1;
+  if (result.lg_parts < 0) result.lg_parts = -1;
   if (result.env == NULL) {
     result.env = Env::Default();
   }
   return result;
 }
 
-Status DirReader::Open(const DirOptions& opts, const std::string& name,
+Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
                        DirReader** result) {
   *result = NULL;
   DirOptions options = SanitizeReadOptions(opts);
-  const uint32_t num_parts = 1u << options.lg_parts;
+  uint32_t num_parts =  // May have to be lazy initialized from the footer
+      options.lg_parts == -1 ? 0 : 1u << options.lg_parts;
   const int my_rank = options.rank;
   Env* const env = options.env;
-  LogSource* data = NULL;
   Status status;
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.name -> %s (mode=read)", name.c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.name -> %s (mode=read)",
+          dirname.c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.reader_pool -> %s",
           options.reader_pool != NULL
               ? options.reader_pool->ToDebugString().c_str()
@@ -1383,61 +1246,87 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
           int(options.skip_checksums) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.measure_reads -> %s",
           int(options.measure_reads) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.epoch_log_rotation -> %s",
+          int(options.epoch_log_rotation) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.allow_env_threads -> %s",
           int(options.allow_env_threads) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.is_env_pfs -> %s",
           int(options.is_env_pfs) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s",
           ToDebugString(options.mode).c_str());
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d", int(num_parts));
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.num_epochs -> %d", options.num_epochs);
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d (lg_parts=%d)",
+          int(num_parts), options.lg_parts);
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", my_rank);
 #endif
-  DirReaderImpl* impl = new DirReaderImpl(options, name);
-  if (options.measure_reads) {
-    status =
-        OpenSource(&data, DataFileName(name, my_rank), env, &impl->io_stats_);
-  } else {
-    status = OpenSource(&data, DataFileName(name, my_rank), env);
-  }
-  char space[Footer::kEncodedLength];
   Footer footer;
-  Slice input;
-  if (!status.ok()) {
-    // Error
-  } else if (data->Size() < sizeof(space)) {
-    status = Status::Corruption("Dir data too short to be valid");
-  } else if (options.paranoid_checks) {
-    status =
-        data->Read(data->Size() - sizeof(space), sizeof(space), &input, space);
-    if (status.ok()) {
-      status = footer.DecodeFrom(&input);
+  char tmp[Footer::kEncodedLength];
+  std::string primary;  // Primary copy of the footer
+  if (options.lg_parts == -1 || options.num_epochs == -1 ||
+      options.paranoid_checks) {
+    status = ReadFileToString(env, FooterFileName(dirname).c_str(), &primary);
+    if (!status.ok()) {
+      return status;
+    } else if (primary.size() != Footer::kEncodedLength) {
+      return Status::Corruption("Footer file size is wrong");
     }
+    Slice input = primary;
+    status = footer.DecodeFrom(&input);
+    if (!status.ok()) {
+      return status;
+    }
+
+    // Override a subset of user-provided options
+    if (static_cast<bool>(footer.skip_checksums()) != options.skip_checksums)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.skip_checksums -> %s (was %s)",
+           static_cast<bool>(footer.skip_checksums()) ? "Yes" : "No",
+           options.skip_checksums ? "Yes" : "No");
+    options.skip_checksums = static_cast<bool>(footer.skip_checksums());
+    if (static_cast<bool>(footer.epoch_log_rotation()) !=
+        options.epoch_log_rotation)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.epoch_log_rotation -> %s (was %s)",
+           static_cast<bool>(footer.epoch_log_rotation()) ? "Yes" : "No",
+           options.epoch_log_rotation ? "Yes" : "No");
+    options.epoch_log_rotation = static_cast<bool>(footer.epoch_log_rotation());
+    if (static_cast<DirMode>(footer.mode()) != options.mode)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.mode -> %s (was %s)",
+           ToDebugString(static_cast<DirMode>(footer.mode())).c_str(),
+           ToDebugString(options.mode).c_str());
+    options.mode = static_cast<DirMode>(footer.mode());
+    if (static_cast<int>(footer.num_epochs()) != options.num_epochs)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.num_epochs -> %d (was %d)",
+           static_cast<int>(footer.num_epochs()), options.num_epochs);
+    options.num_epochs = static_cast<int>(footer.num_epochs());
+    if (static_cast<int>(footer.lg_parts()) != options.lg_parts)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.memtable_parts -> %d (was %d)",
+           1 << footer.lg_parts(), int(num_parts));
+    options.lg_parts = static_cast<int>(footer.lg_parts());
+    num_parts = 1u << options.lg_parts;
   }
 
-  // Update options
-  if (options.paranoid_checks) {
+  LogSource* data = NULL;
+  DirReaderImpl* impl = new DirReaderImpl(options, dirname);
+  LogSource::LogOptions io_opts;
+  io_opts.rank = my_rank;
+  io_opts.type = LogType::kData;
+  io_opts.sub_partition = -1;
+  if (options.epoch_log_rotation) io_opts.num_rotas = options.num_epochs + 1;
+  if (options.measure_reads) io_opts.stats = &impl->io_stats_;
+  io_opts.env = env;
+  status = LogSource::Open(io_opts, dirname, &data);
+  if (!status.ok()) {
+    // Error
+  } else if (data->Size(data->LastFileIndex()) < Footer::kEncodedLength) {
+    status = Status::Corruption("Dir data log file too short to be valid");
+  } else if (options.paranoid_checks) {
+    Slice input;
+    uint64_t off = data->Size(data->LastFileIndex()) - Footer::kEncodedLength;
+    status = data->Read(off, Footer::kEncodedLength, &input, tmp,
+                        data->LastFileIndex());
     if (status.ok()) {
-      impl->options_.lg_parts = static_cast<int>(footer.lg_parts());
-#if VERBOSE >= 2
-      if (impl->options_.lg_parts != options.lg_parts)
-        Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d -> %d",
-                int(num_parts), 1 << impl->options_.lg_parts);
-#endif
-      impl->options_.skip_checksums =
-          static_cast<bool>(footer.skip_checksums());
-#if VERBOSE >= 2
-      if (impl->options_.skip_checksums != options.skip_checksums)
-        Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.skip_checksums -> %s -> %s",
-                int(options.skip_checksums) ? "Yes" : "No",
-                int(impl->options_.skip_checksums) ? "Yes" : "No");
-#endif
-      impl->options_.mode = static_cast<DirMode>(footer.mode());
-#if VERBOSE >= 2
-      if (impl->options_.mode != options.mode)
-        Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s -> %s",
-                ToDebugString(options.mode).c_str(),
-                ToDebugString(impl->options_.mode).c_str());
-#endif
+      if (input.ToString() != primary) {
+        status = Status::Corruption("Footer replica corrupted");
+      }
     }
   }
 
@@ -1457,52 +1346,6 @@ Status DirReader::Open(const DirOptions& opts, const std::string& name,
     data->Unref();
   }
 
-  return status;
-}
-
-static Status DeleteLogStream(const std::string& fname, Env* env) {
-#if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Removing %s ...", fname.c_str());
-#endif
-  return env->DeleteFile(fname.c_str());
-}
-
-Status DestroyDir(const std::string& dirname, const DirOptions& opts) {
-  Status status;
-  DirOptions options = SanitizeReadOptions(opts);
-  Env* const env = options.env;
-  if (options.is_env_pfs) {
-    std::vector<std::string> names;
-    status = env->GetChildren(dirname.c_str(), &names);
-    if (status.ok()) {
-      for (size_t i = 0; i < names.size(); i++) {
-        if (!Slice(names[i]).starts_with(".")) {
-          status = DeleteLogStream(dirname + "/" + names[i], env);
-          if (!status.ok()) {
-            break;
-          }
-        }
-      }
-
-      env->DeleteDir(dirname.c_str());
-    }
-  } else {
-    const size_t num_parts = 1u << options.lg_parts;
-    const int my_rank = options.rank;
-    std::vector<std::string> names;
-    names.push_back(DataFileName(dirname, my_rank));
-    for (size_t part = 0; part < num_parts; part++) {
-      names.push_back(IndexFileName(dirname, my_rank, part));
-    }
-    if (status.ok()) {
-      for (size_t i = 0; i < names.size(); i++) {
-        status = DeleteLogStream(names[i], env);
-        if (!status.ok()) {
-          break;
-        }
-      }
-    }
-  }
   return status;
 }
 

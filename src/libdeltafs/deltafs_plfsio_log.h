@@ -25,6 +25,8 @@ namespace plfsio {
 // Fixed # bytes for each chunk header.
 static const size_t kChunkHeaderSize = 9;
 
+class LogSink;
+
 // Write blocks as log chunks that can be repaired and replayed by a future
 // reader. Each log chunk has the following format:
 //  - header (9 bytes)
