@@ -33,7 +33,7 @@ DirOptions::DirOptions()
       skip_sort(false),
       key_size(8),
       value_size(32),
-      filter(kBloomFilter),
+      filter(FilterType::kBloomFilter),
       filter_bits_per_key(0),
       bf_bits_per_key(8),
       bm_key_bits(24),
@@ -55,7 +55,7 @@ DirOptions::DirOptions()
       slowdown_micros(0),
       paranoid_checks(false),
       ignore_filters(false),
-      compression(kNoCompression),
+      compression(CompressionType::kNoCompression),
       force_compression(false),
       verify_checksums(false),
       skip_checksums(false),
@@ -70,6 +70,18 @@ DirOptions::DirOptions()
       is_env_pfs(true),
       rank(0) {}
 
+static bool ParseFilterType(const Slice& value, FilterType* result) {
+  if (value.starts_with("bloom")) {
+    *result = FilterType::kBloomFilter;
+    return true;
+  } else if (value.starts_with("bitmap")) {
+    *result = FilterType::kBitmapFilter;
+    return true;
+  } else {
+    return false;
+  }
+}
+
 DirOptions ParseDirOptions(const char* input) {
   DirOptions options;
   std::vector<std::string> conf_segments;
@@ -81,6 +93,7 @@ DirOptions ParseDirOptions(const char* input) {
     if (conf_pair.size() != 2) {
       continue;
     }
+    FilterType filter_type;
     Slice conf_key = conf_pair[0];
     Slice conf_value = conf_pair[1];
     uint64_t num;
@@ -152,6 +165,10 @@ DirOptions ParseDirOptions(const char* input) {
     } else if (conf_key == "ignore_filters") {
       if (ParsePrettyBool(conf_value, &flag)) {
         options.ignore_filters = flag;
+      }
+    } else if (conf_key == "filter") {
+      if (ParseFilterType(conf_value, &filter_type)) {
+        options.filter = filter_type;
       }
     } else if (conf_key == "filter_bits_per_key") {
       if (ParsePrettyNumber(conf_value, &num)) {
