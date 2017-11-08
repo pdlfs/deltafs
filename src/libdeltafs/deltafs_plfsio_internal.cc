@@ -376,7 +376,7 @@ void TableLogger::EndTable(T* filter_block, ChunkType filter_type) {
       return;  // Abort
     }
   } else {
-    filter_handle.set_offset(0);  //
+    filter_handle.set_offset(0);  // No filter configured
     filter_handle.set_size(0);
   }
 

@@ -195,12 +195,14 @@ class VarintFormat {
     std::sort(overflowed.begin(), overflowed.end());
     size_t overflowed_idx = 0;
     size_t last_one = 0;
+    std::vector<size_t> bucket_keys;
     // For every bucket
     for(size_t i = 0; i < bucket_num_; i++) {
       // Bucket key size
       unsigned char key_num = (unsigned char)working_space_[bucket_size_*i];
       size_t offset = bucket_size_*i + 1;
-      std::vector<size_t> bucket_keys;
+      // Clear vector for repeated use.
+      bucket_keys.clear();
       for(int j = 0; j< key_num; j++) {
         if(j < bucket_size_-1)
           bucket_keys.push_back((unsigned char)working_space_[offset+j] + (i<<8));
@@ -208,7 +210,7 @@ class VarintFormat {
           bucket_keys.push_back(overflowed[overflowed_idx++]);
       }
       std::sort(bucket_keys.begin(), bucket_keys.end());
-      for(auto it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
+      for(std::vector<size_t>::iterator it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
         size_t distance = *it-last_one;
         last_one = *it;
         // Encoding the distance to variable length encode.
