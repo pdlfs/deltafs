@@ -33,6 +33,7 @@ DirOptions::DirOptions()
       skip_sort(false),
       key_size(8),
       value_size(32),
+      filter(kBloomFilter),
       filter_bits_per_key(0),
       bf_bits_per_key(8),
       bm_key_bits(24),
