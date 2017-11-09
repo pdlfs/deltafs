@@ -1058,8 +1058,18 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
   } else if (options.filter == kVarintFilter) {
     typedef BitmapBlock<VarintFormat> VarintBitmapBlock;
     DirWriterImpl<VarintBitmapBlock>* impl =
-        new DirWriterImpl<VarintBitmapBlock>(options);
-    status = InternalOpen(impl, options, dirname);
+        new DirWriterImpl<VarintBitmapBlock>(options, dirname);
+    status = TryDirOpen(impl);
+    if (status.ok()) {
+      *result = impl;
+    } else {
+      delete impl;
+    }
+  } else if (options.filter == kVarintPlusFilter) {
+    typedef BitmapBlock<VarintPlusFormat> VarintPlusBitmapBlock;
+    DirWriterImpl<VarintPlusBitmapBlock>* impl =
+        new DirWriterImpl<VarintPlusBitmapBlock>(options, dirname);
+    status = TryDirOpen(impl);
     if (status.ok()) {
       *result = impl;
     } else {

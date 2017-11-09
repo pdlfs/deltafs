@@ -1014,6 +1014,8 @@ template class DirLogger<BitmapBlock<UncompressedFormat> >;
 
 template class DirLogger<BitmapBlock<VarintFormat> >;
 
+template class DirLogger<BitmapBlock<VarintPlusFormat> >;
+
 template class DirLogger<EmptyFilterBlock>;
 
 static Status ReadBlock(LogSource* source, const DirOptions& options,

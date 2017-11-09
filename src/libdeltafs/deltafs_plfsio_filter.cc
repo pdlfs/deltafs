@@ -150,9 +150,9 @@ class UncompressedFormat {
 };
 
 // Encoding a bitmap using a modified varint scheme.
-class VarintFormat {
+class CompressedFormat {
  public:
-  VarintFormat(const DirOptions& options, std::string* space)
+  CompressedFormat(const DirOptions& options, std::string* space)
       : key_bits_(options.bm_key_bits), space_(space) {
     bits_ = 1u << key_bits_;  // Logic domain space (total # unique keys)
     bucket_num_ = 1u << (key_bits_-8);
@@ -165,7 +165,8 @@ class VarintFormat {
     working_space_.clear();
     overflowed.clear();
     // Calculate bucket size in probability
-    bucket_size_ = (num_keys+bucket_num_-1)/bucket_num_ + 1; // Extra byte to store the number of key in the bucket
+    // Extra byte to store the number of key in the bucket
+    bucket_size_ = (num_keys+bucket_num_-1)/bucket_num_ + 1;
     working_space_.resize(bucket_size_ * bucket_num_, 0);
     // Calculate the approximate final result size
     size_t approx_size = (num_keys*10 + 7)/8; // Assume 10 bits/key
@@ -189,68 +190,18 @@ class VarintFormat {
     working_space_[bucket_index*bucket_size_] = key_index+1;
   }
 
+  const size_t MemUsage() {
+    return space_->capacity() + working_space_.capacity() + overflowed.size() * sizeof(size_t);
+  }
+
   // Finalize the bitmap representation.
   // Return the final buffer size.
-  size_t Finish() {
-    std::sort(overflowed.begin(), overflowed.end());
-    size_t overflowed_idx = 0;
-    size_t last_one = 0;
-    std::vector<size_t> bucket_keys;
-    // For every bucket
-    for(size_t i = 0; i < bucket_num_; i++) {
-      // Bucket key size
-      unsigned char key_num = (unsigned char)working_space_[bucket_size_*i];
-      size_t offset = bucket_size_*i + 1;
-      // Clear vector for repeated use.
-      bucket_keys.clear();
-      for(int j = 0; j< key_num; j++) {
-        if(j < bucket_size_-1)
-          bucket_keys.push_back((unsigned char)working_space_[offset+j] + (i<<8));
-        else
-          bucket_keys.push_back(overflowed[overflowed_idx++]);
-      }
-      std::sort(bucket_keys.begin(), bucket_keys.end());
-      for(std::vector<size_t>::iterator it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
-        size_t distance = *it-last_one;
-        last_one = *it;
-        // Encoding the distance to variable length encode.
-        unsigned char b = (unsigned char)(distance % 128);
-        while (distance / 128 > 0) {
-          // Set continue bit
-          b |= 1 << 7;
-          space_->push_back(b);
-          distance /= 128;
-          b = (unsigned char)(distance % 128);
-        }
-        space_->push_back(b);
-      }
-    }
-    return space_->size();
-  }
+  size_t Finish();
 
   // Return true iff the i-th bit is set in the given bitmap.
-  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
-    size_t index = 0;
-    for(size_t i = 0; i < input.size(); i++) {
-      size_t runLen = 0;
-      size_t bytes = 0;
-      while((input[i] & (1<<7)) !=0) {
-        runLen += (size_t)(input[i] & ((1<<7)-1)) << (bytes*7);
-        i++;
-        bytes++;
-      }
-      runLen += (size_t)input[i] << (bytes*7);
-      if(index + runLen == bit)
-        return true;
-      else if (index + runLen > bit)
-        return false;
-      else
-        index += runLen;
-    }
-    return false;
-  }
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& input);
 
- private:
+ protected:
   // Key size in bits
   const size_t key_bits_;  // Domain space
   // Underlying space for the bitmap
@@ -266,6 +217,148 @@ class VarintFormat {
   size_t bucket_num_;
   size_t bucket_size_;
   std::vector<size_t> overflowed;
+};
+
+class VarintFormat: public CompressedFormat {
+ public:
+  VarintFormat(const DirOptions& options, std::string* space)
+      :CompressedFormat(options, space) {}
+
+  size_t Finish() {
+    std::sort(overflowed.begin(), overflowed.end());
+    size_t overflowed_idx = 0;
+    size_t last_one = 0;
+    std::vector<size_t> bucket_keys;
+    // For every bucket
+    for(size_t i = 0; i < bucket_num_; i++) {
+      // Bucket key size
+      unsigned char key_num = static_cast<unsigned char>(working_space_[bucket_size_*i]);
+      size_t offset = bucket_size_*i + 1;
+      // Clear vector for repeated use.
+      bucket_keys.clear();
+      for(int j = 0; j< key_num; j++) {
+        if(j < bucket_size_-1)
+          bucket_keys.push_back(static_cast<unsigned char>(working_space_[offset+j]) + (i<<8));
+        else
+          bucket_keys.push_back(overflowed[overflowed_idx++]);
+      }
+      std::sort(bucket_keys.begin(), bucket_keys.end());
+      for(std::vector<size_t>::iterator it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
+        size_t distance = *it-last_one;
+        last_one = *it;
+        // Encoding the distance to variable length encode.
+        unsigned char b = static_cast<unsigned char>(distance % 128);
+        while (distance / 128 > 0) {
+          // Set continue bit
+          b |= 1 << 7;
+          space_->push_back(b);
+          distance /= 128;
+          b = static_cast<unsigned char>(distance % 128);
+        }
+        space_->push_back(b);
+      }
+    }
+    return space_->size();
+  }
+
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
+    size_t index = 0;
+    for(size_t i = 0; i < input.size(); i++) {
+      size_t runLen = 0;
+      size_t bytes = 0;
+      while((input[i] & (1<<7)) !=0) {
+        runLen += static_cast<size_t>(input[i] & ((1<<7)-1)) << (bytes*7);
+        i++;
+        bytes++;
+      }
+      runLen += static_cast<size_t>(input[i]) << (bytes*7);
+      if(index + runLen == bit)
+        return true;
+      else if (index + runLen > bit)
+        return false;
+      else
+        index += runLen;
+    }
+    return false;
+  }
+
+};
+
+class VarintPlusFormat: public CompressedFormat {
+ public:
+  VarintPlusFormat(const DirOptions& options, std::string* space)
+      :CompressedFormat(options, space) {}
+
+  size_t Finish() {
+    std::sort(overflowed.begin(), overflowed.end());
+    size_t overflowed_idx = 0;
+    size_t last_one = 0;
+    std::vector<size_t> bucket_keys;
+    // For every bucket
+    for(size_t i = 0; i < bucket_num_; i++) {
+      // Bucket key size
+      unsigned char key_num = static_cast<unsigned char>(working_space_[bucket_size_*i]);
+      size_t offset = bucket_size_*i + 1;
+      // Clear vector for repeated use.
+      bucket_keys.clear();
+      for(int j = 0; j< key_num; j++) {
+        if(j < bucket_size_-1)
+          bucket_keys.push_back(static_cast<unsigned char>(working_space_[offset+j]) + (i<<8));
+        else
+          bucket_keys.push_back(overflowed[overflowed_idx++]);
+      }
+      std::sort(bucket_keys.begin(), bucket_keys.end());
+      for(std::vector<size_t>::iterator it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
+        size_t distance = *it-last_one;
+        last_one = *it;
+        // Encoding the distance to variable length plus encode.
+        if(distance <= 254) {
+          space_->push_back(static_cast<unsigned char>(distance));
+        } else {
+          space_->push_back(static_cast<unsigned char>(255));
+          distance -= 254;
+          unsigned char b = static_cast<unsigned char>(distance % 128);
+          while (distance / 128 > 0) {
+            // Set continue bit
+            b |= 1 << 7;
+            space_->push_back(b);
+            distance /= 128;
+            b = static_cast<unsigned char>(distance % 128);
+          }
+          space_->push_back(b);
+        }
+      }
+    }
+    return space_->size();
+  }
+
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
+    size_t index = 0;
+    for(size_t i = 0; i < input.size(); i++) {
+      size_t runLen = 0;
+      size_t bytes = 0;
+      if(static_cast<unsigned char>(input[i])<=254) {
+        runLen += static_cast<unsigned char>(input[i]);
+      } else {
+        runLen += 254;
+        i++;
+        while((input[i] & (1<<7)) !=0) {
+          runLen += static_cast<size_t>(input[i] & ((1<<7)-1)) << (bytes*7);
+          i++;
+          bytes++;
+        }
+        runLen += static_cast<size_t>(input[i]) << (bytes*7);
+      }
+      if(index + runLen == bit)
+        return true;
+      else if (index + runLen > bit)
+        return false;
+      else
+        index += runLen;
+    }
+    return false;
+  }
+
 };
 
 template <typename T>
@@ -335,6 +428,8 @@ Slice BitmapBlock<T>::Finish() {
     space_.push_back(static_cast<char>(0));
   } else if (typeid(T)== typeid(VarintFormat)) {
     space_.push_back(static_cast<char>(1));
+  } else if (typeid(T)== typeid(VarintPlusFormat)) {
+    space_.push_back(static_cast<char>(2));
   }
   return space_;
 }
@@ -347,6 +442,8 @@ BitmapBlock<T>::~BitmapBlock() {
 template class BitmapBlock<UncompressedFormat>;
 
 template class BitmapBlock<VarintFormat>;
+
+template class BitmapBlock<VarintPlusFormat>;
 
 // Return true if the target key matches a given bitmap filter. Unlike bloom
 // filters, bitmap filters are designed with no false positives.
@@ -374,6 +471,8 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
     return UncompressedFormat::Test(i, key_bits, bitmap);
   } else if (compression == 1) {
     return VarintFormat::Test(i, key_bits, bitmap);
+  } else if (compression == 2) {
+    return VarintPlusFormat::Test(i, key_bits, bitmap);
   } else {
     return true;
   }
