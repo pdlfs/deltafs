@@ -434,7 +434,7 @@ void TableLogger::Commit() {
     if (GetLengthPrefixedSlice(&input, &key)) {
       handle.DecodeFrom(&input);
       const uint64_t offset = handle.offset();
-      handle.set_offset(base + offset);
+      handle.set_offset(base + offset);  // Finalize the block offset
       handle_encoding.clear();
       handle.EncodeTo(&handle_encoding);
       assert(offset >= BlockHandle::kMaxEncodedLength);
@@ -442,6 +442,7 @@ void TableLogger::Commit() {
           memcmp(&buffer->at(offset - BlockHandle::kMaxEncodedLength),
                  std::string(size_t(BlockHandle::kMaxEncodedLength), 0).c_str(),
                  BlockHandle::kMaxEncodedLength) == 0);
+      // Finalize the leading block handle
       memcpy(&buffer->at(offset - BlockHandle::kMaxEncodedLength),
              handle_encoding.data(), handle_encoding.size());
       if (options_.block_padding) {
@@ -475,12 +476,19 @@ void TableLogger::EndBlock() {
   if (data_block_.empty()) return;  // Empty block
   if (!ok()) return;                // Abort
 
+  // | <------------ options_.block_size (e.g. 32KB) ------------> |
+  //   block handle   block contents  block trailer  block padding
+  //                | <---------- final block contents ----------> |
+  //                          (LevelDb compatible format)
   Slice block_contents = data_block_.Finish();
   const size_t block_size = block_contents.size();
-  Slice final_block_contents;
+  Slice final_block_contents;  // With the trailer and any inserted padding
   if (options_.block_padding) {
+    // Target size for the final block contents
     const size_t padding_target =
         options_.block_size - BlockHandle::kMaxEncodedLength;
+    assert(block_size + kBlockTrailerSize <=
+           padding_target);  // Must fit in the space
     final_block_contents = data_block_.Finalize(
         !options_.skip_checksums, static_cast<uint32_t>(padding_target),
         static_cast<char>(0xff));
@@ -544,10 +552,12 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
     }
   }
 
-  // Establish a new data block
+  // Restart the block buffer
   if (pending_restart_) {
     pending_restart_ = false;
-    data_block_.SwitchBuffer(NULL);  // Restart buffer
+    data_block_.SwitchBuffer(
+        NULL);  // Continue appending to the same underlying buffer
+    // Pre-reserve enough space for the leading block handle
     data_block_.Pad(BlockHandle::kMaxEncodedLength);
     data_block_.Reset();
   }
