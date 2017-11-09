@@ -920,6 +920,25 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   return result;
 }
 
+// Return a brief summary of the configured filter.
+static std::string FilterOptions(const DirOptions& options) {
+  char tmp[50];
+  switch (options.filter) {
+    case kBitmapFilter:
+      snprintf(tmp, sizeof(tmp), "BMP (uncompressed, key_bits=%d)",
+               int(options.bm_key_bits));
+      return tmp;
+    case kBloomFilter:
+      snprintf(tmp, sizeof(tmp), "BF (bits_per_key=%d)",
+               int(options.bf_bits_per_key));
+      return tmp;
+    case kNoFilter:
+      return "N/A";
+    default:
+      return "U/K";
+  }
+}
+
 // Open a directory writer instance according to the instantiated implementation
 // type T. Return OK on success, or a non-OK status on errors.
 template <typename T>
@@ -1023,8 +1042,10 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
           PrettySize(options.key_size).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.value_size -> %s",
           PrettySize(options.value_size).c_str());
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.bf_bits_per_key -> %d",
-          int(options.bf_bits_per_key));
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.filter -> %s",
+          FilterOptions(options).c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.filter_bits_per_key -> %d",
+          int(options.filter_bits_per_key));
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.block_size -> %s",
           PrettySize(options.block_size).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.block_util -> %.2f%%",
@@ -1057,6 +1078,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
           int(options.skip_checksums) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.measure_writes -> %s",
           int(options.measure_writes) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.epoch_log_rotation -> %s",
+          int(options.epoch_log_rotation) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.allow_env_threads -> %s",
           int(options.allow_env_threads) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.is_env_pfs -> %s",
