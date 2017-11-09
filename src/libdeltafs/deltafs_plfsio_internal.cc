@@ -417,14 +417,15 @@ void TableLogger::Commit() {
   assert(num_uncommitted_data_ == num_uncommitted_indx_);
   std::string* const buffer = data_block_.buffer_store();
 
-  data_sink_->Lock();
-  assert(buffer->size() <=
-         options_.block_batch_size);  // Verify buffer size and block alignment
-  assert(buffer->size() % options_.block_size == 0);
-  // Data log file may be rotated so we must
-  // use physical offset
-  const size_t base = data_sink_->Ptell();
   Slice key;
+  data_sink_->Lock();
+  if (options_.block_padding) {
+    assert(buffer->size() % options_.block_size ==
+           0);  // Verify block alignment
+  }
+  // A data log file may be rotated so we must index against the
+  // physical offset
+  const size_t base = data_sink_->Ptell();
   int num_index_committed = 0;
   Slice input = uncommitted_indexes_;
   std::string handle_encoding;
@@ -506,19 +507,19 @@ void TableLogger::EndBlock() {
 
 void TableLogger::Add(const Slice& key, const Slice& value) {
   assert(!finished_);       // Finish() has not been called
-  assert(key.size() != 0);  // Key cannot be empty
+  assert(key.size() != 0);  // Keys cannot be empty
   if (!ok()) return;        // Abort
 
   if (!last_key_.empty()) {
-    // Keys within a single table are expected to be added in a sorted order.
+    // Keys within a single table are inserted in a weakly sorted order
     assert(key >= last_key_);
-    if (options_.mode == kUniqueDrop) {
+    if (options_.mode == kUniqueDrop) {  // Auto deduplicate
       if (key == last_key_) {
         total_num_dropped_keys_++;
         return;  // Drop
       }
     } else if (options_.mode != kMultiMap) {
-      assert(key != last_key_);
+      assert(key != last_key_);  // Keys are strongly ordered, no duplicates
     }
   }
   if (smallest_key_.empty()) {
