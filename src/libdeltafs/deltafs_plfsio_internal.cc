@@ -913,7 +913,7 @@ void DirLogger<T>::CompactMemtable() {
   const bool is_final = imm_buf_is_final_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   TableLogger* const tb = tb_;
-  T* const bf = filter_;
+  T* const ft = filter_;
   mu_->Unlock();
   const uint64_t start = GetCurrentTimeMicros();
   if (options_.listener != NULL) {
@@ -929,20 +929,21 @@ void DirLogger<T>::CompactMemtable() {
           static_cast<int>(tb_bytes_));
 #endif
 #ifndef NDEBUG
+  const OutputStats stats = tb->output_stats_;
   uint32_t num_keys = 0;
 #endif
   buffer->Finish(options_.skip_sort);
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
-  if (bf != NULL) {
-    bf->Reset(buffer->NumEntries());
+  if (ft != NULL) {
+    ft->Reset(buffer->NumEntries());
   }
   for (; iter->Valid(); iter->Next()) {
 #ifndef NDEBUG
     num_keys++;
 #endif
-    if (bf != NULL) {
-      bf->AddKey(iter->key());
+    if (ft != NULL) {
+      ft->AddKey(iter->key());
     }
     tb->Add(iter->key(), iter->value());
     if (!tb->ok()) {
@@ -951,10 +952,23 @@ void DirLogger<T>::CompactMemtable() {
   }
 
   if (tb->ok()) {
-    // Paranoid checks
+    // Double checks
     assert(num_keys == buffer->NumEntries());
     // Inject the filter into the table
-    tb->EndTable(bf, static_cast<ChunkType>(T::chunk_type()));
+    tb->EndTable(ft, static_cast<ChunkType>(T::chunk_type()));
+#ifndef NDEBUG
+#if VERBOSE >= 3
+    Verbose(
+        __LOG_ARGS__, 3, "\t+ D: %s, I: %s, F: %s",
+        PrettySize(tb->output_stats_.final_data_size - stats.final_data_size)
+            .c_str(),
+        PrettySize(tb->output_stats_.final_index_size - stats.final_index_size)
+            .c_str(),
+        PrettySize(tb->output_stats_.final_filter_size -
+                   stats.final_filter_size)
+            .c_str());
+#endif
+#endif
     if (is_epoch_flush) {
       tb->MakeEpoch();
     }
