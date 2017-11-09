@@ -933,9 +933,9 @@ static std::string FilterOptions(const DirOptions& options) {
                int(options.bf_bits_per_key));
       return tmp;
     case kNoFilter:
-      return "N/A";
+      return "Dis";
     default:
-      return "U/K";
+      return "Unk";
   }
 }
 
