@@ -64,7 +64,7 @@ DirOptions::DirOptions()
       num_epochs(-1),
       lg_parts(-1),
       listener(NULL),
-      mode(kUnique),
+      mode(DirMode::kUnique),
       env(NULL),
       allow_env_threads(false),
       is_env_pfs(true),
@@ -161,6 +161,10 @@ DirOptions ParseDirOptions(const char* input) {
     } else if (conf_key == "paranoid_checks") {
       if (ParsePrettyBool(conf_value, &flag)) {
         options.paranoid_checks = flag;
+      }
+    } else if (conf_key == "epoch_log_rotation") {
+      if (ParsePrettyBool(conf_value, &flag)) {
+        options.epoch_log_rotation = flag;
       }
     } else if (conf_key == "ignore_filters") {
       if (ParsePrettyBool(conf_value, &flag)) {
