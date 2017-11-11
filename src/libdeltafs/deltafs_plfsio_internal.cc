@@ -417,14 +417,15 @@ void TableLogger::Commit() {
   assert(num_uncommitted_data_ == num_uncommitted_indx_);
   std::string* const buffer = data_block_.buffer_store();
 
-  data_sink_->Lock();
-  assert(buffer->size() <=
-         options_.block_batch_size);  // Verify buffer size and block alignment
-  assert(buffer->size() % options_.block_size == 0);
-  // Data log file may be rotated so we must
-  // use physical offset
-  const size_t base = data_sink_->Ptell();
   Slice key;
+  data_sink_->Lock();
+  if (options_.block_padding) {
+    assert(buffer->size() % options_.block_size ==
+           0);  // Verify block alignment
+  }
+  // A data log file may be rotated so we must index against the
+  // physical offset
+  const size_t base = data_sink_->Ptell();
   int num_index_committed = 0;
   Slice input = uncommitted_indexes_;
   std::string handle_encoding;
@@ -433,7 +434,7 @@ void TableLogger::Commit() {
     if (GetLengthPrefixedSlice(&input, &key)) {
       handle.DecodeFrom(&input);
       const uint64_t offset = handle.offset();
-      handle.set_offset(base + offset);
+      handle.set_offset(base + offset);  // Finalize the block offset
       handle_encoding.clear();
       handle.EncodeTo(&handle_encoding);
       assert(offset >= BlockHandle::kMaxEncodedLength);
@@ -441,6 +442,7 @@ void TableLogger::Commit() {
           memcmp(&buffer->at(offset - BlockHandle::kMaxEncodedLength),
                  std::string(size_t(BlockHandle::kMaxEncodedLength), 0).c_str(),
                  BlockHandle::kMaxEncodedLength) == 0);
+      // Finalize the leading block handle
       memcpy(&buffer->at(offset - BlockHandle::kMaxEncodedLength),
              handle_encoding.data(), handle_encoding.size());
       if (options_.block_padding) {
@@ -474,12 +476,19 @@ void TableLogger::EndBlock() {
   if (data_block_.empty()) return;  // Empty block
   if (!ok()) return;                // Abort
 
+  // | <------------ options_.block_size (e.g. 32KB) ------------> |
+  //   block handle   block contents  block trailer  block padding
+  //                | <---------- final block contents ----------> |
+  //                          (LevelDb compatible format)
   Slice block_contents = data_block_.Finish();
   const size_t block_size = block_contents.size();
-  Slice final_block_contents;
+  Slice final_block_contents;  // With the trailer and any inserted padding
   if (options_.block_padding) {
+    // Target size for the final block contents
     const size_t padding_target =
         options_.block_size - BlockHandle::kMaxEncodedLength;
+    assert(block_size + kBlockTrailerSize <=
+           padding_target);  // Must fit in the space
     final_block_contents = data_block_.Finalize(
         !options_.skip_checksums, static_cast<uint32_t>(padding_target),
         static_cast<char>(0xff));
@@ -506,19 +515,19 @@ void TableLogger::EndBlock() {
 
 void TableLogger::Add(const Slice& key, const Slice& value) {
   assert(!finished_);       // Finish() has not been called
-  assert(key.size() != 0);  // Key cannot be empty
+  assert(key.size() != 0);  // Keys cannot be empty
   if (!ok()) return;        // Abort
 
   if (!last_key_.empty()) {
-    // Keys within a single table are expected to be added in a sorted order.
+    // Keys within a single table are inserted in a weakly sorted order
     assert(key >= last_key_);
-    if (options_.mode == kUniqueDrop) {
+    if (options_.mode == kUniqueDrop) {  // Auto deduplicate
       if (key == last_key_) {
         total_num_dropped_keys_++;
         return;  // Drop
       }
     } else if (options_.mode != kMultiMap) {
-      assert(key != last_key_);
+      assert(key != last_key_);  // Keys are strongly ordered, no duplicates
     }
   }
   if (smallest_key_.empty()) {
@@ -543,10 +552,12 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
     }
   }
 
-  // Establish a new data block
+  // Restart the block buffer
   if (pending_restart_) {
     pending_restart_ = false;
-    data_block_.SwitchBuffer(NULL);  // Restart buffer
+    data_block_.SwitchBuffer(
+        NULL);  // Continue appending to the same underlying buffer
+    // Pre-reserve enough space for the leading block handle
     data_block_.Pad(BlockHandle::kMaxEncodedLength);
     data_block_.Reset();
   }
@@ -913,7 +924,7 @@ void DirLogger<T>::CompactMemtable() {
   const bool is_final = imm_buf_is_final_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   TableLogger* const tb = tb_;
-  T* const bf = filter_;
+  T* const ft = filter_;
   mu_->Unlock();
   const uint64_t start = GetCurrentTimeMicros();
   if (options_.listener != NULL) {
@@ -929,20 +940,21 @@ void DirLogger<T>::CompactMemtable() {
           static_cast<int>(tb_bytes_));
 #endif
 #ifndef NDEBUG
+  const OutputStats stats = tb->output_stats_;
   uint32_t num_keys = 0;
 #endif
   buffer->Finish(options_.skip_sort);
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
-  if (bf != NULL) {
-    bf->Reset(buffer->NumEntries());
+  if (ft != NULL) {
+    ft->Reset(buffer->NumEntries());
   }
   for (; iter->Valid(); iter->Next()) {
 #ifndef NDEBUG
     num_keys++;
 #endif
-    if (bf != NULL) {
-      bf->AddKey(iter->key());
+    if (ft != NULL) {
+      ft->AddKey(iter->key());
     }
     tb->Add(iter->key(), iter->value());
     if (!tb->ok()) {
@@ -951,10 +963,23 @@ void DirLogger<T>::CompactMemtable() {
   }
 
   if (tb->ok()) {
-    // Paranoid checks
+    // Double checks
     assert(num_keys == buffer->NumEntries());
     // Inject the filter into the table
-    tb->EndTable(bf, static_cast<ChunkType>(T::chunk_type()));
+    tb->EndTable(ft, static_cast<ChunkType>(T::chunk_type()));
+#ifndef NDEBUG
+#if VERBOSE >= 3
+    Verbose(
+        __LOG_ARGS__, 3, "\t+ D: %s, I: %s, F: %s",
+        PrettySize(tb->output_stats_.final_data_size - stats.final_data_size)
+            .c_str(),
+        PrettySize(tb->output_stats_.final_index_size - stats.final_index_size)
+            .c_str(),
+        PrettySize(tb->output_stats_.final_filter_size -
+                   stats.final_filter_size)
+            .c_str());
+#endif
+#endif
     if (is_epoch_flush) {
       tb->MakeEpoch();
     }

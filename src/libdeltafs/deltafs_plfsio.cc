@@ -33,8 +33,8 @@ DirOptions::DirOptions()
       skip_sort(false),
       key_size(8),
       value_size(32),
-      filter(kBitmapFilter),
-      bitmap_format(kUncompressedBitmap),
+      filter(FilterType::kBloomFilter),
+      bitmap_format(BitmapFormatType::kUncompressedBitmap),
       filter_bits_per_key(0),
       bf_bits_per_key(8),
       bm_key_bits(24),
@@ -56,7 +56,7 @@ DirOptions::DirOptions()
       slowdown_micros(0),
       paranoid_checks(false),
       ignore_filters(false),
-      compression(kNoCompression),
+      compression(CompressionType::kNoCompression),
       force_compression(false),
       verify_checksums(false),
       skip_checksums(false),
@@ -65,11 +65,23 @@ DirOptions::DirOptions()
       num_epochs(-1),
       lg_parts(-1),
       listener(NULL),
-      mode(kUnique),
+      mode(DirMode::kUnique),
       env(NULL),
       allow_env_threads(false),
       is_env_pfs(true),
       rank(0) {}
+
+static bool ParseFilterType(const Slice& value, FilterType* result) {
+  if (value.starts_with("bloom")) {
+    *result = FilterType::kBloomFilter;
+    return true;
+  } else if (value.starts_with("bitmap")) {
+    *result = FilterType::kBitmapFilter;
+    return true;
+  } else {
+    return false;
+  }
+}
 
 DirOptions ParseDirOptions(const char* input) {
   DirOptions options;
@@ -82,6 +94,7 @@ DirOptions ParseDirOptions(const char* input) {
     if (conf_pair.size() != 2) {
       continue;
     }
+    FilterType filter_type;
     Slice conf_key = conf_pair[0];
     Slice conf_value = conf_pair[1];
     uint64_t num;
@@ -122,6 +135,10 @@ DirOptions ParseDirOptions(const char* input) {
       if (ParsePrettyNumber(conf_value, &num)) {
         options.min_index_buffer = num;
       }
+    } else if (conf_key == "block_size") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.block_size = num;
+      }
     } else if (conf_key == "block_padding") {
       if (ParsePrettyBool(conf_value, &flag)) {
         options.block_padding = flag;
@@ -146,13 +163,29 @@ DirOptions ParseDirOptions(const char* input) {
       if (ParsePrettyBool(conf_value, &flag)) {
         options.paranoid_checks = flag;
       }
+    } else if (conf_key == "epoch_log_rotation") {
+      if (ParsePrettyBool(conf_value, &flag)) {
+        options.epoch_log_rotation = flag;
+      }
     } else if (conf_key == "ignore_filters") {
       if (ParsePrettyBool(conf_value, &flag)) {
         options.ignore_filters = flag;
       }
+    } else if (conf_key == "filter") {
+      if (ParseFilterType(conf_value, &filter_type)) {
+        options.filter = filter_type;
+      }
     } else if (conf_key == "filter_bits_per_key") {
       if (ParsePrettyNumber(conf_value, &num)) {
+        options.filter_bits_per_key = num;
+      }
+    } else if (conf_key == "bf_bits_per_key") {
+      if (ParsePrettyNumber(conf_value, &num)) {
         options.bf_bits_per_key = num;
+      }
+    } else if (conf_key == "bm_key_bits") {
+      if (ParsePrettyNumber(conf_value, &num)) {
+        options.bm_key_bits = num;
       }
     } else if (conf_key == "value_size") {
       if (ParsePrettyNumber(conf_value, &num)) {
@@ -888,6 +921,25 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   return result;
 }
 
+// Return a brief summary of the configured filter.
+static std::string FilterOptions(const DirOptions& options) {
+  char tmp[50];
+  switch (options.filter) {
+    case kBitmapFilter:
+      snprintf(tmp, sizeof(tmp), "BMP (uncompressed, key_bits=%d)",
+               int(options.bm_key_bits));
+      return tmp;
+    case kBloomFilter:
+      snprintf(tmp, sizeof(tmp), "BF (bits_per_key=%d)",
+               int(options.bf_bits_per_key));
+      return tmp;
+    case kNoFilter:
+      return "Dis";
+    default:
+      return "Unk";
+  }
+}
+
 // Open a directory writer instance according to the instantiated implementation
 // type T. Return OK on success, or a non-OK status on errors.
 template <typename T>
@@ -991,8 +1043,10 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
           PrettySize(options.key_size).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.value_size -> %s",
           PrettySize(options.value_size).c_str());
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.bf_bits_per_key -> %d",
-          int(options.bf_bits_per_key));
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.filter -> %s",
+          FilterOptions(options).c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.filter_bits_per_key -> %d",
+          int(options.filter_bits_per_key));
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.block_size -> %s",
           PrettySize(options.block_size).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.block_util -> %.2f%%",
@@ -1025,6 +1079,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
           int(options.skip_checksums) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.measure_writes -> %s",
           int(options.measure_writes) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.epoch_log_rotation -> %s",
+          int(options.epoch_log_rotation) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.allow_env_threads -> %s",
           int(options.allow_env_threads) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.is_env_pfs -> %s",
