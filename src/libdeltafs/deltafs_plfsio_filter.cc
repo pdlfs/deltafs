@@ -190,7 +190,7 @@ class CompressedFormat {
     working_space_[bucket_index*bucket_size_] = key_index+1;
   }
 
-  const size_t MemUsage() {
+  size_t memory_usage() const {
     return space_->capacity() + working_space_.capacity() + overflowed.size() * sizeof(size_t);
   }
 
@@ -281,7 +281,6 @@ class VarintFormat: public CompressedFormat {
     }
     return false;
   }
-
 };
 
 class VarintPlusFormat: public CompressedFormat {
@@ -361,6 +360,139 @@ class VarintPlusFormat: public CompressedFormat {
 
 };
 
+class PForDeltaFormat: public CompressedFormat {
+ public:
+  PForDeltaFormat(const DirOptions& options, std::string* space)
+      :CompressedFormat(options, space) {}
+
+  size_t Finish() {
+    std::sort(overflowed.begin(), overflowed.end());
+    size_t overflowed_idx = 0;
+    size_t last_one = 0;
+    std::vector<size_t> bucket_keys;
+
+    std::vector<size_t> cohort;
+    cohort.reserve(cohort_size_);
+    size_t cohort_or = 0;
+    // For every bucket
+    for(size_t i = 0; i < bucket_num_; i++) {
+      // Bucket key size
+      unsigned char key_num = static_cast<unsigned char>(working_space_[bucket_size_*i]);
+      size_t offset = bucket_size_*i + 1;
+      // Clear vector for repeated use.
+      bucket_keys.clear();
+      for(int j = 0; j< key_num; j++) {
+        if(j < bucket_size_-1)
+          bucket_keys.push_back(static_cast<unsigned char>(working_space_[offset+j]) + (i<<8));
+        else
+          bucket_keys.push_back(overflowed[overflowed_idx++]);
+      }
+      std::sort(bucket_keys.begin(), bucket_keys.end());
+      for(std::vector<size_t>::iterator it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
+        size_t distance = *it-last_one;
+        last_one = *it;
+        // Encoding the distance using pForDelta.
+        cohort.push_back(distance);
+        cohort_or |= distance;
+        // If full
+        if(cohort.size() == cohort_size_)  {
+          EncodingCohort(cohort, cohort_or);
+          cohort_or = 0;
+          cohort.clear();
+        }
+      }
+    }
+    if(cohort.size() > 0) {
+      EncodingCohort(cohort, cohort_or);
+    }
+    return space_->size();
+  }
+
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
+    size_t index = 0;
+    size_t cohort_num = 0;
+    unsigned char bit_num;
+    unsigned char b=0;
+    int byte_index=-1;
+    for(size_t i = 0; i < input.size();) {
+      bit_num = static_cast<unsigned char>(input[i++]);
+      cohort_num = cohort_size_;
+      if((input.size()-i)*8/bit_num < cohort_num) {
+        cohort_num = (input.size()-i)*8/bit_num;
+      }
+
+      while (cohort_num > 0) {
+        size_t runLen = 0;
+        int runLen_index = bit_num-1;
+        while(runLen_index >= 0) {
+          if(byte_index<0) {
+            if(i < input.size()) {
+              b = static_cast<unsigned char>(input[i]);
+              byte_index = 7;
+              i++;
+            } else {
+              return false;
+            }
+          }
+          runLen |= (b & (1 << byte_index--)) > 0 ? (1 << runLen_index) : 0;
+          runLen_index -= 1;
+        }
+        cohort_num -= 1;
+        if(index + runLen == bit)
+          return true;
+        else if (index + runLen > bit)
+          return false;
+        else
+          index += runLen;
+      }
+      assert(byte_index==0);
+    }
+    return false;
+  }
+
+ private:
+  void EncodingCohort(std::vector<size_t>& cohort, size_t cohort_or) {
+    unsigned char bit_num;
+#if defined(__GNUC__)
+    bit_num = static_cast<unsigned char>(32 - __builtin_clz (cohort_or));
+#else
+    unsigned int n = 0;
+    if (cohort_or != 0) {
+      n=1;
+      if (cohort_or >> 16 == 0) { n += 16; cohort_or <<= 16; }
+      if (cohort_or >> 24 == 0) { n +=  8; cohort_or <<=  8; }
+      if (cohort_or >> 28 == 0) { n +=  4; cohort_or <<=  4; }
+      if (cohort_or >> 30 == 0) { n +=  2; cohort_or <<=  2; }
+      n -= cohort_or >> 31;
+    }
+    bit_num = static_cast<unsigned char>(32 - n);
+#endif
+    space_->push_back(bit_num);
+
+    unsigned char b = 0; // tmp byte to fill bit by bit
+    int byte_index = 7; // Start fill from the most significant bit.
+    int dis_index = bit_num-1;
+    // Encoding cohort
+    for(std::vector<size_t>::iterator it = cohort.begin(); it != cohort.end(); ++it) {
+      dis_index = bit_num - 1;
+      while(dis_index>=0) {
+        b |= (*it & (1 << dis_index--))>=1? (1 << byte_index) : 0;
+        if(byte_index--==0) {
+          space_->push_back(b);
+          b = 0;
+          byte_index = 7;
+        }
+      }
+    }
+    if(byte_index!=7) {
+      space_->push_back(b);
+    }
+  }
+
+  // We assume that cohort size is multiple of 8.
+  const static size_t cohort_size_ = 128;
+};
+
 template <typename T>
 int BitmapBlock<T>::chunk_type() {
   return static_cast<int>(ChunkType::kBmpChunk);
@@ -425,11 +557,13 @@ Slice BitmapBlock<T>::Finish() {
   space_.push_back(static_cast<char>(key_bits_));
   // Remember the compression type
   if(typeid(T)== typeid(UncompressedFormat)) {
-    space_.push_back(static_cast<char>(0));
+    space_.push_back(static_cast<char>(BitmapFormatType::kUncompressedBitmap));
   } else if (typeid(T)== typeid(VarintFormat)) {
-    space_.push_back(static_cast<char>(1));
+    space_.push_back(static_cast<char>(BitmapFormatType::kVarintBitmap));
   } else if (typeid(T)== typeid(VarintPlusFormat)) {
-    space_.push_back(static_cast<char>(2));
+    space_.push_back(static_cast<char>(BitmapFormatType::kVarintPlusBitmap));
+  } else if (typeid(T)== typeid(PForDeltaFormat)) {
+    space_.push_back(static_cast<char>(BitmapFormatType::kPForDeltaBitmap));
   }
   return space_;
 }
@@ -444,6 +578,8 @@ template class BitmapBlock<UncompressedFormat>;
 template class BitmapBlock<VarintFormat>;
 
 template class BitmapBlock<VarintPlusFormat>;
+
+template class BitmapBlock<PForDeltaFormat>;
 
 // Return true if the target key matches a given bitmap filter. Unlike bloom
 // filters, bitmap filters are designed with no false positives.
@@ -467,12 +603,14 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   }
 
   const int compression = input[input.size() - 1];
-  if (compression == 0) {
+  if (compression == BitmapFormatType::kUncompressedBitmap) {
     return UncompressedFormat::Test(i, key_bits, bitmap);
-  } else if (compression == 1) {
+  } else if (compression == BitmapFormatType::kVarintBitmap) {
     return VarintFormat::Test(i, key_bits, bitmap);
-  } else if (compression == 2) {
+  } else if (compression == BitmapFormatType::kVarintPlusBitmap) {
     return VarintPlusFormat::Test(i, key_bits, bitmap);
+  } else if (compression == BitmapFormatType::kPForDeltaBitmap) {
+    return PForDeltaFormat::Test(i, key_bits, bitmap);
   } else {
     return true;
   }

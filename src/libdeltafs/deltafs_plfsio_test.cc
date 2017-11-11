@@ -263,8 +263,7 @@ TEST(VarintBitmapFilterTest, BMP_V_RandomKeys) {
   }
 }
 
-
-// Varint bitmap filter
+// Varint plus bitmap filter
 typedef FilterTest<BitmapBlock<VarintPlusFormat>, BitmapKeyMustMatch>
     VarintPlusBitmapFilterTest;
 
@@ -287,6 +286,56 @@ TEST(VarintPlusBitmapFilterTest, BMP_VP_OneKey) {
 }
 
 TEST(VarintPlusBitmapFilterTest, BMP_VP_RandomKeys) {
+  Random rnd(301);
+  size_t num_keys = 1024;
+  Reset(num_keys);
+  std::set<uint32_t> keys;
+  while (keys.size() != num_keys) {
+    keys.insert(rnd.Uniform(1u << 24));  // Random 24-bit keys
+  }
+  std::set<uint32_t>::iterator it = keys.begin();
+  for (; it != keys.end(); ++it) {
+    AddKey(*it);
+  }
+  Finish();
+  for (it = keys.begin(); it != keys.end(); ++it) {
+    ASSERT_TRUE(KeyMayMatch(*it));
+  }
+  std::set<uint32_t> non_keys;
+  while (non_keys.size() != keys.size()) {
+    uint32_t key = rnd.Uniform(1u << 24);
+    if (keys.count(key) == 0) {
+      non_keys.insert(key);
+    }
+  }
+  for (it = non_keys.begin(); it != non_keys.end(); ++it) {
+    ASSERT_FALSE(KeyMayMatch(*it));
+  }
+}
+
+// Varint plus bitmap filter
+typedef FilterTest<BitmapBlock<PForDeltaFormat>, BitmapKeyMustMatch>
+    PForDeltaBitmapFilterTest;
+
+TEST(PForDeltaBitmapFilterTest, BMP_PFD_Empty) {
+  Random rnd(301);
+  Reset(1024);
+  Finish();
+  ASSERT_FALSE(KeyMayMatch(rnd.Uniform(1u << 24)));
+  ASSERT_FALSE(KeyMayMatch(1u << 24));
+}
+
+TEST(PForDeltaBitmapFilterTest, BMP_PFD_OneKey) {
+  size_t num_keys = 1;
+  Reset(num_keys);
+  AddKey(21343);
+  Finish();
+  ASSERT_FALSE(KeyMayMatch(21342));
+  ASSERT_TRUE(KeyMayMatch(21343));
+  ASSERT_FALSE(KeyMayMatch(21344));
+}
+
+TEST(PForDeltaBitmapFilterTest, BMP_PFD_RandomKeys) {
   Random rnd(301);
   size_t num_keys = 1024;
   Reset(num_keys);
@@ -859,7 +908,8 @@ class PlfsIoBench {
     }
     options_.env = env_;
     // Set filter type for io benchmark
-    options_.filter = kVarintPlusFilter;
+    options_.filter = kBitmapFilter;
+    options_.bitmap_format = kVarintPlusBitmap;
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
     const uint64_t start = env_->NowMicros();
@@ -1388,6 +1438,7 @@ class PlfsFilterBench {
 };
 
 typedef PlfsFilterBench<BitmapBlock<VarintFormat>, BitmapKeyMustMatch> PlfsVarintBitmapBench;
+typedef PlfsFilterBench<BitmapBlock<PForDeltaFormat>, BitmapKeyMustMatch> PlfsPForDeltaBitmapBench;
 typedef PlfsFilterBench<BitmapBlock<VarintPlusFormat>, BitmapKeyMustMatch> PlfsVarintPlusBitmapBench;
 typedef PlfsFilterBench<BitmapBlock<UncompressedFormat>, BitmapKeyMustMatch> PlfsBitmapBench;
 typedef PlfsFilterBench<BloomBlock, BloomKeyMayMatch> PlfsBloomFilterBench;
@@ -1427,7 +1478,7 @@ static void BM_LogAndApply(int* argc, char*** argv) {
     pdlfs::plfsio::PlfsBfBench bench;
     bench.LogAndApply();
   } else if (bench_name == "--bench=filter") {
-    pdlfs::plfsio::PlfsVarintBitmapBench bench(100);
+    pdlfs::plfsio::PlfsPForDeltaBitmapBench bench(100);
     bench.LogAndApply();
   } else {
     BM_Usage();

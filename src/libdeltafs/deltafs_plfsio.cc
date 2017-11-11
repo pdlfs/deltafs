@@ -33,6 +33,8 @@ DirOptions::DirOptions()
       skip_sort(false),
       key_size(8),
       value_size(32),
+      filter(kBitmapFilter),
+      bitmap_format(kUncompressedBitmap),
       filter_bits_per_key(0),
       bf_bits_per_key(8),
       bm_key_bits(24),
@@ -1046,34 +1048,47 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       delete impl;
     }
   } else if (options.filter == kBitmapFilter) {
-    typedef BitmapBlock<UncompressedFormat> UncompressedBitmapBlock;
-    DirWriterImpl<UncompressedBitmapBlock>* impl =
-        new DirWriterImpl<UncompressedBitmapBlock>(options, dirname);
-    status = TryDirOpen(impl);
-    if (status.ok()) {
-      *result = impl;
+    if (options.bitmap_format==kVarintBitmap) {
+      typedef BitmapBlock<VarintFormat> VarintBitmapBlock;
+      DirWriterImpl<VarintBitmapBlock>* impl =
+          new DirWriterImpl<VarintBitmapBlock>(options, dirname);
+      status = TryDirOpen(impl);
+      if (status.ok()) {
+        *result = impl;
+      } else {
+        delete impl;
+      }
+    } else if (options.bitmap_format==kVarintPlusBitmap) {
+      typedef BitmapBlock<VarintPlusFormat> VarintPlusBitmapBlock;
+      DirWriterImpl<VarintPlusBitmapBlock>* impl =
+          new DirWriterImpl<VarintPlusBitmapBlock>(options, dirname);
+      status = TryDirOpen(impl);
+      if (status.ok()) {
+        *result = impl;
+      } else {
+        delete impl;
+      }
+    } else if (options.bitmap_format==kPForDeltaBitmap) {
+      typedef BitmapBlock<PForDeltaFormat> PForDeltaBitmapBlock;
+      DirWriterImpl<PForDeltaBitmapBlock>* impl =
+          new DirWriterImpl<PForDeltaBitmapBlock>(options, dirname);
+      status = TryDirOpen(impl);
+      if (status.ok()) {
+        *result = impl;
+      } else {
+        delete impl;
+      }
     } else {
-      delete impl;
-    }
-  } else if (options.filter == kVarintFilter) {
-    typedef BitmapBlock<VarintFormat> VarintBitmapBlock;
-    DirWriterImpl<VarintBitmapBlock>* impl =
-        new DirWriterImpl<VarintBitmapBlock>(options, dirname);
-    status = TryDirOpen(impl);
-    if (status.ok()) {
-      *result = impl;
-    } else {
-      delete impl;
-    }
-  } else if (options.filter == kVarintPlusFilter) {
-    typedef BitmapBlock<VarintPlusFormat> VarintPlusBitmapBlock;
-    DirWriterImpl<VarintPlusBitmapBlock>* impl =
-        new DirWriterImpl<VarintPlusBitmapBlock>(options, dirname);
-    status = TryDirOpen(impl);
-    if (status.ok()) {
-      *result = impl;
-    } else {
-      delete impl;
+      // Default format: kUncompressedBitmap
+      typedef BitmapBlock<UncompressedFormat> UncompressedBitmapBlock;
+      DirWriterImpl<UncompressedBitmapBlock>* impl =
+          new DirWriterImpl<UncompressedBitmapBlock>(options, dirname);
+      status = TryDirOpen(impl);
+      if (status.ok()) {
+        *result = impl;
+      } else {
+        delete impl;
+      }
     }
   } else {
     DirWriterImpl<EmptyFilterBlock>* impl =

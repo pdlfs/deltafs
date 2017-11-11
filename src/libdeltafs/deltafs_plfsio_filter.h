@@ -83,6 +83,7 @@ class UncompressedFormat;
 class CompressedFormat;
 class VarintFormat;
 class VarintPlusFormat;
+class PForDeltaFormat;
 
 // A simple filter backed by a bitmap.
 template <typename T = UncompressedFormat>

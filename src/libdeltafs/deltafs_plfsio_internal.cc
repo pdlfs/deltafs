@@ -1010,11 +1010,13 @@ size_t DirLogger<T>::memory_usage() const {
 
 template class DirLogger<BloomBlock>;
 
-template class DirLogger<BitmapBlock<UncompressedFormat> >;
+template class DirLogger<BitmapBlock<UncompressedFormat>>;
 
-template class DirLogger<BitmapBlock<VarintFormat> >;
+template class DirLogger<BitmapBlock<VarintFormat>>;
 
-template class DirLogger<BitmapBlock<VarintPlusFormat> >;
+template class DirLogger<BitmapBlock<VarintPlusFormat>>;
+
+template class DirLogger<BitmapBlock<PForDeltaFormat>>;
 
 template class DirLogger<EmptyFilterBlock>;
 

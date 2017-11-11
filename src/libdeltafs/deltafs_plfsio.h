@@ -56,12 +56,19 @@ enum FilterType {
   kNoFilter = 0x00,
   // Use bloom filters
   kBloomFilter = 0x01,
+  // Use bitmap filters
+  kBitmapFilter = 0x02
+};
+
+enum BitmapFormatType {
   // Use uncompressed bitmap filters
-  kBitmapFilter = 0x02,
+  kUncompressedBitmap = 0x00,
   // Use Varint bitmap filters
-  kVarintFilter = 0x03,
+  kVarintBitmap = 0x01,
   // Use Varint-plus bitmap filters
-  kVarintPlusFilter = 0x04
+  kVarintPlusBitmap = 0x02,
+  // Use pForDelta bitmap filters
+  kPForDeltaBitmap = 0x03
 };
 
 struct DirOptions {
@@ -95,6 +102,11 @@ struct DirOptions {
   // Filter type to be applied to directory storage.
   // Default: kBloomFilter
   FilterType filter;
+
+  // Bitmap filter format used to encoding the bitmap filter.
+  // This case only makes sense when filter field is set to kBitmapFilter
+  // Default: kUncompressedBitmap
+  BitmapFormatType bitmap_format;
 
   // Number of bits to reserve per key for filter memory.
   // The actual amount of memory, and storage, used for each key in filters
