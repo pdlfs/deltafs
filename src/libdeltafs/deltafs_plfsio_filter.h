@@ -84,6 +84,7 @@ class CompressedFormat;
 class VarintFormat;
 class VarintPlusFormat;
 class PForDeltaFormat;
+class RoaringFormat;
 
 // A simple filter backed by a bitmap.
 template <typename T = UncompressedFormat>
@@ -130,6 +131,8 @@ class BitmapBlock {
   // Compression format
   T* fmt_;
 };
+
+unsigned char LeftMostOneBit(uint32_t i);
 
 // An empty filter that achieves nothing.
 class EmptyFilterBlock {

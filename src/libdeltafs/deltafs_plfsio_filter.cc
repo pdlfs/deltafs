@@ -357,7 +357,6 @@ class VarintPlusFormat: public CompressedFormat {
     }
     return false;
   }
-
 };
 
 class PForDeltaFormat: public CompressedFormat {
@@ -452,21 +451,7 @@ class PForDeltaFormat: public CompressedFormat {
 
  private:
   void EncodingCohort(std::vector<size_t>& cohort, size_t cohort_or) {
-    unsigned char bit_num;
-#if defined(__GNUC__)
-    bit_num = static_cast<unsigned char>(32 - __builtin_clz (cohort_or));
-#else
-    unsigned int n = 0;
-    if (cohort_or != 0) {
-      n=1;
-      if (cohort_or >> 16 == 0) { n += 16; cohort_or <<= 16; }
-      if (cohort_or >> 24 == 0) { n +=  8; cohort_or <<=  8; }
-      if (cohort_or >> 28 == 0) { n +=  4; cohort_or <<=  4; }
-      if (cohort_or >> 30 == 0) { n +=  2; cohort_or <<=  2; }
-      n -= cohort_or >> 31;
-    }
-    bit_num = static_cast<unsigned char>(32 - n);
-#endif
+    unsigned char bit_num = LeftMostOneBit(cohort_or);
     space_->push_back(bit_num);
 
     unsigned char b = 0; // tmp byte to fill bit by bit
@@ -492,6 +477,163 @@ class PForDeltaFormat: public CompressedFormat {
   // We assume that cohort size is multiple of 8.
   const static size_t cohort_size_ = 128;
 };
+
+
+// Roaring bitmap format bucket size 2^8
+class RoaringFormat: public CompressedFormat {
+ public:
+  RoaringFormat(const DirOptions& options, std::string* space)
+      :CompressedFormat(options, space) {}
+
+  void Reset(uint32_t num_keys) {
+    CompressedFormat::Reset(num_keys);
+    bucket_size_max_bit_ = 0;
+  }
+
+  void Set(uint32_t i) {
+    // Copy from parent
+    int bucket_index = i >> 8;
+    // Read bucket key number
+    unsigned char key_index = working_space_[bucket_index*bucket_size_];
+    if(key_index < bucket_size_-1) {
+      // Append to the bucket
+      working_space_[bucket_index*bucket_size_+key_index+1] = i & ((1 << 8)-1);
+    } else {
+      // Append to overflow vector
+      overflowed.push_back(i);
+    }
+    // Update the bucket key number
+    working_space_[bucket_index*bucket_size_] = key_index+1;
+
+    // Update max bit
+    bucket_size_max_bit_ |= static_cast<size_t>(key_index+1);
+  }
+
+  size_t Finish() {
+    std::sort(overflowed.begin(), overflowed.end());
+    size_t overflowed_idx = 0;
+
+    unsigned char bits_per_len = LeftMostOneBit(bucket_size_max_bit_);
+    space_->resize(1+(bits_per_len*bucket_num_+7)/8, 0);
+    (*space_)[0] = bits_per_len;
+
+    // Leave the space at the head to store the size for every buckets
+    // The index of the byte at space_ to encode bucket size.
+    size_t bucket_len_byte_idx = 1;
+
+    unsigned char bucket_len_byte = 0;
+    int bucket_len_bit_idx = 7; // The index of bit in the constructing byte.
+
+    std::vector<unsigned char> bucket_keys;
+    // For every bucket
+    for(size_t i = 0; i < bucket_num_; i++) {
+      // Bucket key size
+      unsigned char key_num = static_cast<unsigned char>(working_space_[bucket_size_*i]);
+      size_t offset = bucket_size_*i + 1;
+      // Clear vector for repeated use.
+      bucket_keys.clear();
+      for(int j = 0; j< key_num; j++) {
+        if(j < bucket_size_-1)
+          bucket_keys.push_back(static_cast<unsigned char>(working_space_[offset+j]));
+        else
+          bucket_keys.push_back(static_cast<unsigned char>(overflowed[overflowed_idx++] & 255));
+      }
+      std::sort(bucket_keys.begin(), bucket_keys.end());
+      // Encoding bucket size
+      int len_index = bits_per_len - 1;
+      while(len_index>=0) {
+        bucket_len_byte |= (key_num & (1 << len_index--))>=1? (1 << bucket_len_bit_idx) : 0;
+        if(bucket_len_bit_idx--==0) {
+          (*space_)[bucket_len_byte_idx++] = bucket_len_byte;
+          bucket_len_byte = 0;
+          bucket_len_bit_idx = 7;
+        }
+      }
+      // Fill the offsets of the bucket
+      for(std::vector<unsigned char>::iterator it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
+        // Encoding the distance to roaring bitmap encode.
+        space_->push_back(*it);
+      }
+    }
+
+    if(bucket_len_bit_idx!=7) {
+      (*space_)[bucket_len_byte_idx] = bucket_len_byte;;
+    }
+
+    return space_->size();
+  }
+
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
+
+    uint32_t bucket_idx = bit >> 8;
+    unsigned char bit_per_len = input[0];
+    int len_byte_idx = 1;
+    size_t offset = 0;
+    size_t len;
+
+    // Get the offset of the bucket
+    unsigned char b = 0;
+    int b_idx = -1;
+    while(bucket_idx-->0) {
+      len = 0;
+      int len_index = bit_per_len-1;
+      while(len_index>=0) {
+        if(b_idx < 0) {
+          b = static_cast<unsigned char>(input[len_byte_idx++]);
+          b_idx = 7;
+        }
+        len |= (b & (1<<b_idx--))>0?(1<<len_index):0;
+        len_index-=1;
+      }
+      offset+=len;
+    }
+
+    // Get the size of the bucket
+    size_t bucket_size = 0;
+    int bucket_size_index = bit_per_len-1;
+    while(bucket_size_index>=0) {
+      if(b_idx < 0) {
+        b = static_cast<unsigned char>(input[len_byte_idx++]);
+        b_idx = 7;
+      }
+      bucket_size |= (b & (1 << b_idx--))>0?(1<<bucket_size_index):0;
+      bucket_size_index-=1;
+    }
+
+    size_t start_idx = 1 + ((1 << (key_bits-8))/*bucket number*/*bit_per_len+7)/8 + offset;
+    unsigned char target_offset = static_cast<unsigned char>(bit & 255);
+    unsigned char key_offset;
+    for(size_t i = start_idx; i < start_idx+bucket_size; i++) {
+      key_offset = static_cast<unsigned char>(input[i]);
+      if(key_offset==target_offset)
+        return true;
+      else if(key_offset>target_offset)
+        return false;
+    }
+    return false;
+  }
+ private:
+  size_t bucket_size_max_bit_ = 0;
+};
+
+unsigned char LeftMostOneBit(uint32_t i) {
+  if(i==0)
+    return 0;
+
+  unsigned char bit_num;
+#if defined(__GNUC__)
+  bit_num = static_cast<unsigned char>(32 - __builtin_clz (i));
+#else
+  unsigned int n = 1;
+  if (i >> 16 == 0) { n += 16; i <<= 16; }
+  if (i >> 24 == 0) { n +=  8; i <<=  8; }
+  if (i >> 28 == 0) { n +=  4; i <<=  4; }
+  if (i >> 30 == 0) { n +=  2; i <<=  2; }
+  n -= i >> 31;
+  bit_num = static_cast<unsigned char>(32 - n);
+#endif
+  return bit_num;
+}
 
 template <typename T>
 int BitmapBlock<T>::chunk_type() {
@@ -564,6 +706,8 @@ Slice BitmapBlock<T>::Finish() {
     space_.push_back(static_cast<char>(BitmapFormatType::kVarintPlusBitmap));
   } else if (typeid(T)== typeid(PForDeltaFormat)) {
     space_.push_back(static_cast<char>(BitmapFormatType::kPForDeltaBitmap));
+  } else if (typeid(T)== typeid(RoaringFormat)) {
+    space_.push_back(static_cast<char>(BitmapFormatType::kRoaringBitmap));
   }
   return space_;
 }
@@ -580,6 +724,8 @@ template class BitmapBlock<VarintFormat>;
 template class BitmapBlock<VarintPlusFormat>;
 
 template class BitmapBlock<PForDeltaFormat>;
+
+template class BitmapBlock<RoaringFormat>;
 
 // Return true if the target key matches a given bitmap filter. Unlike bloom
 // filters, bitmap filters are designed with no false positives.
@@ -611,6 +757,8 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
     return VarintPlusFormat::Test(i, key_bits, bitmap);
   } else if (compression == BitmapFormatType::kPForDeltaBitmap) {
     return PForDeltaFormat::Test(i, key_bits, bitmap);
+  } else if (compression == BitmapFormatType::kRoaringBitmap) {
+    return RoaringFormat::Test(i, key_bits, bitmap);
   } else {
     return true;
   }

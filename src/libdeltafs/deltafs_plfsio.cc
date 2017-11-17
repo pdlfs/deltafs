@@ -1134,6 +1134,16 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
+    } else if (options.bitmap_format==kRoaringBitmap) {
+      typedef BitmapBlock<RoaringFormat> RoaringBitmapBlock;
+      DirWriterImpl<RoaringBitmapBlock>* impl =
+          new DirWriterImpl<RoaringBitmapBlock>(options, dirname);
+      status = TryDirOpen(impl);
+      if (status.ok()) {
+        *result = impl;
+      } else {
+        delete impl;
+      }
     } else {
       // Default format: kUncompressedBitmap
       typedef BitmapBlock<UncompressedFormat> UncompressedBitmapBlock;

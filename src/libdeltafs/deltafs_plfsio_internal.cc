@@ -1043,6 +1043,8 @@ template class DirLogger<BitmapBlock<VarintPlusFormat>>;
 
 template class DirLogger<BitmapBlock<PForDeltaFormat>>;
 
+template class DirLogger<BitmapBlock<RoaringFormat>>;
+
 template class DirLogger<EmptyFilterBlock>;
 
 static Status ReadBlock(LogSource* source, const DirOptions& options,
