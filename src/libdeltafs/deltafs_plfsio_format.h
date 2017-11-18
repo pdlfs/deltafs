@@ -37,10 +37,10 @@ extern Status ParseEpochKey(const Slice& input, uint32_t* epoch,
 enum ChunkType {
   kUnknown = 0x00,  // Useless padding that should be ignored
 
-  // Standard indexing block types
-  kIdxChunk = 0x01,  // SST indexes
+  // Regular indexing block types
+  kIdxChunk = 0x01,  // Standard SST indexes
   kSbfChunk = 0x02,  // Standard bloom filters
-  kBmpChunk = 0x03,  // Bitmap filters
+  kBmpChunk = 0x03,  // Bitmap filters (w/ different compression fmts)
 
   // Meta indexing block types
   kMetaChunk = 0x71,  // Meta indexes for each epoch
@@ -116,7 +116,8 @@ class EpochStone {
   uint32_t id_;  // Seal Id
 };
 
-// Fixed information stored at the end of every log file.
+// Fixed MANIFEST information stored at the end of every log file.
+// This includes both the index and the data logs.
 class Footer {
  public:
   Footer();
@@ -140,6 +141,9 @@ class Footer {
   unsigned char skip_checksums() const { return skip_checksums_; }
   void set_skip_checksums(unsigned char s) { skip_checksums_ = s; }
 
+  unsigned char filter_type() const { return filter_type_; }
+  void set_filter_type(unsigned char t) { filter_type_ = t; }
+
   unsigned char mode() const { return mode_; }
   void set_mode(unsigned char mode) { mode_ = mode; }
 
@@ -155,8 +159,9 @@ class Footer {
   Status DecodeFrom(Slice* input);
 
   // Encoded length of a Footer. It consists of one encoded block
-  // handle, a set of options (20 bytes in total), and a magic number (8 bytes).
-  enum { kEncodedLength = BlockHandle::kMaxEncodedLength + 20 + 8 };
+  // handle, a set of persisted options (21 bytes in total),
+  // and a magic number (8 bytes).
+  enum { kEncodedLength = BlockHandle::kMaxEncodedLength + 21 + 8 };
 
  private:
   BlockHandle epoch_index_handle_;
@@ -167,6 +172,7 @@ class Footer {
   unsigned char fixed_kv_length_;
   unsigned char epoch_log_rotation_;  // If log rotation has been enabled
   unsigned char skip_checksums_;
+  unsigned char filter_type_;
   unsigned char mode_;
 };
 
@@ -197,6 +203,7 @@ inline Footer::Footer()
       fixed_kv_length_(~static_cast<unsigned char>(0) /* Invalid */),
       epoch_log_rotation_(~static_cast<unsigned char>(0) /* Invalid */),
       skip_checksums_(~static_cast<unsigned char>(0) /* Invalid */),
+      filter_type_(~static_cast<unsigned char>(0) /* Invalid */),
       mode_(~static_cast<unsigned char>(0) /* Invalid */) {
   // Empty
 }
