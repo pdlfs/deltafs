@@ -1188,7 +1188,14 @@ bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& h) {
   const bool cached = true;
   status = ReadBlock(indx_, options_, h, &contents, cached);
   if (status.ok()) {
-    bool r = BloomKeyMayMatch(key, contents.data);
+    bool r;  // False if key must not match so no need for further access
+    if (options_.filter == FilterType::kBloomFilter) {
+      r = BloomKeyMayMatch(key, contents.data);
+    } else if (options_.filter == FilterType::kBitmapFilter) {
+      r = BitmapKeyMustMatch(key, contents.data);
+    } else {  // Unknown filter type
+      r = true;
+    }
     if (contents.heap_allocated) {
       delete[] contents.data.data();
     }
