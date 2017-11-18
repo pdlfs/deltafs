@@ -1598,11 +1598,17 @@ static inline bool UnMatch(U a, V b) {
   return a != static_cast<U>(b);
 }
 
+// Double-check if the options supplied by user code match the directory footer
+// fetched from the storage. Return OK if verification passes.
 static Status VerifyOptions(const DirOptions& options, const Footer& footer) {
   if (UnMatch(options.lg_parts, footer.lg_parts()) ||
+      UnMatch(options.key_size, footer.key_size()) ||
+      UnMatch(options.value_size, footer.value_size()) ||
+      UnMatch(options.epoch_log_rotation, footer.epoch_log_rotation()) ||
       UnMatch(options.skip_checksums, footer.skip_checksums()) ||
+      UnMatch(options.filter, footer.filter_type()) ||
       UnMatch(options.mode, footer.mode())) {
-    return Status::AssertionFailed("Option does not match footer");
+    return Status::AssertionFailed("Options does not match footer");
   } else {
     return Status::OK();
   }

@@ -1253,6 +1253,20 @@ IoStats DirReaderImpl::GetIoStats() const {
 
 DirReader::~DirReader() {}
 
+// Return the name of the filter for printing.
+static std::string FilterName(FilterType type) {
+  switch (type) {
+    case kNoFilter:
+      return "Dis";
+    case kBloomFilter:
+      return "Bloom filter";
+    case kBitmapFilter:
+      return "Bitmap";
+    default:
+      return "Unk";
+  }
+}
+
 static DirOptions SanitizeReadOptions(const DirOptions& options) {
   DirOptions result = options;
   if (result.num_epochs < 0) result.num_epochs = -1;
@@ -1275,6 +1289,8 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
 #if VERBOSE >= 2
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.name -> %s (mode=read)",
           dirname.c_str());
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.filter -> %s",
+          FilterName(options.filter).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.reader_pool -> %s",
           options.reader_pool != NULL
               ? options.reader_pool->ToDebugString().c_str()
@@ -1335,6 +1351,11 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
            static_cast<bool>(footer.epoch_log_rotation()) ? "Yes" : "No",
            options.epoch_log_rotation ? "Yes" : "No");
     options.epoch_log_rotation = static_cast<bool>(footer.epoch_log_rotation());
+    if (static_cast<FilterType>(footer.filter_type()) != options.filter)
+      Warn(__LOG_ARGS__, "Dfs.plfsdir.filter -> %s (was %s)",
+           FilterName(static_cast<FilterType>(footer.filter_type())).c_str(),
+           FilterName(options.filter).c_str());
+    options.filter = static_cast<FilterType>(footer.filter_type());
     if (static_cast<DirMode>(footer.mode()) != options.mode)
       Warn(__LOG_ARGS__, "Dfs.plfsdir.mode -> %s (was %s)",
            ToDebugString(static_cast<DirMode>(footer.mode())).c_str(),
