@@ -1267,6 +1267,42 @@ static std::string FilterName(FilterType type) {
   }
 }
 
+// Override options in accordance with the given footer.
+static DirOptions MaybeRewriteOptions(  // Not all options can be fixed
+    const DirOptions& options, const Footer& footer) {
+  DirOptions result = options;
+  if (static_cast<bool>(footer.skip_checksums()) != options.skip_checksums)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.skip_checksums -> %s (was %s)",
+         static_cast<bool>(footer.skip_checksums()) ? "Yes" : "No",
+         options.skip_checksums ? "Yes" : "No");
+  result.skip_checksums = static_cast<bool>(footer.skip_checksums());
+  if (static_cast<bool>(footer.epoch_log_rotation()) !=
+      options.epoch_log_rotation)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.epoch_log_rotation -> %s (was %s)",
+         static_cast<bool>(footer.epoch_log_rotation()) ? "Yes" : "No",
+         options.epoch_log_rotation ? "Yes" : "No");
+  result.epoch_log_rotation = static_cast<bool>(footer.epoch_log_rotation());
+  if (static_cast<FilterType>(footer.filter_type()) != options.filter)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.filter -> %s (was %s)",
+         FilterName(static_cast<FilterType>(footer.filter_type())).c_str(),
+         FilterName(options.filter).c_str());
+  result.filter = static_cast<FilterType>(footer.filter_type());
+  if (static_cast<DirMode>(footer.mode()) != options.mode)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.mode -> %s (was %s)",
+         ToDebugString(static_cast<DirMode>(footer.mode())).c_str(),
+         ToDebugString(options.mode).c_str());
+  result.mode = static_cast<DirMode>(footer.mode());
+  if (static_cast<int>(footer.num_epochs()) != options.num_epochs)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.num_epochs -> %d (was %d)",
+         static_cast<int>(footer.num_epochs()), options.num_epochs);
+  result.num_epochs = static_cast<int>(footer.num_epochs());
+  if (static_cast<int>(footer.lg_parts()) != options.lg_parts)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.memtable_parts -> %d (was %d)",
+         1 << footer.lg_parts(), 1 << options.lg_parts);
+  result.lg_parts = static_cast<int>(footer.lg_parts());
+  return result;
+}
+
 static DirOptions SanitizeReadOptions(const DirOptions& options) {
   DirOptions result = options;
   if (result.num_epochs < 0) result.num_epochs = -1;
@@ -1277,10 +1313,10 @@ static DirOptions SanitizeReadOptions(const DirOptions& options) {
   return result;
 }
 
-Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
+Status DirReader::Open(const DirOptions& _opts, const std::string& dirname,
                        DirReader** result) {
   *result = NULL;
-  DirOptions options = SanitizeReadOptions(opts);
+  DirOptions options = SanitizeReadOptions(_opts);
   uint32_t num_parts =  // May have to be lazy initialized from the footer
       options.lg_parts == -1 ? 0 : 1u << options.lg_parts;
   const int my_rank = options.rank;
@@ -1339,36 +1375,8 @@ Status DirReader::Open(const DirOptions& opts, const std::string& dirname,
       return status;
     }
 
-    // Override a subset of user-provided options
-    if (static_cast<bool>(footer.skip_checksums()) != options.skip_checksums)
-      Warn(__LOG_ARGS__, "Dfs.plfsdir.skip_checksums -> %s (was %s)",
-           static_cast<bool>(footer.skip_checksums()) ? "Yes" : "No",
-           options.skip_checksums ? "Yes" : "No");
-    options.skip_checksums = static_cast<bool>(footer.skip_checksums());
-    if (static_cast<bool>(footer.epoch_log_rotation()) !=
-        options.epoch_log_rotation)
-      Warn(__LOG_ARGS__, "Dfs.plfsdir.epoch_log_rotation -> %s (was %s)",
-           static_cast<bool>(footer.epoch_log_rotation()) ? "Yes" : "No",
-           options.epoch_log_rotation ? "Yes" : "No");
-    options.epoch_log_rotation = static_cast<bool>(footer.epoch_log_rotation());
-    if (static_cast<FilterType>(footer.filter_type()) != options.filter)
-      Warn(__LOG_ARGS__, "Dfs.plfsdir.filter -> %s (was %s)",
-           FilterName(static_cast<FilterType>(footer.filter_type())).c_str(),
-           FilterName(options.filter).c_str());
-    options.filter = static_cast<FilterType>(footer.filter_type());
-    if (static_cast<DirMode>(footer.mode()) != options.mode)
-      Warn(__LOG_ARGS__, "Dfs.plfsdir.mode -> %s (was %s)",
-           ToDebugString(static_cast<DirMode>(footer.mode())).c_str(),
-           ToDebugString(options.mode).c_str());
-    options.mode = static_cast<DirMode>(footer.mode());
-    if (static_cast<int>(footer.num_epochs()) != options.num_epochs)
-      Warn(__LOG_ARGS__, "Dfs.plfsdir.num_epochs -> %d (was %d)",
-           static_cast<int>(footer.num_epochs()), options.num_epochs);
-    options.num_epochs = static_cast<int>(footer.num_epochs());
-    if (static_cast<int>(footer.lg_parts()) != options.lg_parts)
-      Warn(__LOG_ARGS__, "Dfs.plfsdir.memtable_parts -> %d (was %d)",
-           1 << footer.lg_parts(), int(num_parts));
-    options.lg_parts = static_cast<int>(footer.lg_parts());
+    // Rewrite any that is apparently wrong
+    options = MaybeRewriteOptions(options, footer);
     num_parts = 1u << options.lg_parts;
   }
 
