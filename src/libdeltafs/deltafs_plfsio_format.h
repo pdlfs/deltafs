@@ -176,7 +176,7 @@ class Footer {
   unsigned char mode_;
 };
 
-extern Footer ToFooter(const DirOptions& options);
+extern Footer Mkfoot(const DirOptions& options);
 
 extern std::string FooterFileName(const std::string& dirname);
 

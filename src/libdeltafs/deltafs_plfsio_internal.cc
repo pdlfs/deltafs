@@ -592,7 +592,7 @@ Status TableLogger::Finish() {
   finished_ = true;
   if (!ok()) return status_;
   std::string footer_buf;
-  Footer footer = ToFooter(options_);
+  Footer footer = Mkfoot(options_);
 
   assert(!pending_indx_entry_);
   assert(!pending_meta_entry_);

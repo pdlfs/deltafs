@@ -114,7 +114,7 @@ Status EpochStone::DecodeFrom(Slice* input) {
   }
 }
 
-Footer ToFooter(const DirOptions& options) {
+Footer Mkfoot(const DirOptions& options) {
   Footer result;
   result.set_lg_parts(static_cast<uint32_t>(options.lg_parts));
   result.set_value_size(static_cast<uint32_t>(options.value_size));
@@ -123,6 +123,7 @@ Footer ToFooter(const DirOptions& options) {
   result.set_epoch_log_rotation(
       static_cast<unsigned char>(options.epoch_log_rotation));
   result.set_skip_checksums(static_cast<unsigned char>(options.skip_checksums));
+  result.set_filter_type(static_cast<unsigned char>(options.filter));
   result.set_mode(static_cast<unsigned char>(options.mode));
   return result;
 }
