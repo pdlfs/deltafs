@@ -15,7 +15,7 @@
 namespace pdlfs {
 namespace plfsio {
 
-std::string FooterFileName(const std::string& dirname) {
+std::string DirInfoFileName(const std::string& dirname) {
   return dirname + "/DIR.info";
 }
 

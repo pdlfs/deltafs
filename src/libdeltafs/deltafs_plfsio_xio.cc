@@ -486,7 +486,7 @@ Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
   Status status;
   DirOptions options = SanitizeDirOptions(opts);
   std::vector<std::string> garbage;  // Log files pending deletion
-  garbage.push_back(FooterFileName(prefix));
+  garbage.push_back(DirInfoFileName(prefix));
   Env* const env = options.env;
   if (options.is_env_pfs) {
     std::vector<std::string> names;

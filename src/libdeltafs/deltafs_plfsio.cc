@@ -241,6 +241,7 @@ class DirWriterImpl : public DirWriter {
   Status TryBatchWrites(BatchCursor* cursor);
   Status TryAppend(const Slice& fid, const Slice& data);
   Status EnsureDataPadding(LogSink* sink, size_t footer_size);
+  Status InstallDirInfo(const std::string& footer);
   Status Finalize();
   void MaybeSlowdownCaller();
   friend class DirWriter;
@@ -312,7 +313,7 @@ void DirWriterImpl<T>::MaybeSlowdownCaller() {
 template <typename T>
 Status DirWriterImpl<T>::EnsureDataPadding(LogSink* sink, size_t footer_size) {
   Status status;
-  sink->Lock();
+  sink->Lock();  // Ltell() and Lwrite() must go as an atomic operation
   // Add enough padding to ensure the final size of the index log
   // is some multiple of the physical write size.
   const uint64_t total_size = sink->Ltell() + footer_size;
@@ -328,10 +329,49 @@ Status DirWriterImpl<T>::EnsureDataPadding(LogSink* sink, size_t footer_size) {
 }
 
 template <typename T>
+Status DirWriterImpl<T>::InstallDirInfo(const std::string& footer) {
+  WritableFile* file;
+  const std::string fname = DirInfoFileName(dirname_);
+  Status status = env_->NewWritableFile(fname.c_str(), &file);
+  if (!status.ok()) {
+    return status;
+  }
+
+  Slice contents = footer;
+  std::string buf;
+  // Add enough padding to ensure the final size of the footer file
+  // is some multiple of the physical write size.
+  if (options_.tail_padding) {
+    const size_t footer_size = footer.size();
+    const size_t overflow = footer_size % options_.data_buffer;
+    if (overflow != 0) {
+      buf.resize(options_.data_buffer - overflow, 0);
+      buf += footer;
+      contents = buf;
+    } else {
+      // No need to pad
+    }
+  }
+  status = file->Append(contents);
+  if (status.ok()) {
+    status = file->Sync();
+  }
+  if (status.ok()) {
+    status = file->Close();
+  }
+
+  // Will auto-close if we did not close above
+  delete file;
+  if (!status.ok()) {
+    env_->DeleteFile(fname.c_str());
+  }
+  return status;
+}
+
+template <typename T>
 Status DirWriterImpl<T>::Finalize() {
   mutex_.AssertHeld();
   uint32_t total_epochs = static_cast<uint32_t>(num_epochs_);
-  std::string ff = FooterFileName(dirname_);
   mutex_.Unlock();  // Unlock during i/o operations
   Footer footer = Mkfoot(options_);
   BlockHandle dummy_handle;
@@ -363,10 +403,10 @@ Status DirWriterImpl<T>::Finalize() {
     }
   }
 
-  // Install a special per-directory footer
+  // Write out our primary footer copy
   if (status.ok()) {
-    if (options_.rank == 0) {  // Rank 0 only
-      status = WriteStringToFileSync(env_, ftdata, ff.c_str());
+    if (options_.rank == 0) {  // Rank 0 does the writing
+      status = InstallDirInfo(ftdata);
     }
   }
 
@@ -1362,16 +1402,19 @@ Status DirReader::Open(const DirOptions& _opts, const std::string& dirname,
 #endif
   Footer footer;
   char tmp[Footer::kEncodedLength];
-  std::string primary;  // Primary copy of the footer
+  std::string buf;  // For primary footer copy
   if (options.lg_parts == -1 || options.num_epochs == -1 ||
       options.paranoid_checks) {
-    status = ReadFileToString(env, FooterFileName(dirname).c_str(), &primary);
+    status = ReadFileToString(env, DirInfoFileName(dirname).c_str(), &buf);
     if (!status.ok()) {
       return status;
-    } else if (primary.size() != Footer::kEncodedLength) {
-      return Status::Corruption("Footer file size is wrong");
+    } else if (buf.size() < Footer::kEncodedLength) {
+      return Status::Corruption("Truncated dir info");
     }
-    Slice input = primary;
+    Slice input = buf;
+    if (input.size() > Footer::kEncodedLength) {
+      input.remove_prefix(input.size() - Footer::kEncodedLength);
+    }
     status = footer.DecodeFrom(&input);
     if (!status.ok()) {
       return status;
@@ -1395,14 +1438,14 @@ Status DirReader::Open(const DirOptions& _opts, const std::string& dirname,
   if (!status.ok()) {
     // Error
   } else if (data->Size(data->LastFileIndex()) < Footer::kEncodedLength) {
-    status = Status::Corruption("Dir data log file too short to be valid");
+    status = Status::Corruption("Data log too short to be valid");
   } else if (options.paranoid_checks) {
     Slice input;
     uint64_t off = data->Size(data->LastFileIndex()) - Footer::kEncodedLength;
     status = data->Read(off, Footer::kEncodedLength, &input, tmp,
                         data->LastFileIndex());
     if (status.ok()) {
-      if (input.ToString() != primary) {
+      if (!Slice(buf).ends_with(input)) {
         status = Status::Corruption("Footer replica corrupted");
       }
     }

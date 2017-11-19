@@ -178,7 +178,7 @@ class Footer {
 
 extern Footer Mkfoot(const DirOptions& options);
 
-extern std::string FooterFileName(const std::string& dirname);
+extern std::string DirInfoFileName(const std::string& dirname);
 
 extern std::string ToDebugString(DirMode mode);
 
