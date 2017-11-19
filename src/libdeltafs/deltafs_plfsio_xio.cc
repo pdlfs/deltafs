@@ -423,7 +423,7 @@ static Status TryOpenIt(
   if (opts.type == LogType::kIndex)
     return OpenWithEagerSeqReads(f, opts.io_size, opts.env, opts.seq_stats, r);
   return RandomAccessOpen(f, opts.env, opts.stats, r);
-};
+}
 
 Status LogSource::Open(const LogOptions& opts, const std::string& prefix,
                        LogSource** result) {
