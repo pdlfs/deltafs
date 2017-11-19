@@ -263,15 +263,17 @@ class VarintFormat: public CompressedFormat {
 
   static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
     size_t index = 0;
+    const unsigned char signal_mask = 1<<7;
+    const unsigned char bit_mask = signal_mask-1;
     for(size_t i = 0; i < input.size(); i++) {
       size_t runLen = 0;
       size_t bytes = 0;
-      while((input[i] & (1<<7)) !=0) {
-        runLen += static_cast<size_t>(input[i] & ((1<<7)-1)) << (bytes*7);
+      while((input[i] & signal_mask) !=0) {
+        runLen += static_cast<size_t>(input[i] & bit_mask) << bytes;
         i++;
-        bytes++;
+        bytes+=7;
       }
-      runLen += static_cast<size_t>(input[i]) << (bytes*7);
+      runLen += static_cast<size_t>(input[i]) << bytes;
       if(index + runLen == bit)
         return true;
       else if (index + runLen > bit)
@@ -332,21 +334,23 @@ class VarintPlusFormat: public CompressedFormat {
   }
 
   static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
+    const unsigned char signal_mask = 1<<7;
+    const unsigned char bit_mask = signal_mask-1;
     size_t index = 0;
     for(size_t i = 0; i < input.size(); i++) {
       size_t runLen = 0;
       size_t bytes = 0;
-      if(static_cast<unsigned char>(input[i])<=254) {
+      if(static_cast<unsigned char>(input[i])!=255) {
         runLen += static_cast<unsigned char>(input[i]);
       } else {
         runLen += 254;
         i++;
-        while((input[i] & (1<<7)) !=0) {
-          runLen += static_cast<size_t>(input[i] & ((1<<7)-1)) << (bytes*7);
+        while((input[i] & signal_mask) !=0) {
+          runLen += static_cast<size_t>(input[i] & bit_mask) << bytes;
           i++;
-          bytes++;
+          bytes+=7;
         }
-        runLen += static_cast<size_t>(input[i]) << (bytes*7);
+        runLen += static_cast<size_t>(input[i]) << bytes;
       }
       if(index + runLen == bit)
         return true;
