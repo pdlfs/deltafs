@@ -15,7 +15,7 @@
 namespace pdlfs {
 namespace plfsio {
 
-std::string FooterFileName(const std::string& dirname) {
+std::string DirInfoFileName(const std::string& dirname) {
   return dirname + "/DIR.info";
 }
 
@@ -114,7 +114,7 @@ Status EpochStone::DecodeFrom(Slice* input) {
   }
 }
 
-Footer ToFooter(const DirOptions& options) {
+Footer Mkfoot(const DirOptions& options) {
   Footer result;
   result.set_lg_parts(static_cast<uint32_t>(options.lg_parts));
   result.set_value_size(static_cast<uint32_t>(options.value_size));
@@ -123,6 +123,7 @@ Footer ToFooter(const DirOptions& options) {
   result.set_epoch_log_rotation(
       static_cast<unsigned char>(options.epoch_log_rotation));
   result.set_skip_checksums(static_cast<unsigned char>(options.skip_checksums));
+  result.set_filter_type(static_cast<unsigned char>(options.filter));
   result.set_mode(static_cast<unsigned char>(options.mode));
   return result;
 }
@@ -136,6 +137,7 @@ void Footer::EncodeTo(std::string* dst) const {
   assert(fixed_kv_length_ != kInvalidUchar);
   assert(epoch_log_rotation_ != kInvalidUchar);
   assert(skip_checksums_ != kInvalidUchar);
+  assert(filter_type_ != kInvalidUchar);
   assert(mode_ != kInvalidUchar);
 
   epoch_index_handle_.EncodeTo(dst);
@@ -149,6 +151,7 @@ void Footer::EncodeTo(std::string* dst) const {
   dst->push_back(static_cast<char>(fixed_kv_length_));
   dst->push_back(static_cast<char>(epoch_log_rotation_));
   dst->push_back(static_cast<char>(skip_checksums_));
+  dst->push_back(static_cast<char>(filter_type_));
   dst->push_back(static_cast<char>(mode_));
 }
 
@@ -170,13 +173,14 @@ Status Footer::DecodeFrom(Slice* input) {
   if (magic != kTableMagicNumber) {
     return Status::Corruption("Bad dir footer magic number");
   } else {
-    lg_parts_ = DecodeFixed32(start + kEncodedLength - 20);
-    num_epochs_ = DecodeFixed32(start + kEncodedLength - 16);
-    value_size_ = DecodeFixed32(start + kEncodedLength - 12);
-    key_size_ = DecodeFixed32(start + kEncodedLength - 8);
-    fixed_kv_length_ = static_cast<unsigned char>(start[kEncodedLength - 4]);
-    epoch_log_rotation_ = static_cast<unsigned char>(start[kEncodedLength - 3]);
-    skip_checksums_ = static_cast<unsigned char>(start[kEncodedLength - 2]);
+    lg_parts_ = DecodeFixed32(start + kEncodedLength - 21);
+    num_epochs_ = DecodeFixed32(start + kEncodedLength - 17);
+    value_size_ = DecodeFixed32(start + kEncodedLength - 13);
+    key_size_ = DecodeFixed32(start + kEncodedLength - 9);
+    fixed_kv_length_ = static_cast<unsigned char>(start[kEncodedLength - 5]);
+    epoch_log_rotation_ = static_cast<unsigned char>(start[kEncodedLength - 4]);
+    skip_checksums_ = static_cast<unsigned char>(start[kEncodedLength - 3]);
+    filter_type_ = static_cast<unsigned char>(start[kEncodedLength - 2]);
     mode_ = static_cast<unsigned char>(start[kEncodedLength - 1]);
     switch (mode_) {
       case kMultiMap:

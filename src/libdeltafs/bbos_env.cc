@@ -70,9 +70,9 @@ class BbosEnv : public Env {
     int ret = bbos_mkobj(bb_handle_, obj_name.c_str(),
                          static_cast<bbos_mkobj_flag_t>(obj_type));
     if (ret != BB_SUCCESS) {
-      std::string bbos_err_msg("cannot create bbos object '");
+      std::string bbos_err_msg("cannot create bbos object ");
       bbos_err_msg += obj_name;
-      bbos_err_msg += "' (type=";
+      bbos_err_msg += " (type=";
       bbos_err_msg +=
           (obj_type == BbosType::kIndex) ? "READ_OPTIMIZED" : "WRITE_OPTIMIZED";
       bbos_err_msg += ")";
@@ -92,9 +92,8 @@ class BbosEnv : public Env {
     const std::string obj_name = BbosName(fname);
     off_t ret = bbos_get_size(bb_handle_, obj_name.c_str());
     if (ret < 0) {
-      std::string bbos_err_msg("cannot get bbos object length '");
+      std::string bbos_err_msg("cannot get bbos object length ");
       bbos_err_msg += obj_name;
-      bbos_err_msg += "'";
       *file_size = 0;
       return BbosError(bbos_err_msg, ret);
     } else {
