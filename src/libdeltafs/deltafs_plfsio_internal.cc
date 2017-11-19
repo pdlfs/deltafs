@@ -938,9 +938,11 @@ void DirLogger<T>::CompactMemtable() {
   Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes) ...",
           static_cast<int>(buffer->CurrentBufferSize()),
           static_cast<int>(tb_bytes_));
-#endif
 #ifndef NDEBUG
   const OutputStats stats = tb->output_stats_;
+#endif
+#endif  // VERBOSE
+#ifndef NDEBUG
   uint32_t num_keys = 0;
 #endif
   buffer->Finish(options_.skip_sort);
@@ -967,8 +969,8 @@ void DirLogger<T>::CompactMemtable() {
     assert(num_keys == buffer->NumEntries());
     // Inject the filter into the table
     tb->EndTable(ft, static_cast<ChunkType>(T::chunk_type()));
-#ifndef NDEBUG
 #if VERBOSE >= 3
+#ifndef NDEBUG
     Verbose(
         __LOG_ARGS__, 3, "\t+ D: %s, I: %s, F: %s",
         PrettySize(tb->output_stats_.final_data_size - stats.final_data_size)
@@ -979,7 +981,7 @@ void DirLogger<T>::CompactMemtable() {
                    stats.final_filter_size)
             .c_str());
 #endif
-#endif
+#endif  // VERBOSE
     if (is_epoch_flush) {
       tb->MakeEpoch();
     }

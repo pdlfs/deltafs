@@ -920,6 +920,7 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
   return result;
 }
 
+#if VERBOSE >= 3
 // Return a brief summary of the configured filter.
 static std::string FilterOptions(const DirOptions& options) {
   char tmp[50];
@@ -938,6 +939,7 @@ static std::string FilterOptions(const DirOptions& options) {
       return "Unk";
   }
 }
+#endif
 
 // Open a directory writer instance according to the instantiated implementation
 // type T. Return OK on success, or a non-OK status on errors.
