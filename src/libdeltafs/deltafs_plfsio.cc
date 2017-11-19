@@ -446,9 +446,7 @@ Status DirWriterImpl<T>::WaitForCompaction() {
   Status status;
   while (true) {
     status = ObtainCompactionStatus();
-    if (!status.ok()) {
-      break;
-    } else if (HasCompaction()) {
+    if (status.ok() && HasCompaction()) {
       bg_cv_.Wait();
     } else {
       break;
@@ -961,7 +959,7 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
 }
 
 #if VERBOSE >= 3
-// Return a brief summary of the configured filter.
+// Return a brief summary of filter configuration.
 static std::string FilterOptions(const DirOptions& options) {
   char tmp[50];
   switch (options.filter) {
