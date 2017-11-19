@@ -215,7 +215,7 @@ TEST(UncompressedBitmapFilterTest, BMP_U_RandomKeys) {
 
 // Varint bitmap filter
 typedef FilterTest<BitmapBlock<VarintFormat>, BitmapKeyMustMatch>
- VarintBitmapFilterTest;
+    VarintBitmapFilterTest;
 
 TEST(VarintBitmapFilterTest, BMP_V_Empty) {
   Random rnd(301);
@@ -412,7 +412,6 @@ TEST(RoaringBitmapFilterTest, BMP_R_RandomKeys) {
     ASSERT_FALSE(KeyMayMatch(*it));
   }
 }
-
 
 class PlfsIoTest {
  public:
@@ -1411,15 +1410,13 @@ class PlfsBfBench : protected PlfsIoBench {
 template <typename T>
 class PlfsFilterBench {
  public:
-  PlfsFilterBench(size_t table_num): table_num_(table_num), rnd_(301) {
+  PlfsFilterBench(size_t table_num) : table_num_(table_num), rnd_(301) {
     options_.bf_bits_per_key = 10;  // Override the defaults
     options_.bm_key_bits = 24;
     ft_ = new T(options_, 0);  // Does not reserve memory
   }
 
-  ~PlfsFilterBench() {
-    delete ft_;
-  }
+  ~PlfsFilterBench() { delete ft_; }
 
 #if defined(PDLFS_PLATFORM_POSIX)
   static inline double ToSecs(const struct timeval* tv) {
@@ -1432,16 +1429,16 @@ class PlfsFilterBench {
     const uint64_t start = Env::Default()->NowMicros();
     fprintf(stderr, "Inserting key...\n");
     size_t size = 0;
-    size_t key_num = (1<<24)/table_num_;
+    size_t key_num = (1 << 24) / table_num_;
     size_t time_steps = 10;
-    for(int k = 0; k<time_steps; k++) {
+    for (int k = 0; k < time_steps; k++) {
       // report progress
-      if(k % (time_steps >> 3)==0) {
+      if (k % (time_steps >> 3) == 0) {
         fprintf(stderr, "\r%.2f%%", 100.0 * k / time_steps);
       }
-      for(int j = 0; j<table_num_; j++) {
+      for (int j = 0; j < table_num_; j++) {
         ft_->Reset(key_num);
-        for(int i = 0; i<key_num; i++) {
+        for (int i = 0; i < key_num; i++) {
           uint32_t key = rnd_.Uniform(1 << 24);  // Random 24-bit keys
           std::string key_seq;
           PutFixed32(&key_seq, key);
@@ -1451,15 +1448,15 @@ class PlfsFilterBench {
       }
     }
 
-
     fprintf(stderr, "\nDone!\n");
     const uint64_t end = Env::Default()->NowMicros();
     const uint64_t dura = end - start;
 
     fprintf(stderr, "            filter size: %zu bytes\n", size);
     fprintf(stderr, "             Time steps: %zu \n", time_steps);
-    fprintf(stderr, "             key number: %zu \n", key_num*table_num_);
-    fprintf(stderr, "           bits per key: %.3f bits/key\n", size*8.0/(key_num*table_num_*time_steps));
+    fprintf(stderr, "             key number: %zu \n", key_num * table_num_);
+    fprintf(stderr, "           bits per key: %.3f bits/key\n",
+            size * 8.0 / (key_num * table_num_ * time_steps));
 
 #if defined(PDLFS_PLATFORM_POSIX)
     struct rusage usage;
@@ -1477,9 +1474,11 @@ class PlfsFilterBench {
     ASSERT_EQ(r2, 0);
     fprintf(stderr, "          Num CPU Cores: %d\n", CPU_COUNT(&cpu_set));
     fprintf(stderr, "              CPU Usage: %.1f%%\n",
-            k * k * (ToSecs(&usage.ru_utime) + ToSecs(&usage.ru_stime)) / dura * 100);
+            k * k * (ToSecs(&usage.ru_utime) + ToSecs(&usage.ru_stime)) / dura *
+                100);
 #endif
   }
+
  private:
   size_t table_num_;
   Random rnd_;
@@ -1488,7 +1487,8 @@ class PlfsFilterBench {
 };
 
 typedef PlfsFilterBench<BitmapBlock<VarintFormat>> PlfsVarintBitmapBench;
-typedef PlfsFilterBench<BitmapBlock<VarintPlusFormat>> PlfsVarintPlusBitmapBench;
+typedef PlfsFilterBench<BitmapBlock<VarintPlusFormat>>
+    PlfsVarintPlusBitmapBench;
 typedef PlfsFilterBench<BitmapBlock<PForDeltaFormat>> PlfsPForDeltaBitmapBench;
 typedef PlfsFilterBench<BitmapBlock<RoaringFormat>> PlfsRoaringBitmapBench;
 typedef PlfsFilterBench<BitmapBlock<UncompressedFormat>> PlfsBitmapBench;
@@ -1497,29 +1497,28 @@ typedef PlfsFilterBench<BloomBlock> PlfsBloomFilterBench;
 template <typename T, FilterTester tester>
 class PlfsFilterQueryBench {
  public:
-  PlfsFilterQueryBench(size_t table_num): table_num_(table_num), rnd_(301) {
-    options_.bf_bits_per_key = 10; // Override the defaults
+  PlfsFilterQueryBench(size_t table_num) : table_num_(table_num), rnd_(301) {
+    options_.bf_bits_per_key = 10;  // Override the defaults
     options_.bm_key_bits = 24;
-    ft_ = new T(options_, 0); // Does not reserve memory
+    ft_ = new T(options_, 0);  // Does not reserve memory
   }
 
-  ~PlfsFilterQueryBench() {
-    delete ft_;
-  }
+  ~PlfsFilterQueryBench() { delete ft_; }
 
   void LogAndApply() {
     BuildFilter();
     RunQueries();
   }
+
  protected:
   void BuildFilter() {
     fprintf(stderr, "\rInserting key...");
-    int key_num = (1<<24)/table_num_;
+    int key_num = (1 << 24) / table_num_;
     ft_->Reset(key_num);
     uint32_t max = 0;
-    for(int i = 0; i < key_num; i++) {
+    for (int i = 0; i < key_num; i++) {
       uint32_t key = rnd_.Uniform(1 << 24);  // Random 24-bit keys
-      max = key>max?key:max;
+      max = key > max ? key : max;
       std::string key_seq;
       PutFixed32(&key_seq, key);
       keys_.push_back(key_seq);
@@ -1530,20 +1529,21 @@ class PlfsFilterQueryBench {
   }
 
   void RunQueries() {
-    int key_num = (1<<24)/table_num_;
+    int key_num = (1 << 24) / table_num_;
     const uint64_t start = Env::Default()->NowMicros();
     uint64_t now = start;
     uint64_t max = 0;
     uint64_t min = -1;
     fprintf(stderr, "Query keys...\n");
     int i = 0;
-    for(std::vector<std::string>::iterator it = keys_.begin(); it != keys_.end(); ++it, ++i) {
+    for (std::vector<std::string>::iterator it = keys_.begin();
+         it != keys_.end(); ++it, ++i) {
       if (i % (1 << 15) == (1 << 15) - 1) {
         fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / key_num);
       }
       tester(*it, *(ft_->buffer_store()));
-      uint64_t interval = Env::Default()->NowMicros()-now;
-      if(interval < min) {
+      uint64_t interval = Env::Default()->NowMicros() - now;
+      if (interval < min) {
         min = interval;
       } else if (interval > max) {
         max = interval;
@@ -1565,10 +1565,8 @@ class PlfsFilterQueryBench {
             latency_.Average());
     fprintf(stderr, "       Median Read Time: %.3f us (per key)\n",
             latency_.Median());
-    fprintf(stderr, "          Min Read Time: %.3f us (per key)\n",
-            min);
-    fprintf(stderr, "          Max Read Time: %.3f us (per key)\n",
-            max);
+    fprintf(stderr, "          Min Read Time: %.3f us (per key)\n", min);
+    fprintf(stderr, "          Max Read Time: %.3f us (per key)\n", max);
   }
 
  private:
@@ -1580,12 +1578,19 @@ class PlfsFilterQueryBench {
   Histogram latency_;
 };
 
-typedef PlfsFilterQueryBench<BitmapBlock<VarintFormat>, BitmapKeyMustMatch> PlfsVarintBitmapQueryBench;
-typedef PlfsFilterQueryBench<BitmapBlock<VarintPlusFormat>, BitmapKeyMustMatch> PlfsVarintPlusBitmapQueryBench;
-typedef PlfsFilterQueryBench<BitmapBlock<PForDeltaFormat>, BitmapKeyMustMatch> PlfsPForDeltaBitmapQueryBench;
-typedef PlfsFilterQueryBench<BitmapBlock<RoaringFormat>, BitmapKeyMustMatch> PlfsRoaringBitmapQueryBench;
-typedef PlfsFilterQueryBench<BitmapBlock<UncompressedFormat>, BitmapKeyMustMatch> PlfsBitmapQueryBench;
-typedef PlfsFilterQueryBench<BloomBlock, BloomKeyMayMatch> PlfsBloomFilterReadBench;
+typedef PlfsFilterQueryBench<BitmapBlock<VarintFormat>, BitmapKeyMustMatch>
+    PlfsVarintBitmapQueryBench;
+typedef PlfsFilterQueryBench<BitmapBlock<VarintPlusFormat>, BitmapKeyMustMatch>
+    PlfsVarintPlusBitmapQueryBench;
+typedef PlfsFilterQueryBench<BitmapBlock<PForDeltaFormat>, BitmapKeyMustMatch>
+    PlfsPForDeltaBitmapQueryBench;
+typedef PlfsFilterQueryBench<BitmapBlock<RoaringFormat>, BitmapKeyMustMatch>
+    PlfsRoaringBitmapQueryBench;
+typedef PlfsFilterQueryBench<BitmapBlock<UncompressedFormat>,
+                             BitmapKeyMustMatch>
+    PlfsBitmapQueryBench;
+typedef PlfsFilterQueryBench<BloomBlock, BloomKeyMayMatch>
+    PlfsBloomFilterReadBench;
 
 }  // namespace plfsio
 }  // namespace pdlfs
@@ -1598,7 +1603,9 @@ typedef PlfsFilterQueryBench<BloomBlock, BloomKeyMayMatch> PlfsBloomFilterReadBe
 #endif
 
 static inline void BM_Usage() {
-  fprintf(stderr, "Use --bench=io or --bench=bf or --bench=filter to select a benchmark.\n");
+  fprintf(stderr,
+          "Use --bench=io or --bench=bf or --bench=filter to select a "
+          "benchmark.\n");
 }
 
 static void BM_LogAndApply(int* argc, char*** argv) {
@@ -1625,7 +1632,7 @@ static void BM_LogAndApply(int* argc, char*** argv) {
     pdlfs::plfsio::PlfsRoaringBitmapBench bench(100);
     bench.LogAndApply();
   } else if (bench_name == "--bench=fr") {
-    pdlfs::plfsio::PlfsRoaringBitmapQueryBench bench(100);
+    pdlfs::plfsio::PlfsVarintBitmapQueryBench bench(100);
     bench.LogAndApply();
   } else {
     BM_Usage();
