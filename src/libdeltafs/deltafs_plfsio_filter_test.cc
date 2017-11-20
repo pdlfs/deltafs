@@ -15,8 +15,13 @@
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 
+#include <stdlib.h>
+#ifdef PDLFS_PLATFORM_POSIX
+#include <sys/resource.h>
+#include <sys/time.h>
+#endif
+
 #include <set>
-#include <string>
 
 namespace pdlfs {
 namespace plfsio {
@@ -213,6 +218,85 @@ TEST(RoaringBitmapFilterTest, RoaringBitmapFmt) {
   }
 }
 
+template <typename T>
+class PlfsFilterBench {
+ public:
+  PlfsFilterBench(size_t table_num) : table_num_(table_num), rnd_(301) {
+    options_.bf_bits_per_key = 10;
+    options_.bm_key_bits = 24;
+    ft_ = new T(options_, 0);  // Does not reserve memory
+  }
+
+  ~PlfsFilterBench() { delete ft_; }
+
+#if defined(PDLFS_PLATFORM_POSIX)
+  static inline double ToSecs(const struct timeval* tv) {
+    return tv->tv_sec + tv->tv_usec / 1000.0 / 1000.0;
+  }
+#endif
+
+  void LogAndApply() {
+    const double k = 1000.0;
+    const uint64_t start = Env::Default()->NowMicros();
+    fprintf(stderr, "Inserting keys ... (may take a while)\n");
+    size_t size = 0;
+    size_t key_num = (1 << 24) / table_num_;
+    size_t time_steps = 10;
+    for (int k = 0; k < time_steps; k++) {
+      // Report progress
+      if (k % (time_steps >> 3) == 0) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * k / time_steps);
+      }
+      for (int j = 0; j < table_num_; j++) {
+        ft_->Reset(key_num);
+        for (int i = 0; i < key_num; i++) {
+          uint32_t key = rnd_.Uniform(1 << 24);  // Random 24-bit keys
+          std::string key_seq;
+          PutFixed32(&key_seq, key);
+          ft_->AddKey(key_seq);
+        }
+        size += ft_->Finish().size();
+      }
+    }
+
+    fprintf(stderr, "\nDone!\n");
+    const uint64_t end = Env::Default()->NowMicros();
+    const uint64_t dura = end - start;
+
+    fprintf(stderr, "            Filter size: %zu bytes\n", size);
+    fprintf(stderr, "              Timesteps: %zu \n", time_steps);
+    fprintf(stderr, "             Key number: %zu \n", key_num * table_num_);
+    fprintf(stderr, "           Bits per key: %.3f bits/key\n",
+            size * 8.0 / (key_num * table_num_ * time_steps));
+
+#if defined(PDLFS_PLATFORM_POSIX)
+    struct rusage usage;
+    int r1 = getrusage(RUSAGE_SELF, &usage);
+    ASSERT_EQ(r1, 0);
+    fprintf(stderr, "          User CPU Time: %.3f s\n",
+            ToSecs(&usage.ru_utime));
+    fprintf(stderr, "        System CPU Time: %.3f s\n",
+            ToSecs(&usage.ru_stime));
+#if defined(PDLFS_OS_LINUX)
+    cpu_set_t cpu_set;
+    CPU_ZERO(&cpu_set);
+    int r2 = sched_getaffinity(getpid(), sizeof(cpu_set), &cpu_set);
+    ASSERT_EQ(r2, 0);
+    fprintf(stderr, "          Num CPU Cores: %d\n", CPU_COUNT(&cpu_set));
+    fprintf(stderr, "              CPU Usage: %.1f%%\n",
+            k * k * (ToSecs(&usage.ru_utime) + ToSecs(&usage.ru_stime)) / dura *
+                100);
+#endif
+#endif
+  }
+
+ private:
+  size_t table_num_;
+  Random rnd_;
+  DirOptions options_;
+  T* ft_;
+};
+
 }  // namespace plfsio
 }  // namespace pdlfs
 
@@ -224,7 +308,59 @@ TEST(RoaringBitmapFilterTest, RoaringBitmapFmt) {
 #endif
 
 static void BM_Usage() {
-  fprintf(stderr, "Use --bench=wo or --bench=wr to select a benchmark.\n");
+  fprintf(stderr,
+          "Use --bench=ft,<fmt> or --bench=qu,<fmt> to run benchmark.\n\n");
+  fprintf(stderr, "==Valid fmt are:\n");
+  fprintf(stderr, "bf (bloom filter)\n");
+  fprintf(stderr, "bmp (bitmap)\n");
+  fprintf(stderr, "vb (bitmap, varint)\n");
+  fprintf(stderr, "vbp (bitmap, modified varint)\n");
+  fprintf(stderr, "pfdelta (bitmap, modified p-for-delta)\n");
+  fprintf(stderr, "r (bitmap, modified roaring)\n");
+  fprintf(stderr, "\n");
+}
+
+static void BM_LogAndApply(const char* fmt) {
+  if (fmt[0] != ',') {
+    BM_Usage();
+  } else if (strcmp(fmt + 1, "bf") == 0) {
+    typedef pdlfs::plfsio::PlfsFilterBench<pdlfs::plfsio::BloomBlock>
+        PlfsBloomFilterBench;
+    PlfsBloomFilterBench bench(100);
+    bench.LogAndApply();
+  } else if (strcmp(fmt + 1, "bmp") == 0) {
+    typedef pdlfs::plfsio::PlfsFilterBench<
+        pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::UncompressedFormat> >
+        PlfsBitmapBench;
+    PlfsBitmapBench bench(100);
+    bench.LogAndApply();
+  } else if (strcmp(fmt + 1, "vb") == 0) {
+    typedef pdlfs::plfsio::PlfsFilterBench<
+        pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VarintFormat> >
+        PlfsVarintBitmapBench;
+    PlfsVarintBitmapBench bench(100);
+    bench.LogAndApply();
+  } else if (strcmp(fmt + 1, "vbp") == 0) {
+    typedef pdlfs::plfsio::PlfsFilterBench<
+        pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VarintPlusFormat> >
+        PlfsVarintPlusBitmapBench;
+    PlfsVarintPlusBitmapBench bench(100);
+    bench.LogAndApply();
+  } else if (strcmp(fmt + 1, "pfdelta") == 0) {
+    typedef pdlfs::plfsio::PlfsFilterBench<
+        pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PForDeltaFormat> >
+        PlfsPForDeltaBitmapBench;
+    PlfsPForDeltaBitmapBench bench(100);
+    bench.LogAndApply();
+  } else if (strcmp(fmt + 1, "r") == 0) {
+    typedef pdlfs::plfsio::PlfsFilterBench<
+        pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::RoaringFormat> >
+        PlfsRoaringBitmapBench;
+    PlfsRoaringBitmapBench bench(100);
+    bench.LogAndApply();
+  } else {
+    BM_Usage();
+  }
 }
 
 static void BM_Main(int* argc, char*** argv) {
@@ -241,9 +377,9 @@ static void BM_Main(int* argc, char*** argv) {
   }
   if (*argc <= 1) {
     BM_Usage();
-  } else if (bench_name == "--bench=wo") {
-    BM_Usage();
-  } else if (bench_name == "--bench=wr") {
+  } else if (bench_name.starts_with("--bench=ft")) {
+    BM_LogAndApply(bench_name.c_str() + strlen("--bench=ft"));
+  } else if (bench_name.starts_with("--bench=qu")) {
     BM_Usage();
   } else {
     BM_Usage();
