@@ -21,7 +21,9 @@
 #include <sys/time.h>
 #endif
 
+#include <algorithm>
 #include <set>
+#include <vector>
 
 namespace pdlfs {
 namespace plfsio {
@@ -218,13 +220,21 @@ TEST(RoaringBitmapFilterTest, RoaringBitmapFmt) {
   }
 }
 
-template <typename T>
+template <typename T, size_t key_bits = 24>
 class PlfsFilterBench {
  public:
-  PlfsFilterBench(size_t table_num) : table_num_(table_num), rnd_(301) {
+  explicit PlfsFilterBench(size_t num_tables = 64)
+      : num_tables_(num_tables), key_bits_(key_bits) {
     options_.bf_bits_per_key = 10;
-    options_.bm_key_bits = 24;
-    ft_ = new T(options_, 0);  // Does not reserve memory
+    options_.bm_key_bits = key_bits_;
+
+    fprintf(stderr, "Generating keys ... (may take a while)\n");
+    keys_.reserve(1u << key_bits_);
+    for (uint32_t x = 0; x < (1u << key_bits_); x++) keys_.push_back(x);
+    std::random_shuffle(keys_.begin(), keys_.end());
+    fprintf(stderr, "Done!\n");
+
+    ft_ = new T(options_, 0);
   }
 
   ~PlfsFilterBench() { delete ft_; }
@@ -236,63 +246,67 @@ class PlfsFilterBench {
 #endif
 
   void LogAndApply() {
-    const double k = 1000.0;
+    const double k = 1000.0, ki = 1024.0;
     const uint64_t start = Env::Default()->NowMicros();
-    fprintf(stderr, "Inserting keys ... (may take a while)\n");
-    size_t size = 0;
-    size_t key_num = (1 << 24) / table_num_;
-    size_t time_steps = 10;
-    for (int k = 0; k < time_steps; k++) {
-      // Report progress
-      if (k % (time_steps >> 3) == 0) {
-        fprintf(stderr, "\r%.2f%%", 100.0 * k / time_steps);
+#if defined(PDLFS_PLATFORM_POSIX)
+    struct rusage tmp_usage;
+    int r0 = getrusage(RUSAGE_SELF, &tmp_usage);
+    ASSERT_EQ(r0, 0);
+#endif
+    fprintf(stderr, "Inserting keys ... (%d tables)\n", int(num_tables_));
+    size_t size = 0;  // Total filter size
+    const size_t num_keys = (1u << key_bits_) / num_tables_;  // Keys per table
+    std::vector<uint32_t>::iterator it = keys_.begin();
+    std::string buf;  // Buffer space for keys
+    for (size_t j = 0; j < num_tables_; j++) {
+      fprintf(stderr, "\r%d/%d", int(j), int(num_tables_));
+      ft_->Reset(num_keys);
+      for (size_t i = 0; i < num_keys; i++) {
+        buf.clear();
+        PutFixed32(&buf, *it);
+        ft_->AddKey(buf);
+        ++it;
       }
-      for (int j = 0; j < table_num_; j++) {
-        ft_->Reset(key_num);
-        for (int i = 0; i < key_num; i++) {
-          uint32_t key = rnd_.Uniform(1 << 24);  // Random 24-bit keys
-          std::string key_seq;
-          PutFixed32(&key_seq, key);
-          ft_->AddKey(key_seq);
-        }
-        size += ft_->Finish().size();
-      }
+      Slice contents = ft_->Finish();
+      size += contents.size();
     }
-
-    fprintf(stderr, "\nDone!\n");
+    fprintf(stderr, "\r%d/%d\n", int(num_tables_), int(num_tables_));
+    fprintf(stderr, "Done!\n");
     const uint64_t end = Env::Default()->NowMicros();
     const uint64_t dura = end - start;
 
-    fprintf(stderr, "            Filter size: %zu bytes\n", size);
-    fprintf(stderr, "              Timesteps: %zu \n", time_steps);
-    fprintf(stderr, "             Key number: %zu \n", key_num * table_num_);
-    fprintf(stderr, "           Bits per key: %.3f bits/key\n",
-            size * 8.0 / (key_num * table_num_ * time_steps));
+    fprintf(stderr, "----------------------------------------\n");
+    fprintf(stderr, "  Keys per filter: %d\n", int(num_keys));
+    fprintf(stderr, "      Num filters: %d\n", int(num_tables_));
+    fprintf(stderr, "Total filter size: %.2f MiB\n", 1.0 * size / ki / ki);
+    fprintf(stderr, "          Density: %.2f%%\n", 100.0 / num_tables_);
+    fprintf(stderr, "     Storage cost: %.2f (bits per key)\n",
+            8.0 * size / (num_keys * num_tables_));
 
 #if defined(PDLFS_PLATFORM_POSIX)
     struct rusage usage;
     int r1 = getrusage(RUSAGE_SELF, &usage);
     ASSERT_EQ(r1, 0);
-    fprintf(stderr, "          User CPU Time: %.3f s\n",
-            ToSecs(&usage.ru_utime));
-    fprintf(stderr, "        System CPU Time: %.3f s\n",
-            ToSecs(&usage.ru_stime));
+    double utime = ToSecs(&usage.ru_utime) - ToSecs(&tmp_usage.ru_utime);
+    double stime = ToSecs(&usage.ru_stime) - ToSecs(&tmp_usage.ru_stime);
+    fprintf(stderr, "    User CPU Time: %.3f s\n", utime);
+    fprintf(stderr, "  System CPU Time: %.3f s\n", stime);
 #if defined(PDLFS_OS_LINUX)
     cpu_set_t cpu_set;
     CPU_ZERO(&cpu_set);
     int r2 = sched_getaffinity(getpid(), sizeof(cpu_set), &cpu_set);
     ASSERT_EQ(r2, 0);
-    fprintf(stderr, "          Num CPU Cores: %d\n", CPU_COUNT(&cpu_set));
-    fprintf(stderr, "              CPU Usage: %.1f%%\n",
-            k * k * (ToSecs(&usage.ru_utime) + ToSecs(&usage.ru_stime)) / dura *
-                100);
+    fprintf(stderr, "    Num CPU Cores: %d\n", CPU_COUNT(&cpu_set));
+    fprintf(stderr, "        CPU Usage: %.1f%%\n",
+            k * k * (utime + stime) / dura * 100);
 #endif
 #endif
   }
 
  private:
-  size_t table_num_;
-  Random rnd_;
+  const size_t num_tables_;  // Num tables per epoch
+  const size_t key_bits_;
+  std::vector<uint32_t> keys_;
   DirOptions options_;
   T* ft_;
 };
@@ -326,37 +340,37 @@ static void BM_LogAndApply(const char* fmt) {
   } else if (strcmp(fmt + 1, "bf") == 0) {
     typedef pdlfs::plfsio::PlfsFilterBench<pdlfs::plfsio::BloomBlock>
         PlfsBloomFilterBench;
-    PlfsBloomFilterBench bench(100);
+    PlfsBloomFilterBench bench;
     bench.LogAndApply();
   } else if (strcmp(fmt + 1, "bmp") == 0) {
     typedef pdlfs::plfsio::PlfsFilterBench<
         pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::UncompressedFormat> >
         PlfsBitmapBench;
-    PlfsBitmapBench bench(100);
+    PlfsBitmapBench bench;
     bench.LogAndApply();
   } else if (strcmp(fmt + 1, "vb") == 0) {
     typedef pdlfs::plfsio::PlfsFilterBench<
         pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VarintFormat> >
         PlfsVarintBitmapBench;
-    PlfsVarintBitmapBench bench(100);
+    PlfsVarintBitmapBench bench;
     bench.LogAndApply();
   } else if (strcmp(fmt + 1, "vbp") == 0) {
     typedef pdlfs::plfsio::PlfsFilterBench<
         pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VarintPlusFormat> >
         PlfsVarintPlusBitmapBench;
-    PlfsVarintPlusBitmapBench bench(100);
+    PlfsVarintPlusBitmapBench bench;
     bench.LogAndApply();
   } else if (strcmp(fmt + 1, "pfdelta") == 0) {
     typedef pdlfs::plfsio::PlfsFilterBench<
         pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PForDeltaFormat> >
         PlfsPForDeltaBitmapBench;
-    PlfsPForDeltaBitmapBench bench(100);
+    PlfsPForDeltaBitmapBench bench;
     bench.LogAndApply();
   } else if (strcmp(fmt + 1, "r") == 0) {
     typedef pdlfs::plfsio::PlfsFilterBench<
         pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::RoaringFormat> >
         PlfsRoaringBitmapBench;
-    PlfsRoaringBitmapBench bench(100);
+    PlfsRoaringBitmapBench bench;
     bench.LogAndApply();
   } else {
     BM_Usage();
