@@ -21,12 +21,12 @@
 namespace pdlfs {
 namespace plfsio {
 
-template <typename T, FilterTester tester>
+template <typename T, FilterTester tester, size_t key_bits = 24>
 class FilterTest {
  public:
-  FilterTest() : ft_(NULL) {
+  FilterTest() : key_bits_(key_bits), ft_(NULL) {
     options_.bf_bits_per_key = 10;  // Override the defaults
-    options_.bm_key_bits = 24;
+    options_.bm_key_bits = key_bits_;
   }
 
   ~FilterTest() {
@@ -63,6 +63,7 @@ class FilterTest {
   }
 
   std::string data_;  // Final filter contents
+  const size_t key_bits_;
   DirOptions options_;
   T* ft_;
 };
@@ -71,7 +72,7 @@ template <typename T>
 static void TEST_LogAndApply(T* t, Random* rnd, uint32_t num_keys,
                              bool no_fp = true) {
   t->Reset(num_keys);
-  const int key_bits = t->options_.bm_key_bits;  // Obtain key space
+  const int key_bits = t->key_bits_;  // Obtain key space
   std::set<uint32_t> keys;
   while (keys.size() != num_keys) {
     keys.insert(rnd->Uniform(1 << key_bits));
@@ -81,7 +82,7 @@ static void TEST_LogAndApply(T* t, Random* rnd, uint32_t num_keys,
     t->AddKey(*it);
   }
   Slice contents = t->Finish();
-  fprintf(stderr, "%8u keys (%f%% full) %24s]\t%12.2f bits/key\n", num_keys,
+  fprintf(stderr, "%8u keys (%f%% full) %27s]\t%12.2f bits/key\n", num_keys,
           100.0 * double(num_keys) / (1u << key_bits),
           PrettySize(contents.size()).c_str(),
           8.0 * double(contents.size()) / num_keys);
@@ -107,6 +108,22 @@ static void TEST_LogAndApply(T* t, Random* rnd, uint32_t num_keys,
     // Test keys not in the defined key space
     for (uint32_t i = 0; i < num_keys; i++) {
       ASSERT_FALSE(t->KeyMayMatch((1u << key_bits) + i));
+    }
+  }
+}
+
+// Bloom filter
+typedef FilterTest<BloomBlock, BloomKeyMayMatch> BloomFilterTest;
+
+TEST(BloomFilterTest, BloomFmt) {
+  Random rnd(301);
+  uint32_t num_keys = 0;
+  while (num_keys <= (64 << 10)) {
+    TEST_LogAndApply(this, &rnd, num_keys, false);
+    if (num_keys == 0) {
+      num_keys = 1;
+    } else {
+      num_keys *= 4;
     }
   }
 }
