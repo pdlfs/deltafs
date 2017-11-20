@@ -85,6 +85,7 @@ class VarintFormat;
 class VarintPlusFormat;
 class PForDeltaFormat;
 class RoaringFormat;
+class PRoaringFormat;
 
 // A simple filter backed by a bitmap.
 template <typename T = UncompressedFormat>

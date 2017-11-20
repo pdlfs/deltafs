@@ -220,6 +220,23 @@ TEST(RoaringBitmapFilterTest, RoaringBitmapFmt) {
   }
 }
 
+// Roaring bitmap filter
+typedef FilterTest<BitmapBlock<PRoaringFormat>, BitmapKeyMustMatch>
+    PRoaringBitmapFilterTest;
+
+TEST(PRoaringBitmapFilterTest, PRoaringBitmapFmt) {
+  Random rnd(301);
+  uint32_t num_keys = 0;
+  while (num_keys <= (4 << 10)) {
+    TEST_LogAndApply(this, &rnd, num_keys);
+    if (num_keys == 0) {
+      num_keys = 1;
+    } else {
+      num_keys *= 4;
+    }
+  }
+}
+
 template <typename T, size_t key_bits = 24>
 class PlfsFilterBench {
  public:
@@ -325,12 +342,13 @@ static void BM_Usage() {
   fprintf(stderr,
           "Use --bench=ft,<fmt> or --bench=qu,<fmt> to run benchmark.\n\n");
   fprintf(stderr, "==Valid fmt are:\n");
-  fprintf(stderr, "bf (bloom filter)\n");
-  fprintf(stderr, "bmp (bitmap)\n");
-  fprintf(stderr, "vb (bitmap, varint)\n");
-  fprintf(stderr, "vbp (bitmap, modified varint)\n");
+  fprintf(stderr, "bf      (bloom filter)\n");
+  fprintf(stderr, "bmp     (bitmap)\n");
+  fprintf(stderr, "vb      (bitmap, varint)\n");
+  fprintf(stderr, "vbp     (bitmap, modified varint)\n");
   fprintf(stderr, "pfdelta (bitmap, modified p-for-delta)\n");
-  fprintf(stderr, "r (bitmap, modified roaring)\n");
+  fprintf(stderr, "r       (bitmap, modified roaring)\n");
+  fprintf(stderr, "pr      (bitmap, modified roaring with partitions)\n");
   fprintf(stderr, "\n");
 }
 
@@ -371,6 +389,12 @@ static void BM_LogAndApply(const char* fmt) {
         pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::RoaringFormat> >
         PlfsRoaringBitmapBench;
     PlfsRoaringBitmapBench bench;
+    bench.LogAndApply();
+  } else if (strcmp(fmt + 1, "pr") == 0) {
+    typedef pdlfs::plfsio::PlfsFilterBench<
+        pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PRoaringFormat> >
+        PlfsPRoaringBitmapBench;
+    PlfsPRoaringBitmapBench bench;
     bench.LogAndApply();
   } else {
     BM_Usage();

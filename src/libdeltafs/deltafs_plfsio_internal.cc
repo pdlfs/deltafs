@@ -592,7 +592,7 @@ Status TableLogger::Finish() {
   finished_ = true;
   if (!ok()) return status_;
   std::string footer_buf;
-  Footer footer = ToFooter(options_);
+  Footer footer = Mkfoot(options_);
 
   assert(!pending_indx_entry_);
   assert(!pending_meta_entry_);
@@ -938,9 +938,11 @@ void DirLogger<T>::CompactMemtable() {
   Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes) ...",
           static_cast<int>(buffer->CurrentBufferSize()),
           static_cast<int>(tb_bytes_));
-#endif
 #ifndef NDEBUG
   const OutputStats stats = tb->output_stats_;
+#endif
+#endif  // VERBOSE
+#ifndef NDEBUG
   uint32_t num_keys = 0;
 #endif
   buffer->Finish(options_.skip_sort);
@@ -967,8 +969,8 @@ void DirLogger<T>::CompactMemtable() {
     assert(num_keys == buffer->NumEntries());
     // Inject the filter into the table
     tb->EndTable(ft, static_cast<ChunkType>(T::chunk_type()));
-#ifndef NDEBUG
 #if VERBOSE >= 3
+#ifndef NDEBUG
     Verbose(
         __LOG_ARGS__, 3, "\t+ D: %s, I: %s, F: %s",
         PrettySize(tb->output_stats_.final_data_size - stats.final_data_size)
@@ -979,7 +981,7 @@ void DirLogger<T>::CompactMemtable() {
                    stats.final_filter_size)
             .c_str());
 #endif
-#endif
+#endif  // VERBOSE
     if (is_epoch_flush) {
       tb->MakeEpoch();
     }
@@ -1044,6 +1046,8 @@ template class DirLogger<BitmapBlock<VarintPlusFormat>>;
 template class DirLogger<BitmapBlock<PForDeltaFormat>>;
 
 template class DirLogger<BitmapBlock<RoaringFormat>>;
+
+template class DirLogger<BitmapBlock<PRoaringFormat>>;
 
 template class DirLogger<EmptyFilterBlock>;
 
@@ -1196,7 +1200,14 @@ bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& h) {
   const bool cached = true;
   status = ReadBlock(indx_, options_, h, &contents, cached);
   if (status.ok()) {
-    bool r = BloomKeyMayMatch(key, contents.data);
+    bool r;  // False if key must not match so no need for further access
+    if (options_.filter == FilterType::kBloomFilter) {
+      r = BloomKeyMayMatch(key, contents.data);
+    } else if (options_.filter == FilterType::kBitmapFilter) {
+      r = BitmapKeyMustMatch(key, contents.data);
+    } else {  // Unknown filter type
+      r = true;
+    }
     if (contents.heap_allocated) {
       delete[] contents.data.data();
     }
@@ -1606,11 +1617,17 @@ static inline bool UnMatch(U a, V b) {
   return a != static_cast<U>(b);
 }
 
+// Double-check if the options supplied by user code match the directory footer
+// fetched from the storage. Return OK if verification passes.
 static Status VerifyOptions(const DirOptions& options, const Footer& footer) {
   if (UnMatch(options.lg_parts, footer.lg_parts()) ||
+      UnMatch(options.key_size, footer.key_size()) ||
+      UnMatch(options.value_size, footer.value_size()) ||
+      UnMatch(options.epoch_log_rotation, footer.epoch_log_rotation()) ||
       UnMatch(options.skip_checksums, footer.skip_checksums()) ||
+      UnMatch(options.filter, footer.filter_type()) ||
       UnMatch(options.mode, footer.mode())) {
-    return Status::AssertionFailed("Option does not match footer");
+    return Status::AssertionFailed("Options does not match footer");
   } else {
     return Status::OK();
   }

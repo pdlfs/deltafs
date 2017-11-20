@@ -13,8 +13,8 @@
 #include "deltafs_plfsio.h"
 
 #include <assert.h>
-#include <typeinfo>       // operator typeid
 #include <algorithm>
+#include <typeinfo>  // operator typeid
 
 namespace pdlfs {
 namespace plfsio {
@@ -155,7 +155,7 @@ class CompressedFormat {
   CompressedFormat(const DirOptions& options, std::string* space)
       : key_bits_(options.bm_key_bits), space_(space) {
     bits_ = 1u << key_bits_;  // Logic domain space (total # unique keys)
-    bucket_num_ = 1u << (key_bits_-8);
+    bucket_num_ = 1u << (key_bits_ - 8);
   }
 
   // Reset filter state and resize buffer space.
@@ -166,10 +166,10 @@ class CompressedFormat {
     overflowed.clear();
     // Calculate bucket size in probability
     // Extra byte to store the number of key in the bucket
-    bucket_size_ = (num_keys+bucket_num_-1)/bucket_num_ + 1;
+    bucket_size_ = (num_keys + bucket_num_ - 1) / bucket_num_ + 1;
     working_space_.resize(bucket_size_ * bucket_num_, 0);
     // Calculate the approximate final result size
-    size_t approx_size = (num_keys*10 + 7)/8; // Assume 10 bits/key
+    size_t approx_size = (num_keys * 10 + 7) / 8;  // Assume 10 bits/key
     space_->reserve(approx_size);
   }
 
@@ -178,20 +178,22 @@ class CompressedFormat {
   void Set(uint32_t i) {
     int bucket_index = i >> 8;
     // Read bucket key number
-    unsigned char key_index = working_space_[bucket_index*bucket_size_];
-    if(key_index < bucket_size_-1) {
+    unsigned char key_index = working_space_[bucket_index * bucket_size_];
+    if (key_index < bucket_size_ - 1) {
       // Append to the bucket
-      working_space_[bucket_index*bucket_size_+key_index+1] = i & ((1 << 8)-1);
+      working_space_[bucket_index * bucket_size_ + key_index + 1] =
+          i & ((1 << 8) - 1);
     } else {
       // Append to overflow vector
       overflowed.push_back(i);
     }
     // Update the bucket key number
-    working_space_[bucket_index*bucket_size_] = key_index+1;
+    working_space_[bucket_index * bucket_size_] = key_index + 1;
   }
 
   size_t memory_usage() const {
-    return space_->capacity() + working_space_.capacity() + overflowed.size() * sizeof(size_t);
+    return space_->capacity() + working_space_.capacity() +
+           overflowed.size() * sizeof(size_t);
   }
 
   // Finalize the bitmap representation.
@@ -219,10 +221,10 @@ class CompressedFormat {
   std::vector<size_t> overflowed;
 };
 
-class VarintFormat: public CompressedFormat {
+class VarintFormat : public CompressedFormat {
  public:
   VarintFormat(const DirOptions& options, std::string* space)
-      :CompressedFormat(options, space) {}
+      : CompressedFormat(options, space) {}
 
   size_t Finish() {
     std::sort(overflowed.begin(), overflowed.end());
@@ -230,21 +232,25 @@ class VarintFormat: public CompressedFormat {
     size_t last_one = 0;
     std::vector<size_t> bucket_keys;
     // For every bucket
-    for(size_t i = 0; i < bucket_num_; i++) {
+    for (size_t i = 0; i < bucket_num_; i++) {
       // Bucket key size
-      unsigned char key_num = static_cast<unsigned char>(working_space_[bucket_size_*i]);
-      size_t offset = bucket_size_*i + 1;
+      unsigned char key_num =
+          static_cast<unsigned char>(working_space_[bucket_size_ * i]);
+      size_t offset = bucket_size_ * i + 1;
       // Clear vector for repeated use.
       bucket_keys.clear();
-      for(int j = 0; j< key_num; j++) {
-        if(j < bucket_size_-1)
-          bucket_keys.push_back(static_cast<unsigned char>(working_space_[offset+j]) + (i<<8));
+      for (int j = 0; j < key_num; j++) {
+        if (j < bucket_size_ - 1)
+          bucket_keys.push_back(
+              static_cast<unsigned char>(working_space_[offset + j]) +
+              (i << 8));
         else
           bucket_keys.push_back(overflowed[overflowed_idx++]);
       }
       std::sort(bucket_keys.begin(), bucket_keys.end());
-      for(std::vector<size_t>::iterator it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
-        size_t distance = *it-last_one;
+      for (std::vector<size_t>::iterator it = bucket_keys.begin();
+           it != bucket_keys.end(); ++it) {
+        size_t distance = *it - last_one;
         last_one = *it;
         // Encoding the distance to variable length encode.
         unsigned char b = static_cast<unsigned char>(distance % 128);
@@ -263,18 +269,18 @@ class VarintFormat: public CompressedFormat {
 
   static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
     size_t index = 0;
-    const unsigned char signal_mask = 1<<7;
-    const unsigned char bit_mask = signal_mask-1;
-    for(size_t i = 0; i < input.size(); i++) {
+    const unsigned char signal_mask = 1 << 7;
+    const unsigned char bit_mask = signal_mask - 1;
+    for (size_t i = 0; i < input.size(); i++) {
       size_t runLen = 0;
       size_t bytes = 0;
-      while((input[i] & signal_mask) !=0) {
+      while ((input[i] & signal_mask) != 0) {
         runLen += static_cast<size_t>(input[i] & bit_mask) << bytes;
         i++;
-        bytes+=7;
+        bytes += 7;
       }
       runLen += static_cast<size_t>(input[i]) << bytes;
-      if(index + runLen == bit)
+      if (index + runLen == bit)
         return true;
       else if (index + runLen > bit)
         return false;
@@ -285,10 +291,10 @@ class VarintFormat: public CompressedFormat {
   }
 };
 
-class VarintPlusFormat: public CompressedFormat {
+class VarintPlusFormat : public CompressedFormat {
  public:
   VarintPlusFormat(const DirOptions& options, std::string* space)
-      :CompressedFormat(options, space) {}
+      : CompressedFormat(options, space) {}
 
   size_t Finish() {
     std::sort(overflowed.begin(), overflowed.end());
@@ -296,24 +302,28 @@ class VarintPlusFormat: public CompressedFormat {
     size_t last_one = 0;
     std::vector<size_t> bucket_keys;
     // For every bucket
-    for(size_t i = 0; i < bucket_num_; i++) {
+    for (size_t i = 0; i < bucket_num_; i++) {
       // Bucket key size
-      unsigned char key_num = static_cast<unsigned char>(working_space_[bucket_size_*i]);
-      size_t offset = bucket_size_*i + 1;
+      unsigned char key_num =
+          static_cast<unsigned char>(working_space_[bucket_size_ * i]);
+      size_t offset = bucket_size_ * i + 1;
       // Clear vector for repeated use.
       bucket_keys.clear();
-      for(int j = 0; j< key_num; j++) {
-        if(j < bucket_size_-1)
-          bucket_keys.push_back(static_cast<unsigned char>(working_space_[offset+j]) + (i<<8));
+      for (int j = 0; j < key_num; j++) {
+        if (j < bucket_size_ - 1)
+          bucket_keys.push_back(
+              static_cast<unsigned char>(working_space_[offset + j]) +
+              (i << 8));
         else
           bucket_keys.push_back(overflowed[overflowed_idx++]);
       }
       std::sort(bucket_keys.begin(), bucket_keys.end());
-      for(std::vector<size_t>::iterator it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
-        size_t distance = *it-last_one;
+      for (std::vector<size_t>::iterator it = bucket_keys.begin();
+           it != bucket_keys.end(); ++it) {
+        size_t distance = *it - last_one;
         last_one = *it;
         // Encoding the distance to variable length plus encode.
-        if(distance <= 254) {
+        if (distance <= 254) {
           space_->push_back(static_cast<unsigned char>(distance));
         } else {
           space_->push_back(static_cast<unsigned char>(255));
@@ -334,25 +344,25 @@ class VarintPlusFormat: public CompressedFormat {
   }
 
   static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
-    const unsigned char signal_mask = 1<<7;
-    const unsigned char bit_mask = signal_mask-1;
+    const unsigned char signal_mask = 1 << 7;
+    const unsigned char bit_mask = signal_mask - 1;
     size_t index = 0;
-    for(size_t i = 0; i < input.size(); i++) {
+    for (size_t i = 0; i < input.size(); i++) {
       size_t runLen = 0;
       size_t bytes = 0;
-      if(static_cast<unsigned char>(input[i])!=255) {
+      if (static_cast<unsigned char>(input[i]) != 255) {
         runLen += static_cast<unsigned char>(input[i]);
       } else {
         runLen += 254;
         i++;
-        while((input[i] & signal_mask) !=0) {
+        while ((input[i] & signal_mask) != 0) {
           runLen += static_cast<size_t>(input[i] & bit_mask) << bytes;
           i++;
-          bytes+=7;
+          bytes += 7;
         }
         runLen += static_cast<size_t>(input[i]) << bytes;
       }
-      if(index + runLen == bit)
+      if (index + runLen == bit)
         return true;
       else if (index + runLen > bit)
         return false;
@@ -363,10 +373,10 @@ class VarintPlusFormat: public CompressedFormat {
   }
 };
 
-class PForDeltaFormat: public CompressedFormat {
+class PForDeltaFormat : public CompressedFormat {
  public:
   PForDeltaFormat(const DirOptions& options, std::string* space)
-      :CompressedFormat(options, space) {}
+      : CompressedFormat(options, space) {}
 
   size_t Finish() {
     std::sort(overflowed.begin(), overflowed.end());
@@ -378,34 +388,38 @@ class PForDeltaFormat: public CompressedFormat {
     cohort.reserve(cohort_size_);
     size_t cohort_or = 0;
     // For every bucket
-    for(size_t i = 0; i < bucket_num_; i++) {
+    for (size_t i = 0; i < bucket_num_; i++) {
       // Bucket key size
-      unsigned char key_num = static_cast<unsigned char>(working_space_[bucket_size_*i]);
-      size_t offset = bucket_size_*i + 1;
+      unsigned char key_num =
+          static_cast<unsigned char>(working_space_[bucket_size_ * i]);
+      size_t offset = bucket_size_ * i + 1;
       // Clear vector for repeated use.
       bucket_keys.clear();
-      for(int j = 0; j< key_num; j++) {
-        if(j < bucket_size_-1)
-          bucket_keys.push_back(static_cast<unsigned char>(working_space_[offset+j]) + (i<<8));
+      for (int j = 0; j < key_num; j++) {
+        if (j < bucket_size_ - 1)
+          bucket_keys.push_back(
+              static_cast<unsigned char>(working_space_[offset + j]) +
+              (i << 8));
         else
           bucket_keys.push_back(overflowed[overflowed_idx++]);
       }
       std::sort(bucket_keys.begin(), bucket_keys.end());
-      for(std::vector<size_t>::iterator it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
-        size_t distance = *it-last_one;
+      for (std::vector<size_t>::iterator it = bucket_keys.begin();
+           it != bucket_keys.end(); ++it) {
+        size_t distance = *it - last_one;
         last_one = *it;
         // Encoding the distance using pForDelta.
         cohort.push_back(distance);
         cohort_or |= distance;
         // If full
-        if(cohort.size() == cohort_size_)  {
+        if (cohort.size() == cohort_size_) {
           EncodingCohort(cohort, cohort_or);
           cohort_or = 0;
           cohort.clear();
         }
       }
     }
-    if(cohort.size() > 0) {
+    if (cohort.size() > 0) {
       EncodingCohort(cohort, cohort_or);
     }
     return space_->size();
@@ -415,21 +429,22 @@ class PForDeltaFormat: public CompressedFormat {
     size_t index = 0;
     size_t cohort_num = 0;
     unsigned char bit_num;
-    unsigned char b=0;
-    int byte_index=-1;
-    for(size_t i = 0; i < input.size();) {
+    unsigned char b = 0;
+    int byte_index = -1;
+    for (size_t i = 0; i < input.size();) {
+      assert(byte_index == -1);
+
       bit_num = static_cast<unsigned char>(input[i++]);
       cohort_num = cohort_size_;
-      if((input.size()-i)*8/bit_num < cohort_num) {
-        cohort_num = (input.size()-i)*8/bit_num;
+      if ((input.size() - i) * 8 / bit_num < cohort_num) {
+        cohort_num = (input.size() - i) * 8 / bit_num;
       }
-
       while (cohort_num > 0) {
         size_t runLen = 0;
-        int runLen_index = bit_num-1;
-        while(runLen_index >= 0) {
-          if(byte_index<0) {
-            if(i < input.size()) {
+        int runLen_index = bit_num - 1;
+        while (runLen_index >= 0) {
+          if (byte_index < 0) {
+            if (i < input.size()) {
               b = static_cast<unsigned char>(input[i]);
               byte_index = 7;
               i++;
@@ -441,14 +456,13 @@ class PForDeltaFormat: public CompressedFormat {
           runLen_index -= 1;
         }
         cohort_num -= 1;
-        if(index + runLen == bit)
+        if (index + runLen == bit)
           return true;
         else if (index + runLen > bit)
           return false;
         else
           index += runLen;
       }
-      assert(byte_index==0);
     }
     return false;
   }
@@ -458,22 +472,23 @@ class PForDeltaFormat: public CompressedFormat {
     unsigned char bit_num = LeftMostOneBit(cohort_or);
     space_->push_back(bit_num);
 
-    unsigned char b = 0; // tmp byte to fill bit by bit
-    int byte_index = 7; // Start fill from the most significant bit.
-    int dis_index = bit_num-1;
+    unsigned char b = 0;  // tmp byte to fill bit by bit
+    int byte_index = 7;   // Start fill from the most significant bit.
+    int dis_index = bit_num - 1;
     // Encoding cohort
-    for(std::vector<size_t>::iterator it = cohort.begin(); it != cohort.end(); ++it) {
+    for (std::vector<size_t>::iterator it = cohort.begin(); it != cohort.end();
+         ++it) {
       dis_index = bit_num - 1;
-      while(dis_index>=0) {
-        b |= (*it & (1 << dis_index--))>=1? (1 << byte_index) : 0;
-        if(byte_index--==0) {
+      while (dis_index >= 0) {
+        b |= (*it & (1 << dis_index--)) >= 1 ? (1 << byte_index) : 0;
+        if (byte_index-- == 0) {
           space_->push_back(b);
           b = 0;
           byte_index = 7;
         }
       }
     }
-    if(byte_index!=7) {
+    if (byte_index != 7) {
       space_->push_back(b);
     }
   }
@@ -482,12 +497,11 @@ class PForDeltaFormat: public CompressedFormat {
   const static size_t cohort_size_ = 128;
 };
 
-
 // Roaring bitmap format bucket size 2^8
-class RoaringFormat: public CompressedFormat {
+class RoaringFormat : public CompressedFormat {
  public:
   RoaringFormat(const DirOptions& options, std::string* space)
-      :CompressedFormat(options, space) {}
+      : CompressedFormat(options, space) {}
 
   void Reset(uint32_t num_keys) {
     CompressedFormat::Reset(num_keys);
@@ -498,19 +512,20 @@ class RoaringFormat: public CompressedFormat {
     // Copy from parent
     int bucket_index = i >> 8;
     // Read bucket key number
-    unsigned char key_index = working_space_[bucket_index*bucket_size_];
-    if(key_index < bucket_size_-1) {
+    unsigned char key_index = working_space_[bucket_index * bucket_size_];
+    if (key_index < bucket_size_ - 1) {
       // Append to the bucket
-      working_space_[bucket_index*bucket_size_+key_index+1] = i & ((1 << 8)-1);
+      working_space_[bucket_index * bucket_size_ + key_index + 1] =
+          i & ((1 << 8) - 1);
     } else {
       // Append to overflow vector
       overflowed.push_back(i);
     }
     // Update the bucket key number
-    working_space_[bucket_index*bucket_size_] = key_index+1;
+    working_space_[bucket_index * bucket_size_] = key_index + 1;
 
     // Update max bit
-    bucket_size_max_bit_ |= static_cast<size_t>(key_index+1);
+    bucket_size_max_bit_ |= static_cast<size_t>(key_index + 1);
   }
 
   size_t Finish() {
@@ -518,7 +533,7 @@ class RoaringFormat: public CompressedFormat {
     size_t overflowed_idx = 0;
 
     unsigned char bits_per_len = LeftMostOneBit(bucket_size_max_bit_);
-    space_->resize(1+(bits_per_len*bucket_num_+7)/8, 0);
+    space_->resize(1 + (bits_per_len * bucket_num_ + 7) / 8, 0);
     (*space_)[0] = bits_per_len;
 
     // Leave the space at the head to store the size for every buckets
@@ -526,49 +541,54 @@ class RoaringFormat: public CompressedFormat {
     size_t bucket_len_byte_idx = 1;
 
     unsigned char bucket_len_byte = 0;
-    int bucket_len_bit_idx = 7; // The index of bit in the constructing byte.
+    int bucket_len_bit_idx = 7;  // The index of bit in the constructing byte.
 
     std::vector<unsigned char> bucket_keys;
     // For every bucket
-    for(size_t i = 0; i < bucket_num_; i++) {
+    for (size_t i = 0; i < bucket_num_; i++) {
       // Bucket key size
-      unsigned char key_num = static_cast<unsigned char>(working_space_[bucket_size_*i]);
-      size_t offset = bucket_size_*i + 1;
+      unsigned char key_num =
+          static_cast<unsigned char>(working_space_[bucket_size_ * i]);
+      size_t offset = bucket_size_ * i + 1;
       // Clear vector for repeated use.
       bucket_keys.clear();
-      for(int j = 0; j< key_num; j++) {
-        if(j < bucket_size_-1)
-          bucket_keys.push_back(static_cast<unsigned char>(working_space_[offset+j]));
+      for (int j = 0; j < key_num; j++) {
+        if (j < bucket_size_ - 1)
+          bucket_keys.push_back(
+              static_cast<unsigned char>(working_space_[offset + j]));
         else
-          bucket_keys.push_back(static_cast<unsigned char>(overflowed[overflowed_idx++] & 255));
+          bucket_keys.push_back(
+              static_cast<unsigned char>(overflowed[overflowed_idx++] & 255));
       }
       std::sort(bucket_keys.begin(), bucket_keys.end());
       // Encoding bucket size
       int len_index = bits_per_len - 1;
-      while(len_index>=0) {
-        bucket_len_byte |= (key_num & (1 << len_index--))>=1? (1 << bucket_len_bit_idx) : 0;
-        if(bucket_len_bit_idx--==0) {
+      while (len_index >= 0) {
+        bucket_len_byte |=
+            (key_num & (1 << len_index--)) >= 1 ? (1 << bucket_len_bit_idx) : 0;
+        if (bucket_len_bit_idx-- == 0) {
           (*space_)[bucket_len_byte_idx++] = bucket_len_byte;
           bucket_len_byte = 0;
           bucket_len_bit_idx = 7;
         }
       }
       // Fill the offsets of the bucket
-      for(std::vector<unsigned char>::iterator it = bucket_keys.begin(); it != bucket_keys.end(); ++it) {
+      for (std::vector<unsigned char>::iterator it = bucket_keys.begin();
+           it != bucket_keys.end(); ++it) {
         // Encoding the distance to roaring bitmap encode.
         space_->push_back(*it);
       }
     }
 
-    if(bucket_len_bit_idx!=7) {
-      (*space_)[bucket_len_byte_idx] = bucket_len_byte;;
+    if (bucket_len_bit_idx != 7) {
+      (*space_)[bucket_len_byte_idx] = bucket_len_byte;
+      ;
     }
 
     return space_->size();
   }
 
   static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
-
     uint32_t bucket_idx = bit >> 8;
     unsigned char bit_per_len = input[0];
     int len_byte_idx = 1;
@@ -578,61 +598,245 @@ class RoaringFormat: public CompressedFormat {
     // Get the offset of the bucket
     unsigned char b = 0;
     int b_idx = -1;
-    while(bucket_idx-->0) {
+    while (bucket_idx-- > 0) {
       len = 0;
-      int len_index = bit_per_len-1;
-      while(len_index>=0) {
-        if(b_idx < 0) {
+      int len_index = bit_per_len - 1;
+      while (len_index >= 0) {
+        if (b_idx < 0) {
           b = static_cast<unsigned char>(input[len_byte_idx++]);
           b_idx = 7;
         }
-        len |= (b & (1<<b_idx--))>0?(1<<len_index):0;
-        len_index-=1;
+        len |= (b & (1 << b_idx--)) > 0 ? (1 << len_index) : 0;
+        len_index -= 1;
       }
-      offset+=len;
+      offset += len;
     }
 
     // Get the size of the bucket
     size_t bucket_size = 0;
-    int bucket_size_index = bit_per_len-1;
-    while(bucket_size_index>=0) {
-      if(b_idx < 0) {
+    int bucket_size_index = bit_per_len - 1;
+    while (bucket_size_index >= 0) {
+      if (b_idx < 0) {
         b = static_cast<unsigned char>(input[len_byte_idx++]);
         b_idx = 7;
       }
-      bucket_size |= (b & (1 << b_idx--))>0?(1<<bucket_size_index):0;
-      bucket_size_index-=1;
+      bucket_size |= (b & (1 << b_idx--)) > 0 ? (1 << bucket_size_index) : 0;
+      bucket_size_index -= 1;
     }
 
-    size_t start_idx = 1 + ((1 << (key_bits-8))/*bucket number*/*bit_per_len+7)/8 + offset;
+    size_t start_idx =
+        1 + ((1 << (key_bits - 8)) /*bucket number*/ * bit_per_len + 7) / 8 +
+        offset;
     unsigned char target_offset = static_cast<unsigned char>(bit & 255);
     unsigned char key_offset;
-    for(size_t i = start_idx; i < start_idx+bucket_size; i++) {
+    for (size_t i = start_idx; i < start_idx + bucket_size; i++) {
       key_offset = static_cast<unsigned char>(input[i]);
-      if(key_offset==target_offset)
+      if (key_offset == target_offset)
         return true;
-      else if(key_offset>target_offset)
+      else if (key_offset > target_offset)
         return false;
     }
     return false;
   }
+
  private:
   size_t bucket_size_max_bit_ = 0;
 };
 
+// Partitioned Roaring bitmap format bucket size 2^8
+class PRoaringFormat : public CompressedFormat {
+ public:
+  PRoaringFormat(const DirOptions& options, std::string* space)
+      : CompressedFormat(options, space), partition_num_(bucket_num_ >> 8) {}
+
+  void Reset(uint32_t num_keys) {
+    CompressedFormat::Reset(num_keys);
+
+    bucket_size_max_bit_ = 0;
+    partition_sum_.resize(partition_num_, 0);
+  }
+
+  void Set(uint32_t i) {
+    // Copy from parent
+    int bucket_index = i >> 8;
+    // Read bucket key number
+    unsigned char key_index = working_space_[bucket_index * bucket_size_];
+    if (key_index < bucket_size_ - 1) {
+      // Append to the bucket
+      working_space_[bucket_index * bucket_size_ + key_index + 1] = i & 0xff;
+    } else {
+      // Append to overflow vector
+      overflowed.push_back(i);
+    }
+    // Update the bucket key number
+    working_space_[bucket_index * bucket_size_] = key_index + 1;
+
+    int partition_index = bucket_index >> 8;
+    // Update max bit
+    bucket_size_max_bit_ |= static_cast<size_t>(key_index + 1);
+    partition_sum_[partition_index] += 1;
+  }
+
+  size_t Finish() {
+    std::sort(overflowed.begin(), overflowed.end());
+    size_t overflowed_idx = 0;
+
+    // Reserve space for header (partition sum & bits)
+    space_->resize(partition_num_ * sizeof(uint16_t) + 1, 0);
+
+    for (size_t i = 0; i < partition_num_; i++) {
+      (*space_)[2 * i] = static_cast<char>(partition_sum_[i] & 0xff);
+      (*space_)[2 * i + 1] = static_cast<char>((partition_sum_[i] >> 8) & 0xff);
+    }
+
+    unsigned char bits_per_len = LeftMostOneBit(bucket_size_max_bit_);
+    (*space_)[partition_num_ * sizeof(uint16_t)] = bits_per_len;
+
+    // Leave the space at the head to store the size for every buckets
+    // The index of the byte at space_ to encode bucket size.
+    size_t bucket_len_byte_idx = space_->size();
+
+    space_->resize(space_->size() + (bits_per_len * bucket_num_ + 7) / 8, 0);
+
+    unsigned char bucket_len_byte = 0;
+    int bucket_len_bit_idx = 7;  // The index of bit in the constructing byte.
+
+    std::vector<unsigned char> bucket_keys;
+    // For every bucket
+    for (size_t i = 0; i < bucket_num_; i++) {
+      // Bucket key size
+      unsigned char key_num =
+          static_cast<unsigned char>(working_space_[bucket_size_ * i]);
+      size_t offset = bucket_size_ * i + 1;
+      // Clear vector for repeated use.
+      bucket_keys.clear();
+      for (int j = 0; j < key_num; j++) {
+        if (j < bucket_size_ - 1)
+          bucket_keys.push_back(
+              static_cast<unsigned char>(working_space_[offset + j]));
+        else
+          bucket_keys.push_back(
+              static_cast<unsigned char>(overflowed[overflowed_idx++] & 255));
+      }
+      std::sort(bucket_keys.begin(), bucket_keys.end());
+      // Encoding bucket size
+      int len_index = bits_per_len - 1;
+      while (len_index >= 0) {
+        bucket_len_byte |=
+            (key_num & (1 << len_index--)) >= 1 ? (1 << bucket_len_bit_idx) : 0;
+        if (bucket_len_bit_idx-- == 0) {
+          (*space_)[bucket_len_byte_idx++] = bucket_len_byte;
+          bucket_len_byte = 0;
+          bucket_len_bit_idx = 7;
+        }
+      }
+      // Fill the offsets of the bucket
+      for (std::vector<unsigned char>::iterator it = bucket_keys.begin();
+           it != bucket_keys.end(); ++it) {
+        // Encoding the distance to roaring bitmap encode.
+        space_->push_back(*it);
+      }
+    }
+
+    if (bucket_len_bit_idx != 7) {
+      (*space_)[bucket_len_byte_idx] = bucket_len_byte;
+      ;
+    }
+
+    return space_->size();
+  }
+
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
+    size_t partition_idx = bit >> 16;
+    size_t bucket_idx = (bit & 0xff00) >> 8;
+    size_t bucket_number = 1 << (key_bits - 8);
+    size_t partition_num = bucket_number >> 8;
+
+    size_t offset = 0;
+    // Traverse partition lookup table
+    for (int i = 0; i < partition_idx; i++) {
+      offset += (input[2 * i] + (input[2 * i + 1] << 8));
+    }
+
+    unsigned char bit_per_len = input[2 * partition_num];
+    int len_byte_idx =
+        2 * partition_num + 1 +
+        (bit_per_len * partition_idx << (8 - 3));  // *256 / 8(bits/byte)
+    size_t len;
+
+    // Get the offset of the bucket
+    unsigned char b = 0;
+    int b_idx = -1;
+    while (bucket_idx-- > 0) {
+      len = 0;
+      int len_index = bit_per_len - 1;
+      while (len_index >= 0) {
+        if (b_idx < 0) {
+          b = static_cast<unsigned char>(input[len_byte_idx++]);
+          b_idx = 7;
+        }
+        len |= (b & (1 << b_idx--)) > 0 ? (1 << len_index) : 0;
+        len_index -= 1;
+      }
+      offset += len;
+    }
+
+    // Get the size of the bucket
+    size_t bucket_size = 0;
+    int bucket_size_index = bit_per_len - 1;
+    while (bucket_size_index >= 0) {
+      if (b_idx < 0) {
+        b = static_cast<unsigned char>(input[len_byte_idx++]);
+        b_idx = 7;
+      }
+      bucket_size |= (b & (1 << b_idx--)) > 0 ? (1 << bucket_size_index) : 0;
+      bucket_size_index -= 1;
+    }
+
+    size_t start_idx =
+        2 * partition_num + 1 + (bucket_number * bit_per_len + 7) / 8 + offset;
+    unsigned char target_offset = static_cast<unsigned char>(bit & 0xff);
+    unsigned char key_offset;
+    for (size_t i = start_idx; i < start_idx + bucket_size; i++) {
+      key_offset = static_cast<unsigned char>(input[i]);
+      if (key_offset == target_offset)
+        return true;
+      else if (key_offset > target_offset)
+        return false;
+    }
+    return false;
+  }
+
+ private:
+  size_t partition_num_;
+  size_t bucket_size_max_bit_ = 0;
+  std::vector<uint16_t> partition_sum_;
+};
+
 unsigned char LeftMostOneBit(uint32_t i) {
-  if(i==0)
-    return 0;
+  if (i == 0) return 0;
 
   unsigned char bit_num;
 #if defined(__GNUC__)
-  bit_num = static_cast<unsigned char>(32 - __builtin_clz (i));
+  bit_num = static_cast<unsigned char>(32 - __builtin_clz(i));
 #else
   unsigned int n = 1;
-  if (i >> 16 == 0) { n += 16; i <<= 16; }
-  if (i >> 24 == 0) { n +=  8; i <<=  8; }
-  if (i >> 28 == 0) { n +=  4; i <<=  4; }
-  if (i >> 30 == 0) { n +=  2; i <<=  2; }
+  if (i >> 16 == 0) {
+    n += 16;
+    i <<= 16;
+  }
+  if (i >> 24 == 0) {
+    n += 8;
+    i <<= 8;
+  }
+  if (i >> 28 == 0) {
+    n += 4;
+    i <<= 4;
+  }
+  if (i >> 30 == 0) {
+    n += 2;
+    i <<= 2;
+  }
   n -= i >> 31;
   bit_num = static_cast<unsigned char>(32 - n);
 #endif
@@ -702,16 +906,18 @@ Slice BitmapBlock<T>::Finish() {
   // Remember the size of the domain space
   space_.push_back(static_cast<char>(key_bits_));
   // Remember the compression type
-  if(typeid(T)== typeid(UncompressedFormat)) {
+  if (typeid(T) == typeid(UncompressedFormat)) {
     space_.push_back(static_cast<char>(BitmapFormatType::kUncompressedBitmap));
-  } else if (typeid(T)== typeid(VarintFormat)) {
+  } else if (typeid(T) == typeid(VarintFormat)) {
     space_.push_back(static_cast<char>(BitmapFormatType::kVarintBitmap));
-  } else if (typeid(T)== typeid(VarintPlusFormat)) {
+  } else if (typeid(T) == typeid(VarintPlusFormat)) {
     space_.push_back(static_cast<char>(BitmapFormatType::kVarintPlusBitmap));
-  } else if (typeid(T)== typeid(PForDeltaFormat)) {
+  } else if (typeid(T) == typeid(PForDeltaFormat)) {
     space_.push_back(static_cast<char>(BitmapFormatType::kPForDeltaBitmap));
-  } else if (typeid(T)== typeid(RoaringFormat)) {
+  } else if (typeid(T) == typeid(RoaringFormat)) {
     space_.push_back(static_cast<char>(BitmapFormatType::kRoaringBitmap));
+  } else if (typeid(T) == typeid(PRoaringFormat)) {
+    space_.push_back(static_cast<char>(BitmapFormatType::kPRoaringBitmap));
   }
   return space_;
 }
@@ -730,6 +936,8 @@ template class BitmapBlock<VarintPlusFormat>;
 template class BitmapBlock<PForDeltaFormat>;
 
 template class BitmapBlock<RoaringFormat>;
+
+template class BitmapBlock<PRoaringFormat>;
 
 // Return true if the target key matches a given bitmap filter. Unlike bloom
 // filters, bitmap filters are designed with no false positives.
@@ -763,6 +971,8 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
     return PForDeltaFormat::Test(i, key_bits, bitmap);
   } else if (compression == BitmapFormatType::kRoaringBitmap) {
     return RoaringFormat::Test(i, key_bits, bitmap);
+  } else if (compression == BitmapFormatType::kPRoaringBitmap) {
+    return PRoaringFormat::Test(i, key_bits, bitmap);
   } else {
     return true;
   }

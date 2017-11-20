@@ -41,7 +41,8 @@ extern Status BbosError(const std::string& err_msg, int err_num);
 
 // Determine object type according to a given file name
 inline BbosType TryResolveBbosType(const std::string& name) {
-  if (name.rfind(".idx") != std::string::npos) {
+  if (name.rfind(".info") != std::string::npos ||
+      name.rfind(".idx") != std::string::npos) {
     return BbosType::kIndex;
   } else if (name.rfind(".dat") != std::string::npos) {
     return BbosType::kData;
@@ -72,9 +73,8 @@ class BbosSequentialFile : public SequentialFile {
   virtual Status Read(size_t n, Slice* result, char* scratch) {
     ssize_t ret = bbos_read(bbos_, obj_name_.c_str(), scratch, off_, n);
     if (ret < 0) {
-      std::string bbos_err_msg("cannot read from bbos object '");
+      std::string bbos_err_msg("cannot read from bbos object ");
       bbos_err_msg += obj_name_;
-      bbos_err_msg += "'";
       *result = Slice();
       return BbosError(bbos_err_msg, ret);
     } else {
@@ -101,9 +101,8 @@ class BbosRandomAccessFile : public RandomAccessFile {
                       char* scratch) const {
     ssize_t ret = bbos_read(bbos_, obj_name_.c_str(), scratch, offset, n);
     if (ret < 0) {
-      std::string bbos_err_msg("cannot read from bbos object '");
+      std::string bbos_err_msg("cannot read from bbos object ");
       bbos_err_msg += obj_name_;
-      bbos_err_msg += "'";
       *result = Slice();
       return BbosError(bbos_err_msg, ret);
     } else {
@@ -133,9 +132,8 @@ class BbosWritableFile : public WritableFile {
       ssize_t ret =
           bbos_append(bbos_, obj_name_.c_str(), const_cast<char*>(data), size);
       if (ret < 0) {
-        std::string bbos_err_msg("cannot write into bbos object '");
+        std::string bbos_err_msg("cannot write into bbos object ");
         bbos_err_msg += obj_name_;
-        bbos_err_msg += "'";
         return BbosError(bbos_err_msg, ret);
       } else {
         assert(size >= ret);
