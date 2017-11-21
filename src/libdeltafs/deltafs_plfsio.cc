@@ -1144,7 +1144,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       delete impl;
     }
   } else if (options.filter == kBitmapFilter) {
-    if (options.bitmap_format==kVarintBitmap) {
+    if (options.bitmap_format == kVarintBitmap) {
       typedef BitmapBlock<VarintFormat> VarintBitmapBlock;
       DirWriterImpl<VarintBitmapBlock>* impl =
           new DirWriterImpl<VarintBitmapBlock>(options, dirname);
@@ -1154,7 +1154,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format==kVarintPlusBitmap) {
+    } else if (options.bitmap_format == kVarintPlusBitmap) {
       typedef BitmapBlock<VarintPlusFormat> VarintPlusBitmapBlock;
       DirWriterImpl<VarintPlusBitmapBlock>* impl =
           new DirWriterImpl<VarintPlusBitmapBlock>(options, dirname);
@@ -1164,7 +1164,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format==kPForDeltaBitmap) {
+    } else if (options.bitmap_format == kPForDeltaBitmap) {
       typedef BitmapBlock<PForDeltaFormat> PForDeltaBitmapBlock;
       DirWriterImpl<PForDeltaBitmapBlock>* impl =
           new DirWriterImpl<PForDeltaBitmapBlock>(options, dirname);
@@ -1174,10 +1174,20 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format==kRoaringBitmap) {
+    } else if (options.bitmap_format == kRoaringBitmap) {
       typedef BitmapBlock<RoaringFormat> RoaringBitmapBlock;
       DirWriterImpl<RoaringBitmapBlock>* impl =
           new DirWriterImpl<RoaringBitmapBlock>(options, dirname);
+      status = TryDirOpen(impl);
+      if (status.ok()) {
+        *result = impl;
+      } else {
+        delete impl;
+      }
+    } else if (options.bitmap_format == kPRoaringBitmap) {
+      typedef BitmapBlock<PRoaringFormat> PRoaringBitmapBlock;
+      DirWriterImpl<PRoaringBitmapBlock>* impl =
+          new DirWriterImpl<PRoaringBitmapBlock>(options, dirname);
       status = TryDirOpen(impl);
       if (status.ok()) {
         *result = impl;

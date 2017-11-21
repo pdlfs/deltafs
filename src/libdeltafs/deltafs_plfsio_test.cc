@@ -1096,104 +1096,6 @@ class PlfsBfBench : protected PlfsIoBench {
   Histogram seeks_;
 };
 
-template <typename T, FilterTester tester>
-class PlfsFilterQueryBench {
- public:
-  PlfsFilterQueryBench(size_t table_num) : table_num_(table_num), rnd_(301) {
-    options_.bf_bits_per_key = 10;  // Override the defaults
-    options_.bm_key_bits = 24;
-    ft_ = new T(options_, 0);  // Does not reserve memory
-  }
-
-  ~PlfsFilterQueryBench() { delete ft_; }
-
-  void LogAndApply() {
-    BuildFilter();
-    RunQueries();
-  }
-
- protected:
-  void BuildFilter() {
-    fprintf(stderr, "\rInserting key...");
-    int key_num = (1 << 24) / table_num_;
-    ft_->Reset(key_num);
-    uint32_t max = 0;
-    for (int i = 0; i < key_num; i++) {
-      uint32_t key = rnd_.Uniform(1 << 24);  // Random 24-bit keys
-      max = key > max ? key : max;
-      std::string key_seq;
-      PutFixed32(&key_seq, key);
-      keys_.push_back(key_seq);
-      ft_->AddKey(key_seq);
-    }
-    ft_->Finish();
-    fprintf(stderr, "\rFilter construction finished! max key: %u\n", max);
-  }
-
-  void RunQueries() {
-    int key_num = (1 << 24) / table_num_;
-    const uint64_t start = Env::Default()->NowMicros();
-    uint64_t now = start;
-    uint64_t max = 0;
-    uint64_t min = -1;
-    fprintf(stderr, "Query keys...\n");
-    int i = 0;
-    for (std::vector<std::string>::iterator it = keys_.begin();
-         it != keys_.end(); ++it, ++i) {
-      if (i % (1 << 15) == (1 << 15) - 1) {
-        fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / key_num);
-      }
-      tester(*it, *(ft_->buffer_store()));
-      uint64_t interval = Env::Default()->NowMicros() - now;
-      if (interval < min) {
-        min = interval;
-      } else if (interval > max) {
-        max = interval;
-      }
-      latency_.Add(interval);
-      now = Env::Default()->NowMicros();
-    }
-
-    uint64_t dura = Env::Default()->NowMicros() - start;
-
-    Report(dura, min, max);
-  }
-
-  void Report(uint64_t dura, double min, double max) {
-    const double k = 1000.0;
-    fprintf(stderr, "\n----------------------------------------\n");
-    fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
-    fprintf(stderr, "          Avg Read Time: %.3f us (per key)\n",
-            latency_.Average());
-    fprintf(stderr, "       Median Read Time: %.3f us (per key)\n",
-            latency_.Median());
-    fprintf(stderr, "          Min Read Time: %.3f us (per key)\n", min);
-    fprintf(stderr, "          Max Read Time: %.3f us (per key)\n", max);
-  }
-
- private:
-  size_t table_num_;
-  Random rnd_;
-  DirOptions options_;
-  std::vector<std::string> keys_;
-  T* ft_;
-  Histogram latency_;
-};
-
-typedef PlfsFilterQueryBench<BitmapBlock<VarintFormat>, BitmapKeyMustMatch>
-    PlfsVarintBitmapQueryBench;
-typedef PlfsFilterQueryBench<BitmapBlock<VarintPlusFormat>, BitmapKeyMustMatch>
-    PlfsVarintPlusBitmapQueryBench;
-typedef PlfsFilterQueryBench<BitmapBlock<PForDeltaFormat>, BitmapKeyMustMatch>
-    PlfsPForDeltaBitmapQueryBench;
-typedef PlfsFilterQueryBench<BitmapBlock<RoaringFormat>, BitmapKeyMustMatch>
-    PlfsRoaringBitmapQueryBench;
-typedef PlfsFilterQueryBench<BitmapBlock<UncompressedFormat>,
-                             BitmapKeyMustMatch>
-    PlfsBitmapQueryBench;
-typedef PlfsFilterQueryBench<BloomBlock, BloomKeyMayMatch>
-    PlfsBloomFilterReadBench;
-
 }  // namespace plfsio
 }  // namespace pdlfs
 
@@ -1206,7 +1108,7 @@ typedef PlfsFilterQueryBench<BloomBlock, BloomKeyMayMatch>
 
 static inline void BM_Usage() {
   fprintf(stderr,
-          "Use --bench=io or --bench=bf or --bench=filter to select a "
+          "Use --bench=io or --bench=bf to select a "
           "benchmark.\n");
 }
 
@@ -1229,9 +1131,6 @@ static void BM_LogAndApply(int* argc, char*** argv) {
     bench.LogAndApply();
   } else if (bench_name == "--bench=bf") {
     pdlfs::plfsio::PlfsBfBench bench;
-    bench.LogAndApply();
-  } else if (bench_name == "--bench=fr") {
-    pdlfs::plfsio::PlfsVarintBitmapQueryBench bench(100);
     bench.LogAndApply();
   } else {
     BM_Usage();
