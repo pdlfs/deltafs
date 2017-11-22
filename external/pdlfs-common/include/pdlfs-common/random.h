@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2017 Carnegie Mellon University.
@@ -9,6 +7,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+
+#pragma once
 
 #include <stdint.h>
 
@@ -68,6 +68,22 @@ class Random {
   // return "base" random bits.  The effect is to pick a number in the
   // range [0,2^max_log-1] with exponential bias towards smaller numbers.
   uint32_t Skewed(int max_log) { return Uniform(1 << Uniform(max_log + 1)); }
+};
+
+// Return a random sequence of 32-bit unique integers.
+class RandomSequence {
+ public:
+  RandomSequence(uint32_t seed, uint32_t base = 0, uint32_t offset = 0);
+
+  // Skip the next n integers.
+  void Skip(uint32_t n) { index_ += n; }
+
+  // Return the next integer in sequence.
+  uint32_t Next();
+
+ private:
+  uint32_t mid_offset_;
+  uint32_t index_;
 };
 
 }  // namespace pdlfs
