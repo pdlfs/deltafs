@@ -1208,6 +1208,7 @@ class PlfsBfBench : protected PlfsIoBench {
     batch.Seek(0);
     uint64_t accumulated_seeks = 0;
     std::string dummy_buf;
+    char tmp[20];
     while (batch.Valid()) {
       uint32_t i = batch.offset();
       // Report progress
@@ -1216,6 +1217,13 @@ class PlfsBfBench : protected PlfsIoBench {
       }
       dummy_buf.clear();
       Slice k = batch.fid();
+      if (force_negative_lookups_) {
+        uint64_t h1 = xxhash64(k.data(), k.size(), 301);
+        memcpy(tmp + 8, &h1, 8);
+        uint64_t h2 = xxhash64(k.data(), k.size(), 103);
+        memcpy(tmp, &h2, 8);
+        k = Slice(tmp, options_.key_size);
+      }
       s = reader_->ReadAll(k, &dummy_buf, block_buffer_, options_.block_size);
       if (!s.ok()) {
         break;
@@ -1247,11 +1255,9 @@ class PlfsBfBench : protected PlfsIoBench {
     fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
     fprintf(stderr, "          Avg Read Time: %.3f us\n",
             1.0 * dura / (mfiles_ << 20));
-    fprintf(stderr, "              Num Reads: %.2f M (%llu)\n",
-            num_reads_ / ki / ki, static_cast<unsigned long long>(num_reads_));
-    fprintf(stderr, "          Num Neg Reads: %.2f M (%llu)\n",
-            num_empty_reads_ / ki / ki,
-            static_cast<unsigned long long>(num_empty_reads_));
+    fprintf(stderr, "              Num Reads: %.2f M\n", num_reads_ / ki / ki);
+    fprintf(stderr, "          Num Neg Reads: %.2f M (%.2f%%)\n",
+            num_empty_reads_ / ki / ki, 100.0 * num_empty_reads_ / num_reads_);
     fprintf(stderr, "    Num Seeks Per Epoch: %.3f/%.3f/%.3f (avg/m/std)\n",
             seeks_.Average() / 10.0, seeks_.Median() / 10.0,
             seeks_.StandardDeviation() / 10.0);
