@@ -28,6 +28,7 @@
 #include <sys/time.h>
 #endif
 
+#include <algorithm>
 #include <map>
 #include <set>
 #include <vector>
@@ -527,11 +528,11 @@ class PlfsIoBench {
   };
 
   PlfsIoBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
-    link_speed_ = GetOption("LINK_SPEED", 6);  // 6 MiB per secs to batch LANL
+    mbps_ = GetOption("LINK_SPEED", 6);  // per LANL's configuration
     batched_insertion_ = GetOption("BATCHED_INSERTION", false);
     batch_size_ = GetOption("BATCH_SIZE", 4) << 10;  // Files per batch op
     ordered_keys_ = GetOption("ORDERED_KEYS", false);
-    num_files_ = GetOption("NUM_FILES", 16);  // 16M files per epoch
+    mfiles_ = GetOption("NUM_FILES", 16);  // 16 million per epoch
 
     num_threads_ = GetOption("NUM_THREADS", 4);  // Threads for bg compaction
 
@@ -590,25 +591,58 @@ class PlfsIoBench {
 
   void LogAndApply() {
     DestroyDir(home_, options_);
+    MaybePrepareKeys(false);
     DoIt();
   }
 
  protected:
+  // Pre-generate user keys if bitmap filters are used, or if explicitly
+  // requested by user. Otherwise, keys will be lazy generated
+  // using a hashing function.
+  // REQUIRES: file count must honor key space.
+  void MaybePrepareKeys(bool forced) {
+    if (forced || options_.filter == FilterType::kBitmapFilter) {
+      const int num_files = mfiles_ << 20;
+      ASSERT_TRUE(num_files <= (1 << options_.bm_key_bits));
+      keys_.clear();
+      fprintf(stderr, "Generating keys ... (%d keys)\n", num_files);
+      keys_.reserve(static_cast<size_t>(num_files));
+      for (int i = 0; i < num_files; i++) {
+        keys_.push_back(static_cast<uint32_t>(i));
+      }
+      std::random_shuffle(keys_.begin(), keys_.end());
+      ASSERT_TRUE(keys_.size() == num_files);
+      fprintf(stderr, "Done!\n");
+    }
+  }
+
   class BigBatch : public BatchCursor {
    public:
-    BigBatch(const DirOptions& options, int base_offset, int size)
+    BigBatch(const DirOptions& options, const std::vector<uint32_t>& keys,
+             int base_offset, int size)
         : key_size_(options.key_size),
           dummy_val_(options.value_size, 'x'),
+          options_(options),
+          keys_(keys),
           base_offset_(static_cast<uint32_t>(base_offset)),
           size_(static_cast<uint32_t>(size)),
-          ordered_keys_(options.skip_sort),
-          offset_(size_) {}
+          offset_(size_) {
+      ASSERT_TRUE(key_size_ <= sizeof(key_));
+      memset(key_, 0, sizeof(key_));
+      if (!keys_.empty()) {  // If keys are pre-generated as 32-bit ints
+        ASSERT_TRUE(key_size_ >= 4);
+      } else {
+        ASSERT_TRUE(key_size_ >= 8);
+      }
+    }
 
     virtual ~BigBatch() {}
 
     void Reset(int base_offset, int size) {
       base_offset_ = static_cast<uint32_t>(base_offset);
       size_ = static_cast<uint32_t>(size);
+      // Invalid offset, an explicit seek is required
+      // before data can be fetched
       offset_ = size_;
     }
 
@@ -633,28 +667,34 @@ class PlfsIoBench {
     }
 
    private:
+    // Constant after construction
     size_t key_size_;
     std::string dummy_val_;
+    const DirOptions& options_;
+    const std::vector<uint32_t>& keys_;
     uint32_t base_offset_;
     uint32_t size_;
-    bool ordered_keys_;
-    Status status_;
 
     void MakeKey() {
-      uint32_t offset = base_offset_ + offset_;
-      if (!ordered_keys_) {
-        uint64_t h = xxhash64(&offset, sizeof(offset), 0);
+      const uint32_t index = base_offset_ + offset_;
+      if (!keys_.empty()) {
+        assert(index < keys_.size());
+        EncodeFixed32(key_, keys_[index]);
+      } else if (!options_.skip_sort) {  // Random insertion
+        // Key collisions are still possible, though very unlikely
+        uint64_t h = xxhash64(&index, sizeof(index), 0);
         memcpy(key_ + 8, &h, 8);
         memcpy(key_, &h, 8);
       } else {
-        uint64_t x = htobe64(offset);
-        memcpy(key_ + 8, &x, 8);
-        memcpy(key_, &x, 8);
+        uint64_t k = htobe64(index);
+        memcpy(key_ + 8, &k, 8);
+        memcpy(key_, &k, 8);
       }
     }
 
+    Status status_;
     uint32_t offset_;
-    char key_[30];
+    char key_[20];
   };
 
 #if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_OS_LINUX)
@@ -697,8 +737,8 @@ class PlfsIoBench {
     }
     bool owns_env = false;
     if (env_ == NULL) {
-      const uint64_t bytes_ps = static_cast<uint64_t>(link_speed_ << 20);
-      env_ = new FakeEnv(bytes_ps, &printer_);
+      const uint64_t speed = static_cast<uint64_t>(mbps_ << 20);
+      env_ = new FakeEnv(speed, &printer_);
       owns_env = true;
     }
     options_.env = env_;
@@ -706,13 +746,15 @@ class PlfsIoBench {
     ASSERT_OK(s) << "Cannot open dir";
     const uint64_t start = env_->NowMicros();
     fprintf(stderr, "Inserting data...\n");
-    int i = 0, total_files = (num_files_ << 20);
-    BigBatch batch(options_, i, batched_insertion_ ? batch_size_ : total_files);
+    int i = 0;
+    const int num_files = (mfiles_ << 20);
+    const int final_batch_size = batched_insertion_ ? batch_size_ : num_files;
+    BigBatch batch(options_, keys_, i, final_batch_size);
     batch.Seek(0);
-    while (i < total_files) {
+    while (i < num_files) {
       // Report progress
       if ((i & 0x7FFFF) == 0) {
-        fprintf(stderr, "\r%.2f%%", 100.0 * i / total_files);
+        fprintf(stderr, "\r%.2f%%", 100.0 * i / num_files);
       }
       if (batched_insertion_) {
         s = writer_->Write(&batch, 0);
@@ -808,8 +850,8 @@ class PlfsIoBench {
             options_.compression == kSnappyCompression ? "Yes" : "No");
     fprintf(stderr, "              BF Budget: %d (bits pey key)\n",
             int(options_.bf_bits_per_key));
-    fprintf(stderr, "     Num Files Inserted: %d M\n", num_files_);
-    fprintf(stderr, "        Total File Data: %d MiB\n", 48 * num_files_);
+    fprintf(stderr, "     Num Files Inserted: %d M\n", mfiles_);
+    fprintf(stderr, "        Logic File Data: %d MiB\n", 48 * mfiles_);
     fprintf(stderr, "  Total MemTable Budget: %d MiB\n",
             int(options_.total_memtable_budget) >> 20);
     fprintf(stderr, "     Estimated SST Size: %.3f MiB\n",
@@ -821,14 +863,13 @@ class PlfsIoBench {
     fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
     fprintf(stderr, "         Num Bg Threads: %d\n", num_threads_);
     if (owns_env) {
-      fprintf(stderr, "    Emulated Link Speed: %d MiB/s (per log)\n",
-              link_speed_);
+      fprintf(stderr, "    Emulated Link Speed: %d MiB/s (per log)\n", mbps_);
     } else {
       fprintf(stderr, "    Emulated Link Speed: N/A\n");
     }
     fprintf(stderr, "            Write Speed: %.3f MiB/s (observed by app)\n",
-            1.0 * k * k * (options_.key_size + options_.value_size) *
-                num_files_ / dura);
+            1.0 * k * k * (options_.key_size + options_.value_size) * mfiles_ /
+                dura);
     fprintf(stderr, "              Index Buf: %d MiB (x%d)\n",
             int(options_.index_buffer) >> 20, 1 << options_.lg_parts);
     fprintf(stderr, "     Min Index I/O Size: %d MiB\n",
@@ -883,15 +924,16 @@ class PlfsIoBench {
             int(options_.key_size));
   }
 
-  int link_speed_;  // Link speed to emulate (in MBps)
+  int mbps_;  // Link speed to emulate (in MBps)
   int batch_size_;
   int batched_insertion_;
   int ordered_keys_;
-  int num_files_;     // Number of particle files (in millions)
+  int mfiles_;        // Number of files to insert (in Millions)
   int num_threads_;   // Number of bg compaction threads
   int force_fifo_;    // Force real-time FIFO scheduling
   int print_events_;  // Dump background events
   EventPrinter printer_;
+  std::vector<uint32_t> keys_;
   const std::string home_;
   DirOptions options_;
   DirWriter* writer_;
@@ -1036,7 +1078,7 @@ class PlfsBfBench : protected PlfsIoBench {
  public:
   PlfsBfBench() : PlfsIoBench() {
     num_threads_ = 0;
-    link_speed_ = 0;
+    mbps_ = 0;
 
     force_negative_lookups_ = GetOption("FALSE_KEYS", false);
 
@@ -1073,11 +1115,11 @@ class PlfsBfBench : protected PlfsIoBench {
     char tmp[30];
     fprintf(stderr, "Reading dir...\n");
     Slice key(tmp, options_.key_size);
-    const int total_files = num_files_ << 20;
+    const int num_files = mfiles_ << 20;
     uint64_t accumulated_seeks = 0;
     const uint64_t start = env_->NowMicros();
     std::string dummy_buf;
-    for (int i = 0; i < total_files; i++) {
+    for (int i = 0; i < num_files; i++) {
       const int ii = force_negative_lookups_ ? (-1 * i) : i;
       const int fid = xxhash32(&ii, sizeof(ii), 0);
       snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
@@ -1087,7 +1129,7 @@ class PlfsBfBench : protected PlfsIoBench {
         break;
       }
       if (i % (1 << 18) == (1 << 18) - 1) {
-        fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / total_files);
+        fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / num_files);
       }
       const IoStats ios = reader_->GetIoStats();
       seeks_.Add(10.0 * (ios.data_ops - accumulated_seeks));
@@ -1110,7 +1152,7 @@ class PlfsBfBench : protected PlfsIoBench {
     fprintf(stderr, "----------------------------------------\n");
     fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
     fprintf(stderr, "          Avg Read Time: %.3f us (per file)\n",
-            1.0 * dura / (num_files_ << 20));
+            1.0 * dura / (mfiles_ << 20));
     fprintf(stderr, " Avg Num Seeks Per Read: %.3f (per file)\n",
             seeks_.Average() / 10.0);
     fprintf(stderr, "              10%% Seeks: %.3f\n",
