@@ -1169,9 +1169,11 @@ class PlfsBfBench : protected PlfsIoBench {
     mbps_ = 0;
 
     force_negative_lookups_ = GetOption("FALSE_KEYS", false);
+    num_empty_reads_ = 0;
+    num_reads_ = 0;
 
     options_.verify_checksums = false;
-    options_.paranoid_checks = false;
+    options_.paranoid_checks = true;
 
     block_buffer_ = new char[options_.block_size];
     env_ = new StringEnv;
@@ -1188,8 +1190,7 @@ class PlfsBfBench : protected PlfsIoBench {
   }
 
   void LogAndApply() {
-    DestroyDir(home_, options_);
-    DoIt();
+    PlfsIoBench::LogAndApply();
     RunQueries();
   }
 
@@ -1200,31 +1201,36 @@ class PlfsBfBench : protected PlfsIoBench {
     options_.env = env_;
     Status s = DirReader::Open(options_, home_, &reader_);
     ASSERT_OK(s) << "Cannot open dir";
-    char tmp[30];
     fprintf(stderr, "Reading dir...\n");
-    Slice key(tmp, options_.key_size);
-    const int num_files = mfiles_ << 20;
-    uint64_t accumulated_seeks = 0;
     const uint64_t start = env_->NowMicros();
+    const int num_files = (mfiles_ << 20);
+    BigBatch batch(options_, keys_, 0, num_files);
+    batch.Seek(0);
+    uint64_t accumulated_seeks = 0;
     std::string dummy_buf;
-    for (int i = 0; i < num_files; i++) {
-      const int ii = force_negative_lookups_ ? (-1 * i) : i;
-      const int fid = xxhash32(&ii, sizeof(ii), 0);
-      snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
+    while (batch.Valid()) {
+      uint32_t i = batch.offset();
+      // Report progress
+      if ((i & 0x3FFFF) == 0) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * i / num_files);
+      }
       dummy_buf.clear();
-      s = reader_->ReadAll(key, &dummy_buf, block_buffer_, options_.block_size);
+      Slice k = batch.fid();
+      s = reader_->ReadAll(k, &dummy_buf, block_buffer_, options_.block_size);
       if (!s.ok()) {
         break;
       }
-      if (i % (1 << 18) == (1 << 18) - 1) {
-        fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / num_files);
+      const IoStats stats = reader_->GetIoStats();
+      seeks_.Add(10.0 * (stats.data_ops - accumulated_seeks));
+      accumulated_seeks = stats.data_ops;
+      num_reads_++;
+      if (dummy_buf.empty()) {
+        num_empty_reads_++;
       }
-      const IoStats ios = reader_->GetIoStats();
-      seeks_.Add(10.0 * (ios.data_ops - accumulated_seeks));
-      accumulated_seeks = ios.data_ops;
+      batch.Next();
     }
     ASSERT_OK(s) << "Cannot read";
-    fprintf(stderr, "\n");
+    fprintf(stderr, "\r100.00%%\n");
     fprintf(stderr, "Done!\n");
 
     uint64_t dura = env_->NowMicros() - start;
@@ -1239,10 +1245,16 @@ class PlfsBfBench : protected PlfsIoBench {
     const double k = 1000.0, ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
     fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
-    fprintf(stderr, "          Avg Read Time: %.3f us (per file)\n",
+    fprintf(stderr, "          Avg Read Time: %.3f us\n",
             1.0 * dura / (mfiles_ << 20));
-    fprintf(stderr, " Avg Num Seeks Per Read: %.3f (per file)\n",
-            seeks_.Average() / 10.0);
+    fprintf(stderr, "              Num Reads: %.2f M (%llu)\n",
+            num_reads_ / ki / ki, static_cast<unsigned long long>(num_reads_));
+    fprintf(stderr, "          Num Neg Reads: %.2f M (%llu)\n",
+            num_empty_reads_ / ki / ki,
+            static_cast<unsigned long long>(num_empty_reads_));
+    fprintf(stderr, "    Num Seeks Per Epoch: %.3f/%.3f/%.3f (avg/m/std)\n",
+            seeks_.Average() / 10.0, seeks_.Median() / 10.0,
+            seeks_.StandardDeviation() / 10.0);
     fprintf(stderr, "              10%% Seeks: %.3f\n",
             seeks_.Percentile(10) / 10.0);
     fprintf(stderr, "              30%% Seeks: %.3f\n",
@@ -1266,8 +1278,8 @@ class PlfsBfBench : protected PlfsIoBench {
     const IoStats stats = reader_->GetIoStats();
     fprintf(stderr, "  Total Indexes Fetched: %.3f MB\n",
             1.0 * stats.index_bytes / ki / ki);
-    fprintf(stderr, "     Total Data Fetched: %.3f TB\n",
-            1.0 * stats.data_bytes / ki / ki / ki / ki);
+    fprintf(stderr, "     Total Data Fetched: %.3f GB\n",
+            1.0 * stats.data_bytes / ki / ki / ki);
     fprintf(stderr, "           Avg I/O size: %.3f KB\n",
             1.0 * stats.data_bytes / stats.data_ops / ki);
   }
@@ -1276,6 +1288,8 @@ class PlfsBfBench : protected PlfsIoBench {
   char* block_buffer_;
   DirReader* reader_;
 
+  uint64_t num_empty_reads_;
+  uint64_t num_reads_;
   Histogram seeks_;
 };
 
@@ -1290,9 +1304,7 @@ class PlfsBfBench : protected PlfsIoBench {
 #endif
 
 static inline void BM_Usage() {
-  fprintf(stderr,
-          "Use --bench=io or --bench=bf to select a "
-          "benchmark.\n");
+  fprintf(stderr, "Use --bench=io or --bench=bf to select a benchmark.\n");
 }
 
 static void BM_LogAndApply(int* argc, char*** argv) {
