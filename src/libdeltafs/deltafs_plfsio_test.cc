@@ -405,17 +405,17 @@ class PlfsIoBench {
       return deffmt;
     } else if (env[0] == 0) {
       return deffmt;
-    } else if (strcmp(env, "bmp")) {
+    } else if (strcmp(env, "bmp") == 0) {
       return BitmapFormatType::kUncompressedBitmap;
-    } else if (strcmp(env, "vb")) {
+    } else if (strcmp(env, "vb") == 0) {
       return BitmapFormatType::kVarintBitmap;
-    } else if (strcmp(env, "vbp")) {
+    } else if (strcmp(env, "vbp") == 0) {
       return BitmapFormatType::kVarintPlusBitmap;
-    } else if (strcmp(env, "r")) {
+    } else if (strcmp(env, "r") == 0) {
       return BitmapFormatType::kRoaringBitmap;
-    } else if (strcmp(env, "pr")) {
+    } else if (strcmp(env, "pr") == 0) {
       return BitmapFormatType::kPRoaringBitmap;
-    } else if (strcmp(env, "pfdelta")) {
+    } else if (strcmp(env, "pfdelta") == 0) {
       return BitmapFormatType::kPForDeltaBitmap;
     } else {
       return deffmt;
@@ -428,19 +428,19 @@ class PlfsIoBench {
       return deftype;
     } else if (env[0] == 0) {
       return deftype;
-    } else if (strcmp(env, "bf")) {
+    } else if (strcmp(env, "bf") == 0) {
       return FilterType::kBloomFilter;
-    } else if (strcmp(env, "bmp")) {
+    } else if (strcmp(env, "bmp") == 0) {
       return FilterType::kBitmapFilter;
-    } else if (strcmp(env, "vb")) {
+    } else if (strcmp(env, "vb") == 0) {
       return FilterType::kBitmapFilter;
-    } else if (strcmp(env, "vbp")) {
+    } else if (strcmp(env, "vbp") == 0) {
       return FilterType::kBitmapFilter;
-    } else if (strcmp(env, "r")) {
+    } else if (strcmp(env, "r") == 0) {
       return FilterType::kBitmapFilter;
-    } else if (strcmp(env, "pr")) {
+    } else if (strcmp(env, "pr") == 0) {
       return FilterType::kBitmapFilter;
-    } else if (strcmp(env, "pfdelta")) {
+    } else if (strcmp(env, "pfdelta") == 0) {
       return FilterType::kBitmapFilter;
     } else {
       return FilterType::kNoFilter;
@@ -596,6 +596,25 @@ class PlfsIoBench {
   }
 
  protected:
+  // Compare two 32-bit integers according to their binary encoding
+  struct STLLessThan {
+    bool operator()(uint32_t a, uint32_t b) {
+      char tmp1[4];
+      EncodeFixed32(tmp1, a);
+      char tmp2[4];
+      EncodeFixed32(tmp2, b);
+      return memcmp(tmp1, tmp2, 4) < 0;
+    }
+  };
+
+  void MaybeSortKeys() {
+    if (options_.skip_sort) {
+      fprintf(stderr, "Sorting keys ...\n");
+      std::sort(keys_.begin(), keys_.end(), STLLessThan());
+      fprintf(stderr, "Done!\n");
+    }
+  }
+
   // Pre-generate user keys if bitmap filters are used, or if explicitly
   // requested by user. Otherwise, keys will be lazy generated
   // using a hashing function.
@@ -613,6 +632,7 @@ class PlfsIoBench {
       std::random_shuffle(keys_.begin(), keys_.end());
       ASSERT_TRUE(keys_.size() == num_files);
       fprintf(stderr, "Done!\n");
+      MaybeSortKeys();
     }
   }
 
@@ -624,12 +644,14 @@ class PlfsIoBench {
           dummy_val_(options.value_size, 'x'),
           options_(options),
           keys_(keys),
+          use_external_keys_(!keys_.empty()),
+          rnd_insertion_(!options_.skip_sort),
           base_offset_(static_cast<uint32_t>(base_offset)),
           size_(static_cast<uint32_t>(size)),
           offset_(size_) {
       ASSERT_TRUE(key_size_ <= sizeof(key_));
       memset(key_, 0, sizeof(key_));
-      if (!keys_.empty()) {  // If keys are pre-generated as 32-bit ints
+      if (use_external_keys_) {  // If keys are pre-generated as 32-bit ints
         ASSERT_TRUE(key_size_ >= 4);
       } else {
         ASSERT_TRUE(key_size_ >= 8);
@@ -672,15 +694,17 @@ class PlfsIoBench {
     std::string dummy_val_;
     const DirOptions& options_;
     const std::vector<uint32_t>& keys_;
+    bool use_external_keys_;
+    bool rnd_insertion_;
     uint32_t base_offset_;
     uint32_t size_;
 
     void MakeKey() {
       const uint32_t index = base_offset_ + offset_;
-      if (!keys_.empty()) {
+      if (use_external_keys_) {
         assert(index < keys_.size());
         EncodeFixed32(key_, keys_[index]);
-      } else if (!options_.skip_sort) {  // Random insertion
+      } else if (rnd_insertion_) {  // Random insertion
         // Key collisions are still possible, though very unlikely
         uint64_t h = xxhash64(&index, sizeof(index), 0);
         memcpy(key_ + 8, &h, 8);
@@ -882,10 +906,10 @@ class PlfsIoBench {
     fprintf(stderr, "          FT Mem Budget: %d (bits per key)\n",
             int(options_.filter_bits_per_key));
     if (options_.filter == FilterType::kBloomFilter) {
-      fprintf(stderr, "              BF Budget: %d (bits pey key)\n",
+      fprintf(stderr, "              BF Budget: %d (bits per key)\n",
               int(options_.bf_bits_per_key));
     } else if (options_.filter == FilterType::kBitmapFilter) {
-      fprintf(stderr, "           BM Key Space: [0, 2^%d)\n",
+      fprintf(stderr, "           BM Key Space: 0-2^%d\n",
               int(options_.bm_key_bits));
       fprintf(stderr, "                 BM Fmt: %s\n",
               ToString(options_.bitmap_format));
