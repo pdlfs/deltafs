@@ -398,6 +398,54 @@ class FakeEnv : public EnvWrapper {
 
 class PlfsIoBench {
  public:
+  static BitmapFormatType GetBitmapFilterFormat(BitmapFormatType deffmt) {
+    const char* env = getenv("FT_TYPE");
+    if (env == NULL) {
+      return deffmt;
+    } else if (env[0] == 0) {
+      return deffmt;
+    } else if (strcmp(env, "bmp")) {
+      return BitmapFormatType::kUncompressedBitmap;
+    } else if (strcmp(env, "vb")) {
+      return BitmapFormatType::kVarintBitmap;
+    } else if (strcmp(env, "vbp")) {
+      return BitmapFormatType::kVarintPlusBitmap;
+    } else if (strcmp(env, "r")) {
+      return BitmapFormatType::kRoaringBitmap;
+    } else if (strcmp(env, "pr")) {
+      return BitmapFormatType::kPRoaringBitmap;
+    } else if (strcmp(env, "pfdelta")) {
+      return BitmapFormatType::kPForDeltaBitmap;
+    } else {
+      return deffmt;
+    }
+  }
+
+  static FilterType GetFilterType(FilterType deftype) {
+    const char* env = getenv("FT_TYPE");
+    if (env == NULL) {
+      return deftype;
+    } else if (env[0] == 0) {
+      return deftype;
+    } else if (strcmp(env, "bf")) {
+      return FilterType::kBloomFilter;
+    } else if (strcmp(env, "bmp")) {
+      return FilterType::kBitmapFilter;
+    } else if (strcmp(env, "vb")) {
+      return FilterType::kBitmapFilter;
+    } else if (strcmp(env, "vbp")) {
+      return FilterType::kBitmapFilter;
+    } else if (strcmp(env, "r")) {
+      return FilterType::kBitmapFilter;
+    } else if (strcmp(env, "pr")) {
+      return FilterType::kBitmapFilter;
+    } else if (strcmp(env, "pfdelta")) {
+      return FilterType::kBitmapFilter;
+    } else {
+      return FilterType::kNoFilter;
+    }
+  }
+
   static int GetOption(const char* key, int defval) {
     const char* env = getenv(key);
     if (env == NULL) {
@@ -479,8 +527,7 @@ class PlfsIoBench {
   };
 
   PlfsIoBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
-    link_speed_ =
-        GetOption("LINK_SPEED", 6);  // Burst-buffer link speed is 6 MBps
+    link_speed_ = GetOption("LINK_SPEED", 6);  // 6 MiB per secs to batch LANL
     batched_insertion_ = GetOption("BATCHED_INSERTION", false);
     batch_size_ = GetOption("BATCH_SIZE", 4) << 10;  // Files per batch op
     ordered_keys_ = GetOption("ORDERED_KEYS", false);
@@ -492,7 +539,11 @@ class PlfsIoBench {
     force_fifo_ = GetOption("FORCE_FIFO", false);
 
     options_.rank = 0;
+#ifndef NDEBUG
+    options_.mode = kUnique;
+#else
     options_.mode = kUniqueDrop;
+#endif
     options_.lg_parts = GetOption("LG_PARTS", 2);
     options_.skip_sort = ordered_keys_ != 0;
     options_.non_blocking = batched_insertion_ != 0;
@@ -507,7 +558,12 @@ class PlfsIoBench {
         static_cast<size_t>(GetOption("BLOCK_BATCH_SIZE", 4) << 20);
     options_.block_util = GetOption("BLOCK_UTIL", 996) / 1000.0;
     options_.bf_bits_per_key = static_cast<size_t>(GetOption("BF_BITS", 14));
-    options_.filter_bits_per_key = options_.bf_bits_per_key;
+    options_.bitmap_format =
+        GetBitmapFilterFormat(BitmapFormatType::kUncompressedBitmap);
+    options_.bm_key_bits = static_cast<size_t>(GetOption("BM_KEY_BITS", 24));
+    options_.filter = GetFilterType(FilterType::kBloomFilter);
+    options_.filter_bits_per_key =
+        static_cast<size_t>(GetOption("FT_BITS", 16));
     options_.value_size = static_cast<size_t>(GetOption("VALUE_SIZE", 40));
     options_.key_size = static_cast<size_t>(GetOption("KEY_SIZE", 8));
     options_.data_buffer =
@@ -646,9 +702,6 @@ class PlfsIoBench {
       owns_env = true;
     }
     options_.env = env_;
-    // Set filter type for io benchmark
-    options_.filter = kBitmapFilter;
-    options_.bitmap_format = kRoaringBitmap;
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
     const uint64_t start = env_->NowMicros();
@@ -658,7 +711,7 @@ class PlfsIoBench {
     batch.Seek(0);
     while (i < total_files) {
       // Report progress
-      if (i % (1 << 20) == 0) {
+      if ((i & 0x7FFFF) == 0) {
         fprintf(stderr, "\r%.2f%%", 100.0 * i / total_files);
       }
       if (batched_insertion_) {
