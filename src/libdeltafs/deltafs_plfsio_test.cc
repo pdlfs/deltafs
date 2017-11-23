@@ -812,6 +812,36 @@ class PlfsIoBench {
   }
 #endif
 
+  static const char* ToString(FilterType type) {
+    switch (type) {
+      case FilterType::kBloomFilter:
+        return "BF (bloom filter)";
+      case FilterType::kBitmapFilter:
+        return "BM (bitmap)";
+      default:
+        return "Unknown";
+    }
+  }
+
+  static const char* ToString(BitmapFormatType type) {
+    switch (type) {
+      case BitmapFormatType::kUncompressedBitmap:
+        return "Uncompressed";
+      case BitmapFormatType::kVarintBitmap:
+        return "VB";
+      case BitmapFormatType::kVarintPlusBitmap:
+        return "VBP";
+      case BitmapFormatType::kPForDeltaBitmap:
+        return "PFDelta";
+      case BitmapFormatType::kRoaringBitmap:
+        return "R";
+      case BitmapFormatType::kPRoaringBitmap:
+        return "PR";
+      default:
+        return "Unknown";
+    }
+  }
+
   void PrintStats(uint64_t dura, bool owns_env) {
     const double k = 1000.0, ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
@@ -848,8 +878,18 @@ class PlfsIoBench {
             ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "    Indexes Compression: %s\n",
             options_.compression == kSnappyCompression ? "Yes" : "No");
-    fprintf(stderr, "              BF Budget: %d (bits pey key)\n",
-            int(options_.bf_bits_per_key));
+    fprintf(stderr, "                FT Type: %s\n", ToString(options_.filter));
+    fprintf(stderr, "          FT Mem Budget: %d (bits per key)\n",
+            int(options_.filter_bits_per_key));
+    if (options_.filter == FilterType::kBloomFilter) {
+      fprintf(stderr, "              BF Budget: %d (bits pey key)\n",
+              int(options_.bf_bits_per_key));
+    } else if (options_.filter == FilterType::kBitmapFilter) {
+      fprintf(stderr, "           BM Key Space: [0, 2^%d)\n",
+              int(options_.bm_key_bits));
+      fprintf(stderr, "                 BM Fmt: %s\n",
+              ToString(options_.bitmap_format));
+    }
     fprintf(stderr, "     Num Files Inserted: %d M\n", mfiles_);
     fprintf(stderr, "        Logic File Data: %d MiB\n", 48 * mfiles_);
     fprintf(stderr, "  Total MemTable Budget: %d MiB\n",
@@ -874,20 +914,22 @@ class PlfsIoBench {
             int(options_.index_buffer) >> 20, 1 << options_.lg_parts);
     fprintf(stderr, "     Min Index I/O Size: %d MiB\n",
             int(options_.min_index_buffer) >> 20);
-    fprintf(stderr, " Aggregated SST Indexes: %.3f MiB\n",
-            writer_->TEST_raw_index_contents() / ki / ki);
-    fprintf(stderr, "          Aggregated BF: %.3f MiB\n",
-            writer_->TEST_raw_filter_contents() / ki / ki);
-    fprintf(stderr, "     Final Phys Indexes: %.3f MiB\n",
-            stats.index_bytes / ki / ki);
+    const uint64_t user_bytes =
+        writer_->TEST_key_bytes() + writer_->TEST_value_bytes();
+    fprintf(stderr, " Aggregated SST Indexes: %.3f KiB\n",
+            1.0 * writer_->TEST_raw_index_contents() / ki);
+    fprintf(stderr, "          Aggregated FT: %.3f MiB (+%.2f%%)\n",
+            1.0 * writer_->TEST_raw_filter_contents() / ki / ki,
+            1.0 * writer_->TEST_raw_filter_contents() / user_bytes * 100);
+    fprintf(stderr, "     Final Phys Indexes: %.3f MiB (+%.2f%%)\n",
+            1.0 * stats.index_bytes / ki / ki,
+            1.0 * stats.index_bytes / user_bytes * 100);
     fprintf(stderr, "         Compaction Buf: %d MiB (x%d)\n",
             int(options_.block_batch_size) >> 20, 1 << options_.lg_parts);
     fprintf(stderr, "               Data Buf: %d MiB\n",
             int(options_.data_buffer) >> 20);
     fprintf(stderr, "      Min Data I/O Size: %d MiB\n",
             int(options_.min_data_buffer) >> 20);
-    const uint64_t user_bytes =
-        writer_->TEST_key_bytes() + writer_->TEST_value_bytes();
     fprintf(stderr, "        Total User Data: %.3f MiB (K+V)\n",
             1.0 * user_bytes / ki / ki);
     fprintf(stderr,
