@@ -400,50 +400,54 @@ class FakeEnv : public EnvWrapper {
 class PlfsIoBench {
  public:
   static BitmapFormatType GetBitmapFilterFormat(BitmapFormatType deffmt) {
+    typedef BitmapFormatType BFT;
     const char* env = getenv("FT_TYPE");
     if (env == NULL) {
       return deffmt;
     } else if (env[0] == 0) {
       return deffmt;
     } else if (strcmp(env, "bmp") == 0) {
-      return BitmapFormatType::kUncompressedBitmap;
-    } else if (strcmp(env, "vb") == 0) {
-      return BitmapFormatType::kVarintBitmap;
-    } else if (strcmp(env, "vbp") == 0) {
-      return BitmapFormatType::kVarintPlusBitmap;
-    } else if (strcmp(env, "r") == 0) {
-      return BitmapFormatType::kRoaringBitmap;
+      return BFT::kUncompressedBitmap;
     } else if (strcmp(env, "pr") == 0) {
-      return BitmapFormatType::kPRoaringBitmap;
+      return BFT::kPRoaringBitmap;
+    } else if (strcmp(env, "r") == 0) {
+      return BFT::kRoaringBitmap;
+    } else if (strcmp(env, "vbp") == 0) {
+      return BFT::kVarintPlusBitmap;
+    } else if (strcmp(env, "vb") == 0) {
+      return BFT::kVarintBitmap;
     } else if (strcmp(env, "pfdelta") == 0) {
-      return BitmapFormatType::kPForDeltaBitmap;
+      return BFT::kPForDeltaBitmap;
     } else {
       return deffmt;
     }
   }
 
   static FilterType GetFilterType(FilterType deftype) {
+    static const FilterType bloom_filter = FilterType::kBloomFilter;
+    static const FilterType bitmap_ft = FilterType::kBitmapFilter;
+    static const FilterType null = FilterType::kNoFilter;
     const char* env = getenv("FT_TYPE");
     if (env == NULL) {
       return deftype;
     } else if (env[0] == 0) {
       return deftype;
     } else if (strcmp(env, "bf") == 0) {
-      return FilterType::kBloomFilter;
+      return bloom_filter;
     } else if (strcmp(env, "bmp") == 0) {
-      return FilterType::kBitmapFilter;
+      return bitmap_ft;
     } else if (strcmp(env, "vb") == 0) {
-      return FilterType::kBitmapFilter;
+      return bitmap_ft;
     } else if (strcmp(env, "vbp") == 0) {
-      return FilterType::kBitmapFilter;
+      return bitmap_ft;
     } else if (strcmp(env, "r") == 0) {
-      return FilterType::kBitmapFilter;
+      return bitmap_ft;
     } else if (strcmp(env, "pr") == 0) {
-      return FilterType::kBitmapFilter;
+      return bitmap_ft;
     } else if (strcmp(env, "pfdelta") == 0) {
-      return FilterType::kBitmapFilter;
+      return bitmap_ft;
     } else {
-      return FilterType::kNoFilter;
+      return null;
     }
   }
 
@@ -596,7 +600,8 @@ class PlfsIoBench {
   }
 
  protected:
-  // Compare two 32-bit integers according to their binary encoding
+  // Compare two 32-bit integers according to their binary encoding.
+  // This is different from comparing their values.
   struct STLLessThan {
     bool operator()(uint32_t a, uint32_t b) {
       char tmp1[4];
@@ -607,6 +612,8 @@ class PlfsIoBench {
     }
   };
 
+  // Pre-sort all keys so the compaction process
+  // can skip the sort operation.
   void MaybeSortKeys() {
     if (options_.skip_sort) {
       fprintf(stderr, "Sorting keys ...\n");
@@ -768,6 +775,12 @@ class PlfsIoBench {
     options_.env = env_;
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
+    Env::Default()->SleepForMicroseconds(1000);
+#ifdef PDLFS_PLATFORM_POSIX
+    struct rusage tmp_usage;
+    int r0 = getrusage(RUSAGE_SELF, &tmp_usage);
+    ASSERT_EQ(r0, 0);
+#endif
     const uint64_t start = env_->NowMicros();
     fprintf(stderr, "Inserting data...\n");
     int i = 0;
@@ -811,10 +824,14 @@ class PlfsIoBench {
     fprintf(stderr, "Done!\n");
     const uint64_t end = env_->NowMicros();
     const uint64_t dura = end - start;
-
+#ifdef PDLFS_PLATFORM_POSIX
+    PrintStats(tmp_usage, dura, owns_env);
+#else
     PrintStats(dura, owns_env);
-
-    if (print_events_) printer_.PrintEvents();
+#endif
+    if (print_events_) {
+      printer_.PrintEvents();
+    }
 
     delete writer_;
     writer_ = NULL;
@@ -848,25 +865,31 @@ class PlfsIoBench {
   }
 
   static const char* ToString(BitmapFormatType type) {
+    typedef BitmapFormatType BFT;
     switch (type) {
-      case BitmapFormatType::kUncompressedBitmap:
+      case BFT::kUncompressedBitmap:
         return "Uncompressed";
-      case BitmapFormatType::kVarintBitmap:
-        return "VB";
-      case BitmapFormatType::kVarintPlusBitmap:
-        return "VBP";
-      case BitmapFormatType::kPForDeltaBitmap:
-        return "PFDelta";
-      case BitmapFormatType::kRoaringBitmap:
-        return "R";
-      case BitmapFormatType::kPRoaringBitmap:
+      case BFT::kPRoaringBitmap:  // Partitioned roaring
         return "PR";
+      case BFT::kRoaringBitmap:
+        return "R";
+      case BFT::kVarintPlusBitmap:
+        return "VBP";
+      case BFT::kVarintBitmap:
+        return "VB";
+      case BFT::kPForDeltaBitmap:
+        return "PFDelta";
       default:
         return "Unknown";
     }
   }
 
+#ifdef PDLFS_PLATFORM_POSIX
+  void PrintStats(const struct rusage& tmp_usage, uint64_t dura,
+                  bool owns_env) {
+#else
   void PrintStats(uint64_t dura, bool owns_env) {
+#endif
     const double k = 1000.0, ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
     const uint64_t total_memory_usage = writer_->TEST_total_memory_usage();
@@ -878,10 +901,10 @@ class PlfsIoBench {
     struct rusage usage;
     int r1 = getrusage(RUSAGE_SELF, &usage);
     ASSERT_EQ(r1, 0);
-    fprintf(stderr, "          User CPU Time: %.3f s\n",
-            ToSecs(&usage.ru_utime));
-    fprintf(stderr, "        System CPU Time: %.3f s\n",
-            ToSecs(&usage.ru_stime));
+    double utime = ToSecs(&usage.ru_utime) - ToSecs(&tmp_usage.ru_utime);
+    double stime = ToSecs(&usage.ru_stime) - ToSecs(&tmp_usage.ru_stime);
+    fprintf(stderr, "          User CPU Time: %.3f s\n", utime);
+    fprintf(stderr, "        System CPU Time: %.3f s\n", stime);
 #ifdef PDLFS_OS_LINUX
     cpu_set_t cpu_set;
     CPU_ZERO(&cpu_set);
@@ -889,8 +912,7 @@ class PlfsIoBench {
     ASSERT_EQ(r2, 0);
     fprintf(stderr, "          Num CPU Cores: %d\n", CPU_COUNT(&cpu_set));
     fprintf(stderr, "              CPU Usage: %.1f%%\n",
-            k * k * (ToSecs(&usage.ru_utime) + ToSecs(&usage.ru_stime)) /
-                CPU_COUNT(&cpu_set) / dura * 100);
+            k * k * (utime + stime) / CPU_COUNT(&cpu_set) / dura * 100);
 #endif
 #endif
     if (batched_insertion_) {
