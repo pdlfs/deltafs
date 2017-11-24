@@ -1164,10 +1164,30 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
+    } else if (options.bitmap_format == kPVarintPlusBitmap) {
+      typedef BitmapBlock<PVarintPlusFormat> PVarintPlusBitmapBlock;
+      DirWriterImpl<PVarintPlusBitmapBlock>* impl =
+          new DirWriterImpl<PVarintPlusBitmapBlock>(options, dirname);
+      status = TryDirOpen(impl);
+      if (status.ok()) {
+        *result = impl;
+      } else {
+        delete impl;
+      }
     } else if (options.bitmap_format == kPForDeltaBitmap) {
       typedef BitmapBlock<PForDeltaFormat> PForDeltaBitmapBlock;
       DirWriterImpl<PForDeltaBitmapBlock>* impl =
           new DirWriterImpl<PForDeltaBitmapBlock>(options, dirname);
+      status = TryDirOpen(impl);
+      if (status.ok()) {
+        *result = impl;
+      } else {
+        delete impl;
+      }
+    } else if (options.bitmap_format == kPpForDeltaBitmap) {
+      typedef BitmapBlock<PpForDeltaFormat> PpForDeltaBitmapBlock;
+      DirWriterImpl<PpForDeltaBitmapBlock>* impl =
+          new DirWriterImpl<PpForDeltaBitmapBlock>(options, dirname);
       status = TryDirOpen(impl);
       if (status.ok()) {
         *result = impl;

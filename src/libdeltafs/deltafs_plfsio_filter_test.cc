@@ -187,11 +187,45 @@ TEST(VarintPlusBitmapFilterTest, VarintPlusBitmapFmt) {
   }
 }
 
+// Partitioned Varint plus bitmap filter
+typedef FilterTest<BitmapBlock<PVarintPlusFormat>, BitmapKeyMustMatch>
+    PVarintPlusBitmapFilterTest;
+
+TEST(PVarintPlusBitmapFilterTest, PVarintPlusBitmapFmt) {
+  Random rnd(301);
+  uint32_t num_keys = 0;
+  while (num_keys <= (4 << 10)) {
+    TEST_LogAndApply(this, &rnd, num_keys);
+    if (num_keys == 0) {
+      num_keys = 1;
+    } else {
+      num_keys *= 4;
+    }
+  }
+}
+
 // PForDelta bitmap filter
 typedef FilterTest<BitmapBlock<PForDeltaFormat>, BitmapKeyMustMatch>
     PForDeltaBitmapFilterTest;
 
 TEST(PForDeltaBitmapFilterTest, PForDeltaBitmapFmt) {
+  Random rnd(301);
+  uint32_t num_keys = 0;
+  while (num_keys <= (4 << 10)) {
+    TEST_LogAndApply(this, &rnd, num_keys);
+    if (num_keys == 0) {
+      num_keys = 1;
+    } else {
+      num_keys *= 4;
+    }
+  }
+}
+
+// Partitioned PForDelta bitmap filter
+typedef FilterTest<BitmapBlock<PpForDeltaFormat>, BitmapKeyMustMatch>
+    PpForDeltaBitmapFilterTest;
+
+TEST(PpForDeltaBitmapFilterTest, PpForDeltaBitmapFmt) {
   Random rnd(301);
   uint32_t num_keys = 0;
   while (num_keys <= (4 << 10)) {
@@ -241,8 +275,19 @@ TEST(PRoaringBitmapFilterTest, PRoaringBitmapFmt) {
 template <typename T, size_t key_bits = 24>
 class PlfsFilterBench {
  public:
-  explicit PlfsFilterBench(size_t num_tables = 64)
-      : num_tables_(num_tables), key_bits_(key_bits) {
+  static int GetOption(const char* key, int defval) {
+    const char* env = getenv(key);
+    if (env == NULL) {
+      return defval;
+    } else if (strlen(env) == 0) {
+      return defval;
+    } else {
+      return atoi(env);
+    }
+  }
+
+  explicit PlfsFilterBench()
+      : num_tables_( GetOption("TABLE_NUM", 64)), key_bits_(key_bits) {
     options_.bf_bits_per_key = 10;
     options_.bm_key_bits = key_bits_;
 
@@ -300,6 +345,7 @@ class PlfsFilterBench {
     fprintf(stderr, "          Density: %.2f%%\n", 100.0 / num_tables_);
     fprintf(stderr, "     Storage cost: %.2f (bits per key)\n",
             8.0 * size / (num_keys * num_tables_));
+    fprintf(stderr, " Memory footprint: %.2f MiB\n", 1.0 * ft_->memory_usage() / ki / ki);
 
 #if defined(PDLFS_PLATFORM_POSIX)
     struct rusage usage;
@@ -432,6 +478,7 @@ static void BM_Usage() {
   fprintf(stderr, "bmp     (bitmap)\n");
   fprintf(stderr, "vb      (bitmap, varint)\n");
   fprintf(stderr, "vbp     (bitmap, modified varint)\n");
+  fprintf(stderr, "pvbp    (bipvbptmap, partitioned varint)\n");
   fprintf(stderr, "pfdelta (bitmap, modified p-for-delta)\n");
   fprintf(stderr, "r       (bitmap, modified roaring)\n");
   fprintf(stderr, "pr      (bitmap, modified roaring with partitions)\n");
@@ -499,6 +546,21 @@ static void BM_LogAndApply(bool read_or_write, const char* fmt) {
       PlfsVarintPlusBitmapBench bench;
       bench.LogAndApply();
     }
+  } else if (strcmp(fmt + 1, "pvbp") == 0) {
+    if (read_or_write) {
+      typedef pdlfs::plfsio::PlfsFilterQueryBench<
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PVarintPlusFormat>,
+          pdlfs::plfsio::BitmapKeyMustMatch>
+          PlfsPVarintPlusBitmapQueryBench;
+      PlfsPVarintPlusBitmapQueryBench bench;
+      bench.LogAndApply();
+    } else {
+      typedef pdlfs::plfsio::PlfsFilterBench<
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PVarintPlusFormat> >
+          PlfsPVarintPlusBitmapBench;
+      PlfsPVarintPlusBitmapBench bench;
+      bench.LogAndApply();
+    }
   } else if (strcmp(fmt + 1, "pfdelta") == 0) {
     if (read_or_write) {
       typedef pdlfs::plfsio::PlfsFilterQueryBench<
@@ -512,6 +574,21 @@ static void BM_LogAndApply(bool read_or_write, const char* fmt) {
           pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PForDeltaFormat> >
           PlfsPForDeltaBitmapBench;
       PlfsPForDeltaBitmapBench bench;
+      bench.LogAndApply();
+    }
+  } else if (strcmp(fmt + 1, "ppfdelta") == 0) {
+    if (read_or_write) {
+      typedef pdlfs::plfsio::PlfsFilterQueryBench<
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PpForDeltaFormat>,
+          pdlfs::plfsio::BitmapKeyMustMatch>
+          PlfsPpForDeltaBitmapQueryBench;
+      PlfsPpForDeltaBitmapQueryBench bench;
+      bench.LogAndApply();
+    } else {
+      typedef pdlfs::plfsio::PlfsFilterBench<
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PpForDeltaFormat> >
+          PlfsPpForDeltaBitmapBench;
+      PlfsPpForDeltaBitmapBench bench;
       bench.LogAndApply();
     }
   } else if (strcmp(fmt + 1, "r") == 0) {

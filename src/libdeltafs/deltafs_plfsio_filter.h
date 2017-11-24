@@ -59,6 +59,7 @@ class BloomBlock {
 
   // Return the underlying buffer space.
   std::string* buffer_store() { return &space_; }
+  size_t memory_usage() const { return space_.size(); }
   static int chunk_type();  // Return the corresponding chunk type
 
  private:
@@ -83,7 +84,9 @@ class UncompressedFormat;
 class CompressedFormat;
 class VarintFormat;
 class VarintPlusFormat;
+class PVarintPlusFormat;
 class PForDeltaFormat;
+class PpForDeltaFormat;
 class RoaringFormat;
 class PRoaringFormat;
 
@@ -117,6 +120,8 @@ class BitmapBlock {
 
   // Return the underlying buffer space.
   std::string* buffer_store() { return &space_; }
+
+  size_t memory_usage() const;
   static int chunk_type();  // Return the corresponding chunk type
 
  private:

@@ -71,8 +71,12 @@ enum BitmapFormatType {
   kPForDeltaBitmap = 0x03,
   // Use Roaring bitmap filters
   kRoaringBitmap = 0x04,
-  // Use Partitioned Roaring bitmap filters
-  kPRoaringBitmap = 0x05
+  // Use partitioned Roaring bitmap filters
+  kPRoaringBitmap = 0x05,
+  // Use partitioned Varint-plus bitmap filters
+  kPVarintPlusBitmap = 0x06,
+  // Use partitioned pForDelta bitmap filters
+  kPpForDeltaBitmap = 0x07
 };
 
 struct DirOptions {

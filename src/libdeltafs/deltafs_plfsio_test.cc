@@ -647,8 +647,8 @@ class PlfsIoBench {
     }
     options_.env = env_;
     // Set filter type for io benchmark
-    options_.filter = kBitmapFilter;
-    options_.bitmap_format = kRoaringBitmap;
+    options_.filter = static_cast<FilterType>(GetOption("FILTER_TYPE", kBloomFilter));
+    options_.bitmap_format = static_cast<BitmapFormatType>(GetOption("FILTER_FORMAT", kUncompressedBitmap));
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
     const uint64_t start = env_->NowMicros();

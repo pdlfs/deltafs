@@ -1043,7 +1043,11 @@ template class DirLogger<BitmapBlock<VarintFormat>>;
 
 template class DirLogger<BitmapBlock<VarintPlusFormat>>;
 
+template class DirLogger<BitmapBlock<PVarintPlusFormat>>;
+
 template class DirLogger<BitmapBlock<PForDeltaFormat>>;
+
+template class DirLogger<BitmapBlock<PpForDeltaFormat>>;
 
 template class DirLogger<BitmapBlock<RoaringFormat>>;
 
