@@ -28,6 +28,7 @@
 #include <sys/time.h>
 #endif
 
+#include <algorithm>
 #include <map>
 #include <set>
 #include <vector>
@@ -398,6 +399,58 @@ class FakeEnv : public EnvWrapper {
 
 class PlfsIoBench {
  public:
+  static BitmapFormatType GetBitmapFilterFormat(BitmapFormatType deffmt) {
+    typedef BitmapFormatType BFT;
+    const char* env = getenv("FT_TYPE");
+    if (env == NULL) {
+      return deffmt;
+    } else if (env[0] == 0) {
+      return deffmt;
+    } else if (strcmp(env, "bmp") == 0) {
+      return BFT::kUncompressedBitmap;
+    } else if (strcmp(env, "pr") == 0) {
+      return BFT::kPRoaringBitmap;
+    } else if (strcmp(env, "r") == 0) {
+      return BFT::kRoaringBitmap;
+    } else if (strcmp(env, "vbp") == 0) {
+      return BFT::kVarintPlusBitmap;
+    } else if (strcmp(env, "vb") == 0) {
+      return BFT::kVarintBitmap;
+    } else if (strcmp(env, "pfdelta") == 0) {
+      return BFT::kPForDeltaBitmap;
+    } else {
+      return deffmt;
+    }
+  }
+
+  static FilterType GetFilterType(FilterType deftype) {
+    static const FilterType bloom_filter = FilterType::kBloomFilter;
+    static const FilterType bitmap_ft = FilterType::kBitmapFilter;
+    static const FilterType null = FilterType::kNoFilter;
+    const char* env = getenv("FT_TYPE");
+    if (env == NULL) {
+      return deftype;
+    } else if (env[0] == 0) {
+      return deftype;
+    } else if (strcmp(env, "bf") == 0) {
+      return bloom_filter;
+    } else if (strcmp(env, "bmp") == 0) {
+      return bitmap_ft;
+    } else if (strcmp(env, "vb") == 0) {
+      return bitmap_ft;
+    } else if (strcmp(env, "vbp") == 0) {
+      return bitmap_ft;
+    } else if (strcmp(env, "r") == 0) {
+      return bitmap_ft;
+    } else if (strcmp(env, "pr") == 0) {
+      return bitmap_ft;
+    } else if (strcmp(env, "pfdelta") == 0) {
+      return bitmap_ft;
+    } else {
+      return null;
+    }
+  }
+
   static int GetOption(const char* key, int defval) {
     const char* env = getenv(key);
     if (env == NULL) {
@@ -479,12 +532,11 @@ class PlfsIoBench {
   };
 
   PlfsIoBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
-    link_speed_ =
-        GetOption("LINK_SPEED", 6);  // Burst-buffer link speed is 6 MBps
+    mbps_ = GetOption("LINK_SPEED", 6);  // per LANL's configuration
     batched_insertion_ = GetOption("BATCHED_INSERTION", false);
     batch_size_ = GetOption("BATCH_SIZE", 4) << 10;  // Files per batch op
     ordered_keys_ = GetOption("ORDERED_KEYS", false);
-    num_files_ = GetOption("NUM_FILES", 16);  // 16M files per epoch
+    mfiles_ = GetOption("NUM_FILES", 16);  // 16 million per epoch
 
     num_threads_ = GetOption("NUM_THREADS", 4);  // Threads for bg compaction
 
@@ -492,7 +544,11 @@ class PlfsIoBench {
     force_fifo_ = GetOption("FORCE_FIFO", false);
 
     options_.rank = 0;
+#ifndef NDEBUG
+    options_.mode = kUnique;
+#else
     options_.mode = kUniqueDrop;
+#endif
     options_.lg_parts = GetOption("LG_PARTS", 2);
     options_.skip_sort = ordered_keys_ != 0;
     options_.non_blocking = batched_insertion_ != 0;
@@ -507,7 +563,12 @@ class PlfsIoBench {
         static_cast<size_t>(GetOption("BLOCK_BATCH_SIZE", 4) << 20);
     options_.block_util = GetOption("BLOCK_UTIL", 996) / 1000.0;
     options_.bf_bits_per_key = static_cast<size_t>(GetOption("BF_BITS", 14));
-    options_.filter_bits_per_key = options_.bf_bits_per_key;
+    options_.bitmap_format =
+        GetBitmapFilterFormat(BitmapFormatType::kUncompressedBitmap);
+    options_.bm_key_bits = static_cast<size_t>(GetOption("BM_KEY_BITS", 24));
+    options_.filter = GetFilterType(FilterType::kBloomFilter);
+    options_.filter_bits_per_key =
+        static_cast<size_t>(GetOption("FT_BITS", 16));
     options_.value_size = static_cast<size_t>(GetOption("VALUE_SIZE", 40));
     options_.key_size = static_cast<size_t>(GetOption("KEY_SIZE", 8));
     options_.data_buffer =
@@ -534,25 +595,83 @@ class PlfsIoBench {
 
   void LogAndApply() {
     DestroyDir(home_, options_);
+    MaybePrepareKeys(false);
     DoIt();
   }
 
  protected:
+  // Compare two 32-bit integers according to their binary encoding.
+  // This is different from comparing their values.
+  struct STLLessThan {
+    bool operator()(uint32_t a, uint32_t b) {
+      char tmp1[4];
+      EncodeFixed32(tmp1, a);
+      char tmp2[4];
+      EncodeFixed32(tmp2, b);
+      return memcmp(tmp1, tmp2, 4) < 0;
+    }
+  };
+
+  // Pre-sort all keys so the compaction process
+  // can skip the sort operation.
+  void MaybeSortKeys() {
+    if (options_.skip_sort) {
+      fprintf(stderr, "Sorting keys ...\n");
+      std::sort(keys_.begin(), keys_.end(), STLLessThan());
+      fprintf(stderr, "Done!\n");
+    }
+  }
+
+  // Pre-generate user keys if bitmap filters are used, or if explicitly
+  // requested by user. Otherwise, keys will be lazy generated
+  // using a hashing function.
+  // REQUIRES: file count must honor key space.
+  void MaybePrepareKeys(bool forced) {
+    if (forced || options_.filter == FilterType::kBitmapFilter) {
+      const int num_files = mfiles_ << 20;
+      ASSERT_TRUE(num_files <= (1 << options_.bm_key_bits));
+      keys_.clear();
+      fprintf(stderr, "Generating keys ... (%d keys)\n", num_files);
+      keys_.reserve(static_cast<size_t>(num_files));
+      for (int i = 0; i < num_files; i++) {
+        keys_.push_back(static_cast<uint32_t>(i));
+      }
+      std::random_shuffle(keys_.begin(), keys_.end());
+      ASSERT_TRUE(keys_.size() == num_files);
+      fprintf(stderr, "Done!\n");
+      MaybeSortKeys();
+    }
+  }
+
   class BigBatch : public BatchCursor {
    public:
-    BigBatch(const DirOptions& options, int base_offset, int size)
+    BigBatch(const DirOptions& options, const std::vector<uint32_t>& keys,
+             int base_offset, int size)
         : key_size_(options.key_size),
           dummy_val_(options.value_size, 'x'),
+          options_(options),
+          keys_(keys),
+          use_external_keys_(!keys_.empty()),
+          rnd_insertion_(!options_.skip_sort),
           base_offset_(static_cast<uint32_t>(base_offset)),
           size_(static_cast<uint32_t>(size)),
-          ordered_keys_(options.skip_sort),
-          offset_(size_) {}
+          offset_(size_) {
+      ASSERT_TRUE(key_size_ <= sizeof(key_));
+      memset(key_, 0, sizeof(key_));
+      if (use_external_keys_) {  // If keys are pre-generated as 32-bit ints
+        ASSERT_TRUE(key_size_ >= 4);
+      } else {
+        ASSERT_TRUE(key_size_ >= 8);
+      }
+    }
 
     virtual ~BigBatch() {}
 
     void Reset(int base_offset, int size) {
       base_offset_ = static_cast<uint32_t>(base_offset);
       size_ = static_cast<uint32_t>(size);
+      // Invalid offset, an explicit seek is required
+      // before data can be fetched
       offset_ = size_;
     }
 
@@ -577,28 +696,36 @@ class PlfsIoBench {
     }
 
    private:
+    // Constant after construction
     size_t key_size_;
     std::string dummy_val_;
+    const DirOptions& options_;
+    const std::vector<uint32_t>& keys_;
+    bool use_external_keys_;
+    bool rnd_insertion_;
     uint32_t base_offset_;
     uint32_t size_;
-    bool ordered_keys_;
-    Status status_;
 
     void MakeKey() {
-      uint32_t offset = base_offset_ + offset_;
-      if (!ordered_keys_) {
-        uint64_t h = xxhash64(&offset, sizeof(offset), 0);
+      const uint32_t index = base_offset_ + offset_;
+      if (use_external_keys_) {
+        assert(index < keys_.size());
+        EncodeFixed32(key_, keys_[index]);
+      } else if (rnd_insertion_) {  // Random insertion
+        // Key collisions are still possible, though very unlikely
+        uint64_t h = xxhash64(&index, sizeof(index), 0);
         memcpy(key_ + 8, &h, 8);
         memcpy(key_, &h, 8);
       } else {
-        uint64_t x = htobe64(offset);
-        memcpy(key_ + 8, &x, 8);
-        memcpy(key_, &x, 8);
+        uint64_t k = htobe64(index);
+        memcpy(key_ + 8, &k, 8);
+        memcpy(key_, &k, 8);
       }
     }
 
+    Status status_;
     uint32_t offset_;
-    char key_[30];
+    char key_[20];
   };
 
 #if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_OS_LINUX)
@@ -641,25 +768,35 @@ class PlfsIoBench {
     }
     bool owns_env = false;
     if (env_ == NULL) {
-      const uint64_t bytes_ps = static_cast<uint64_t>(link_speed_ << 20);
-      env_ = new FakeEnv(bytes_ps, &printer_);
+      const uint64_t speed = static_cast<uint64_t>(mbps_ << 20);
+      env_ = new FakeEnv(speed, &printer_);
       owns_env = true;
     }
     options_.env = env_;
+
     // Set filter type for io benchmark
     options_.filter = static_cast<FilterType>(GetOption("FILTER_TYPE", kBloomFilter));
     options_.bitmap_format = static_cast<BitmapFormatType>(GetOption("FILTER_FORMAT", kUncompressedBitmap));
+
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
+    Env::Default()->SleepForMicroseconds(1000);
+#ifdef PDLFS_PLATFORM_POSIX
+    struct rusage tmp_usage;
+    int r0 = getrusage(RUSAGE_SELF, &tmp_usage);
+    ASSERT_EQ(r0, 0);
+#endif
     const uint64_t start = env_->NowMicros();
     fprintf(stderr, "Inserting data...\n");
-    int i = 0, total_files = (num_files_ << 20);
-    BigBatch batch(options_, i, batched_insertion_ ? batch_size_ : total_files);
+    int i = 0;
+    const int num_files = (mfiles_ << 20);
+    const int final_batch_size = batched_insertion_ ? batch_size_ : num_files;
+    BigBatch batch(options_, keys_, i, final_batch_size);
     batch.Seek(0);
-    while (i < total_files) {
+    while (i < num_files) {
       // Report progress
-      if (i % (1 << 20) == 0) {
-        fprintf(stderr, "\r%.2f%%", 100.0 * i / total_files);
+      if ((i & 0x7FFFF) == 0) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * i / num_files);
       }
       if (batched_insertion_) {
         s = writer_->Write(&batch, 0);
@@ -692,10 +829,14 @@ class PlfsIoBench {
     fprintf(stderr, "Done!\n");
     const uint64_t end = env_->NowMicros();
     const uint64_t dura = end - start;
-
+#ifdef PDLFS_PLATFORM_POSIX
+    PrintStats(tmp_usage, dura, owns_env);
+#else
     PrintStats(dura, owns_env);
-
-    if (print_events_) printer_.PrintEvents();
+#endif
+    if (print_events_) {
+      printer_.PrintEvents();
+    }
 
     delete writer_;
     writer_ = NULL;
@@ -717,7 +858,43 @@ class PlfsIoBench {
   }
 #endif
 
+  static const char* ToString(FilterType type) {
+    switch (type) {
+      case FilterType::kBloomFilter:
+        return "BF (bloom filter)";
+      case FilterType::kBitmapFilter:
+        return "BM (bitmap)";
+      default:
+        return "Unknown";
+    }
+  }
+
+  static const char* ToString(BitmapFormatType type) {
+    typedef BitmapFormatType BFT;
+    switch (type) {
+      case BFT::kUncompressedBitmap:
+        return "Uncompressed";
+      case BFT::kPRoaringBitmap:  // Partitioned roaring
+        return "PR";
+      case BFT::kRoaringBitmap:
+        return "R";
+      case BFT::kVarintPlusBitmap:
+        return "VBP";
+      case BFT::kVarintBitmap:
+        return "VB";
+      case BFT::kPForDeltaBitmap:
+        return "PFDelta";
+      default:
+        return "Unknown";
+    }
+  }
+
+#ifdef PDLFS_PLATFORM_POSIX
+  void PrintStats(const struct rusage& tmp_usage, uint64_t dura,
+                  bool owns_env) {
+#else
   void PrintStats(uint64_t dura, bool owns_env) {
+#endif
     const double k = 1000.0, ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
     const uint64_t total_memory_usage = writer_->TEST_total_memory_usage();
@@ -729,10 +906,10 @@ class PlfsIoBench {
     struct rusage usage;
     int r1 = getrusage(RUSAGE_SELF, &usage);
     ASSERT_EQ(r1, 0);
-    fprintf(stderr, "          User CPU Time: %.3f s\n",
-            ToSecs(&usage.ru_utime));
-    fprintf(stderr, "        System CPU Time: %.3f s\n",
-            ToSecs(&usage.ru_stime));
+    double utime = ToSecs(&usage.ru_utime) - ToSecs(&tmp_usage.ru_utime);
+    double stime = ToSecs(&usage.ru_stime) - ToSecs(&tmp_usage.ru_stime);
+    fprintf(stderr, "          User CPU Time: %.3f s\n", utime);
+    fprintf(stderr, "        System CPU Time: %.3f s\n", stime);
 #ifdef PDLFS_OS_LINUX
     cpu_set_t cpu_set;
     CPU_ZERO(&cpu_set);
@@ -740,8 +917,7 @@ class PlfsIoBench {
     ASSERT_EQ(r2, 0);
     fprintf(stderr, "          Num CPU Cores: %d\n", CPU_COUNT(&cpu_set));
     fprintf(stderr, "              CPU Usage: %.1f%%\n",
-            k * k * (ToSecs(&usage.ru_utime) + ToSecs(&usage.ru_stime)) /
-                CPU_COUNT(&cpu_set) / dura * 100);
+            k * k * (utime + stime) / CPU_COUNT(&cpu_set) / dura * 100);
 #endif
 #endif
     if (batched_insertion_) {
@@ -753,10 +929,20 @@ class PlfsIoBench {
             ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "    Indexes Compression: %s\n",
             options_.compression == kSnappyCompression ? "Yes" : "No");
-    fprintf(stderr, "              BF Budget: %d (bits pey key)\n",
-            int(options_.bf_bits_per_key));
-    fprintf(stderr, "     Num Files Inserted: %d M\n", num_files_);
-    fprintf(stderr, "        Total File Data: %d MiB\n", 48 * num_files_);
+    fprintf(stderr, "                FT Type: %s\n", ToString(options_.filter));
+    fprintf(stderr, "          FT Mem Budget: %d (bits per key)\n",
+            int(options_.filter_bits_per_key));
+    if (options_.filter == FilterType::kBloomFilter) {
+      fprintf(stderr, "              BF Budget: %d (bits per key)\n",
+              int(options_.bf_bits_per_key));
+    } else if (options_.filter == FilterType::kBitmapFilter) {
+      fprintf(stderr, "           BM Key Space: 0-2^%d\n",
+              int(options_.bm_key_bits));
+      fprintf(stderr, "                 BM Fmt: %s\n",
+              ToString(options_.bitmap_format));
+    }
+    fprintf(stderr, "     Num Files Inserted: %d M\n", mfiles_);
+    fprintf(stderr, "        Logic File Data: %d MiB\n", 48 * mfiles_);
     fprintf(stderr, "  Total MemTable Budget: %d MiB\n",
             int(options_.total_memtable_budget) >> 20);
     fprintf(stderr, "     Estimated SST Size: %.3f MiB\n",
@@ -768,32 +954,33 @@ class PlfsIoBench {
     fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
     fprintf(stderr, "         Num Bg Threads: %d\n", num_threads_);
     if (owns_env) {
-      fprintf(stderr, "    Emulated Link Speed: %d MiB/s (per log)\n",
-              link_speed_);
+      fprintf(stderr, "    Emulated Link Speed: %d MiB/s (per log)\n", mbps_);
     } else {
       fprintf(stderr, "    Emulated Link Speed: N/A\n");
     }
     fprintf(stderr, "            Write Speed: %.3f MiB/s (observed by app)\n",
-            1.0 * k * k * (options_.key_size + options_.value_size) *
-                num_files_ / dura);
+            1.0 * k * k * (options_.key_size + options_.value_size) * mfiles_ /
+                dura);
     fprintf(stderr, "              Index Buf: %d MiB (x%d)\n",
             int(options_.index_buffer) >> 20, 1 << options_.lg_parts);
     fprintf(stderr, "     Min Index I/O Size: %d MiB\n",
             int(options_.min_index_buffer) >> 20);
-    fprintf(stderr, " Aggregated SST Indexes: %.3f MiB\n",
-            writer_->TEST_raw_index_contents() / ki / ki);
-    fprintf(stderr, "          Aggregated BF: %.3f MiB\n",
-            writer_->TEST_raw_filter_contents() / ki / ki);
-    fprintf(stderr, "     Final Phys Indexes: %.3f MiB\n",
-            stats.index_bytes / ki / ki);
+    const uint64_t user_bytes =
+        writer_->TEST_key_bytes() + writer_->TEST_value_bytes();
+    fprintf(stderr, " Aggregated SST Indexes: %.3f KiB\n",
+            1.0 * writer_->TEST_raw_index_contents() / ki);
+    fprintf(stderr, "          Aggregated FT: %.3f MiB (+%.2f%%)\n",
+            1.0 * writer_->TEST_raw_filter_contents() / ki / ki,
+            1.0 * writer_->TEST_raw_filter_contents() / user_bytes * 100);
+    fprintf(stderr, "     Final Phys Indexes: %.3f MiB (+%.2f%%)\n",
+            1.0 * stats.index_bytes / ki / ki,
+            1.0 * stats.index_bytes / user_bytes * 100);
     fprintf(stderr, "         Compaction Buf: %d MiB (x%d)\n",
             int(options_.block_batch_size) >> 20, 1 << options_.lg_parts);
     fprintf(stderr, "               Data Buf: %d MiB\n",
             int(options_.data_buffer) >> 20);
     fprintf(stderr, "      Min Data I/O Size: %d MiB\n",
             int(options_.min_data_buffer) >> 20);
-    const uint64_t user_bytes =
-        writer_->TEST_key_bytes() + writer_->TEST_value_bytes();
     fprintf(stderr, "        Total User Data: %.3f MiB (K+V)\n",
             1.0 * user_bytes / ki / ki);
     fprintf(stderr,
@@ -830,15 +1017,16 @@ class PlfsIoBench {
             int(options_.key_size));
   }
 
-  int link_speed_;  // Link speed to emulate (in MBps)
+  int mbps_;  // Link speed to emulate (in MBps)
   int batch_size_;
   int batched_insertion_;
   int ordered_keys_;
-  int num_files_;     // Number of particle files (in millions)
+  int mfiles_;        // Number of files to insert (in Millions)
   int num_threads_;   // Number of bg compaction threads
   int force_fifo_;    // Force real-time FIFO scheduling
   int print_events_;  // Dump background events
   EventPrinter printer_;
+  std::vector<uint32_t> keys_;
   const std::string home_;
   DirOptions options_;
   DirWriter* writer_;
@@ -983,12 +1171,14 @@ class PlfsBfBench : protected PlfsIoBench {
  public:
   PlfsBfBench() : PlfsIoBench() {
     num_threads_ = 0;
-    link_speed_ = 0;
+    mbps_ = 0;
 
     force_negative_lookups_ = GetOption("FALSE_KEYS", false);
+    num_empty_reads_ = 0;
+    num_reads_ = 0;
 
     options_.verify_checksums = false;
-    options_.paranoid_checks = false;
+    options_.paranoid_checks = true;
 
     block_buffer_ = new char[options_.block_size];
     env_ = new StringEnv;
@@ -1005,8 +1195,7 @@ class PlfsBfBench : protected PlfsIoBench {
   }
 
   void LogAndApply() {
-    DestroyDir(home_, options_);
-    DoIt();
+    PlfsIoBench::LogAndApply();
     RunQueries();
   }
 
@@ -1017,31 +1206,44 @@ class PlfsBfBench : protected PlfsIoBench {
     options_.env = env_;
     Status s = DirReader::Open(options_, home_, &reader_);
     ASSERT_OK(s) << "Cannot open dir";
-    char tmp[30];
     fprintf(stderr, "Reading dir...\n");
-    Slice key(tmp, options_.key_size);
-    const int total_files = num_files_ << 20;
-    uint64_t accumulated_seeks = 0;
     const uint64_t start = env_->NowMicros();
+    const int num_files = (mfiles_ << 20);
+    BigBatch batch(options_, keys_, 0, num_files);
+    batch.Seek(0);
+    uint64_t accumulated_seeks = 0;
     std::string dummy_buf;
-    for (int i = 0; i < total_files; i++) {
-      const int ii = force_negative_lookups_ ? (-1 * i) : i;
-      const int fid = xxhash32(&ii, sizeof(ii), 0);
-      snprintf(tmp, sizeof(tmp), "%08x-%08x-%08x", fid, fid, fid);
+    char tmp[20];
+    while (batch.Valid()) {
+      uint32_t i = batch.offset();
+      // Report progress
+      if ((i & 0x3FFFF) == 0) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * i / num_files);
+      }
       dummy_buf.clear();
-      s = reader_->ReadAll(key, &dummy_buf, block_buffer_, options_.block_size);
+      Slice k = batch.fid();
+      if (force_negative_lookups_) {
+        uint64_t h1 = xxhash64(k.data(), k.size(), 301);
+        memcpy(tmp + 8, &h1, 8);
+        uint64_t h2 = xxhash64(k.data(), k.size(), 103);
+        memcpy(tmp, &h2, 8);
+        k = Slice(tmp, options_.key_size);
+      }
+      s = reader_->ReadAll(k, &dummy_buf, block_buffer_, options_.block_size);
       if (!s.ok()) {
         break;
       }
-      if (i % (1 << 18) == (1 << 18) - 1) {
-        fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / total_files);
+      const IoStats stats = reader_->GetIoStats();
+      seeks_.Add(10.0 * (stats.data_ops - accumulated_seeks));
+      accumulated_seeks = stats.data_ops;
+      num_reads_++;
+      if (dummy_buf.empty()) {
+        num_empty_reads_++;
       }
-      const IoStats ios = reader_->GetIoStats();
-      seeks_.Add(10.0 * (ios.data_ops - accumulated_seeks));
-      accumulated_seeks = ios.data_ops;
+      batch.Next();
     }
     ASSERT_OK(s) << "Cannot read";
-    fprintf(stderr, "\n");
+    fprintf(stderr, "\r100.00%%\n");
     fprintf(stderr, "Done!\n");
 
     uint64_t dura = env_->NowMicros() - start;
@@ -1056,10 +1258,14 @@ class PlfsBfBench : protected PlfsIoBench {
     const double k = 1000.0, ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
     fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
-    fprintf(stderr, "          Avg Read Time: %.3f us (per file)\n",
-            1.0 * dura / (num_files_ << 20));
-    fprintf(stderr, " Avg Num Seeks Per Read: %.3f (per file)\n",
-            seeks_.Average() / 10.0);
+    fprintf(stderr, "          Avg Read Time: %.3f us\n",
+            1.0 * dura / (mfiles_ << 20));
+    fprintf(stderr, "              Num Reads: %.2f M\n", num_reads_ / ki / ki);
+    fprintf(stderr, "          Num Neg Reads: %.2f M (%.2f%%)\n",
+            num_empty_reads_ / ki / ki, 100.0 * num_empty_reads_ / num_reads_);
+    fprintf(stderr, "    Num Seeks Per Epoch: %.3f/%.3f/%.3f (avg/m/std)\n",
+            seeks_.Average() / 10.0, seeks_.Median() / 10.0,
+            seeks_.StandardDeviation() / 10.0);
     fprintf(stderr, "              10%% Seeks: %.3f\n",
             seeks_.Percentile(10) / 10.0);
     fprintf(stderr, "              30%% Seeks: %.3f\n",
@@ -1083,8 +1289,8 @@ class PlfsBfBench : protected PlfsIoBench {
     const IoStats stats = reader_->GetIoStats();
     fprintf(stderr, "  Total Indexes Fetched: %.3f MB\n",
             1.0 * stats.index_bytes / ki / ki);
-    fprintf(stderr, "     Total Data Fetched: %.3f TB\n",
-            1.0 * stats.data_bytes / ki / ki / ki / ki);
+    fprintf(stderr, "     Total Data Fetched: %.3f GB\n",
+            1.0 * stats.data_bytes / ki / ki / ki);
     fprintf(stderr, "           Avg I/O size: %.3f KB\n",
             1.0 * stats.data_bytes / stats.data_ops / ki);
   }
@@ -1093,6 +1299,8 @@ class PlfsBfBench : protected PlfsIoBench {
   char* block_buffer_;
   DirReader* reader_;
 
+  uint64_t num_empty_reads_;
+  uint64_t num_reads_;
   Histogram seeks_;
 };
 
@@ -1107,9 +1315,7 @@ class PlfsBfBench : protected PlfsIoBench {
 #endif
 
 static inline void BM_Usage() {
-  fprintf(stderr,
-          "Use --bench=io or --bench=bf to select a "
-          "benchmark.\n");
+  fprintf(stderr, "Use --bench=io or --bench=bf to select a benchmark.\n");
 }
 
 static void BM_LogAndApply(int* argc, char*** argv) {
