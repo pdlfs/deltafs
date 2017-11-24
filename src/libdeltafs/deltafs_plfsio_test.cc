@@ -595,7 +595,7 @@ class PlfsIoBench {
 
   void LogAndApply() {
     DestroyDir(home_, options_);
-    MaybePrepareKeys(false);
+    MaybePrepareKeys(GetOption("PREPARE_KEYS", 0));
     DoIt();
   }
 
@@ -658,7 +658,7 @@ class PlfsIoBench {
           offset_(size_) {
       ASSERT_TRUE(key_size_ <= sizeof(key_));
       memset(key_, 0, sizeof(key_));
-      if (use_external_keys_) {  // If keys are pre-generated as 32-bit ints
+      if (use_external_keys_) {  // Keys are pre-generated as 32-bit ints
         ASSERT_TRUE(key_size_ >= 4);
       } else {
         ASSERT_TRUE(key_size_ >= 8);
@@ -708,7 +708,7 @@ class PlfsIoBench {
 
     void MakeKey() {
       const uint32_t index = base_offset_ + offset_;
-      if (use_external_keys_) {
+      if (use_external_keys_) {  // Use pre-generated keys
         assert(index < keys_.size());
         EncodeFixed32(key_, keys_[index]);
       } else if (rnd_insertion_) {  // Random insertion
@@ -717,6 +717,7 @@ class PlfsIoBench {
         memcpy(key_ + 8, &h, 8);
         memcpy(key_, &h, 8);
       } else {
+        // Use big-endian to ensure key ordering
         uint64_t k = htobe64(index);
         memcpy(key_ + 8, &k, 8);
         memcpy(key_, &k, 8);
@@ -1214,6 +1215,7 @@ class PlfsBfBench : protected PlfsIoBench {
     uint64_t accumulated_seeks = 0;
     std::string dummy_buf;
     char tmp[20];
+    memset(tmp, 0, sizeof(tmp));
     while (batch.Valid()) {
       uint32_t i = batch.offset();
       // Report progress
