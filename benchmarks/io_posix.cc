@@ -254,7 +254,7 @@ static std::string MP(const IOClientOptions& options) {
   std::string mp =
       "/tmp/ioclient";  // Allow falling back to the default mount point
   std::vector<std::string> confs;
-  SplitString(&confs, options.conf_str);
+  SplitString(&confs, options.conf_str.c_str());
   for (size_t i = 0; i < confs.size(); i++) {
     Slice input = confs[i];
     if (input.size() != 0) {

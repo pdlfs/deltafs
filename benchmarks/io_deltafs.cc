@@ -301,10 +301,10 @@ static void MaybeEnablePLFSDir() {
 
 static void InstallDeltafsOpts(const IOClientOptions& options) {
   std::vector<std::string> confs;
-  SplitString(&confs, options.conf_str, '|');
+  SplitString(&confs, options.conf_str.c_str(), '|');
   for (size_t i = 0; i < confs.size(); i++) {
     std::vector<std::string> kv;
-    SplitString(&kv, confs[i], '?', 1);
+    SplitString(&kv, confs[i].c_str(), '?', 1);
     if (kv.size() == 2) {
       const char* k = kv[0].c_str();
       const char* v = kv[1].c_str();
