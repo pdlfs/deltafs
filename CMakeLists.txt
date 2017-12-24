@@ -56,9 +56,12 @@
 #       CMAKE_INSTALL_PATH or on CMAKE_PREFIX_PATH, except as noted.
 #
 
+#
 # note: cmake 2.8.12 is considered stale, and will be deprecated.
 # yet cmake 2.8.12.2 is shipped by ubuntu14.04. ubuntu14.04 won't be end of
-# life until Apr 2019.
+# life until Apr 2019. cmake 3 has been backported to ubuntu14.04
+# as cmake3 (use ``sudo apt-get install cmake3'' to install).
+#
 cmake_minimum_required (VERSION 2.8.12)
 
 project (DELTAFS)
