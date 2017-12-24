@@ -20,7 +20,9 @@
 #      -DCMAKE_PREFIX_PATH='/dir1;/dir2;/dir3'
 #
 
-# link shared lib with full rpath
+#
+# link shared lib with full rpath. on some modern platforms, the newer
+# runpath will be used instead of rpath.
 set (CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 set (CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
@@ -37,20 +39,23 @@ if (NOT CMAKE_BUILD_TYPE)
                   "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
 endif ()
 set (DEBUG_SANITIZER Off CACHE STRING "Sanitizer for debug builds")
+mark_as_advanced (DEBUG_SANITIZER)
 set_property (CACHE DEBUG_SANITIZER PROPERTY STRINGS
-              "Off" "Address" "Thread")
+              "Off" "Address" "Thread" "Undefined")
 set (CMAKE_PREFIX_PATH "" CACHE STRING "External dependencies path")
 set (BUILD_SHARED_LIBS "OFF" CACHE BOOL "Build a shared library")
 set (BUILD_TESTS "OFF" CACHE BOOL "Build test programs")
 
 #
-# sanitizer config
+# sanitizer config (only used in debug builds)
 #
-###set (as_flags "-fsanitize=address,leak -O1 -fno-omit-frame-pointer")
+### set (as_flags "-fsanitize=address,leak -O1 -fno-omit-frame-pointer")
 #
+
 set (as_flags "-fsanitize=address -O1 -fno-omit-frame-pointer")
 set (ts_flags "-fsanitize=thread  -O1 -fno-omit-frame-pointer")
-#
+set (us_flags "-fsanitize=undefined -O1")
+
 if (${CMAKE_C_COMPILER_ID} STREQUAL "GNU" OR
     ${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
     if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
@@ -58,10 +63,12 @@ if (${CMAKE_C_COMPILER_ID} STREQUAL "GNU" OR
             set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${as_flags}")
         elseif (${DEBUG_SANITIZER} STREQUAL "Thread")
             set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${ts_flags}")
+        elseif (${DEBUG_SANITIZER} STREQUAL "Undefined")
+            set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${us_flags}")
         endif ()
     endif ()
 endif ()
-#
+
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" OR
     ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
     if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
@@ -69,6 +76,8 @@ if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" OR
             set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${as_flags}")
         elseif (${DEBUG_SANITIZER} STREQUAL "Thread")
             set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${ts_flags}")
+        elseif (${DEBUG_SANITIZER} STREQUAL "Undefined")
+            set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${us_flags}")
         endif ()
     endif ()
 endif ()
@@ -84,7 +93,7 @@ if (${CMAKE_C_COMPILER_ID} STREQUAL "Intel" OR
     set (CMAKE_C_FLAGS_RELWITHDEBINFO "-g -O2 -DNDEBUG")
     set (CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG")
 endif ()
-#
+
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Intel" OR
     ${CMAKE_CXX_COMPILER_ID} STREQUAL "Cray")
     set (CMAKE_CXX_FLAGS_DEBUG "-g")
