@@ -20,6 +20,7 @@
 #    -DCMAKE_BUILD_TYPE=type               -- type can be DEBUG, RELEASE, ...
 #    -DCMAKE_PREFIX_PATH=/dir              -- external packages
 #    -DBUILD_SHARED_LIBS=OFF               -- turn ON for shared libs
+#    -DBUILD_TESTS=OFF                     -- turn ON to build tests
 #
 #     note that CMAKE_PREFIX_PATH can be a list of directories:
 #      -DCMAKE_PREFIX_PATH='/dir1;/dir2;/dir3'
@@ -55,6 +56,9 @@
 #       CMAKE_INSTALL_PATH or on CMAKE_PREFIX_PATH, except as noted.
 #
 
+# note: cmake 2.8.12 is considered stale, and will be deprecated.
+# yet cmake 2.8.12.2 is shipped by ubuntu14.04. ubuntu14.04 won't be end of
+# life until Apr 2019.
 cmake_minimum_required (VERSION 2.8.12)
 
 project (DELTAFS)
@@ -75,7 +79,13 @@ set (PDLFS_COMMON_LIBNAME "deltafs-common" CACHE
 set (PDLFS_COMMON_DEFINES "DELTAFS" CACHE
      STRING "Additional defines for this version of pdlfs-common")
 mark_as_advanced (PDLFS_COMMON_LIBNAME PDLFS_COMMON_DEFINES)
+
+# note: CMAKE_CXX_STANDARD is not defined until cmake 3.1, and will be
+# ignored by cmake distributions before cmake 3.1.
 set (CMAKE_CXX_STANDARD 11)
+
+# uncomment the following to enforce C++ 11.
+# set (CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # pull in pdlfs handling of generic cmake config
 include (cmake-options)
