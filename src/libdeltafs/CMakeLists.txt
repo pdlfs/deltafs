@@ -27,6 +27,10 @@ set (deltafs-tests deltafs_plfsio_test deltafs_plfsio_filter_test.cc
 include (CMakePackageConfigHelpers)
 set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set (THREADS_PREFER_PTHREAD_FLAG TRUE)
+
+# note: cmake 3.1 and newer define a Threads::Threads imported target
+# that we should switch to when we are ready to require 3.1 or better.
+# cmake 3.1 was released late 2014.
 find_package (Threads REQUIRED)
 
 # common lib is always required
@@ -80,6 +84,9 @@ target_include_directories (deltafs BEFORE PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../../include>)
 target_link_libraries (deltafs deltafs-common)
+if (THREADS_HAVE_PTHREAD_ARG)
+    target_compile_options(deltafs PUBLIC "-pthread")
+endif()
 if (DELTAFS_BBOS)
     target_compile_definitions(deltafs PUBLIC "-DDELTAFS_BBOS")
     target_link_libraries (deltafs bbos)
@@ -115,10 +122,9 @@ if (DELTAFS_MPI)
 endif ()
 
 if (CMAKE_THREAD_LIBS_INIT)
-  target_link_libraries (deltafs "${CMAKE_THREAD_LIBS_INIT}")
+    target_link_libraries (deltafs "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
-set_target_properties(deltafs
-                      PROPERTIES VERSION ${dfs-vers}
+set_target_properties(deltafs PROPERTIES VERSION ${dfs-vers}
                       SOVERSION ${DELTAFS_VERSION_MAJOR})
 
 #

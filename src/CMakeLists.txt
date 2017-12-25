@@ -7,8 +7,8 @@ include (CheckCXXCompilerFlag)
 #
 # set some general deltafs compile options (this is a directory property)
 #
-set (deltafs-try-common-flags -Wpedantic -Wno-long-long -Wall
-                              -Wno-sign-compare -pthread)
+set (deltafs-try-common-flags -Wpedantic -Wall)
+list (APPEND deltafs-try-common-flags -Wno-long-long -Wno-sign-compare)
 foreach (lcv ${deltafs-try-common-flags})
     CHECK_CXX_COMPILER_FLAG (${lcv} flag${lcv})
     if (${flag${lcv}})
