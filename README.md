@@ -95,24 +95,17 @@ Type 'c' multiple times and choose suitable options. Recommended options are:
  CMAKE_BUILD_TYPE                 RelWithDebInfo
  CMAKE_INSTALL_PREFIX             /usr/local
  CMAKE_PREFIX_PATH
- DEBUG_SANITIZER                  Off
  DELTAFS_BBOS                     OFF
  DELTAFS_BENCHMARKS               OFF
  DELTAFS_COMMON_INTREE            ON
  DELTAFS_MPI                      ON
  PDLFS_GFLAGS                     ON
  PDLFS_GLOG                       ON
- PDLFS_HOST_OS                    Linux
- PDLFS_HOST_OS_VERSION            4.9.17-c9
  PDLFS_MARGO_RPC                  OFF
  PDLFS_MERCURY_RPC                ON
- PDLFS_PLATFORM                   POSIX
  PDLFS_RADOS                      OFF
  PDLFS_SNAPPY                     ON
- PDLFS_TARGET_OS                  Linux
- PDLFS_TARGET_OS_VERSION          4.9.17-c9
  PDLFS_VERBOSE                    0
- deltafs-common_DIR               deltafs-common_DIR-NOTFOUND
 ```
 
 Once you exit the CMake configuration screen and are ready to build the targets, do:
