@@ -74,9 +74,9 @@ include (CheckCXXCompilerFlag)
 set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set (THREADS_PREFER_PTHREAD_FLAG TRUE)
 
-# XXX: cmake 3.1 and newer define a Threads::Threads imported target
+# note: cmake 3.1 and newer define a Threads::Threads imported target
 # that we should switch too when we are ready to require 3.1 or better.
-# (3.1 was released late 2014)
+# cmake 3.1 was released late 2014.
 find_package (Threads REQUIRED)
 
 if (TARGET margo AND PDLFS_MARGO_RPC)
@@ -207,8 +207,8 @@ set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-leveldb-tests}
 # additional compiler flags to be applied for this directory
 # (must come before any add_library/add_executable calls)
 #
-set (pdlfs-try-common-flags -Wpedantic -Wno-long-long -Wall
-                            -Wno-sign-compare -pthread)
+set (pdlfs-try-common-flags -Wpedantic -Wall)
+list (APPEND pdlfs-try-common-flags -Wno-long-long -Wno-sign-compare)
 foreach (lcv ${pdlfs-try-common-flags})
     CHECK_CXX_COMPILER_FLAG (${lcv} flag${lcv})
     if (${flag${lcv}})
@@ -231,8 +231,11 @@ target_include_directories (${PDLFS_NAME} PUBLIC $<INSTALL_INTERFACE:include>)
 target_include_directories (${PDLFS_NAME} BEFORE PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../include>)
+if (THREADS_HAVE_PTHREAD_ARG)
+    target_compile_options(${PDLFS_NAME} PUBLIC "-pthread")
+endif()
 if (CMAKE_THREAD_LIBS_INIT)
-  target_link_libraries (${PDLFS_NAME} "${CMAKE_THREAD_LIBS_INIT}")
+    target_link_libraries (${PDLFS_NAME} "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
 
 target_link_libraries (${PDLFS_NAME} ${pdlfs-xtra-libs})
@@ -330,3 +333,4 @@ endforeach ()
 if (TARGET mercury_test AND PDLFS_MERCURY_RPC)
     target_link_libraries (mercury_test mercury)
 endif ()
+
