@@ -41,6 +41,8 @@
 #   -DPDLFS_VERBOSE=1                      -- set max log verbose level
 #
 # DELTAFS specific compile time options flags:
+#   -DDELTAFS_CXX_STANDARD=11              -- CXX stardard to request
+#   -DDELTAFS_CXX_STANDARD_REQUIRED=OFF    -- if CXX stardard must be met
 #   -DDELTAFS_BBOS=ON                      -- build BBOS env
 #   -DDELTAFS_BENCHMARKS=ON                -- build our MPI-based benchmarks
 #   -DDELTAFS_COMMON_INTREE=OFF            -- in-tree common lib (for devel)
@@ -81,13 +83,29 @@ set (PDLFS_COMMON_LIBNAME "deltafs-common" CACHE
 set (PDLFS_COMMON_DEFINES "DELTAFS" CACHE
      STRING "Additional defines for this version of pdlfs-common")
 mark_as_advanced (PDLFS_COMMON_LIBNAME PDLFS_COMMON_DEFINES)
+set (DELTAFS_CXX_STANDARD "11" CACHE STRING "C++ std to probe")
+set (DELTAFS_CXX_STANDARD_REQUIRED "OFF" CACHE BOOL "C++ std must be met")
+mark_as_advanced (DELTAFS_CXX_STANDARD DELTAFS_CXX_STANDARD_REQUIRED)
+set_property (CACHE DELTAFS_CXX_STANDARD PROPERTY STRINGS "98" "11")
 
 # note: CMAKE_CXX_STANDARD is not defined until cmake 3.1, and will be
-# ignored by cmake distributions before cmake 3.1.
-set (CMAKE_CXX_STANDARD 11)
-
-# uncomment the following to enforce C++ 11.
-# set (CMAKE_CXX_STANDARD_REQUIRED ON)
+# ignored by cmake 3.0 and before.
+#
+include (CheckCXXCompilerFlag)
+if (CMAKE_VERSION VERSION_LESS "3.1")
+    set (cxxstdflag "-std=c++${DELTAFS_CXX_STANDARD}")
+    CHECK_CXX_COMPILER_FLAG (${cxxstdflag} flag${cxxstdflag})
+    if (${flag${cxxstdflag}})
+        add_compile_options (${cxxstdflag})
+    else()
+        if (${DELTAFS_CXX_STANDARD_REQUIRED})
+            message (FATAL_ERROR "Fail to enable CXX ${DELTAFS_CXX_STANDARD}")
+        endif ()
+    endif ()
+else ()
+    set (CMAKE_CXX_STANDARD ${DELTAFS_CXX_STANDARD})
+    set (CMAKE_CXX_STANDARD_REQUIRED ${DELTAFS_CXX_STANDARD_REQUIRED})
+endif ()
 
 # pull in pdlfs handling of generic cmake config
 include (cmake-options)
