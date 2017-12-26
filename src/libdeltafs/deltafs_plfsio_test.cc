@@ -546,7 +546,7 @@ class PlfsIoBench {
 #ifndef NDEBUG
     options_.mode = kDmUniqueKey;
 #else
-    options_.mode = kUniqueDrop;
+    options_.mode = kDmUniqueDrop;
 #endif
     options_.lg_parts = GetOption("LG_PARTS", 2);
     options_.skip_sort = ordered_keys_ != 0;

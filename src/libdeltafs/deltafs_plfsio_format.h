@@ -180,7 +180,7 @@ extern Footer Mkfoot(const DirOptions& options);
 
 extern std::string DirInfoFileName(const std::string& dirname);
 
-extern std::string ToDebugString(DirMode mode);
+extern std::string DirModeName(DirMode mode);
 
 inline TableHandle::TableHandle()
     : filter_offset_(~static_cast<uint64_t>(0) /* Invalid offset */),

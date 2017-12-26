@@ -1158,7 +1158,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.is_env_pfs -> %s",
           int(options.is_env_pfs) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s",
-          ToDebugString(options.mode).c_str());
+          DirModeName(options.mode).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d (lg_parts=%d)",
           1 << options.lg_parts, options.lg_parts);
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", options.rank);
@@ -1435,8 +1435,8 @@ static DirOptions MaybeRewriteOptions(  // Not all options can be fixed
   result.filter = static_cast<FilterType>(footer.filter_type());
   if (static_cast<DirMode>(footer.mode()) != options.mode)
     Warn(__LOG_ARGS__, "Dfs.plfsdir.mode -> %s (was %s)",
-         ToDebugString(static_cast<DirMode>(footer.mode())).c_str(),
-         ToDebugString(options.mode).c_str());
+         DirModeName(static_cast<DirMode>(footer.mode())).c_str(),
+         DirModeName(options.mode).c_str());
   result.mode = static_cast<DirMode>(footer.mode());
   if (static_cast<int>(footer.num_epochs()) != options.num_epochs)
     Warn(__LOG_ARGS__, "Dfs.plfsdir.num_epochs -> %d (was %d)",
@@ -1498,7 +1498,7 @@ Status DirReader::Open(const DirOptions& _opts, const std::string& dirname,
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.is_env_pfs -> %s",
           int(options.is_env_pfs) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.mode -> %s",
-          ToDebugString(options.mode).c_str());
+          DirModeName(options.mode).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.num_epochs -> %d", options.num_epochs);
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_parts -> %d (lg_parts=%d)",
           int(num_parts), options.lg_parts);

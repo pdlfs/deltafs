@@ -19,7 +19,7 @@ std::string DirInfoFileName(const std::string& dirname) {
   return dirname + "/DIR.info";
 }
 
-std::string ToDebugString(DirMode mode) {
+std::string DirModeName(DirMode mode) {
   switch (mode) {
     case kDmMultiMap:
       return "M/M";
@@ -28,7 +28,7 @@ std::string ToDebugString(DirMode mode) {
     case kDmUniqueDrop:
       return "U/D";
     case kDmUniqueKey:
-      return "Uni";
+      return "U/K";
     default:
       return "Unknown";
   }

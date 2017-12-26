@@ -919,22 +919,23 @@ int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
 
 namespace {
 
-typedef pdlfs::plfsio::DirMode DirMode;
-
-const DirMode kDirMultiMap = pdlfs::plfsio::kDmMultiMap;
-const DirMode kDirUniqueDrop = pdlfs::plfsio::kDmUniqueDrop;
-const DirMode kDirUnique = pdlfs::plfsio::kDmUniqueKey;
+const pdlfs::plfsio::DirMode DM_MULTIMAP =
+    pdlfs::plfsio::kDmMultiMap;  // Allow duplicated keys
+const pdlfs::plfsio::DirMode DM_UNIDROP =
+    pdlfs::plfsio::kDmUniqueDrop;  // Discard all duplicated keys
+const pdlfs::plfsio::DirMode DM_UNIK =
+    pdlfs::plfsio::kDmUniqueKey;  // Assume no duplicates
 
 pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;
   if (dir->multi) {
     // Allow multiple insertions per key within a single epoch
-    dir->options.mode = kDirMultiMap;
+    dir->options.mode = DM_MULTIMAP;
   } else {  // By default, each key is inserted at most once within each epoch
 #ifndef NDEBUG
-    dir->options.mode = kDirUniqueDrop;  // Drop duplicates
+    dir->options.mode = DM_UNIDROP;  // Drop duplicates
 #else
-    dir->options.mode = kDirUnique;
+    dir->options.mode = DM_UNIK;
 #endif
   }
   dir->options.allow_env_threads = false;
