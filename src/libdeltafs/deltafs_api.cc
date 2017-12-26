@@ -631,9 +631,9 @@ void deltafs_print_sysinfo() {
 // -------------
 // Version query
 // -------------
-int deltafs_version_major() { return PDLFS_COMMON_VERSION_MAJOR; }
-int deltafs_version_minor() { return PDLFS_COMMON_VERSION_MINOR; }
-int deltafs_version_patch() { return PDLFS_COMMON_VERSION_PATCH; }
+int deltafs_version_major() { return DELTAFS_VERSION_MAJOR; }
+int deltafs_version_minor() { return DELTAFS_VERSION_MINOR; }
+int deltafs_version_patch() { return DELTAFS_VERSION_PATCH; }
 
 // -------------------------
 // Light-weight plfsdir api
