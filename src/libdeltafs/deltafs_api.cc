@@ -642,7 +642,7 @@ namespace {
 
 // Dir options
 typedef pdlfs::plfsio::DirOptions DirOptions;
-#define PLFSIO_HASH_USE_SPOOKY
+#define PLFSIO_HASH_USE_SPOOKY  // Any prefix of a hash is still a hash
 
 // Dir writer
 typedef pdlfs::plfsio::DirWriter DirWriter;
@@ -918,7 +918,8 @@ int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
 }
 
 namespace {
-// Pre-defined plfsdir dir modes...
+// Pre-defined plfsdir dir modes...  the main difference
+// is on the disposition of duplicated keys inserted
 const pdlfs::plfsio::DirMode DM_MULTIMAP =
     pdlfs::plfsio::kDmMultiMap;  // Allow duplicated keys -- each duplicated key
                                  // insertion is regarded as a separate record
@@ -928,7 +929,8 @@ const pdlfs::plfsio::DirMode DM_UNIK =
     pdlfs::plfsio::kDmUniqueKey;  // Assume no duplicates
 
 pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
-  pdlfs::Status s;
+  pdlfs::Status s;  // To obtain detailed error status, an error printer must be
+                    // set by a user
   if (dir->multi) {
     // Allow multiple insertions per key within a single epoch
     dir->options.mode = DM_MULTIMAP;
@@ -939,10 +941,12 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
     dir->options.mode = DM_UNIK;
 #endif
   }
-  dir->options.allow_env_threads = false;
+
+  dir->options.allow_env_threads = false;  // No implicit background threads
   dir->options.is_env_pfs = dir->is_env_pfs;
   dir->options.env = dir->env;
 
+  // TODO: support O_RDWR in future
   if (dir->mode == O_WRONLY) {
     DirWriter* writer;
     dir->options.compaction_pool = dir->pool;
@@ -963,6 +967,8 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
     }
   }
 
+  // Some options may only be set before
+  // a directory is opened
   if (s.ok()) {
     dir->opened = true;
   }
