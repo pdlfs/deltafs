@@ -16,6 +16,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <vector>
 
@@ -185,10 +186,11 @@ Status DeltafsClient::OpenDir(const std::string& path, Dir** dirptr) {
 #endif
   Status s;
   int fd = deltafs_open(
-      p, O_DIRECTORY |
-             (FLAGS_plfsdir != PLFSDIR_DISABLED
-                  ? (FLAGS_plfsdir == PLFSDIR_WRITE ? O_WRONLY : O_RDONLY)
-                  : O_RDONLY),
+      p,
+      O_DIRECTORY |
+          (FLAGS_plfsdir != PLFSDIR_DISABLED
+               ? (FLAGS_plfsdir == PLFSDIR_WRITE ? O_WRONLY : O_RDONLY)
+               : O_RDONLY),
       0);
   if (fd == -1) {
     s = IOError(path);

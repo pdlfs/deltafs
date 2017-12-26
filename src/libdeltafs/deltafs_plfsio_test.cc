@@ -400,33 +400,32 @@ class FakeEnv : public EnvWrapper {
 class PlfsIoBench {
  public:
   static BitmapFormatType GetBitmapFilterFormat(BitmapFormatType deffmt) {
-    typedef BitmapFormatType BFT;
     const char* env = getenv("FT_TYPE");
     if (env == NULL) {
       return deffmt;
     } else if (env[0] == 0) {
       return deffmt;
     } else if (strcmp(env, "bmp") == 0) {
-      return BFT::kUncompressedFormat;
+      return kUncompressedFormat;
     } else if (strcmp(env, "pr") == 0) {
-      return BFT::kFastRoaringFormat;
+      return kFastRoaringFormat;
     } else if (strcmp(env, "r") == 0) {
-      return BFT::kRoaringFormat;
+      return kRoaringFormat;
     } else if (strcmp(env, "vbp") == 0) {
-      return BFT::kVarintPlusFormat;
+      return kVarintPlusFormat;
     } else if (strcmp(env, "vb") == 0) {
-      return BFT::kVarintFormat;
+      return kVarintFormat;
     } else if (strcmp(env, "pfdelta") == 0) {
-      return BFT::kPfDeltaFormat;
+      return kPfDeltaFormat;
     } else {
       return deffmt;
     }
   }
 
   static FilterType GetFilterType(FilterType deftype) {
-    static const FilterType bloom_filter = FilterType::kDirBloomFilter;
-    static const FilterType bitmap_ft = FilterType::kDirBitmap;
-    static const FilterType null = FilterType::kDirNoFilter;
+    static const FilterType bloom_filter = kDirBloomFilter;
+    static const FilterType bitmap_ft = kDirBitmap;
+    static const FilterType null = kDirNoFilter;
     const char* env = getenv("FT_TYPE");
     if (env == NULL) {
       return deftype;
@@ -563,10 +562,9 @@ class PlfsIoBench {
         static_cast<size_t>(GetOption("BLOCK_BATCH_SIZE", 4) << 20);
     options_.block_util = GetOption("BLOCK_UTIL", 996) / 1000.0;
     options_.bf_bits_per_key = static_cast<size_t>(GetOption("BF_BITS", 14));
-    options_.bitmap_format =
-        GetBitmapFilterFormat(BitmapFormatType::kUncompressedFormat);
+    options_.bm_fmt = GetBitmapFilterFormat(kUncompressedFormat);
     options_.bm_key_bits = static_cast<size_t>(GetOption("BM_KEY_BITS", 24));
-    options_.filter = GetFilterType(FilterType::kDirBloomFilter);
+    options_.filter = GetFilterType(kDirBloomFilter);
     options_.filter_bits_per_key =
         static_cast<size_t>(GetOption("FT_BITS", 16));
     options_.value_size = static_cast<size_t>(GetOption("VALUE_SIZE", 40));
@@ -627,7 +625,7 @@ class PlfsIoBench {
   // using a hashing function.
   // REQUIRES: file count must honor key space.
   void MaybePrepareKeys(bool forced) {
-    if (forced || options_.filter == FilterType::kDirBitmap) {
+    if (forced || options_.filter == kDirBitmap) {
       const int num_files = mfiles_ << 20;
       ASSERT_TRUE(num_files <= (1 << options_.bm_key_bits));
       keys_.clear();
@@ -778,7 +776,7 @@ class PlfsIoBench {
     // Set filter type for io benchmark
     options_.filter =
         static_cast<FilterType>(GetOption("FILTER_TYPE", kDirBloomFilter));
-    options_.bitmap_format = static_cast<BitmapFormatType>(
+    options_.bm_fmt = static_cast<BitmapFormatType>(
         GetOption("FILTER_FORMAT", kUncompressedFormat));
 
     Status s = DirWriter::Open(options_, home_, &writer_);
@@ -863,9 +861,9 @@ class PlfsIoBench {
 
   static const char* ToString(FilterType type) {
     switch (type) {
-      case FilterType::kDirBloomFilter:
+      case kDirBloomFilter:
         return "BF (bloom filter)";
-      case FilterType::kDirBitmap:
+      case kDirBitmap:
         return "BM (bitmap)";
       default:
         return "Unknown";
@@ -873,19 +871,18 @@ class PlfsIoBench {
   }
 
   static const char* ToString(BitmapFormatType type) {
-    typedef BitmapFormatType BFT;
     switch (type) {
-      case BFT::kUncompressedFormat:
+      case kUncompressedFormat:
         return "Uncompressed";
-      case BFT::kFastRoaringFormat:  // Partitioned roaring
+      case kFastRoaringFormat:  // Partitioned roaring
         return "PR";
-      case BFT::kRoaringFormat:
+      case kRoaringFormat:
         return "R";
-      case BFT::kVarintPlusFormat:
+      case kVarintPlusFormat:
         return "VBP";
-      case BFT::kVarintFormat:
+      case kVarintFormat:
         return "VB";
-      case BFT::kPfDeltaFormat:
+      case kPfDeltaFormat:
         return "PFDelta";
       default:
         return "Unknown";
@@ -935,14 +932,14 @@ class PlfsIoBench {
     fprintf(stderr, "                FT Type: %s\n", ToString(options_.filter));
     fprintf(stderr, "          FT Mem Budget: %d (bits per key)\n",
             int(options_.filter_bits_per_key));
-    if (options_.filter == FilterType::kDirBloomFilter) {
+    if (options_.filter == kDirBloomFilter) {
       fprintf(stderr, "              BF Budget: %d (bits per key)\n",
               int(options_.bf_bits_per_key));
-    } else if (options_.filter == FilterType::kDirBitmap) {
+    } else if (options_.filter == kDirBitmap) {
       fprintf(stderr, "           BM Key Space: 0-2^%d\n",
               int(options_.bm_key_bits));
       fprintf(stderr, "                 BM Fmt: %s\n",
-              ToString(options_.bitmap_format));
+              ToString(options_.bm_fmt));
     }
     fprintf(stderr, "     Num Files Inserted: %d M\n", mfiles_);
     fprintf(stderr, "        Logic File Data: %d MiB\n", 48 * mfiles_);

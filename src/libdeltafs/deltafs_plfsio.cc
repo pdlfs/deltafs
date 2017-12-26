@@ -34,7 +34,7 @@ DirOptions::DirOptions()
       key_size(8),
       value_size(32),
       filter(kDirBloomFilter),
-      bitmap_format(kUncompressedFormat),
+      bm_fmt(kUncompressedFormat),
       filter_bits_per_key(0),
       bf_bits_per_key(8),
       bm_key_bits(24),
@@ -960,14 +960,29 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
 }
 
 #if VERBOSE >= 3
-// Return a brief summary of filter configuration.
-static std::string FilterOptions(const DirOptions& options) {
+namespace {
+// Return a brief summary of the configuration of a bitmap filter
+std::string BitmapFilterOptions(const DirOptions& options) {
+  assert(options.filter == kDirBitmap);
   char tmp[50];
-  switch (options.filter) {
-    case kDirBitmap:
+  switch (options.bm_fmt) {
+    case kUncompressedFormat:
       snprintf(tmp, sizeof(tmp), "BMP (uncompressed, key_bits=%d)",
                int(options.bm_key_bits));
       return tmp;
+    default:
+      snprintf(tmp, sizeof(tmp), "BMP (unknown, key_bits=%d)",
+               int(options.bm_key_bits));
+      return tmp;
+  }
+}
+
+// Return a brief summary of filter configuration.
+std::string FilterOptions(const DirOptions& options) {
+  char tmp[50];
+  switch (options.filter) {
+    case kDirBitmap:
+      return BitmapFilterOptions(options);
     case kDirBloomFilter:
       snprintf(tmp, sizeof(tmp), "BF (bits_per_key=%d)",
                int(options.bf_bits_per_key));
@@ -978,6 +993,7 @@ static std::string FilterOptions(const DirOptions& options) {
       return "Unk";
   }
 }
+}  // namespace
 #endif
 
 // Open a directory writer instance according to the instantiated implementation
@@ -1144,7 +1160,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       delete impl;
     }
   } else if (options.filter == kDirBitmap) {
-    if (options.bitmap_format == kVarintFormat) {
+    if (options.bm_fmt == kVarintFormat) {
       typedef BitmapBlock<VarintFormat> VarintBitmapBlock;
       DirWriterImpl<VarintBitmapBlock>* impl =
           new DirWriterImpl<VarintBitmapBlock>(options, dirname);
@@ -1154,7 +1170,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kVarintPlusFormat) {
+    } else if (options.bm_fmt == kVarintPlusFormat) {
       typedef BitmapBlock<VarintPlusFormat> VarintPlusBitmapBlock;
       DirWriterImpl<VarintPlusBitmapBlock>* impl =
           new DirWriterImpl<VarintPlusBitmapBlock>(options, dirname);
@@ -1164,7 +1180,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kFastVarintPlusFormat) {
+    } else if (options.bm_fmt == kFastVarintPlusFormat) {
       typedef BitmapBlock<PVarintPlusFormat> PVarintPlusBitmapBlock;
       DirWriterImpl<PVarintPlusBitmapBlock>* impl =
           new DirWriterImpl<PVarintPlusBitmapBlock>(options, dirname);
@@ -1174,7 +1190,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kPfDeltaFormat) {
+    } else if (options.bm_fmt == kPfDeltaFormat) {
       typedef BitmapBlock<PForDeltaFormat> PForDeltaBitmapBlock;
       DirWriterImpl<PForDeltaBitmapBlock>* impl =
           new DirWriterImpl<PForDeltaBitmapBlock>(options, dirname);
@@ -1184,7 +1200,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kFastPfDeltaFormat) {
+    } else if (options.bm_fmt == kFastPfDeltaFormat) {
       typedef BitmapBlock<PpForDeltaFormat> PpForDeltaBitmapBlock;
       DirWriterImpl<PpForDeltaBitmapBlock>* impl =
           new DirWriterImpl<PpForDeltaBitmapBlock>(options, dirname);
@@ -1194,7 +1210,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kRoaringFormat) {
+    } else if (options.bm_fmt == kRoaringFormat) {
       typedef BitmapBlock<RoaringFormat> RoaringBitmapBlock;
       DirWriterImpl<RoaringBitmapBlock>* impl =
           new DirWriterImpl<RoaringBitmapBlock>(options, dirname);
@@ -1204,7 +1220,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kFastRoaringFormat) {
+    } else if (options.bm_fmt == kFastRoaringFormat) {
       typedef BitmapBlock<PRoaringFormat> PRoaringBitmapBlock;
       DirWriterImpl<PRoaringBitmapBlock>* impl =
           new DirWriterImpl<PRoaringBitmapBlock>(options, dirname);

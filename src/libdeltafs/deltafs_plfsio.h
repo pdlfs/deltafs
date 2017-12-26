@@ -73,11 +73,11 @@ enum BitmapFormatType {
   // Use the roaring bitmap format
   kRoaringFormat = 0x04,
   // Use a modified varint format with a lookup table
-  kFastVarintPlusFormat = 0x05,
+  kFastVarintPlusFormat = 0x05,  // Recommended
   // Use the p-for-delta compression format
   // with a lookup table
   kFastPfDeltaFormat = 0x06,
-  // Use pthe roaring bitmap format
+  // Use the roaring bitmap format
   // with a lookup table
   kFastRoaringFormat = 0x07
 };
@@ -117,7 +117,7 @@ struct DirOptions {
   // Bitmap filter format used to encoding the bitmap filter.
   // This case only makes sense when filter field is set to kBitmapFilter
   // Default: kUncompressedBitmap
-  BitmapFormatType bitmap_format;
+  BitmapFormatType bm_fmt;
 
   // Number of bits to reserve per key for filter memory.
   // The actual amount of memory, and storage, used for each key in filters
