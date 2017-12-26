@@ -970,8 +970,24 @@ std::string BitmapFilterOptions(const DirOptions& options) {
       snprintf(tmp, sizeof(tmp), "BMP (uncompressed, key_bits=%d)",
                int(options.bm_key_bits));
       return tmp;
+    case kFmtFastRoaring:
+      snprintf(tmp, sizeof(tmp), "BMP (fast r, key_bits=%d)",
+               int(options.bm_key_bits));
+      return tmp;
+    case kFmtFastPfDelta:
+      snprintf(tmp, sizeof(tmp), "BMP (fast p-f-delta, key_bits=%d)",
+               int(options.bm_key_bits));
+      return tmp;
+    case kFmtFastVarintPlus:
+      snprintf(tmp, sizeof(tmp), "BMP (fast vb+, key_bits=%d)",
+               int(options.bm_key_bits));
+      return tmp;
+    case kFmtVarintPlus:
+      snprintf(tmp, sizeof(tmp), "BMP (vb+, key_bits=%d)",
+               int(options.bm_key_bits));
+      return tmp;
     default:
-      snprintf(tmp, sizeof(tmp), "BMP (unknown, key_bits=%d)",
+      snprintf(tmp, sizeof(tmp), "BMP (others, key_bits=%d)",
                int(options.bm_key_bits));
       return tmp;
   }
