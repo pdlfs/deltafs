@@ -263,7 +263,7 @@ endif ()
 # we checked for "-pthread" earlier (before add_library).
 # "-pthread" should take care of all thread related options.
 # but if we don't have it, fall back to -D_REENTRANT
-if (NOT flag-pthread)
+if (NOT THREADS_HAVE_PTHREAD_ARG)
     target_compile_definitions (${PDLFS_NAME} PUBLIC -D_REENTRANT)
 endif ()
 
