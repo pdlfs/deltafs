@@ -125,7 +125,7 @@ static std::string Lpart(int sub_partition) {
 }
 
 static std::string Lsuffix(LogType type) {
-  if (type == LogType::kIndex) {
+  if (type == kIndex) {
     return ".idx";
   } else {
     return ".dat";
@@ -420,7 +420,7 @@ static Status RandomAccessOpen(
 static Status TryOpenIt(
     const std::string& f, const LogSource::LogOptions& opts,
     std::vector<std::pair<RandomAccessFile*, uint64_t> >* r) {
-  if (opts.type == LogType::kIndex)
+  if (opts.type == kIndex)
     return OpenWithEagerSeqReads(f, opts.io_size, opts.env, opts.seq_stats, r);
   return RandomAccessOpen(f, opts.env, opts.stats, r);
 }

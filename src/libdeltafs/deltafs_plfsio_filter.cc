@@ -36,7 +36,7 @@ BloomBlock::BloomBlock(const DirOptions& options, size_t bytes_to_reserve)
 BloomBlock::~BloomBlock() {}
 
 int BloomBlock::chunk_type() {
-  return static_cast<int>(ChunkType::kSbfChunk);  // Standard bloom filter
+  return static_cast<int>(kSbfChunk);  // Standard bloom filter
 }
 
 void BloomBlock::Reset(uint32_t num_keys) {
@@ -1180,7 +1180,7 @@ unsigned char LeftMostOneBit(uint32_t i) {
 
 template <typename T>
 int BitmapBlock<T>::chunk_type() {
-  return static_cast<int>(ChunkType::kBmpChunk);
+  return static_cast<int>(kBmpChunk);
 }
 
 template <typename T>
@@ -1242,22 +1242,21 @@ Slice BitmapBlock<T>::Finish() {
   space_.push_back(static_cast<char>(key_bits_));
   // Remember the compression type
   if (typeid(T) == typeid(UncompressedFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kUncompressedFormat));
+    space_.push_back(static_cast<char>(kUncompressedFormat));
   } else if (typeid(T) == typeid(VarintFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kVarintFormat));
+    space_.push_back(static_cast<char>(kVarintFormat));
   } else if (typeid(T) == typeid(VarintPlusFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kVarintPlusFormat));
+    space_.push_back(static_cast<char>(kVarintPlusFormat));
   } else if (typeid(T) == typeid(PVarintPlusFormat)) {
-    space_.push_back(
-        static_cast<char>(BitmapFormatType::kFastVarintPlusFormat));
+    space_.push_back(static_cast<char>(kFastVarintPlusFormat));
   } else if (typeid(T) == typeid(PForDeltaFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kPfDeltaFormat));
+    space_.push_back(static_cast<char>(kPfDeltaFormat));
   } else if (typeid(T) == typeid(PpForDeltaFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kFastPfDeltaFormat));
+    space_.push_back(static_cast<char>(kFastPfDeltaFormat));
   } else if (typeid(T) == typeid(RoaringFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kRoaringFormat));
+    space_.push_back(static_cast<char>(kRoaringFormat));
   } else if (typeid(T) == typeid(PRoaringFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kFastRoaringFormat));
+    space_.push_back(static_cast<char>(kFastRoaringFormat));
   }
   return space_;
 }
@@ -1310,30 +1309,28 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   }
 
   const int compression = input[input.size() - 1];
-  if (compression == BitmapFormatType::kUncompressedFormat) {
+  if (compression == kUncompressedFormat) {
     return UncompressedFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kVarintFormat) {
+  } else if (compression == kVarintFormat) {
     return VarintFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kVarintPlusFormat) {
+  } else if (compression == kVarintPlusFormat) {
     return VarintPlusFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kFastVarintPlusFormat) {
+  } else if (compression == kFastVarintPlusFormat) {
     return PVarintPlusFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kPfDeltaFormat) {
+  } else if (compression == kPfDeltaFormat) {
     return PForDeltaFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kFastPfDeltaFormat) {
+  } else if (compression == kFastPfDeltaFormat) {
     return PpForDeltaFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kRoaringFormat) {
+  } else if (compression == kRoaringFormat) {
     return RoaringFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kFastRoaringFormat) {
+  } else if (compression == kFastRoaringFormat) {
     return PRoaringFormat::Test(i, key_bits, bitmap);
   } else {
     return true;
   }
 }
 
-int EmptyFilterBlock::chunk_type() {
-  return static_cast<int>(ChunkType::kUnknown);
-}
+int EmptyFilterBlock::chunk_type() { return static_cast<int>(kUnknown); }
 
 EmptyFilterBlock::EmptyFilterBlock(const DirOptions& o, size_t b) {
   space_.resize(0);

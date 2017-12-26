@@ -12,6 +12,8 @@
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/status.h"
 
+#include <stdint.h>
+
 namespace pdlfs {
 namespace plfsio {
 

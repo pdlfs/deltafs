@@ -1038,21 +1038,21 @@ size_t DirLogger<T>::memory_usage() const {
 
 template class DirLogger<BloomBlock>;
 
-template class DirLogger<BitmapBlock<UncompressedFormat>>;
+template class DirLogger<BitmapBlock<UncompressedFormat> >;
 
-template class DirLogger<BitmapBlock<VarintFormat>>;
+template class DirLogger<BitmapBlock<VarintFormat> >;
 
-template class DirLogger<BitmapBlock<VarintPlusFormat>>;
+template class DirLogger<BitmapBlock<VarintPlusFormat> >;
 
-template class DirLogger<BitmapBlock<PVarintPlusFormat>>;
+template class DirLogger<BitmapBlock<PVarintPlusFormat> >;
 
-template class DirLogger<BitmapBlock<PForDeltaFormat>>;
+template class DirLogger<BitmapBlock<PForDeltaFormat> >;
 
-template class DirLogger<BitmapBlock<PpForDeltaFormat>>;
+template class DirLogger<BitmapBlock<PpForDeltaFormat> >;
 
-template class DirLogger<BitmapBlock<RoaringFormat>>;
+template class DirLogger<BitmapBlock<RoaringFormat> >;
 
-template class DirLogger<BitmapBlock<PRoaringFormat>>;
+template class DirLogger<BitmapBlock<PRoaringFormat> >;
 
 template class DirLogger<EmptyFilterBlock>;
 
@@ -1206,9 +1206,9 @@ bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& h) {
   status = ReadBlock(indx_, options_, h, &contents, cached);
   if (status.ok()) {
     bool r;  // False if key must not match so no need for further access
-    if (options_.filter == FilterType::kDirBloomFilter) {
+    if (options_.filter == kDirBloomFilter) {
       r = BloomKeyMayMatch(key, contents.data);
-    } else if (options_.filter == FilterType::kDirBitmap) {
+    } else if (options_.filter == kDirBitmap) {
       r = BitmapKeyMustMatch(key, contents.data);
     } else {  // Unknown filter type
       r = true;

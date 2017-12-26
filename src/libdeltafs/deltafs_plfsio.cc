@@ -33,8 +33,8 @@ DirOptions::DirOptions()
       skip_sort(false),
       key_size(8),
       value_size(32),
-      filter(FilterType::kDirBloomFilter),
-      bitmap_format(BitmapFormatType::kUncompressedFormat),
+      filter(kDirBloomFilter),
+      bitmap_format(kUncompressedFormat),
       filter_bits_per_key(0),
       bf_bits_per_key(8),
       bm_key_bits(24),
@@ -56,7 +56,7 @@ DirOptions::DirOptions()
       slowdown_micros(0),
       paranoid_checks(false),
       ignore_filters(false),
-      compression(CompressionType::kNoCompression),
+      compression(kNoCompression),
       force_compression(false),
       verify_checksums(false),
       skip_checksums(false),
@@ -65,7 +65,7 @@ DirOptions::DirOptions()
       num_epochs(-1),
       lg_parts(-1),
       listener(NULL),
-      mode(DirMode::kDirUnique),
+      mode(kDirUnique),
       env(NULL),
       allow_env_threads(false),
       is_env_pfs(true),
@@ -73,10 +73,10 @@ DirOptions::DirOptions()
 
 static bool ParseFilterType(const Slice& value, FilterType* result) {
   if (value.starts_with("bloom")) {
-    *result = FilterType::kDirBloomFilter;
+    *result = kDirBloomFilter;
     return true;
   } else if (value.starts_with("bitmap")) {
-    *result = FilterType::kDirBitmap;
+    *result = kDirBitmap;
     return true;
   } else {
     return false;
@@ -1002,7 +1002,7 @@ Status DirWriter::TryDirOpen(T* impl) {
   std::vector<const OutputStats*> output_stats;
   LogSink::LogOptions io_opts;
   io_opts.rank = my_rank;
-  io_opts.type = LogType::kData;
+  io_opts.type = kData;
   if (options->epoch_log_rotation) io_opts.rotation = kExtCtrl;
   if (options->measure_writes) io_opts.stats = &impl->io_stats_;
   io_opts.mu = &impl->io_mutex_;
@@ -1017,7 +1017,7 @@ Status DirWriter::TryDirOpen(T* impl) {
       LogSink::LogOptions idx_opts;
       idx_opts.rank = my_rank;
       idx_opts.sub_partition = static_cast<int>(i);
-      idx_opts.type = LogType::kIndex;
+      idx_opts.type = kIndex;
       if (options->measure_writes) idx_opts.stats = &plfsdirs[i]->io_stats_;
       idx_opts.mu = NULL;
       idx_opts.min_buf = options->min_index_buffer;
@@ -1307,7 +1307,7 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
     Dir* dir = new Dir(options_, &mutex_, &cond_cv_);
     dir->Ref();
     LogSource::LogOptions idx_opts;
-    idx_opts.type = LogType::kIndex;
+    idx_opts.type = kIndex;
     idx_opts.sub_partition = static_cast<int>(part);
     idx_opts.rank = options_.rank;
     if (options_.measure_reads) idx_opts.seq_stats = &dir->io_stats_;
@@ -1501,7 +1501,7 @@ Status DirReader::Open(const DirOptions& _opts, const std::string& dirname,
   DirReaderImpl* impl = new DirReaderImpl(options, dirname);
   LogSource::LogOptions io_opts;
   io_opts.rank = my_rank;
-  io_opts.type = LogType::kData;
+  io_opts.type = kData;
   io_opts.sub_partition = -1;
   if (options.epoch_log_rotation) io_opts.num_rotas = options.num_epochs + 1;
   if (options.measure_reads) io_opts.stats = &impl->io_stats_;
