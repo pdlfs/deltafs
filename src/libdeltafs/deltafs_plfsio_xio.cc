@@ -125,7 +125,7 @@ static std::string Lpart(int sub_partition) {
 }
 
 static std::string Lsuffix(LogType type) {
-  if (type == kIndex) {
+  if (type == kIdxIo) {
     return ".idx";
   } else {
     return ".dat";
@@ -264,7 +264,7 @@ LogSink::LogOptions::LogOptions()
       max_buf(4096),
       min_buf(4096),
       rotation(kNoRotation),
-      type(kData),
+      type(kDefLogIo),
       mu(NULL),
       stats(NULL),
       env(Env::Default()) {}
@@ -344,7 +344,7 @@ LogSource::LogOptions::LogOptions()
     : rank(0),
       sub_partition(-1),
       num_rotas(-1),
-      type(kData),
+      type(kDefLogIo),
       seq_stats(NULL),
       stats(NULL),
       io_size(4096),
@@ -420,7 +420,7 @@ static Status RandomAccessOpen(
 static Status TryOpenIt(
     const std::string& f, const LogSource::LogOptions& opts,
     std::vector<std::pair<RandomAccessFile*, uint64_t> >* r) {
-  if (opts.type == kIndex)
+  if (opts.type == kIdxIo)
     return OpenWithEagerSeqReads(f, opts.io_size, opts.env, opts.seq_stats, r);
   return RandomAccessOpen(f, opts.env, opts.stats, r);
 }
@@ -444,7 +444,7 @@ Status LogSource::Open(const LogOptions& opts, const std::string& prefix,
   if (status.ok()) {
     LogSource* src = new LogSource(opts, prefix);
     std::pair<RandomAccessFile*, uint64_t>* files =
-        new std::pair<RandomAccessFile*, uint64_t>[ sources.size() ];
+        new std::pair<RandomAccessFile*, uint64_t>[sources.size()];
     for (size_t i = 0; i < sources.size(); i++) {
       files[i].second = static_cast<uint64_t>(sources[i].second);
       files[i].first = sources[i].first;

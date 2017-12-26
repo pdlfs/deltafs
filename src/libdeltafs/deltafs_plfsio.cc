@@ -1002,8 +1002,8 @@ Status DirWriter::TryDirOpen(T* impl) {
   std::vector<const OutputStats*> output_stats;
   LogSink::LogOptions io_opts;
   io_opts.rank = my_rank;
-  io_opts.type = kData;
-  if (options->epoch_log_rotation) io_opts.rotation = kExtCtrl;
+  io_opts.type = kDefLogIo;
+  if (options->epoch_log_rotation) io_opts.rotation = kRotationExtCtrl;
   if (options->measure_writes) io_opts.stats = &impl->io_stats_;
   io_opts.mu = &impl->io_mutex_;
   io_opts.min_buf = options->min_data_buffer;
@@ -1017,7 +1017,7 @@ Status DirWriter::TryDirOpen(T* impl) {
       LogSink::LogOptions idx_opts;
       idx_opts.rank = my_rank;
       idx_opts.sub_partition = static_cast<int>(i);
-      idx_opts.type = kIndex;
+      idx_opts.type = kIdxIo;
       if (options->measure_writes) idx_opts.stats = &plfsdirs[i]->io_stats_;
       idx_opts.mu = NULL;
       idx_opts.min_buf = options->min_index_buffer;
@@ -1307,7 +1307,7 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
     Dir* dir = new Dir(options_, &mutex_, &cond_cv_);
     dir->Ref();
     LogSource::LogOptions idx_opts;
-    idx_opts.type = kIndex;
+    idx_opts.type = kIdxIo;
     idx_opts.sub_partition = static_cast<int>(part);
     idx_opts.rank = options_.rank;
     if (options_.measure_reads) idx_opts.seq_stats = &dir->io_stats_;
@@ -1501,7 +1501,7 @@ Status DirReader::Open(const DirOptions& _opts, const std::string& dirname,
   DirReaderImpl* impl = new DirReaderImpl(options, dirname);
   LogSource::LogOptions io_opts;
   io_opts.rank = my_rank;
-  io_opts.type = kData;
+  io_opts.type = kDefLogIo;
   io_opts.sub_partition = -1;
   if (options.epoch_log_rotation) io_opts.num_rotas = options.num_epochs + 1;
   if (options.measure_reads) io_opts.stats = &impl->io_stats_;

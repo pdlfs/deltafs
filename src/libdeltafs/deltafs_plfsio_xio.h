@@ -25,11 +25,11 @@ namespace plfsio {
 
 // Log types
 enum LogType {
-  // Default type, contains data blocks
-  kData = 0x00,  // Optimized for random read access
+  // Default I/O type, for data blocks
+  kDefLogIo = 0x00,  // Optimized for random read accesses
 
-  // Index log with table indexes, filters, and other index blocks
-  kIndex = 0x01  // Sequential reads expected
+  // For index logs consisting of table indexes, filters, and other index blocks
+  kIdxIo = 0x01  // Sequential reads expected
 };
 
 // Log rotation types.
@@ -38,7 +38,7 @@ enum RotationType {
   // Do not rotate log files
   kNoRotation = 0x00,
   // Log rotation is controlled by external user code
-  kExtCtrl = 0x01
+  kRotationExtCtrl = 0x01
 };
 
 // Accumulate a certain amount of data before writing
