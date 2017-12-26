@@ -399,7 +399,7 @@ class FakeEnv : public EnvWrapper {
 
 class PlfsIoBench {
  public:
-  static BitmapFormatType GetBitmapFilterFormat(BitmapFormatType deffmt) {
+  static BitmapFormat GetBitmapFilterFormat(BitmapFormat deffmt) {
     const char* env = getenv("FT_TYPE");
     if (env == NULL) {
       return deffmt;
@@ -776,8 +776,8 @@ class PlfsIoBench {
     // Set filter type for io benchmark
     options_.filter =
         static_cast<FilterType>(GetOption("FILTER_TYPE", kFtBloomFilter));
-    options_.bm_fmt = static_cast<BitmapFormatType>(
-        GetOption("FILTER_FORMAT", kFmtUncompressed));
+    options_.bm_fmt =
+        static_cast<BitmapFormat>(GetOption("FILTER_FORMAT", kFmtUncompressed));
 
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
@@ -870,7 +870,7 @@ class PlfsIoBench {
     }
   }
 
-  static const char* ToString(BitmapFormatType type) {
+  static const char* ToString(BitmapFormat type) {
     switch (type) {
       case kFmtUncompressed:
         return "Uncompressed";

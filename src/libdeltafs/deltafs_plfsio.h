@@ -61,7 +61,7 @@ enum FilterType {
 };
 
 // Bitmap compression format.
-enum BitmapFormatType {
+enum BitmapFormat {
   // Use uncompressed bitmap format
   kFmtUncompressed = 0x00,
   // Use the varint format
@@ -111,13 +111,8 @@ struct DirOptions {
   size_t value_size;
 
   // Filter type to be applied to directory storage.
-  // Default: kBloomFilter
+  // Default: kFtBloomFilter
   FilterType filter;
-
-  // Bitmap filter format used to encoding the bitmap filter.
-  // This case only makes sense when filter field is set to kBitmapFilter
-  // Default: kUncompressedBitmap
-  BitmapFormatType bm_fmt;
 
   // Number of bits to reserve per key for filter memory.
   // The actual amount of memory, and storage, used for each key in filters
@@ -133,6 +128,11 @@ struct DirOptions {
   // Set to 0 to disable bloom filters.
   // Default: 8 bits
   size_t bf_bits_per_key;
+
+  // Storage format used to encoding the bitmap filter.
+  // This option is only used when bitmap filter is enabled.
+  // Default: kFmtUncompressed
+  BitmapFormat bm_fmt;
 
   // Total number of bits in each key.
   // Used to bound the domain size of the key space.
