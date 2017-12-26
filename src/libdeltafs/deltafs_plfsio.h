@@ -39,44 +39,47 @@ struct IoStats {
 enum DirMode {
   // Each duplicated key insertion within an epoch are considered separate
   // records
-  kMultiMap = 0x00,
+  kDirMultiMap = 0x00,
   // Each duplicated key insertion within an epoch overrides the previous
   // insertion in the same epoch
-  kUniqueOverride = 0x01,
+  kDirUniqueOverride = 0x01,
   // Duplicated key insertions are silently discarded
-  kUniqueDrop = 0x02,
-  // No duplicated keys
-  kUnique = 0x03
+  kDirUniqueDrop = 0x02,
+  // No duplicated keys, ensured by users
+  kDirUnique = 0x03
 };
 
 // Directory filter types. Bitmap-based filters are optimized
 // for workloads with compact key spaces.
 enum FilterType {
   // Do not use any filters
-  kNoFilter = 0x00,
+  kDirNoFilter = 0x00,  // For debugging or benchmarking
   // Use bloom filters
-  kBloomFilter = 0x01,
+  kDirBloomFilter = 0x01,
   // Use bitmap filters
-  kBitmapFilter = 0x02
+  kDirBitmap = 0x02
 };
 
+// Bitmap compression format.
 enum BitmapFormatType {
-  // Use uncompressed bitmap filters
-  kUncompressedBitmap = 0x00,
-  // Use Varint bitmap filters
-  kVarintBitmap = 0x01,
-  // Use Varint-plus bitmap filters
-  kVarintPlusBitmap = 0x02,
-  // Use pForDelta bitmap filters
-  kPForDeltaBitmap = 0x03,
-  // Use Roaring bitmap filters
-  kRoaringBitmap = 0x04,
-  // Use partitioned Roaring bitmap filters
-  kPRoaringBitmap = 0x05,
-  // Use partitioned Varint-plus bitmap filters
-  kPVarintPlusBitmap = 0x06,
-  // Use partitioned pForDelta bitmap filters
-  kPpForDeltaBitmap = 0x07
+  // Use uncompressed bitmap format
+  kUncompressedFormat = 0x00,
+  // Use the varint format
+  kVarintFormat = 0x01,
+  // Use a modified varint format
+  kVarintPlusFormat = 0x02,
+  // Use the p-for-delta compression format
+  kPfDeltaFormat = 0x03,
+  // Use the roaring bitmap format
+  kRoaringFormat = 0x04,
+  // Use a modified varint format with a lookup table
+  kFastVarintPlusFormat = 0x05,
+  // Use the p-for-delta compression format
+  // with a lookup table
+  kFastPfDeltaFormat = 0x06,
+  // Use pthe roaring bitmap format
+  // with a lookup table
+  kFastRoaringFormat = 0x07
 };
 
 struct DirOptions {

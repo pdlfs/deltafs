@@ -140,9 +140,7 @@ class UncompressedFormat {
     }
   }
 
-  size_t memory_usage() const {
-    return space_->capacity();
-  }
+  size_t memory_usage() const { return space_->capacity(); }
 
  private:
   // Key size in bits
@@ -386,17 +384,17 @@ class VarintPlusFormat : public CompressedFormat {
 
 static void EncodingSizeT(std::string* space, size_t index, size_t value) {
   (*space)[index] = static_cast<unsigned char>(value & 0xff);
-  (*space)[index+1] = static_cast<unsigned char>((value >> 8) & 0xff);
-  (*space)[index+2] = static_cast<unsigned char>((value >> 16) & 0xff);
-  (*space)[index+3] = static_cast<unsigned char>((value >> 24) & 0xff);
+  (*space)[index + 1] = static_cast<unsigned char>((value >> 8) & 0xff);
+  (*space)[index + 2] = static_cast<unsigned char>((value >> 16) & 0xff);
+  (*space)[index + 3] = static_cast<unsigned char>((value >> 24) & 0xff);
 }
 
 static size_t DecodingSizeT(const Slice& input, size_t index) {
   size_t value = 0;
   value += static_cast<unsigned char>(input[index]);
-  value += static_cast<unsigned char>(input[index+1]) << 8;
-  value += static_cast<unsigned char>(input[index+2]) << 16;
-  value += static_cast<unsigned char>(input[index+3]) << 24;
+  value += static_cast<unsigned char>(input[index + 1]) << 8;
+  value += static_cast<unsigned char>(input[index + 2]) << 16;
+  value += static_cast<unsigned char>(input[index + 3]) << 24;
   return value;
 }
 
@@ -407,15 +405,14 @@ class PVarintPlusFormat : public CompressedFormat {
 
   size_t Finish() {
     // Header partition lookup table related variable.
-    size_t num_partition = (num_keys_ + partition_size_-1) / partition_size_;
+    size_t num_partition = (num_keys_ + partition_size_ - 1) / partition_size_;
     // For each partition, reserve a space to store a total RL and start index
-    space_->resize(num_partition==0?8:num_partition*8);
+    space_->resize(num_partition == 0 ? 8 : num_partition * 8);
     size_t parti_ele_count = 0;
     size_t parti_total_rl = 0;
     size_t parti_index = 0;
     // Starting address of current partition
-    EncodingSizeT(space_, parti_index*8+4, space_->size());
-
+    EncodingSizeT(space_, parti_index * 8 + 4, space_->size());
 
     std::sort(overflowed.begin(), overflowed.end());
     size_t overflowed_idx = 0;
@@ -434,7 +431,7 @@ class PVarintPlusFormat : public CompressedFormat {
         if (j < bucket_size_ - 1)
           bucket_keys.push_back(
               static_cast<unsigned char>(working_space_[offset + j]) +
-                  (i << 8));
+              (i << 8));
         else
           bucket_keys.push_back(overflowed[overflowed_idx++]);
       }
@@ -445,17 +442,16 @@ class PVarintPlusFormat : public CompressedFormat {
         last_one = *it;
 
         // If partition is full
-        if(parti_ele_count==partition_size_) {
-          EncodingSizeT(space_, parti_index*8, parti_total_rl);
+        if (parti_ele_count == partition_size_) {
+          EncodingSizeT(space_, parti_index * 8, parti_total_rl);
           parti_ele_count = 0;
           parti_total_rl = 0;
-          parti_index+=1;
-          EncodingSizeT(space_, parti_index*8+4, space_->size());
+          parti_index += 1;
+          EncodingSizeT(space_, parti_index * 8 + 4, space_->size());
         }
         // Update partition stats
         parti_total_rl += distance;
-        parti_ele_count +=1;
-
+        parti_ele_count += 1;
 
         // Encoding the distance to variable length plus encode.
         if (distance <= 254) {
@@ -476,8 +472,8 @@ class PVarintPlusFormat : public CompressedFormat {
       }
     }
     // If partition is not empty
-    if(parti_ele_count!=0) {
-      EncodingSizeT(space_, parti_index*8, parti_total_rl);
+    if (parti_ele_count != 0) {
+      EncodingSizeT(space_, parti_index * 8, parti_total_rl);
     }
     return space_->size();
   }
@@ -488,18 +484,18 @@ class PVarintPlusFormat : public CompressedFormat {
     size_t partition_num = DecodingSizeT(input, 4) / 8;
 
     size_t parti_idx = 0;
-    for(; parti_idx < partition_num; parti_idx++) {
-      size_t parti_rl = DecodingSizeT(input, parti_idx*8);
-      if(bit > parti_rl) {
+    for (; parti_idx < partition_num; parti_idx++) {
+      size_t parti_rl = DecodingSizeT(input, parti_idx * 8);
+      if (bit > parti_rl) {
         bit -= parti_rl;
       } else {
-        start_rl = DecodingSizeT(input, parti_idx*8+4);
+        start_rl = DecodingSizeT(input, parti_idx * 8 + 4);
         break;
       }
     }
 
     // Out of range
-    if(parti_idx==partition_num) {
+    if (parti_idx == partition_num) {
       return false;
     }
 
@@ -663,14 +659,14 @@ class PpForDeltaFormat : public CompressedFormat {
 
   size_t Finish() {
     // Header partition lookup table related variable.
-    size_t num_partition = (num_keys_ + partition_size_-1) / partition_size_;
+    size_t num_partition = (num_keys_ + partition_size_ - 1) / partition_size_;
     // For each partition, reserve a space to store a total RL and start index
-    space_->resize(num_partition==0?8:num_partition*8);
+    space_->resize(num_partition == 0 ? 8 : num_partition * 8);
     size_t parti_ele_count = 0;
     size_t parti_total_rl = 0;
     size_t parti_index = 0;
     // Starting address of current partition
-    EncodingSizeT(space_, parti_index*8+4, space_->size());
+    EncodingSizeT(space_, parti_index * 8 + 4, space_->size());
 
     std::sort(overflowed.begin(), overflowed.end());
     size_t overflowed_idx = 0;
@@ -692,7 +688,7 @@ class PpForDeltaFormat : public CompressedFormat {
         if (j < bucket_size_ - 1)
           bucket_keys.push_back(
               static_cast<unsigned char>(working_space_[offset + j]) +
-                  (i << 8));
+              (i << 8));
         else
           bucket_keys.push_back(overflowed[overflowed_idx++]);
       }
@@ -703,13 +699,13 @@ class PpForDeltaFormat : public CompressedFormat {
         last_one = *it;
 
         // If partition is full
-        if(parti_ele_count==partition_size_) {
-          assert(cohort.size()==0);
-          EncodingSizeT(space_, parti_index*8, parti_total_rl);
+        if (parti_ele_count == partition_size_) {
+          assert(cohort.size() == 0);
+          EncodingSizeT(space_, parti_index * 8, parti_total_rl);
           parti_ele_count = 0;
           parti_total_rl = 0;
-          parti_index+=1;
-          EncodingSizeT(space_, parti_index*8+4, space_->size());
+          parti_index += 1;
+          EncodingSizeT(space_, parti_index * 8 + 4, space_->size());
         }
         // Update partition stats
         parti_total_rl += distance;
@@ -724,7 +720,6 @@ class PpForDeltaFormat : public CompressedFormat {
           cohort_or = 0;
           cohort.clear();
         }
-
       }
     }
     if (cohort.size() > 0) {
@@ -732,8 +727,8 @@ class PpForDeltaFormat : public CompressedFormat {
     }
 
     // If partition is not empty
-    if(parti_ele_count!=0) {
-      EncodingSizeT(space_, parti_index*8, parti_total_rl);
+    if (parti_ele_count != 0) {
+      EncodingSizeT(space_, parti_index * 8, parti_total_rl);
     }
     return space_->size();
   }
@@ -744,18 +739,18 @@ class PpForDeltaFormat : public CompressedFormat {
     size_t partition_num = DecodingSizeT(input, 4) / 8;
 
     size_t parti_idx = 0;
-    for(; parti_idx < partition_num; parti_idx++) {
-      size_t parti_rl = DecodingSizeT(input, parti_idx*8);
-      if(bit > parti_rl) {
+    for (; parti_idx < partition_num; parti_idx++) {
+      size_t parti_rl = DecodingSizeT(input, parti_idx * 8);
+      if (bit > parti_rl) {
         bit -= parti_rl;
       } else {
-        start_rl = DecodingSizeT(input, parti_idx*8+4);
+        start_rl = DecodingSizeT(input, parti_idx * 8 + 4);
         break;
       }
     }
 
     // Out of range
-    if(parti_idx==partition_num) {
+    if (parti_idx == partition_num) {
       return false;
     }
 
@@ -806,7 +801,6 @@ class PpForDeltaFormat : public CompressedFormat {
   void EncodingCohort(std::vector<size_t>& cohort, size_t cohort_or) {
     unsigned char bit_num = LeftMostOneBit(cohort_or);
     space_->push_back(bit_num);
-
 
     unsigned char b = 0;  // tmp byte to fill bit by bit
     int byte_index = 7;   // Start fill from the most significant bit.
@@ -1144,7 +1138,8 @@ class PRoaringFormat : public CompressedFormat {
   }
 
   size_t memory_usage() const {
-    return CompressedFormat::memory_usage() + partition_sum_.size()*sizeof(uint16_t);
+    return CompressedFormat::memory_usage() +
+           partition_sum_.size() * sizeof(uint16_t);
   }
 
  private:
@@ -1247,27 +1242,30 @@ Slice BitmapBlock<T>::Finish() {
   space_.push_back(static_cast<char>(key_bits_));
   // Remember the compression type
   if (typeid(T) == typeid(UncompressedFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kUncompressedBitmap));
+    space_.push_back(static_cast<char>(BitmapFormatType::kUncompressedFormat));
   } else if (typeid(T) == typeid(VarintFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kVarintBitmap));
+    space_.push_back(static_cast<char>(BitmapFormatType::kVarintFormat));
   } else if (typeid(T) == typeid(VarintPlusFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kVarintPlusBitmap));
+    space_.push_back(static_cast<char>(BitmapFormatType::kVarintPlusFormat));
   } else if (typeid(T) == typeid(PVarintPlusFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kPVarintPlusBitmap));
+    space_.push_back(
+        static_cast<char>(BitmapFormatType::kFastVarintPlusFormat));
   } else if (typeid(T) == typeid(PForDeltaFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kPForDeltaBitmap));
+    space_.push_back(static_cast<char>(BitmapFormatType::kPfDeltaFormat));
   } else if (typeid(T) == typeid(PpForDeltaFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kPpForDeltaBitmap));
+    space_.push_back(static_cast<char>(BitmapFormatType::kFastPfDeltaFormat));
   } else if (typeid(T) == typeid(RoaringFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kRoaringBitmap));
+    space_.push_back(static_cast<char>(BitmapFormatType::kRoaringFormat));
   } else if (typeid(T) == typeid(PRoaringFormat)) {
-    space_.push_back(static_cast<char>(BitmapFormatType::kPRoaringBitmap));
+    space_.push_back(static_cast<char>(BitmapFormatType::kFastRoaringFormat));
   }
   return space_;
 }
 
 template <typename T>
-size_t BitmapBlock<T>::memory_usage() const { return fmt_->memory_usage(); }
+size_t BitmapBlock<T>::memory_usage() const {
+  return fmt_->memory_usage();
+}
 
 template <typename T>
 BitmapBlock<T>::~BitmapBlock() {
@@ -1312,21 +1310,21 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   }
 
   const int compression = input[input.size() - 1];
-  if (compression == BitmapFormatType::kUncompressedBitmap) {
+  if (compression == BitmapFormatType::kUncompressedFormat) {
     return UncompressedFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kVarintBitmap) {
+  } else if (compression == BitmapFormatType::kVarintFormat) {
     return VarintFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kVarintPlusBitmap) {
+  } else if (compression == BitmapFormatType::kVarintPlusFormat) {
     return VarintPlusFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kPVarintPlusBitmap) {
+  } else if (compression == BitmapFormatType::kFastVarintPlusFormat) {
     return PVarintPlusFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kPForDeltaBitmap) {
+  } else if (compression == BitmapFormatType::kPfDeltaFormat) {
     return PForDeltaFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kPpForDeltaBitmap) {
+  } else if (compression == BitmapFormatType::kFastPfDeltaFormat) {
     return PpForDeltaFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kRoaringBitmap) {
+  } else if (compression == BitmapFormatType::kRoaringFormat) {
     return RoaringFormat::Test(i, key_bits, bitmap);
-  } else if (compression == BitmapFormatType::kPRoaringBitmap) {
+  } else if (compression == BitmapFormatType::kFastRoaringFormat) {
     return PRoaringFormat::Test(i, key_bits, bitmap);
   } else {
     return true;

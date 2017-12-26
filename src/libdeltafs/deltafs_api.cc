@@ -925,10 +925,10 @@ static pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;
   if (dir->multi) {
     // Allow multiple insertions per key within a single epoch
-    dir->options.mode = DirMode::kMultiMap;
+    dir->options.mode = DirMode::kDirMultiMap;
   } else {  // By default, each key is inserted at most once within each epoch
 #ifndef NDEBUG
-    dir->options.mode = DirMode::kUniqueDrop;  // Drop duplicates
+    dir->options.mode = DirMode::kDirUniqueDrop;  // Drop duplicates
 #else
     dir->options.mode = DirMode::kUnique;
 #endif

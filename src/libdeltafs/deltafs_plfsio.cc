@@ -33,8 +33,8 @@ DirOptions::DirOptions()
       skip_sort(false),
       key_size(8),
       value_size(32),
-      filter(FilterType::kBloomFilter),
-      bitmap_format(BitmapFormatType::kUncompressedBitmap),
+      filter(FilterType::kDirBloomFilter),
+      bitmap_format(BitmapFormatType::kUncompressedFormat),
       filter_bits_per_key(0),
       bf_bits_per_key(8),
       bm_key_bits(24),
@@ -65,7 +65,7 @@ DirOptions::DirOptions()
       num_epochs(-1),
       lg_parts(-1),
       listener(NULL),
-      mode(DirMode::kUnique),
+      mode(DirMode::kDirUnique),
       env(NULL),
       allow_env_threads(false),
       is_env_pfs(true),
@@ -73,10 +73,10 @@ DirOptions::DirOptions()
 
 static bool ParseFilterType(const Slice& value, FilterType* result) {
   if (value.starts_with("bloom")) {
-    *result = FilterType::kBloomFilter;
+    *result = FilterType::kDirBloomFilter;
     return true;
   } else if (value.starts_with("bitmap")) {
-    *result = FilterType::kBitmapFilter;
+    *result = FilterType::kDirBitmap;
     return true;
   } else {
     return false;
@@ -964,15 +964,15 @@ static DirOptions SanitizeWriteOptions(const DirOptions& options) {
 static std::string FilterOptions(const DirOptions& options) {
   char tmp[50];
   switch (options.filter) {
-    case kBitmapFilter:
+    case kDirBitmap:
       snprintf(tmp, sizeof(tmp), "BMP (uncompressed, key_bits=%d)",
                int(options.bm_key_bits));
       return tmp;
-    case kBloomFilter:
+    case kDirBloomFilter:
       snprintf(tmp, sizeof(tmp), "BF (bits_per_key=%d)",
                int(options.bf_bits_per_key));
       return tmp;
-    case kNoFilter:
+    case kDirNoFilter:
       return "Dis";
     default:
       return "Unk";
@@ -1134,7 +1134,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
 
   Status status;
   // Port to different filter types
-  if (options.filter == kBloomFilter) {
+  if (options.filter == kDirBloomFilter) {
     DirWriterImpl<BloomBlock>* impl =
         new DirWriterImpl<BloomBlock>(options, dirname);
     status = TryDirOpen(impl);
@@ -1143,8 +1143,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
     } else {
       delete impl;
     }
-  } else if (options.filter == kBitmapFilter) {
-    if (options.bitmap_format == kVarintBitmap) {
+  } else if (options.filter == kDirBitmap) {
+    if (options.bitmap_format == kVarintFormat) {
       typedef BitmapBlock<VarintFormat> VarintBitmapBlock;
       DirWriterImpl<VarintBitmapBlock>* impl =
           new DirWriterImpl<VarintBitmapBlock>(options, dirname);
@@ -1154,7 +1154,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kVarintPlusBitmap) {
+    } else if (options.bitmap_format == kVarintPlusFormat) {
       typedef BitmapBlock<VarintPlusFormat> VarintPlusBitmapBlock;
       DirWriterImpl<VarintPlusBitmapBlock>* impl =
           new DirWriterImpl<VarintPlusBitmapBlock>(options, dirname);
@@ -1164,7 +1164,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kPVarintPlusBitmap) {
+    } else if (options.bitmap_format == kFastVarintPlusFormat) {
       typedef BitmapBlock<PVarintPlusFormat> PVarintPlusBitmapBlock;
       DirWriterImpl<PVarintPlusBitmapBlock>* impl =
           new DirWriterImpl<PVarintPlusBitmapBlock>(options, dirname);
@@ -1174,7 +1174,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kPForDeltaBitmap) {
+    } else if (options.bitmap_format == kPfDeltaFormat) {
       typedef BitmapBlock<PForDeltaFormat> PForDeltaBitmapBlock;
       DirWriterImpl<PForDeltaBitmapBlock>* impl =
           new DirWriterImpl<PForDeltaBitmapBlock>(options, dirname);
@@ -1184,7 +1184,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kPpForDeltaBitmap) {
+    } else if (options.bitmap_format == kFastPfDeltaFormat) {
       typedef BitmapBlock<PpForDeltaFormat> PpForDeltaBitmapBlock;
       DirWriterImpl<PpForDeltaBitmapBlock>* impl =
           new DirWriterImpl<PpForDeltaBitmapBlock>(options, dirname);
@@ -1194,7 +1194,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kRoaringBitmap) {
+    } else if (options.bitmap_format == kRoaringFormat) {
       typedef BitmapBlock<RoaringFormat> RoaringBitmapBlock;
       DirWriterImpl<RoaringBitmapBlock>* impl =
           new DirWriterImpl<RoaringBitmapBlock>(options, dirname);
@@ -1204,7 +1204,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bitmap_format == kPRoaringBitmap) {
+    } else if (options.bitmap_format == kFastRoaringFormat) {
       typedef BitmapBlock<PRoaringFormat> PRoaringBitmapBlock;
       DirWriterImpl<PRoaringBitmapBlock>* impl =
           new DirWriterImpl<PRoaringBitmapBlock>(options, dirname);
@@ -1252,7 +1252,7 @@ class DirReaderImpl : public DirReader {
       size_t tmp_length,    // Size of the temporary space
       size_t* table_seeks,  // Total number of tables touched
       size_t* seeks         // Total number of data blocks fetched
-      );
+  );
 
   virtual IoStats GetIoStats() const;
 
@@ -1370,11 +1370,11 @@ DirReader::~DirReader() {}
 // Return the name of the filter for printing.
 static std::string FilterName(FilterType type) {
   switch (type) {
-    case kNoFilter:
+    case kDirNoFilter:
       return "Dis";
-    case kBloomFilter:
+    case kDirBloomFilter:
       return "Bloom filter";
-    case kBitmapFilter:
+    case kDirBitmap:
       return "Bitmap";
     default:
       return "Unk";
