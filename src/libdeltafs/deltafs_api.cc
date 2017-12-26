@@ -921,9 +921,9 @@ namespace {
 
 typedef pdlfs::plfsio::DirMode DirMode;
 
-const DirMode kDirMultiMap = pdlfs::plfsio::kDirMultiMap;
-const DirMode kDirUniqueDrop = pdlfs::plfsio::kDirUniqueDrop;
-const DirMode kDirUnique = pdlfs::plfsio::kDirUnique;
+const DirMode kDirMultiMap = pdlfs::plfsio::kDmMultiMap;
+const DirMode kDirUniqueDrop = pdlfs::plfsio::kDmUniqueDrop;
+const DirMode kDirUnique = pdlfs::plfsio::kDmUniqueKey;
 
 pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;

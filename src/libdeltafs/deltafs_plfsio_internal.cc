@@ -521,12 +521,12 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   if (!last_key_.empty()) {
     // Keys within a single table are inserted in a weakly sorted order
     assert(key >= last_key_);
-    if (options_.mode == kDirUniqueDrop) {  // Auto deduplicate
+    if (options_.mode == kDmUniqueDrop) {  // Auto deduplicate
       if (key == last_key_) {
         total_num_dropped_keys_++;
         return;  // Drop
       }
-    } else if (options_.mode != kDirMultiMap) {
+    } else if (options_.mode != kDmMultiMap) {
       assert(key != last_key_);  // Keys are strongly ordered, no duplicates
     }
   }
@@ -566,7 +566,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   output_stats_.value_size += value.size();
   output_stats_.key_size += key.size();
 #ifndef NDEBUG
-  if (options_.mode == kDirUnique) {
+  if (options_.mode == kDmUniqueKey) {
     assert(keys_.count(last_key_) == 0);
     keys_.insert(last_key_);
   }
@@ -695,9 +695,9 @@ DirLogger<T>::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
   buf0_.Reserve(tb_bytes_);
   buf1_.Reserve(tb_bytes_);
 
-  if (options_.filter == kDirNoFilter) {
+  if (options_.filter == kFtNoFilter) {
     // Skip filter
-  } else if (options_.filter != kDirBloomFilter ||
+  } else if (options_.filter != kFtBloomFilter ||
              options_.bf_bits_per_key != 0) {
     filter_ = new T(options_, ft_bytes_);
   } else {
@@ -1155,7 +1155,7 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
 
   Block* block = new Block(contents);
   Iterator* const iter = block->NewIterator(BytewiseComparator());
-  if (options_.mode != kDirMultiMap) {
+  if (options_.mode != kDmMultiMap) {
     iter->Seek(key);  // Binary search
   } else {
     iter->SeekToFirst();
@@ -1177,7 +1177,7 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
   for (; iter->Valid(); iter->Next()) {
     if (iter->key() == key) {
       opts.saver(opts.arg, key, iter->value());
-      if (options_.mode != kDirMultiMap) {
+      if (options_.mode != kDmMultiMap) {
         break;  // If keys are unique, we are done
       }
     } else {
@@ -1206,9 +1206,9 @@ bool Dir::KeyMayMatch(const Slice& key, const BlockHandle& h) {
   status = ReadBlock(indx_, options_, h, &contents, cached);
   if (status.ok()) {
     bool r;  // False if key must not match so no need for further access
-    if (options_.filter == kDirBloomFilter) {
+    if (options_.filter == kFtBloomFilter) {
       r = BloomKeyMayMatch(key, contents.data);
-    } else if (options_.filter == kDirBitmap) {
+    } else if (options_.filter == kFtBitmap) {
       r = BitmapKeyMustMatch(key, contents.data);
     } else {  // Unknown filter type
       r = true;
@@ -1261,7 +1261,7 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
 
   Block* index_block = new Block(index_contents);
   Iterator* const iter = index_block->NewIterator(BytewiseComparator());
-  if (options_.mode != kDirMultiMap) {
+  if (options_.mode != kDmMultiMap) {
     iter->Seek(key);  // Binary search
   } else {
     iter->SeekToFirst();
@@ -1281,7 +1281,7 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
 
     if (!status.ok()) {
       break;
-    } else if (options_.mode != kDirMultiMap) {
+    } else if (options_.mode != kDmMultiMap) {
       break;
     } else if (exhausted) {
       break;
@@ -1393,7 +1393,7 @@ Status Dir::DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
         status = Fetch(opts, key, table_handle);
       }
       if (status.ok() && arg.found) {
-        if (options_.mode != kDirMultiMap) {
+        if (options_.mode != kDmMultiMap) {
           break;
         }
       }

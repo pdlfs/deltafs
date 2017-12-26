@@ -125,7 +125,7 @@ static std::string Lpart(int sub_partition) {
 }
 
 static std::string Lsuffix(LogType type) {
-  if (type == kIdxIo) {
+  if (type == kIdxIoType) {
     return ".idx";
   } else {
     return ".dat";
@@ -264,7 +264,7 @@ LogSink::LogOptions::LogOptions()
       max_buf(4096),
       min_buf(4096),
       rotation(kNoRotation),
-      type(kDefLogIo),
+      type(kDefIoType),
       mu(NULL),
       stats(NULL),
       env(Env::Default()) {}
@@ -344,7 +344,7 @@ LogSource::LogOptions::LogOptions()
     : rank(0),
       sub_partition(-1),
       num_rotas(-1),
-      type(kDefLogIo),
+      type(kDefIoType),
       seq_stats(NULL),
       stats(NULL),
       io_size(4096),
@@ -420,7 +420,7 @@ static Status RandomAccessOpen(
 static Status TryOpenIt(
     const std::string& f, const LogSource::LogOptions& opts,
     std::vector<std::pair<RandomAccessFile*, uint64_t> >* r) {
-  if (opts.type == kIdxIo)
+  if (opts.type == kIdxIoType)
     return OpenWithEagerSeqReads(f, opts.io_size, opts.env, opts.seq_stats, r);
   return RandomAccessOpen(f, opts.env, opts.stats, r);
 }

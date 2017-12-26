@@ -1242,21 +1242,21 @@ Slice BitmapBlock<T>::Finish() {
   space_.push_back(static_cast<char>(key_bits_));
   // Remember the compression type
   if (typeid(T) == typeid(UncompressedFormat)) {
-    space_.push_back(static_cast<char>(kUncompressedFormat));
+    space_.push_back(static_cast<char>(kFmtUncompressed));
   } else if (typeid(T) == typeid(VarintFormat)) {
-    space_.push_back(static_cast<char>(kVarintFormat));
+    space_.push_back(static_cast<char>(kFmtVarint));
   } else if (typeid(T) == typeid(VarintPlusFormat)) {
-    space_.push_back(static_cast<char>(kVarintPlusFormat));
+    space_.push_back(static_cast<char>(kFmtVarintPlus));
   } else if (typeid(T) == typeid(PVarintPlusFormat)) {
-    space_.push_back(static_cast<char>(kFastVarintPlusFormat));
+    space_.push_back(static_cast<char>(kFmtFastVarintPlus));
   } else if (typeid(T) == typeid(PForDeltaFormat)) {
-    space_.push_back(static_cast<char>(kPfDeltaFormat));
+    space_.push_back(static_cast<char>(kFmtPfDelta));
   } else if (typeid(T) == typeid(PpForDeltaFormat)) {
-    space_.push_back(static_cast<char>(kFastPfDeltaFormat));
+    space_.push_back(static_cast<char>(kFmtFastPfDelta));
   } else if (typeid(T) == typeid(RoaringFormat)) {
-    space_.push_back(static_cast<char>(kRoaringFormat));
+    space_.push_back(static_cast<char>(kFmtRoaring));
   } else if (typeid(T) == typeid(PRoaringFormat)) {
-    space_.push_back(static_cast<char>(kFastRoaringFormat));
+    space_.push_back(static_cast<char>(kFmtFastRoaring));
   }
   return space_;
 }
@@ -1309,21 +1309,21 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   }
 
   const int compression = input[input.size() - 1];
-  if (compression == kUncompressedFormat) {
+  if (compression == kFmtUncompressed) {
     return UncompressedFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kVarintFormat) {
+  } else if (compression == kFmtVarint) {
     return VarintFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kVarintPlusFormat) {
+  } else if (compression == kFmtVarintPlus) {
     return VarintPlusFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFastVarintPlusFormat) {
+  } else if (compression == kFmtFastVarintPlus) {
     return PVarintPlusFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kPfDeltaFormat) {
+  } else if (compression == kFmtPfDelta) {
     return PForDeltaFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFastPfDeltaFormat) {
+  } else if (compression == kFmtFastPfDelta) {
     return PpForDeltaFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kRoaringFormat) {
+  } else if (compression == kFmtRoaring) {
     return RoaringFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFastRoaringFormat) {
+  } else if (compression == kFmtFastRoaring) {
     return PRoaringFormat::Test(i, key_bits, bitmap);
   } else {
     return true;

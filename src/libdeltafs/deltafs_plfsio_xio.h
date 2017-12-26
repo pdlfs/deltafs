@@ -26,10 +26,10 @@ namespace plfsio {
 // Log types
 enum LogType {
   // Default I/O type, for data blocks
-  kDefLogIo = 0x00,  // Optimized for random read accesses
+  kDefIoType = 0x00,  // Optimized for random read accesses
 
   // For index logs consisting of table indexes, filters, and other index blocks
-  kIdxIo = 0x01  // Sequential reads expected
+  kIdxIoType = 0x01  // Sequential reads expected
 };
 
 // Log rotation types.

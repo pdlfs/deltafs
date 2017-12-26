@@ -21,13 +21,13 @@ std::string DirInfoFileName(const std::string& dirname) {
 
 std::string ToDebugString(DirMode mode) {
   switch (mode) {
-    case kDirMultiMap:
+    case kDmMultiMap:
       return "M/M";
-    case kDirUniqueOverride:
+    case kDmUniqueOverride:
       return "U/O";
-    case kDirUniqueDrop:
+    case kDmUniqueDrop:
       return "U/D";
-    case kDirUnique:
+    case kDmUniqueKey:
       return "Uni";
     default:
       return "Unknown";
@@ -183,10 +183,10 @@ Status Footer::DecodeFrom(Slice* input) {
     filter_type_ = static_cast<unsigned char>(start[kEncodedLength - 2]);
     mode_ = static_cast<unsigned char>(start[kEncodedLength - 1]);
     switch (mode_) {
-      case kDirMultiMap:
-      case kDirUniqueOverride:
-      case kDirUniqueDrop:
-      case kDirUnique:
+      case kDmMultiMap:
+      case kDmUniqueOverride:
+      case kDmUniqueDrop:
+      case kDmUniqueKey:
         break;
       default:
         return Status::Corruption("Bad dir mode");

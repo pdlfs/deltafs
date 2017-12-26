@@ -37,49 +37,49 @@ struct IoStats {
 
 // Directory semantics
 enum DirMode {
-  // Each duplicated key insertion within an epoch are considered separate
-  // records
-  kDirMultiMap = 0x00,
+  // Duplicated keys inserted within an epoch
+  // are considered separate records
+  kDmMultiMap = 0x00,
   // Each duplicated key insertion within an epoch overrides the previous
   // insertion in the same epoch
-  kDirUniqueOverride = 0x01,
+  kDmUniqueOverride = 0x01,
   // Duplicated key insertions are silently discarded
-  kDirUniqueDrop = 0x02,
+  kDmUniqueDrop = 0x02,
   // No duplicated keys, ensured by users
-  kDirUnique = 0x03
+  kDmUniqueKey = 0x03
 };
 
 // Directory filter types. Bitmap-based filters are optimized
 // for workloads with compact key spaces.
 enum FilterType {
   // Do not use any filters
-  kDirNoFilter = 0x00,  // For debugging or benchmarking
+  kFtNoFilter = 0x00,  // For debugging or benchmarking
   // Use bloom filters
-  kDirBloomFilter = 0x01,
+  kFtBloomFilter = 0x01,
   // Use bitmap filters
-  kDirBitmap = 0x02
+  kFtBitmap = 0x02
 };
 
 // Bitmap compression format.
 enum BitmapFormatType {
   // Use uncompressed bitmap format
-  kUncompressedFormat = 0x00,
+  kFmtUncompressed = 0x00,
   // Use the varint format
-  kVarintFormat = 0x01,
+  kFmtVarint = 0x01,
   // Use a modified varint format
-  kVarintPlusFormat = 0x02,
+  kFmtVarintPlus = 0x02,
   // Use the p-for-delta compression format
-  kPfDeltaFormat = 0x03,
+  kFmtPfDelta = 0x03,
   // Use the roaring bitmap format
-  kRoaringFormat = 0x04,
+  kFmtRoaring = 0x04,
   // Use a modified varint format with a lookup table
-  kFastVarintPlusFormat = 0x05,  // Recommended
+  kFmtFastVarintPlus = 0x05,  // Recommended
   // Use the p-for-delta compression format
   // with a lookup table
-  kFastPfDeltaFormat = 0x06,
+  kFmtFastPfDelta = 0x06,
   // Use the roaring bitmap format
   // with a lookup table
-  kFastRoaringFormat = 0x07
+  kFmtFastRoaring = 0x07
 };
 
 struct DirOptions {
