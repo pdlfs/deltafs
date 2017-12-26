@@ -650,7 +650,7 @@ typedef pdlfs::plfsio::DirWriter DirWriter;
 typedef pdlfs::plfsio::DirReader DirReader;
 
 // Default system env.
-static inline pdlfs::Env* DefaultDirEnv() {
+inline pdlfs::Env* DefaultDirEnv() {
 #if defined(PDLFS_PLATFORM_POSIX)
   return pdlfs::port::PosixGetUnBufferedIOEnv();  // Avoid double-buffering
 #else
@@ -659,11 +659,11 @@ static inline pdlfs::Env* DefaultDirEnv() {
 }
 
 // Default thread pool impl.
-static inline pdlfs::ThreadPool* CreateThreadPool(int num_threads) {
+inline pdlfs::ThreadPool* CreateThreadPool(int num_threads) {
   return pdlfs::ThreadPool::NewFixed(num_threads, true);
 }
 
-static inline DirOptions ParseOptions(const char* conf) {
+inline DirOptions ParseOptions(const char* conf) {
   if (conf != NULL) {
     return pdlfs::plfsio::ParseDirOptions(conf);
   } else {
@@ -925,7 +925,7 @@ const DirMode kDirMultiMap = pdlfs::plfsio::kDirMultiMap;
 const DirMode kDirUniqueDrop = pdlfs::plfsio::kDirUniqueDrop;
 const DirMode kDirUnique = pdlfs::plfsio::kDirUnique;
 
-static pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
+pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;
   if (dir->multi) {
     // Allow multiple insertions per key within a single epoch
@@ -968,7 +968,7 @@ static pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   return s;
 }
 
-static int DirError(deltafs_plfsdir_t* dir, const pdlfs::Status& s) {
+int DirError(deltafs_plfsdir_t* dir, const pdlfs::Status& s) {
   if (dir->printer != NULL) {
     dir->printer(s.ToString().c_str(), dir->printer_arg);
   }
@@ -976,7 +976,7 @@ static int DirError(deltafs_plfsdir_t* dir, const pdlfs::Status& s) {
   return -1;
 }
 
-static bool IsDirOpened(deltafs_plfsdir_t* dir) {
+bool IsDirOpened(deltafs_plfsdir_t* dir) {
   if (dir != NULL) {
     return dir->opened;
   } else {
