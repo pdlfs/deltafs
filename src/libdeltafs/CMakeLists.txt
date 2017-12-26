@@ -135,7 +135,7 @@ set_target_properties(deltafs PROPERTIES VERSION ${dfs-vers}
 
 # "-pthread" should take care of all thread related options.
 # but if we don't have it, fall back to -D_REENTRANT
-if (NOT flag-pthread)
+if (NOT THREADS_HAVE_PTHREAD_ARG)
     target_compile_definitions (deltafs PUBLIC -D_REENTRANT)
 endif ()
 
