@@ -60,7 +60,7 @@ set (DELTAFS_VERSION_MAJOR 1)
 set (DELTAFS_VERSION_MINOR 0)
 set (DELTAFS_VERSION_PATCH 0)
 set (dfs-vers "${DELTAFS_VERSION_MAJOR}.${DELTAFS_VERSION_MINOR}")
-set (dfs-vers "${dfs-vers}.${DELTAFS_VERSION_PATCH}")
+set (DELTAFS_VERSION "${dfs-vers}.${DELTAFS_VERSION_PATCH}")
 
 # setup and configure deltafs_config.h.in
 configure_file ("../../include/deltafs/deltafs_config.h.in"
@@ -124,7 +124,7 @@ endif ()
 if (CMAKE_THREAD_LIBS_INIT)
     target_link_libraries (deltafs "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
-set_target_properties(deltafs PROPERTIES VERSION ${dfs-vers}
+set_target_properties(deltafs PROPERTIES VERSION ${DELTAFS_VERSION}
                       SOVERSION ${DELTAFS_VERSION_MAJOR})
 
 #
@@ -157,7 +157,7 @@ endif ()
 #
 write_basic_package_version_file(
     "deltafs-config-version.cmake"
-    VERSION ${dfs-vers}
+    VERSION ${DELTAFS_VERSION}
     COMPATIBILITY AnyNewerVersion)
 
 # generate our config file for find_package()
