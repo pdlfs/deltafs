@@ -291,6 +291,7 @@ class CompressedFormat {
   size_t Finish() {
     std::sort(extra_keys_.begin(), extra_keys_.end());
     // To be overridden by subclasses...
+    return 0;
   }
 
   // Partition size for auxiliary lookup tables
