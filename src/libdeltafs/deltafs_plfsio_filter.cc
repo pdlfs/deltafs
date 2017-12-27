@@ -217,7 +217,7 @@ class CompressedFormat {
   }
 
  protected:
-  class Iter {  // Iterate through all bitmap buckets
+  class Iter {  // Iterate through all bitmap buckets stored in working_space_
    public:
     // REQUIRES: parent.extra_keys is sorted
     explicit Iter(const CompressedFormat& parent)
@@ -287,6 +287,7 @@ class CompressedFormat {
 
   // Finalize the bitmap representation.
   // Return the final buffer size.
+  // Not a virtual function.
   size_t Finish() {
     std::sort(extra_keys_.begin(), extra_keys_.end());
     // To be overridden by subclasses...
@@ -348,7 +349,7 @@ class VbFormat : public CompressedFormat {
   // The on-storage version will be stored in *space_.
   size_t Finish() {
     uint32_t last_key = 0;
-    CompressedFormat::Finish();
+    CompressedFormat::Finish();  // Sort extra keys
     Iter bucket_iter(*this);
     for (; bucket_iter.Valid(); bucket_iter.Next()) {
       std::vector<uint32_t>* bucket_keys = bucket_iter.keys();
@@ -393,83 +394,68 @@ class VbFormat : public CompressedFormat {
   }
 };
 
-class VbPlusFormat : public CompressedFormat {
+// Very similar to VbFormat except that the first byte is
+// encoded as a special full byte.
+class VbPlusFormat : public VbFormat {
  public:
   VbPlusFormat(const DirOptions& options, std::string* space)
-      : CompressedFormat(options, space) {}
+      : VbFormat(options, space) {}
 
+  static void VbPlusEnc(std::string* output, uint32_t value) {
+    if (value < 255) {
+      output->push_back(value);  // Encode the byte as-is
+    } else {
+      output->push_back(255);
+      value -= 254;  // Continue with varint
+      VbEnc(output, value);
+    }
+  }
+
+  // Convert the in-memory bitmap representation to an on-storage
+  // representation. The in-memory version is stored at working_space_.
+  // The on-storage version will be stored in *space_.
   size_t Finish() {
-    std::sort(extra_keys_.begin(), extra_keys_.end());
-    size_t overflowed_idx = 0;
-    size_t last_one = 0;
-    std::vector<size_t> bucket_keys;
-    // For every bucket
-    for (size_t i = 0; i < num_buckets_; i++) {
-      // Bucket key size
-      unsigned char key_num =
-          static_cast<unsigned char>(working_space_[bytes_per_bucket_ * i]);
-      size_t offset = bytes_per_bucket_ * i + 1;
-      // Clear vector for repeated use.
-      bucket_keys.clear();
-      for (int j = 0; j < key_num; j++) {
-        if (j < bytes_per_bucket_ - 1)
-          bucket_keys.push_back(
-              static_cast<unsigned char>(working_space_[offset + j]) +
-              (i << 8));
-        else
-          bucket_keys.push_back(extra_keys_[overflowed_idx++]);
-      }
-      std::sort(bucket_keys.begin(), bucket_keys.end());
-      for (std::vector<size_t>::iterator it = bucket_keys.begin();
-           it != bucket_keys.end(); ++it) {
-        size_t distance = *it - last_one;
-        last_one = *it;
-        // Encoding the distance to variable length plus encode.
-        if (distance <= 254) {
-          space_->push_back(static_cast<unsigned char>(distance));
-        } else {
-          space_->push_back(static_cast<unsigned char>(255));
-          distance -= 254;
-          unsigned char b = static_cast<unsigned char>(distance % 128);
-          while (distance / 128 > 0) {
-            // Set continue bit
-            b |= 1 << 7;
-            space_->push_back(b);
-            distance /= 128;
-            b = static_cast<unsigned char>(distance % 128);
-          }
-          space_->push_back(b);
-        }
+    uint32_t last_key = 0;
+    CompressedFormat::Finish();  // Sort extra keys
+    Iter bucket_iter(*this);
+    for (; bucket_iter.Valid(); bucket_iter.Next()) {
+      std::vector<uint32_t>* bucket_keys = bucket_iter.keys();
+      std::sort(bucket_keys->begin(), bucket_keys->end());
+      for (std::vector<uint32_t>::iterator it = bucket_keys->begin();
+           it != bucket_keys->end(); ++it) {
+        uint32_t dta = *it - last_key;
+        VbPlusEnc(space_, dta);
+        last_key = *it;
       }
     }
+
     return space_->size();
   }
 
-  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
-    const unsigned char signal_mask = 1 << 7;
-    const unsigned char bit_mask = signal_mask - 1;
-    size_t index = 0;
-    for (size_t i = 0; i < input.size(); i++) {
-      size_t runLen = 0;
-      size_t bytes = 0;
-      if (static_cast<unsigned char>(input[i]) != 255) {
-        runLen += static_cast<unsigned char>(input[i]);
+  static uint32_t VbPlusDec(Slice* input) {
+    uint32_t result = 0;
+    if (!input->empty()) {
+      unsigned char b = static_cast<unsigned char>((*input)[0]);
+      input->remove_prefix(1);
+      if (b == 255) {
+        result = VbDec(input) + 254;
       } else {
-        runLen += 254;
-        i++;
-        while ((input[i] & signal_mask) != 0) {
-          runLen += static_cast<size_t>(input[i] & bit_mask) << bytes;
-          i++;
-          bytes += 7;
-        }
-        runLen += static_cast<size_t>(input[i]) << bytes;
+        result = b;
       }
-      if (index + runLen == bit)
+    }
+    return result;
+  }
+
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& bitmap) {
+    uint32_t base = 0;
+    Slice input = bitmap;
+    while (!input.empty()) {
+      base += VbPlusDec(&input);
+      if (base == bit) {
         return true;
-      else if (index + runLen > bit)
+      } else if (base > bit) {
         return false;
-      else
-        index += runLen;
+      }
     }
     return false;
   }
