@@ -140,7 +140,11 @@ class UncompressedFormat {
     }
   }
 
-  size_t memory_usage() const { return space_->capacity(); }
+  // Report total memory consumption.
+  size_t memory_usage() const {
+    size_t result = space_->capacity();
+    return result;
+  }
 
  private:
   // Key size in bits
@@ -152,7 +156,8 @@ class UncompressedFormat {
 };
 
 // Encoding a bitmap in-memory using a roaring-like bitmap representation.
-// Final storage representation is not implemented.
+// Final storage representation is not implemented, and is
+// the job of the subclasses.
 class CompressedFormat {
  public:
   CompressedFormat(const DirOptions& options, std::string* space)
@@ -171,12 +176,13 @@ class CompressedFormat {
     num_keys_ = num_keys;
     extra_keys_.clear();
     working_space_.clear();
-    // Estimated number of keys per bucket.
-    // The actual number of keys for each bucket may differ.
-    // Each key takes 1 byte to store.
+    // Estimated number of user keys per bucket. The actual number
+    // for each bucket may differ. Works best when user keys
+    // are uniformly distributed.
+    // Each key only takes 1 byte to store.
     estimated_bucket_size_ = (num_keys + num_buckets_ - 1) / num_buckets_;
-    // Use an extra byte to store the actual
-    // number of keys for each bucket.
+    // Use an extra byte to store the actual number
+    // of user keys inserted at each bucket.
     bytes_per_bucket_ = estimated_bucket_size_ + 1;
     working_space_.resize(bytes_per_bucket_ * num_buckets_, 0);
     space_->clear();
@@ -194,11 +200,9 @@ class CompressedFormat {
     working_space_[bucket_index * bytes_per_bucket_] =
         static_cast<char>(bucket_size + 1);
     if (bucket_size < estimated_bucket_size_) {
-      // Append to the bucket
       working_space_[bucket_index * bytes_per_bucket_ + 1 + bucket_size] =
           static_cast<char>(i & 0xFF);
     } else {
-      // Append to the overflow vector
       extra_keys_.push_back(i);
     }
   }
