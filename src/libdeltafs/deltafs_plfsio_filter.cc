@@ -216,11 +216,82 @@ class CompressedFormat {
     return result;
   }
 
+ protected:
+  class Iter {  // Iterate through all bitmap buckets
+   public:
+    // REQUIRES: parent.extra_keys is sorted
+    explicit Iter(const CompressedFormat& parent)
+        : bytes_per_bucket_(parent.bytes_per_bucket_),
+          estimated_bucket_size_(parent.estimated_bucket_size_),
+          num_buckets_(parent.num_buckets_),
+          working_space_(parent.working_space_.data()) {
+      bucket_keys_.reserve(16);
+      iter_end_ = parent.extra_keys_.end();
+      iter_ = parent.extra_keys_.begin();
+      bucket_index_ = 0;  // Seek to the first bucket
+      if (Valid()) {
+        Fetch();
+      }
+    }
+
+    // Return a pointer to the bucket keys
+    // Contents valid until the next Next() call.
+    std::vector<uint32_t>* keys() { return &bucket_keys_; }
+
+    bool Valid() const {  // True iff bucket exists
+      return bucket_index_ < num_buckets_;
+    }
+
+    void Next() {
+      bucket_index_++;
+      if (Valid()) {
+        Fetch();
+      }
+    }
+
+   private:
+    // Fetch keys for the current bucket
+    // Results are not sorted
+    void Fetch() {
+      bucket_keys_.clear();
+      const uint32_t bucket_size = static_cast<unsigned char>(
+          working_space_[bytes_per_bucket_ * bucket_index_]);
+      for (uint32_t i = 0; i < bucket_size; i++) {
+        if (i < estimated_bucket_size_) {
+          uint32_t key_offset = static_cast<unsigned char>(
+              working_space_[bytes_per_bucket_ * bucket_index_ + 1 + i]);
+          bucket_keys_.push_back(key_offset + (bucket_index_ << 8));
+        } else {
+          assert(iter_ != iter_end_);
+          bucket_keys_.push_back(*iter_);
+          ++iter_;
+        }
+      }
+    }
+
+    // Constant after construction
+    const size_t bytes_per_bucket_;
+    const size_t estimated_bucket_size_;
+    const size_t num_buckets_;
+
+    const char* working_space_;
+
+    // Temp storage for all keys in the current bucket
+    std::vector<uint32_t> bucket_keys_;
+    // Cursor to the extra keys
+    std::vector<uint32_t>::const_iterator iter_end_;
+    std::vector<uint32_t>::const_iterator iter_;
+    // Current bucket index
+    uint32_t bucket_index_;
+  };
+
   // Finalize the bitmap representation.
   // Return the final buffer size.
-  size_t Finish();  // To be overridden by subclasses.
+  size_t Finish() {
+    std::sort(extra_keys_.begin(), extra_keys_.end());
+    // To be overridden by subclasses...
+  }
 
- protected:
   // Partition size for auxiliary lookup tables
   static const size_t partition_size_ = 1024;
 
@@ -253,71 +324,70 @@ class CompressedFormat {
   size_t bits_;
 };
 
+// VbFormat: encode each bitmap using a varint-based scheme.
+// Varint is also named VByte, or VB.
 class VbFormat : public CompressedFormat {
  public:
   VbFormat(const DirOptions& options, std::string* space)
       : CompressedFormat(options, space) {}
 
+  static void VbEnc(std::string* output, uint32_t value) {
+    // While more than 7 bits of data are left, occupy the last output byte
+    // and set the next byte flag
+    while (value > 127) {
+      // |128: Set the next byte flag
+      output->push_back((value & 127) | 128);
+      // Remove the seven bits we just wrote
+      value >>= 7;
+    }
+    output->push_back(value & 127);
+  }
+
+  // Convert the in-memory bitmap representation to an on-storage
+  // representation. The in-memory version is stored at working_space_.
+  // The on-storage version will be stored in *space_.
   size_t Finish() {
-    std::sort(extra_keys_.begin(), extra_keys_.end());
-    size_t overflowed_idx = 0;
-    size_t last_one = 0;
-    std::vector<size_t> bucket_keys;
-    // For every bucket
-    for (size_t i = 0; i < num_buckets_; i++) {
-      // Bucket key size
-      unsigned char key_num =
-          static_cast<unsigned char>(working_space_[bytes_per_bucket_ * i]);
-      size_t offset = bytes_per_bucket_ * i + 1;
-      // Clear vector for repeated use.
-      bucket_keys.clear();
-      for (int j = 0; j < key_num; j++) {
-        if (j < bytes_per_bucket_ - 1)
-          bucket_keys.push_back(
-              static_cast<unsigned char>(working_space_[offset + j]) +
-              (i << 8));
-        else
-          bucket_keys.push_back(extra_keys_[overflowed_idx++]);
-      }
-      std::sort(bucket_keys.begin(), bucket_keys.end());
-      for (std::vector<size_t>::iterator it = bucket_keys.begin();
-           it != bucket_keys.end(); ++it) {
-        size_t distance = *it - last_one;
-        last_one = *it;
-        // Encoding the distance to variable length encode.
-        unsigned char b = static_cast<unsigned char>(distance % 128);
-        while (distance / 128 > 0) {
-          // Set continue bit
-          b |= 1 << 7;
-          space_->push_back(b);
-          distance /= 128;
-          b = static_cast<unsigned char>(distance % 128);
-        }
-        space_->push_back(b);
+    uint32_t last_key = 0;
+    CompressedFormat::Finish();
+    Iter bucket_iter(*this);
+    for (; bucket_iter.Valid(); bucket_iter.Next()) {
+      std::vector<uint32_t>* bucket_keys = bucket_iter.keys();
+      std::sort(bucket_keys->begin(), bucket_keys->end());
+      for (std::vector<uint32_t>::iterator it = bucket_keys->begin();
+           it != bucket_keys->end(); ++it) {
+        uint32_t dta = *it - last_key;
+        VbEnc(space_, dta);
+        last_key = *it;
       }
     }
+
     return space_->size();
   }
 
-  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
-    size_t index = 0;
-    const unsigned char signal_mask = 1 << 7;
-    const unsigned char bit_mask = signal_mask - 1;
-    for (size_t i = 0; i < input.size(); i++) {
-      size_t runLen = 0;
-      size_t bytes = 0;
-      while ((input[i] & signal_mask) != 0) {
-        runLen += static_cast<size_t>(input[i] & bit_mask) << bytes;
-        i++;
-        bytes += 7;
+  static uint32_t VbDec(Slice* input) {
+    uint32_t result = 0;
+    for (size_t i = 0; !input->empty(); i++) {
+      unsigned char b = static_cast<unsigned char>((*input)[0]);
+      input->remove_prefix(1);
+      result |= (b & 127) << (7 * i);
+      // If the next-byte flag is set
+      if (!(b & 128)) {
+        break;
       }
-      runLen += static_cast<size_t>(input[i]) << bytes;
-      if (index + runLen == bit)
+    }
+    return result;
+  }
+
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& bitmap) {
+    uint32_t base = 0;
+    Slice input = bitmap;
+    while (!input.empty()) {
+      base += VbDec(&input);
+      if (base == bit) {
         return true;
-      else if (index + runLen > bit)
+      } else if (base > bit) {
         return false;
-      else
-        index += runLen;
+      }
     }
     return false;
   }
@@ -1227,10 +1297,10 @@ void BitmapBlock<T>::Reset(uint32_t num_keys) {
   finished_ = false;
 }
 
-// To convert a key into an int, the first 4 bytes of the key is interpreted as
-// the little-endian representation of a 32-bit int. As illustrated below,
-// the conversion may be seen as using the "first" 32 bits of the byte array to
-// construct an int.
+// To convert a key into an int, the first 4 bytes of the key is interpreted
+// as the little-endian representation of a 32-bit int. As illustrated below,
+// the conversion may be seen as using the "first" 32 bits of the byte array
+// to construct an int.
 //
 // [07.06.05.04.03.02.01.00]  [15.14.13.12.11.10.09.08] [...] [...]
 //  <------------ byte 0 ->    <------------ byte 1 ->
@@ -1243,10 +1313,9 @@ static uint32_t BitmapIndex(const Slice& key) {
 }
 
 // Insert a key (1-4 bytes) into the bitmap filter. If the key has more than 4
-// bytes, the rest bytes are ignored. If a key has less than 4 bytes, it will be
-// zero-padded to 4 bytes.
-// Inserting a key is achieved by first converting the key into an int, i,
-// and then setting the i-th bit of the bitmap to "1".
+// bytes, the rest bytes are ignored. If a key has less than 4 bytes, it will
+// be zero-padded to 4 bytes. Inserting a key is achieved by first converting
+// the key into an int, i, and then setting the i-th bit of the bitmap to "1".
 template <typename T>
 void BitmapBlock<T>::AddKey(const Slice& key) {
   assert(!finished_);  // Finish() has not been called
