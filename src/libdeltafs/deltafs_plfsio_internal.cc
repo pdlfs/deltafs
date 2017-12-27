@@ -1040,19 +1040,19 @@ template class DirLogger<BloomBlock>;
 
 template class DirLogger<BitmapBlock<UncompressedFormat> >;
 
-template class DirLogger<BitmapBlock<VarintFormat> >;
+template class DirLogger<BitmapBlock<VbFormat> >;
 
-template class DirLogger<BitmapBlock<VarintPlusFormat> >;
+template class DirLogger<BitmapBlock<VbPlusFormat> >;
 
-template class DirLogger<BitmapBlock<PVarintPlusFormat> >;
+template class DirLogger<BitmapBlock<FastVbPlusFormat> >;
 
-template class DirLogger<BitmapBlock<PForDeltaFormat> >;
+template class DirLogger<BitmapBlock<PfDelFormat> >;
 
-template class DirLogger<BitmapBlock<PpForDeltaFormat> >;
+template class DirLogger<BitmapBlock<FastPfDelFormat> >;
 
 template class DirLogger<BitmapBlock<RoaringFormat> >;
 
-template class DirLogger<BitmapBlock<PRoaringFormat> >;
+template class DirLogger<BitmapBlock<FastRoaringFormat> >;
 
 template class DirLogger<EmptyFilterBlock>;
 

@@ -154,7 +154,7 @@ TEST(UncompressedBitmapFilterTest, UncompressedBitmapFmt) {
 }
 
 // Varint bitmap filter
-typedef FilterTest<BitmapBlock<VarintFormat>, BitmapKeyMustMatch>
+typedef FilterTest<BitmapBlock<VbFormat>, BitmapKeyMustMatch>
     VarintBitmapFilterTest;
 
 TEST(VarintBitmapFilterTest, VarintBitmapFmt) {
@@ -171,7 +171,7 @@ TEST(VarintBitmapFilterTest, VarintBitmapFmt) {
 }
 
 // Varint plus bitmap filter
-typedef FilterTest<BitmapBlock<VarintPlusFormat>, BitmapKeyMustMatch>
+typedef FilterTest<BitmapBlock<VbPlusFormat>, BitmapKeyMustMatch>
     VarintPlusBitmapFilterTest;
 
 TEST(VarintPlusBitmapFilterTest, VarintPlusBitmapFmt) {
@@ -188,7 +188,7 @@ TEST(VarintPlusBitmapFilterTest, VarintPlusBitmapFmt) {
 }
 
 // Partitioned Varint plus bitmap filter
-typedef FilterTest<BitmapBlock<PVarintPlusFormat>, BitmapKeyMustMatch>
+typedef FilterTest<BitmapBlock<FastVbPlusFormat>, BitmapKeyMustMatch>
     PVarintPlusBitmapFilterTest;
 
 TEST(PVarintPlusBitmapFilterTest, PVarintPlusBitmapFmt) {
@@ -205,7 +205,7 @@ TEST(PVarintPlusBitmapFilterTest, PVarintPlusBitmapFmt) {
 }
 
 // PForDelta bitmap filter
-typedef FilterTest<BitmapBlock<PForDeltaFormat>, BitmapKeyMustMatch>
+typedef FilterTest<BitmapBlock<PfDelFormat>, BitmapKeyMustMatch>
     PForDeltaBitmapFilterTest;
 
 TEST(PForDeltaBitmapFilterTest, PForDeltaBitmapFmt) {
@@ -222,7 +222,7 @@ TEST(PForDeltaBitmapFilterTest, PForDeltaBitmapFmt) {
 }
 
 // Partitioned PForDelta bitmap filter
-typedef FilterTest<BitmapBlock<PpForDeltaFormat>, BitmapKeyMustMatch>
+typedef FilterTest<BitmapBlock<FastPfDelFormat>, BitmapKeyMustMatch>
     PpForDeltaBitmapFilterTest;
 
 TEST(PpForDeltaBitmapFilterTest, PpForDeltaBitmapFmt) {
@@ -256,7 +256,7 @@ TEST(RoaringBitmapFilterTest, RoaringBitmapFmt) {
 }
 
 // Partitioned Roaring bitmap filter
-typedef FilterTest<BitmapBlock<PRoaringFormat>, BitmapKeyMustMatch>
+typedef FilterTest<BitmapBlock<FastRoaringFormat>, BitmapKeyMustMatch>
     PRoaringBitmapFilterTest;
 
 TEST(PRoaringBitmapFilterTest, PRoaringBitmapFmt) {
@@ -519,14 +519,14 @@ static void BM_LogAndApply(bool read_or_write, const char* fmt) {
   } else if (strcmp(fmt + 1, "vb") == 0) {
     if (read_or_write) {
       typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VarintFormat>,
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VbFormat>,
           pdlfs::plfsio::BitmapKeyMustMatch>
           PlfsVarintBitmapQueryBench;
       PlfsVarintBitmapQueryBench bench;
       bench.LogAndApply();
     } else {
       typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VarintFormat> >
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VbFormat> >
           PlfsVarintBitmapBench;
       PlfsVarintBitmapBench bench;
       bench.LogAndApply();
@@ -534,14 +534,14 @@ static void BM_LogAndApply(bool read_or_write, const char* fmt) {
   } else if (strcmp(fmt + 1, "vbp") == 0) {
     if (read_or_write) {
       typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VarintPlusFormat>,
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VbPlusFormat>,
           pdlfs::plfsio::BitmapKeyMustMatch>
           PlfsVarintPlusBitmapQueryBench;
       PlfsVarintPlusBitmapQueryBench bench;
       bench.LogAndApply();
     } else {
       typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VarintPlusFormat> >
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VbPlusFormat> >
           PlfsVarintPlusBitmapBench;
       PlfsVarintPlusBitmapBench bench;
       bench.LogAndApply();
@@ -549,14 +549,14 @@ static void BM_LogAndApply(bool read_or_write, const char* fmt) {
   } else if (strcmp(fmt + 1, "pvbp") == 0) {
     if (read_or_write) {
       typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PVarintPlusFormat>,
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastVbPlusFormat>,
           pdlfs::plfsio::BitmapKeyMustMatch>
           PlfsPVarintPlusBitmapQueryBench;
       PlfsPVarintPlusBitmapQueryBench bench;
       bench.LogAndApply();
     } else {
       typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PVarintPlusFormat> >
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastVbPlusFormat> >
           PlfsPVarintPlusBitmapBench;
       PlfsPVarintPlusBitmapBench bench;
       bench.LogAndApply();
@@ -564,14 +564,14 @@ static void BM_LogAndApply(bool read_or_write, const char* fmt) {
   } else if (strcmp(fmt + 1, "pfdelta") == 0) {
     if (read_or_write) {
       typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PForDeltaFormat>,
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PfDelFormat>,
           pdlfs::plfsio::BitmapKeyMustMatch>
           PlfsPForDeltaBitmapQueryBench;
       PlfsPForDeltaBitmapQueryBench bench;
       bench.LogAndApply();
     } else {
       typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PForDeltaFormat> >
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PfDelFormat> >
           PlfsPForDeltaBitmapBench;
       PlfsPForDeltaBitmapBench bench;
       bench.LogAndApply();
@@ -579,14 +579,14 @@ static void BM_LogAndApply(bool read_or_write, const char* fmt) {
   } else if (strcmp(fmt + 1, "ppfdelta") == 0) {
     if (read_or_write) {
       typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PpForDeltaFormat>,
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastPfDelFormat>,
           pdlfs::plfsio::BitmapKeyMustMatch>
           PlfsPpForDeltaBitmapQueryBench;
       PlfsPpForDeltaBitmapQueryBench bench;
       bench.LogAndApply();
     } else {
       typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PpForDeltaFormat> >
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastPfDelFormat> >
           PlfsPpForDeltaBitmapBench;
       PlfsPpForDeltaBitmapBench bench;
       bench.LogAndApply();
@@ -609,14 +609,14 @@ static void BM_LogAndApply(bool read_or_write, const char* fmt) {
   } else if (strcmp(fmt + 1, "pr") == 0) {
     if (read_or_write) {
       typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PRoaringFormat>,
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastRoaringFormat>,
           pdlfs::plfsio::BitmapKeyMustMatch>
           PlfsPRoaringBitmapQueryBench;
       PlfsPRoaringBitmapQueryBench bench;
       bench.LogAndApply();
     } else {
       typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PRoaringFormat> >
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastRoaringFormat> >
           PlfsPRoaringBitmapBench;
       PlfsPRoaringBitmapBench bench;
       bench.LogAndApply();

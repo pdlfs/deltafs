@@ -81,14 +81,17 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input);
 
 // Bitmap compression formats.
 class UncompressedFormat;
-class CompressedFormat;
-class VarintFormat;
-class VarintPlusFormat;
-class PVarintPlusFormat;
-class PForDeltaFormat;
-class PpForDeltaFormat;
+class CompressedFormat;  // Parent class for all compressed formats
+// P-for-delta, bit-level compression on a group of deltas
+class FastPfDelFormat;
+class PfDelFormat;
+// A fast, bucketized bitmap representation
+class FastRoaringFormat;
 class RoaringFormat;
-class PRoaringFormat;
+// Varint-based compression
+class FastVbPlusFormat;
+class VbPlusFormat;
+class VbFormat;
 
 // A simple filter backed by a bitmap.
 template <typename T = UncompressedFormat>
