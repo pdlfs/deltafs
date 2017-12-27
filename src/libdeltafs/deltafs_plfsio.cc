@@ -71,7 +71,53 @@ DirOptions::DirOptions()
       is_env_pfs(true),
       rank(0) {}
 
-static bool ParseFilterType(const Slice& value, FilterType* result) {
+static bool ParseBool(const Slice& key, const Slice& value, bool* result) {
+  if (!ParsePrettyBool(value, result)) {
+    Warn(__LOG_ARGS__, "Unknown dir option: %s=%s, option ignored", key.c_str(),
+         value.c_str());
+    return false;
+  } else {
+    return true;
+  }
+}
+
+static bool ParseInteger(const Slice& key, const Slice& value,
+                         uint64_t* result) {
+  if (!ParsePrettyNumber(value, result)) {
+    Warn(__LOG_ARGS__, "Unknown dir option: %s=%s, option ignored", key.c_str(),
+         value.c_str());
+    return false;
+  } else {
+    return true;
+  }
+}
+
+static bool ParseBitmapFormat(const Slice& key, const Slice& value,
+                              BitmapFormat* result) {
+  if (value == "uncompressed") {
+    *result = kFmtUncompressed;
+    return true;
+  } else if (value == "fast-roaring" || value == "fr") {
+    *result = kFmtFastRoaring;
+    return true;
+  } else if (value == "fast-p-f-delta" || value == "fpfdel") {
+    *result = kFmtFastPfDelta;
+    return true;
+  } else if (value == "fast-vbp" || value == "fvbp") {
+    *result = kFmtFastVarintPlus;
+    return true;
+  } else if (value == "vbp") {
+    *result = kFmtVarintPlus;
+    return true;
+  } else {
+    Warn(__LOG_ARGS__, "Unknown bitmap format: %s=%s, option ignored",
+         key.c_str(), value.c_str());
+    return false;
+  }
+}
+
+static bool ParseFilterType(const Slice& key, const Slice& value,
+                            FilterType* result) {
   if (value.starts_with("bloom")) {
     *result = kFtBloomFilter;
     return true;
@@ -79,12 +125,14 @@ static bool ParseFilterType(const Slice& value, FilterType* result) {
     *result = kFtBitmap;
     return true;
   } else {
+    Warn(__LOG_ARGS__, "Unknown filter type: %s=%s, option ignored",
+         key.c_str(), value.c_str());
     return false;
   }
 }
 
 DirOptions ParseDirOptions(const char* input) {
-  DirOptions options;
+  DirOptions result;
   std::vector<std::string> conf_segments;
   size_t n = SplitString(&conf_segments, input, '&');  // k1=v1 & k2=v2 & k3=v3
   std::vector<std::string> conf_pair;
@@ -95,110 +143,118 @@ DirOptions ParseDirOptions(const char* input) {
       continue;
     }
     FilterType filter_type;
+    BitmapFormat bm_fmt;
     Slice conf_key = conf_pair[0];
     Slice conf_value = conf_pair[1];
     uint64_t num;
     bool flag;
     if (conf_key == "lg_parts") {
-      if (ConsumeDecimalNumber(&conf_value, &num)) {
-        options.lg_parts = int(num);
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.lg_parts = int(num);
       }
     } else if (conf_key == "rank") {
-      if (ConsumeDecimalNumber(&conf_value, &num)) {
-        options.rank = int(num);
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.rank = int(num);
       }
     } else if (conf_key == "memtable_size") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.total_memtable_budget = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.total_memtable_budget = num;
       }
     } else if (conf_key == "total_memtable_budget") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.total_memtable_budget = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.total_memtable_budget = num;
       }
     } else if (conf_key == "compaction_buffer") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.block_batch_size = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.block_batch_size = num;
       }
     } else if (conf_key == "data_buffer") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.data_buffer = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.data_buffer = num;
       }
     } else if (conf_key == "min_data_buffer") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.min_data_buffer = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.min_data_buffer = num;
       }
     } else if (conf_key == "index_buffer") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.index_buffer = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.index_buffer = num;
       }
     } else if (conf_key == "min_index_buffer") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.min_index_buffer = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.min_index_buffer = num;
       }
     } else if (conf_key == "block_size") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.block_size = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.block_size = num;
       }
     } else if (conf_key == "block_padding") {
-      if (ParsePrettyBool(conf_value, &flag)) {
-        options.block_padding = flag;
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.block_padding = flag;
       }
     } else if (conf_key == "tail_padding") {
-      if (ParsePrettyBool(conf_value, &flag)) {
-        options.tail_padding = flag;
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.tail_padding = flag;
       }
     } else if (conf_key == "verify_checksums") {
-      if (ParsePrettyBool(conf_value, &flag)) {
-        options.verify_checksums = flag;
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.verify_checksums = flag;
       }
     } else if (conf_key == "skip_checksums") {
-      if (ParsePrettyBool(conf_value, &flag)) {
-        options.skip_checksums = flag;
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.skip_checksums = flag;
       }
     } else if (conf_key == "parallel_reads") {
-      if (ParsePrettyBool(conf_value, &flag)) {
-        options.parallel_reads = flag;
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.parallel_reads = flag;
       }
     } else if (conf_key == "paranoid_checks") {
-      if (ParsePrettyBool(conf_value, &flag)) {
-        options.paranoid_checks = flag;
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.paranoid_checks = flag;
       }
     } else if (conf_key == "epoch_log_rotation") {
-      if (ParsePrettyBool(conf_value, &flag)) {
-        options.epoch_log_rotation = flag;
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.epoch_log_rotation = flag;
       }
     } else if (conf_key == "ignore_filters") {
-      if (ParsePrettyBool(conf_value, &flag)) {
-        options.ignore_filters = flag;
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.ignore_filters = flag;
       }
     } else if (conf_key == "filter") {
-      if (ParseFilterType(conf_value, &filter_type)) {
-        options.filter = filter_type;
+      if (ParseFilterType(conf_key, conf_value, &filter_type)) {
+        result.filter = filter_type;
       }
     } else if (conf_key == "filter_bits_per_key") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.filter_bits_per_key = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.filter_bits_per_key = num;
       }
     } else if (conf_key == "bf_bits_per_key") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.bf_bits_per_key = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.bf_bits_per_key = num;
+      }
+    } else if (conf_key == "bm_fmt") {
+      if (ParseBitmapFormat(conf_key, conf_value, &bm_fmt)) {
+        result.bm_fmt = bm_fmt;
       }
     } else if (conf_key == "bm_key_bits") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.bm_key_bits = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.bm_key_bits = num;
       }
     } else if (conf_key == "value_size") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.value_size = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.value_size = num;
       }
     } else if (conf_key == "key_size") {
-      if (ParsePrettyNumber(conf_value, &num)) {
-        options.key_size = num;
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.key_size = num;
       }
+    } else {
+      Warn(__LOG_ARGS__, "Unknown option key: %s, option ignored",
+           conf_key.c_str());
     }
   }
 
-  return options;
+  return result;
 }
 
 template <typename T = BloomBlock>

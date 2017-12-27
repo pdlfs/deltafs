@@ -286,7 +286,7 @@ struct DirOptions {
   EventListener* listener;
 
   // Dir mode
-  // Default: kUnique
+  // Default: kDmUniqueKey
   DirMode mode;
 
   // Env instance used to access objects or files stored in the underlying
