@@ -141,8 +141,6 @@ class BitmapBlock {
   T* fmt_;
 };
 
-unsigned char LeftMostOneBit(uint32_t i);
-
 // An empty filter that achieves nothing.
 class EmptyFilterBlock {
  public:

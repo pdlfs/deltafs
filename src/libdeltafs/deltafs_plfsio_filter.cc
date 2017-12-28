@@ -19,6 +19,41 @@
 namespace pdlfs {
 namespace plfsio {
 
+// Return the position of the left most "1" bit, such that
+//   LeftMostBit(0x00) = 0
+//   LeftMostBit(0x01) = 1
+//   LeftMostBit(0x02) = 2
+//   LeftMostBit(0x04) = 3
+//   ...
+static unsigned char LeftMostBit(uint32_t i) {
+  if (i == 0) return 0;  // Special case
+  unsigned char result;
+#if defined(__GNUC__)
+  result = static_cast<unsigned char>(32 - __builtin_clz(i));
+#else
+  unsigned int n = 1;
+  if (i >> 16 == 0) {
+    n += 16;
+    i <<= 16;
+  }
+  if (i >> 24 == 0) {
+    n += 8;
+    i <<= 8;
+  }
+  if (i >> 28 == 0) {
+    n += 4;
+    i <<= 4;
+  }
+  if (i >> 30 == 0) {
+    n += 2;
+    i <<= 2;
+  }
+  n -= i >> 31;
+  result = static_cast<unsigned char>(32 - n);
+#endif
+  return result;
+}
+
 BloomBlock::BloomBlock(const DirOptions& options, size_t bytes_to_reserve)
     : bits_per_key_(options.bf_bits_per_key) {
   // Round down to reduce probing cost a little bit
@@ -660,7 +695,7 @@ class PfDelFormat : public CompressedFormat {
 
  private:
   void EncodingCohort(std::vector<size_t>& cohort, size_t cohort_or) {
-    unsigned char bit_num = LeftMostOneBit(cohort_or);
+    unsigned char bit_num = LeftMostBit(cohort_or);
     space_->push_back(bit_num);
 
     unsigned char b = 0;  // tmp byte to fill bit by bit
@@ -835,7 +870,7 @@ class FastPfDelFormat : public CompressedFormat {
 
  private:
   void EncodingCohort(std::vector<size_t>& cohort, size_t cohort_or) {
-    unsigned char bit_num = LeftMostOneBit(cohort_or);
+    unsigned char bit_num = LeftMostBit(cohort_or);
     space_->push_back(bit_num);
 
     unsigned char b = 0;  // tmp byte to fill bit by bit
@@ -898,7 +933,7 @@ class RoaringFormat : public CompressedFormat {
     std::sort(extra_keys_.begin(), extra_keys_.end());
     size_t overflowed_idx = 0;
 
-    unsigned char bits_per_len = LeftMostOneBit(bucket_size_max_bit_);
+    unsigned char bits_per_len = LeftMostBit(bucket_size_max_bit_);
     space_->resize(1 + (bits_per_len * num_buckets_ + 7) / 8, 0);
     (*space_)[0] = bits_per_len;
 
@@ -1056,7 +1091,7 @@ class FastRoaringFormat : public CompressedFormat {
       (*space_)[2 * i + 1] = static_cast<char>((partition_sum_[i] >> 8) & 0xff);
     }
 
-    unsigned char bits_per_len = LeftMostOneBit(bucket_size_max_bit_);
+    unsigned char bits_per_len = LeftMostBit(bucket_size_max_bit_);
     (*space_)[partition_num_ * sizeof(uint16_t)] = bits_per_len;
 
     // Leave the space at the head to store the size for every buckets
@@ -1184,36 +1219,6 @@ class FastRoaringFormat : public CompressedFormat {
   size_t bucket_size_max_bit_ = 0;
   std::vector<uint16_t> partition_sum_;
 };
-
-unsigned char LeftMostOneBit(uint32_t i) {
-  if (i == 0) return 0;
-
-  unsigned char bit_num;
-#if defined(__GNUC__)
-  bit_num = static_cast<unsigned char>(32 - __builtin_clz(i));
-#else
-  unsigned int n = 1;
-  if (i >> 16 == 0) {
-    n += 16;
-    i <<= 16;
-  }
-  if (i >> 24 == 0) {
-    n += 8;
-    i <<= 8;
-  }
-  if (i >> 28 == 0) {
-    n += 4;
-    i <<= 4;
-  }
-  if (i >> 30 == 0) {
-    n += 2;
-    i <<= 2;
-  }
-  n -= i >> 31;
-  bit_num = static_cast<unsigned char>(32 - n);
-#endif
-  return bit_num;
-}
 
 template <typename T>
 int BitmapBlock<T>::chunk_type() {
