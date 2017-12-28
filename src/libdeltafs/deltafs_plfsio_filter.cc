@@ -607,91 +607,76 @@ class PfDtaFormat : public CompressedFormat {
       : CompressedFormat(options, space) {}
 
   size_t Finish() {
-    std::sort(extra_keys_.begin(), extra_keys_.end());
-    size_t overflowed_idx = 0;
-    size_t last_one = 0;
-    std::vector<size_t> bucket_keys;
-
-    std::vector<size_t> cohort;
+    uint32_t cohort_max = 0;  // The max key in a cohort
+    // A group of input keys to compress together
+    std::vector<uint32_t> cohort;
     cohort.reserve(cohort_size_);
-    size_t cohort_or = 0;
-    // For every bucket
-    for (size_t i = 0; i < num_buckets_; i++) {
-      // Bucket key size
-      unsigned char key_num =
-          static_cast<unsigned char>(working_space_[bytes_per_bucket_ * i]);
-      size_t offset = bytes_per_bucket_ * i + 1;
-      // Clear vector for repeated use.
-      bucket_keys.clear();
-      for (int j = 0; j < key_num; j++) {
-        if (j < bytes_per_bucket_ - 1)
-          bucket_keys.push_back(
-              static_cast<unsigned char>(working_space_[offset + j]) +
-              (i << 8));
-        else
-          bucket_keys.push_back(extra_keys_[overflowed_idx++]);
-      }
-      std::sort(bucket_keys.begin(), bucket_keys.end());
-      for (std::vector<size_t>::iterator it = bucket_keys.begin();
-           it != bucket_keys.end(); ++it) {
-        size_t distance = *it - last_one;
-        last_one = *it;
-        // Encoding the distance using pForDelta.
-        cohort.push_back(distance);
-        cohort_or |= distance;
-        // If full
+    uint32_t last_key = 0;
+    CompressedFormat::Finish();  // Sort extra keys
+    Iter bucket_iter(*this);
+    for (; bucket_iter.Valid(); bucket_iter.Next()) {
+      std::vector<uint32_t>* bucket_keys = bucket_iter.keys();
+      std::sort(bucket_keys->begin(), bucket_keys->end());
+      for (std::vector<uint32_t>::iterator it = bucket_keys->begin();
+           it != bucket_keys->end(); ++it) {
+        uint32_t dta = *it - last_key;
+        cohort.push_back(dta);
+        cohort_max |= dta;
         if (cohort.size() == cohort_size_) {
-          EncodingCohort(cohort, cohort_or);
-          cohort_or = 0;
+          EncodeCohort(cohort, cohort_max);
           cohort.clear();
+          cohort_max = 0;
         }
+        last_key = *it;
       }
     }
-    if (cohort.size() > 0) {
-      EncodingCohort(cohort, cohort_or);
+
+    if (!cohort.empty()) {
+      EncodeCohort(cohort, cohort_max);
     }
+
     return space_->size();
   }
 
-  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
-    size_t index = 0;
-    size_t cohort_num = 0;
-    unsigned char bit_num;
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& bitmap) {
+    Slice input = bitmap;
+    uint32_t base = 0;
     unsigned char b = 0;
-    int byte_index = -1;
-    for (size_t i = 0; i < input.size();) {
-      assert(byte_index == -1);
-
-      bit_num = static_cast<unsigned char>(input[i++]);
-      cohort_num = cohort_size_;
-      if ((input.size() - i) * 8 / bit_num < cohort_num) {
-        cohort_num = (input.size() - i) * 8 / bit_num;
+    int bit_index = -1;
+    for (size_t i = 0; i < input.size(); /* empty */) {
+      assert(bit_index == -1);
+      unsigned char num_bits = static_cast<unsigned char>(input[i++]);
+      size_t remaining_keys = cohort_size_;
+      if ((input.size() - i) * 8 / num_bits < remaining_keys) {
+        remaining_keys = (input.size() - i) * 8 / num_bits;
       }
-      while (cohort_num > 0) {
-        size_t runLen = 0;
-        int runLen_index = bit_num - 1;
-        while (runLen_index >= 0) {
-          if (byte_index < 0) {
+      while (remaining_keys > 0) {
+        uint32_t dta = 0;
+        int remaining_bits = num_bits - 1;
+        while (remaining_bits >= 0) {
+          if (bit_index < 0) {
             if (i < input.size()) {
               b = static_cast<unsigned char>(input[i]);
-              byte_index = 7;
+              bit_index = 7;
               i++;
             } else {
               return false;
             }
           }
-          runLen |= (b & (1 << byte_index--)) > 0 ? (1 << runLen_index) : 0;
-          runLen_index -= 1;
+          dta |= (b & (1 << bit_index--)) > 0 ? (1 << remaining_bits) : 0;
+          remaining_bits--;
         }
-        cohort_num -= 1;
-        if (index + runLen == bit)
+        remaining_keys--;
+        if (base + dta == bit) {
           return true;
-        else if (index + runLen > bit)
+        } else if (base + dta > bit) {
           return false;
-        else
-          index += runLen;
+        } else {
+          base += dta;
+        }
       }
     }
+
     return false;
   }
 
@@ -700,27 +685,25 @@ class PfDtaFormat : public CompressedFormat {
   // REQUIRES: must be a multiple of 8.
   static const size_t cohort_size_ = 128;
 
-  void EncodingCohort(std::vector<size_t>& cohort, size_t cohort_or) {
-    unsigned char bit_num = LeftMostBit(cohort_or);
-    space_->push_back(bit_num);
-
-    unsigned char b = 0;  // tmp byte to fill bit by bit
-    int byte_index = 7;   // Start fill from the most significant bit.
-    int dis_index = bit_num - 1;
+  void EncodeCohort(const std::vector<uint32_t>& cohort, uint32_t cohort_max) {
+    unsigned char num_bits = LeftMostBit(cohort_max);  // Bits per key
+    space_->push_back(num_bits);
+    unsigned char b = 0;  // Tmp byte to fill bit by bit
+    int bit_index = 7;    // Start fill from the most significant bit.
     // Encoding cohort
-    for (std::vector<size_t>::iterator it = cohort.begin(); it != cohort.end();
-         ++it) {
-      dis_index = bit_num - 1;
-      while (dis_index >= 0) {
-        b |= (*it & (1 << dis_index--)) >= 1 ? (1 << byte_index) : 0;
-        if (byte_index-- == 0) {
+    for (std::vector<uint32_t>::const_iterator it = cohort.begin();
+         it != cohort.end(); ++it) {
+      int remaining_bits = num_bits - 1;
+      while (remaining_bits >= 0) {
+        b |= (*it & (1 << remaining_bits--)) >= 1 ? (1 << bit_index) : 0;
+        if (bit_index-- == 0) {
           space_->push_back(b);
+          bit_index = 7;
           b = 0;
-          byte_index = 7;
         }
       }
     }
-    if (byte_index != 7) {
+    if (bit_index != 7) {
       space_->push_back(b);
     }
   }
