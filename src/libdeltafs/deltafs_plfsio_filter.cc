@@ -478,10 +478,10 @@ static size_t DecodingSizeT(const Slice& input, size_t index) {
   return value;
 }
 
-// Similar to VbPlusFormat but with an extra lookup table for faster
-// queries. A lookup entry is inserted for each partition_size_
-// keys. Each lookup entry costs 8 bytes, using 4 bytes for
-// an offset, and another 4 bytes for a delta prefix.
+// Similar to VbPlusFormat but with an extra lookup table for faster queries.
+// A lookup entry is inserted for each partition_size_ keys.
+// Each lookup entry costs 8 bytes, using 4 bytes for an offset,
+// and another 4 bytes for a delta prefix.
 class FastVbPlusFormat : public VbPlusFormat {
  public:
   FastVbPlusFormat(const DirOptions& options, std::string* space)
@@ -492,8 +492,8 @@ class FastVbPlusFormat : public VbPlusFormat {
   // The on-storage version will be stored in *space_.
   size_t Finish() {
     uint32_t last_key = 0;
-    // Accumulated delta covering deltas both before
-    // and in the current partition
+    // Accumulated delta covering deltas both before and in
+    // the current partition
     uint32_t partition_dta_prefix = 0;
     size_t partition_index = 0;
     size_t partition_num_keys = 0;
@@ -537,7 +537,7 @@ class FastVbPlusFormat : public VbPlusFormat {
     uint32_t base = 0;
     size_t partition_index = 0;
     for (; partition_index < num_partitions; partition_index++) {
-      uint32_t partition_dta_prefix =
+      const uint32_t partition_dta_prefix =
           DecodeFixed32(&input[partition_index * 8]);
       if (bit <= partition_dta_prefix) {
         size_t size = DecodeFixed32(&input[partition_index * 8 + 4]);
