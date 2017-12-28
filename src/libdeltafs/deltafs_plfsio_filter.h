@@ -83,12 +83,12 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input);
 class UncompressedFormat;
 class CompressedFormat;  // Parent class for all compressed formats
 // P-for-delta, bit-level compression on a group of deltas
-class FastPfDelFormat;
-class PfDelFormat;
+class FastPfDtaFormat;
+class PfDtaFormat;
 // A fast, bucketized bitmap representation
 class FastRoaringFormat;
 class RoaringFormat;
-// Varint-based compression
+// A varint-based compression
 class FastVbPlusFormat;
 class VbPlusFormat;
 class VbFormat;

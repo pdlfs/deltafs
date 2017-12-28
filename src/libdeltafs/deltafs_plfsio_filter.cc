@@ -599,9 +599,11 @@ class FastVbPlusFormat : public VbPlusFormat {
   }
 };
 
-class PfDelFormat : public CompressedFormat {
+// PfDtaFormat: encode each bitmap using a p-for-delta-based scheme.
+// High compression rate, using bit-level encoding.
+class PfDtaFormat : public CompressedFormat {
  public:
-  PfDelFormat(const DirOptions& options, std::string* space)
+  PfDtaFormat(const DirOptions& options, std::string* space)
       : CompressedFormat(options, space) {}
 
   size_t Finish() {
@@ -693,7 +695,11 @@ class PfDelFormat : public CompressedFormat {
     return false;
   }
 
- private:
+ protected:
+  // Number of user keys per cohort (compression group)
+  // REQUIRES: must be a multiple of 8.
+  static const size_t cohort_size_ = 128;
+
   void EncodingCohort(std::vector<size_t>& cohort, size_t cohort_or) {
     unsigned char bit_num = LeftMostBit(cohort_or);
     space_->push_back(bit_num);
@@ -718,14 +724,11 @@ class PfDelFormat : public CompressedFormat {
       space_->push_back(b);
     }
   }
-
-  // We assume that cohort size is multiple of 8.
-  const static size_t cohort_size_ = 128;
 };
 
-class FastPfDelFormat : public CompressedFormat {
+class FastPfDtaFormat : public CompressedFormat {
  public:
-  FastPfDelFormat(const DirOptions& options, std::string* space)
+  FastPfDtaFormat(const DirOptions& options, std::string* space)
       : CompressedFormat(options, space) {}
 
   size_t Finish() {
@@ -1290,9 +1293,9 @@ Slice BitmapBlock<T>::Finish() {
     space_.push_back(static_cast<char>(kFmtVarintPlus));
   } else if (typeid(T) == typeid(FastVbPlusFormat)) {
     space_.push_back(static_cast<char>(kFmtFastVarintPlus));
-  } else if (typeid(T) == typeid(PfDelFormat)) {
+  } else if (typeid(T) == typeid(PfDtaFormat)) {
     space_.push_back(static_cast<char>(kFmtPfDelta));
-  } else if (typeid(T) == typeid(FastPfDelFormat)) {
+  } else if (typeid(T) == typeid(FastPfDtaFormat)) {
     space_.push_back(static_cast<char>(kFmtFastPfDelta));
   } else if (typeid(T) == typeid(RoaringFormat)) {
     space_.push_back(static_cast<char>(kFmtRoaring));
@@ -1320,9 +1323,9 @@ template class BitmapBlock<VbPlusFormat>;
 
 template class BitmapBlock<FastVbPlusFormat>;
 
-template class BitmapBlock<PfDelFormat>;
+template class BitmapBlock<PfDtaFormat>;
 
-template class BitmapBlock<FastPfDelFormat>;
+template class BitmapBlock<FastPfDtaFormat>;
 
 template class BitmapBlock<RoaringFormat>;
 
@@ -1359,9 +1362,9 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   } else if (compression == kFmtFastVarintPlus) {
     return FastVbPlusFormat::Test(i, key_bits, bitmap);
   } else if (compression == kFmtPfDelta) {
-    return PfDelFormat::Test(i, key_bits, bitmap);
+    return PfDtaFormat::Test(i, key_bits, bitmap);
   } else if (compression == kFmtFastPfDelta) {
-    return FastPfDelFormat::Test(i, key_bits, bitmap);
+    return FastPfDtaFormat::Test(i, key_bits, bitmap);
   } else if (compression == kFmtRoaring) {
     return RoaringFormat::Test(i, key_bits, bitmap);
   } else if (compression == kFmtFastRoaring) {
