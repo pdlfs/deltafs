@@ -332,6 +332,95 @@ class CompressedFormat {
   // Number of user keys for each lookup entry
   static const size_t partition_size_ = 1024;
 
+  // Helper class for building auxiliary lookup tables to speedup bitmap
+  // queries. Each lookup entry takes 8 bytes to store.
+  class LookupTableBuilder {
+   public:
+    LookupTableBuilder(std::string* space, size_t num_keys)
+        : partition_dta_prefix_(0),
+          partition_num_keys_(0),
+          partition_index_(0),
+          space_(space) {
+      size_t num_partitions =  // Total number of partitions to create
+          (num_keys + partition_size_ - 1) / partition_size_;
+      if (num_partitions == 0) {
+        num_partitions = 1;  // Ensure at least 1 partition
+      }
+      // Each lookup entry takes 8 bytes to store. The first 4 bytes represent
+      // the delta prefix of a partition. The last 4 bytes represent
+      // the partition storage offset.
+      space_->resize(num_partitions * 8, 0);
+      EncodeFixed32(&(*space_)[4], static_cast<uint32_t>(space_->size()));
+    }
+
+    void Add(uint32_t dta) {
+      // If a partition becomes full
+      if (partition_num_keys_ == partition_size_) {
+        EncodeFixed32(&(*space_)[partition_index_++ * 8],
+                      partition_dta_prefix_);  // Finalize the current partition
+        EncodeFixed32(
+            &(*space_)[partition_index_ * 8 + 4],  // Initialize the next
+            static_cast<uint32_t>(space_->size()));
+        partition_num_keys_ = 0;
+      }
+      partition_dta_prefix_ += dta;
+      partition_num_keys_++;
+    }
+
+    void Finish() {
+      if (partition_num_keys_ != 0) {  // Finalize the last partition
+        EncodeFixed32(&(*space_)[partition_index_ * 8], partition_dta_prefix_);
+      }
+    }
+
+   private:
+    // Accumulated delta sum covering deltas both before and in
+    // the current partition
+    uint32_t partition_dta_prefix_;
+    // Number of user keys in the current partition
+    size_t partition_num_keys_;
+    size_t partition_index_;
+
+    // Final bitmap storage.
+    // The lookup table is pre-allocated at the beginning of the buffer space,
+    // followed by the actual bitmap representation.
+    std::string* space_;
+  };
+
+  // Helper class for accessing lookup tables.
+  class LookupTable {
+   public:
+    explicit LookupTable(const Slice& bitmap) : bitmap_(bitmap) {}
+
+    // Return false if the lookup must not exist.
+    // Otherwise, stores the new input and base in *input and *base.
+    bool Lookup(uint32_t bit, Slice* input, uint32_t* base) {
+      *input = bitmap_;
+      *base = 0;
+      if (input->size() < 8) {
+        return false;  // Too short for a lookup entry
+      }
+      size_t num_partitions = DecodeFixed32(&(*input)[4]) / 8;
+      for (size_t partition_index = 0; partition_index < num_partitions;
+           partition_index++) {
+        const uint32_t partition_dta_prefix =
+            DecodeFixed32(&(*input)[partition_index * 8]);
+        if (bit <= partition_dta_prefix) {
+          size_t size = DecodeFixed32(&(*input)[partition_index * 8 + 4]);
+          input->remove_prefix(size);
+          return true;
+        } else {
+          *base = partition_dta_prefix;
+        }
+      }
+
+      return false;
+    }
+
+   private:
+    const Slice& bitmap_;
+  };
+
   // In-memory bitmap storage where the entire bitmap
   // is divided into a set of fixed-sized bucket.
   // Each bucket is responsible for 256 keys. User keys inserted
@@ -497,22 +586,6 @@ class VbPlusFormat : public VbFormat {
   }
 };
 
-static void EncodingSizeT(std::string* space, size_t index, size_t value) {
-  (*space)[index] = static_cast<unsigned char>(value & 0xff);
-  (*space)[index + 1] = static_cast<unsigned char>((value >> 8) & 0xff);
-  (*space)[index + 2] = static_cast<unsigned char>((value >> 16) & 0xff);
-  (*space)[index + 3] = static_cast<unsigned char>((value >> 24) & 0xff);
-}
-
-static size_t DecodingSizeT(const Slice& input, size_t index) {
-  size_t value = 0;
-  value += static_cast<unsigned char>(input[index]);
-  value += static_cast<unsigned char>(input[index + 1]) << 8;
-  value += static_cast<unsigned char>(input[index + 2]) << 16;
-  value += static_cast<unsigned char>(input[index + 3]) << 24;
-  return value;
-}
-
 // Similar to VbPlusFormat but with an extra lookup table for faster queries.
 // A lookup entry is inserted for each partition_size_ keys.
 // Each lookup entry costs 8 bytes, using 4 bytes for an offset,
@@ -527,16 +600,8 @@ class FastVbPlusFormat : public VbPlusFormat {
   // The on-storage version will be stored in *space_.
   size_t Finish() {
     uint32_t last_key = 0;
-    // Accumulated delta covering deltas both before and in
-    // the current partition
-    uint32_t partition_dta_prefix = 0;
-    size_t partition_index = 0;
-    size_t partition_num_keys = 0;
+    LookupTableBuilder table(space_, num_keys_);
     CompressedFormat::Finish();  // Sort extra keys
-    size_t num_partitions = (num_keys_ + partition_size_ - 1) / partition_size_;
-    if (num_partitions == 0) num_partitions = 1;
-    space_->resize(num_partitions * 8, 0);
-    EncodeFixed32(&(*space_)[4], static_cast<uint32_t>(space_->size()));
     Iter bucket_iter(*this);
     for (; bucket_iter.Valid(); bucket_iter.Next()) {
       std::vector<uint32_t>* bucket_keys = bucket_iter.keys();
@@ -544,48 +609,22 @@ class FastVbPlusFormat : public VbPlusFormat {
       for (std::vector<uint32_t>::iterator it = bucket_keys->begin();
            it != bucket_keys->end(); ++it) {
         uint32_t dta = *it - last_key;
-        // If a partition becomes full
-        if (partition_num_keys == partition_size_) {
-          EncodeFixed32(&(*space_)[partition_index++ * 8],
-                        partition_dta_prefix);
-          EncodeFixed32(&(*space_)[partition_index * 8 + 4],  // Next partition
-                        static_cast<uint32_t>(space_->size()));
-          partition_num_keys = 0;
-        }
-        partition_num_keys++;
-        partition_dta_prefix += dta;
+        table.Add(dta);  // Must go before the encoding
         VbPlusEnc(space_, dta);
         last_key = *it;
       }
     }
-
-    if (partition_num_keys != 0) {
-      EncodeFixed32(&(*space_)[partition_index * 8], partition_dta_prefix);
-    }
+    // Finalize the lookup table
+    table.Finish();
 
     return space_->size();
   }
 
   static bool Test(uint32_t bit, size_t key_bits, const Slice& bitmap) {
     Slice input = bitmap;
-    if (input.size() < 8) return false;
-    size_t num_partitions = DecodeFixed32(&input[4]) / 8;
     uint32_t base = 0;
-    size_t partition_index = 0;
-    for (; partition_index < num_partitions; partition_index++) {
-      const uint32_t partition_dta_prefix =
-          DecodeFixed32(&input[partition_index * 8]);
-      if (bit <= partition_dta_prefix) {
-        size_t size = DecodeFixed32(&input[partition_index * 8 + 4]);
-        input.remove_prefix(size);
-        break;
-      } else {
-        base = partition_dta_prefix;
-      }
-    }
-
-    // Search within the target partition
-    if (partition_index < num_partitions) {
+    LookupTable table(bitmap);
+    if (table.Lookup(bit, &input, &base)) {
       while (!input.empty()) {
         base += VbPlusDec(&input);
         if (base == bit) {
@@ -724,6 +763,22 @@ class PfDtaFormat : public CompressedFormat {
     }
   }
 };
+
+static void EncodingSizeT(std::string* space, size_t index, size_t value) {
+  (*space)[index] = static_cast<unsigned char>(value & 0xff);
+  (*space)[index + 1] = static_cast<unsigned char>((value >> 8) & 0xff);
+  (*space)[index + 2] = static_cast<unsigned char>((value >> 16) & 0xff);
+  (*space)[index + 3] = static_cast<unsigned char>((value >> 24) & 0xff);
+}
+
+static size_t DecodingSizeT(const Slice& input, size_t index) {
+  size_t value = 0;
+  value += static_cast<unsigned char>(input[index]);
+  value += static_cast<unsigned char>(input[index + 1]) << 8;
+  value += static_cast<unsigned char>(input[index + 2]) << 16;
+  value += static_cast<unsigned char>(input[index + 3]) << 24;
+  return value;
+}
 
 class FastPfDtaFormat : public CompressedFormat {
  public:
