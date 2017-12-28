@@ -1043,7 +1043,7 @@ class RoaringFormat : public CompressedFormat {
   }
 
  private:
-  size_t bucket_size_max_bit_ = 0;
+  size_t bucket_size_max_bit_;
 };
 
 // Partitioned Roaring bitmap format bucket size 2^8
@@ -1217,9 +1217,9 @@ class FastRoaringFormat : public CompressedFormat {
   }
 
  private:
-  size_t partition_num_;
-  size_t bucket_size_max_bit_ = 0;
+  size_t bucket_size_max_bit_;
   std::vector<uint16_t> partition_sum_;
+  size_t partition_num_;
 };
 
 template <typename T>
