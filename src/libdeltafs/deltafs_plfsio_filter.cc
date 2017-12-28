@@ -639,8 +639,8 @@ class FastVbPlusFormat : public VbPlusFormat {
   }
 };
 
-// PfDtaFormat: encode each bitmap using a p-for-delta-based scheme.
-// High compression rate, using bit-level encoding.
+// PfDtaFormat: encode each bitmap using a p-for-delta-based compression
+// scheme for a higher compression rate by bit-level encoding.
 class PfDtaFormat : public CompressedFormat {
  public:
   PfDtaFormat(const DirOptions& options, std::string* space)
@@ -764,195 +764,76 @@ class PfDtaFormat : public CompressedFormat {
   }
 };
 
-static void EncodingSizeT(std::string* space, size_t index, size_t value) {
-  (*space)[index] = static_cast<unsigned char>(value & 0xff);
-  (*space)[index + 1] = static_cast<unsigned char>((value >> 8) & 0xff);
-  (*space)[index + 2] = static_cast<unsigned char>((value >> 16) & 0xff);
-  (*space)[index + 3] = static_cast<unsigned char>((value >> 24) & 0xff);
-}
-
-static size_t DecodingSizeT(const Slice& input, size_t index) {
-  size_t value = 0;
-  value += static_cast<unsigned char>(input[index]);
-  value += static_cast<unsigned char>(input[index + 1]) << 8;
-  value += static_cast<unsigned char>(input[index + 2]) << 16;
-  value += static_cast<unsigned char>(input[index + 3]) << 24;
-  return value;
-}
-
-class FastPfDtaFormat : public CompressedFormat {
+// Similar to PfDtaFormat but with an extra lookup table for faster queries.
+// A lookup entry is inserted for each partition_size_ keys.
+// Each lookup entry costs 8 bytes, using 4 bytes for an offset,
+// and another 4 bytes for a delta prefix.
+class FastPfDtaFormat : public PfDtaFormat {
  public:
   FastPfDtaFormat(const DirOptions& options, std::string* space)
-      : CompressedFormat(options, space) {}
+      : PfDtaFormat(options, space) {}
 
+  // Convert the in-memory bitmap representation to an on-storage
+  // representation. The in-memory version is stored at working_space_.
+  // The on-storage version will be stored in *space_.
   size_t Finish() {
-    // Header partition lookup table related variable.
-    size_t num_partition = (num_keys_ + partition_size_ - 1) / partition_size_;
-    // For each partition, reserve a space to store a total RL and start index
-    space_->resize(num_partition == 0 ? 8 : num_partition * 8);
-    size_t parti_ele_count = 0;
-    size_t parti_total_rl = 0;
-    size_t parti_index = 0;
-    // Starting address of current partition
-    EncodingSizeT(space_, parti_index * 8 + 4, space_->size());
-
-    std::sort(extra_keys_.begin(), extra_keys_.end());
-    size_t overflowed_idx = 0;
-    size_t last_one = 0;
-    std::vector<size_t> bucket_keys;
-
-    std::vector<size_t> cohort;
+    uint32_t cohort_max = 0;  // No less than the max in a cohort
+    // A group of input keys to compress together
+    std::vector<uint32_t> cohort;
     cohort.reserve(cohort_size_);
-    size_t cohort_or = 0;
-    // For every bucket
-    for (size_t i = 0; i < num_buckets_; i++) {
-      // Bucket key size
-      unsigned char key_num =
-          static_cast<unsigned char>(working_space_[bytes_per_bucket_ * i]);
-      size_t offset = bytes_per_bucket_ * i + 1;
-      // Clear vector for repeated use.
-      bucket_keys.clear();
-      for (int j = 0; j < key_num; j++) {
-        if (j < bytes_per_bucket_ - 1)
-          bucket_keys.push_back(
-              static_cast<unsigned char>(working_space_[offset + j]) +
-              (i << 8));
-        else
-          bucket_keys.push_back(extra_keys_[overflowed_idx++]);
-      }
-      std::sort(bucket_keys.begin(), bucket_keys.end());
-      for (std::vector<size_t>::iterator it = bucket_keys.begin();
-           it != bucket_keys.end(); ++it) {
-        size_t distance = *it - last_one;
-        last_one = *it;
-
-        // If partition is full
-        if (parti_ele_count == partition_size_) {
-          assert(cohort.size() == 0);
-          EncodingSizeT(space_, parti_index * 8, parti_total_rl);
-          parti_ele_count = 0;
-          parti_total_rl = 0;
-          parti_index += 1;
-          EncodingSizeT(space_, parti_index * 8 + 4, space_->size());
-        }
-        // Update partition stats
-        parti_total_rl += distance;
-        parti_ele_count += 1;
-
-        // Encoding the distance using pForDelta.
-        cohort.push_back(distance);
-        cohort_or |= distance;
-        // If full
+    uint32_t last_key = 0;
+    LookupTableBuilder table(space_, num_keys_);
+    CompressedFormat::Finish();  // Sort extra keys
+    Iter bucket_iter(*this);
+    for (; bucket_iter.Valid(); bucket_iter.Next()) {
+      std::vector<uint32_t>* bucket_keys = bucket_iter.keys();
+      std::sort(bucket_keys->begin(), bucket_keys->end());
+      for (std::vector<uint32_t>::iterator it = bucket_keys->begin();
+           it != bucket_keys->end(); ++it) {
+        uint32_t dta = *it - last_key;
+        table.Add(dta);  // Must go before the encoding
+        cohort.push_back(dta);
+        cohort_max |= dta;
         if (cohort.size() == cohort_size_) {
-          EncodingCohort(cohort, cohort_or);
-          cohort_or = 0;
+          PfDtaEnc(space_, cohort, cohort_max);
           cohort.clear();
+          cohort_max = 0;
         }
+        last_key = *it;
       }
     }
-    if (cohort.size() > 0) {
-      EncodingCohort(cohort, cohort_or);
+
+    table.Finish();  // Finalize the lookup table
+    // Complete and write out the last cohort
+    if (!cohort.empty()) {
+      PfDtaEnc(space_, cohort, cohort_max);
     }
 
-    // If partition is not empty
-    if (parti_ele_count != 0) {
-      EncodingSizeT(space_, parti_index * 8, parti_total_rl);
-    }
     return space_->size();
   }
 
-  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
-    // Skip partitions
-    size_t start_rl = 0;
-    size_t partition_num = DecodingSizeT(input, 4) / 8;
-
-    size_t parti_idx = 0;
-    for (; parti_idx < partition_num; parti_idx++) {
-      size_t parti_rl = DecodingSizeT(input, parti_idx * 8);
-      if (bit > parti_rl) {
-        bit -= parti_rl;
-      } else {
-        start_rl = DecodingSizeT(input, parti_idx * 8 + 4);
-        break;
-      }
-    }
-
-    // Out of range
-    if (parti_idx == partition_num) {
-      return false;
-    }
-
-    size_t index = 0;
-    size_t cohort_num = 0;
-    unsigned char bit_num;
-    unsigned char b = 0;
-    int byte_index = -1;
-    for (size_t i = start_rl; i < input.size();) {
-      assert(byte_index == -1);
-
-      bit_num = static_cast<unsigned char>(input[i++]);
-
-      cohort_num = cohort_size_;
-      if ((input.size() - i) * 8 / bit_num < cohort_num) {
-        cohort_num = (input.size() - i) * 8 / bit_num;
-      }
-      while (cohort_num > 0) {
-        size_t runLen = 0;
-        int runLen_index = bit_num - 1;
-        while (runLen_index >= 0) {
-          if (byte_index < 0) {
-            if (i < input.size()) {
-              b = static_cast<unsigned char>(input[i]);
-              byte_index = 7;
-              i++;
-            } else {
-              return false;
-            }
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& bitmap) {
+    uint32_t base = 0;
+    std::vector<uint32_t> cohort;
+    cohort.reserve(cohort_size_);
+    Slice input = bitmap;
+    LookupTable table(bitmap);
+    if (table.Lookup(bit, &input, &base)) {
+      while (!input.empty()) {
+        size_t num_keys = PfDtaDec(&input, &cohort);
+        for (size_t i = 0; i < num_keys; i++) {
+          base += cohort[i];
+          if (base == bit) {
+            return true;
+          } else if (base > bit) {
+            return false;
           }
-          runLen |= (b & (1 << byte_index--)) > 0 ? (1 << runLen_index) : 0;
-          runLen_index -= 1;
         }
-
-        cohort_num -= 1;
-        if (index + runLen == bit)
-          return true;
-        else if (index + runLen > bit)
-          return false;
-        else
-          index += runLen;
       }
     }
+
     return false;
   }
-
- private:
-  void EncodingCohort(std::vector<size_t>& cohort, size_t cohort_or) {
-    unsigned char bit_num = LeftMostBit(cohort_or);
-    space_->push_back(bit_num);
-
-    unsigned char b = 0;  // tmp byte to fill bit by bit
-    int byte_index = 7;   // Start fill from the most significant bit.
-    int dis_index = bit_num - 1;
-    // Encoding cohort
-    for (std::vector<size_t>::iterator it = cohort.begin(); it != cohort.end();
-         ++it) {
-      dis_index = bit_num - 1;
-      while (dis_index >= 0) {
-        b |= (*it & (1 << dis_index--)) >= 1 ? (1 << byte_index) : 0;
-        if (byte_index-- == 0) {
-          space_->push_back(b);
-          b = 0;
-          byte_index = 7;
-        }
-      }
-    }
-    if (byte_index != 7) {
-      space_->push_back(b);
-    }
-  }
-
-  // We assume that cohort size is multiple of 8.
-  const static size_t cohort_size_ = 128;
 };
 
 // Roaring bitmap format bucket size 2^8
