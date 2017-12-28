@@ -568,6 +568,7 @@ class FastVbPlusFormat : public VbPlusFormat {
 
   static bool Test(uint32_t bit, size_t key_bits, const Slice& bitmap) {
     Slice input = bitmap;
+    if (input.size() < 8) return false;
     size_t num_partitions = DecodeFixed32(&input[4]) / 8;
     uint32_t base = 0;
     size_t partition_index = 0;
@@ -673,8 +674,8 @@ class PfDtaFormat : public CompressedFormat {
     input->remove_prefix(1);
     unsigned char b = 0;  // Tmp byte to consume encoded bits
     size_t remaining_keys = cohort_size_;
-    // Will never overflow, but may return garbage, though all garbage keys will
-    // be zero, which won't impact correctness
+    // Will never overflow the buffer space, but may return garbage, though all
+    // garbage keys will be zero, which won't impact correctness.
     if (8 * input->size() / num_bits < remaining_keys) {
       remaining_keys = 8 * input->size() / num_bits;
     }
