@@ -606,8 +606,11 @@ class PfDtaFormat : public CompressedFormat {
   PfDtaFormat(const DirOptions& options, std::string* space)
       : CompressedFormat(options, space) {}
 
+  // Convert the in-memory bitmap representation to an on-storage
+  // representation. The in-memory version is stored at working_space_.
+  // The on-storage version will be stored in *space_.
   size_t Finish() {
-    uint32_t cohort_max = 0;  // The max key in a cohort
+    uint32_t cohort_max = 0;  // No less than the max in a cohort
     // A group of input keys to compress together
     std::vector<uint32_t> cohort;
     cohort.reserve(cohort_size_);
@@ -623,7 +626,7 @@ class PfDtaFormat : public CompressedFormat {
         cohort.push_back(dta);
         cohort_max |= dta;
         if (cohort.size() == cohort_size_) {
-          EncodeCohort(cohort, cohort_max);
+          PfDtaEnc(space_, cohort, cohort_max);
           cohort.clear();
           cohort_max = 0;
         }
@@ -632,47 +635,25 @@ class PfDtaFormat : public CompressedFormat {
     }
 
     if (!cohort.empty()) {
-      EncodeCohort(cohort, cohort_max);
+      PfDtaEnc(space_, cohort, cohort_max);
     }
 
     return space_->size();
   }
 
   static bool Test(uint32_t bit, size_t key_bits, const Slice& bitmap) {
-    Slice input = bitmap;
     uint32_t base = 0;
-    unsigned char b = 0;
-    int bit_index = -1;
-    for (size_t i = 0; i < input.size(); /* empty */) {
-      assert(bit_index == -1);
-      unsigned char num_bits = static_cast<unsigned char>(input[i++]);
-      size_t remaining_keys = cohort_size_;
-      if ((input.size() - i) * 8 / num_bits < remaining_keys) {
-        remaining_keys = (input.size() - i) * 8 / num_bits;
-      }
-      while (remaining_keys > 0) {
-        uint32_t dta = 0;
-        int remaining_bits = num_bits - 1;
-        while (remaining_bits >= 0) {
-          if (bit_index < 0) {
-            if (i < input.size()) {
-              b = static_cast<unsigned char>(input[i]);
-              bit_index = 7;
-              i++;
-            } else {
-              return false;
-            }
-          }
-          dta |= (b & (1 << bit_index--)) > 0 ? (1 << remaining_bits) : 0;
-          remaining_bits--;
-        }
-        remaining_keys--;
-        if (base + dta == bit) {
+    std::vector<uint32_t> cohort;
+    cohort.reserve(cohort_size_);
+    Slice input = bitmap;
+    while (!input.empty()) {
+      size_t num_keys = PfDtaDec(&input, &cohort);
+      for (size_t i = 0; i < num_keys; i++) {
+        base += cohort[i];
+        if (base == bit) {
           return true;
-        } else if (base + dta > bit) {
+        } else if (base > bit) {
           return false;
-        } else {
-          base += dta;
         }
       }
     }
@@ -685,11 +666,44 @@ class PfDtaFormat : public CompressedFormat {
   // REQUIRES: must be a multiple of 8.
   static const size_t cohort_size_ = 128;
 
-  void EncodeCohort(const std::vector<uint32_t>& cohort, uint32_t cohort_max) {
+  static size_t PfDtaDec(Slice* input, std::vector<uint32_t>* cohort) {
+    cohort->clear();
+    if (input->empty()) return 0;
+    unsigned char num_bits = static_cast<unsigned char>((*input)[0]);
+    input->remove_prefix(1);
+    unsigned char b = 0;  // Tmp byte to consume encoded bits
+    size_t remaining_keys = cohort_size_;
+    // Will never overflow, but may return garbage, though all garbage keys will
+    // be zero, which won't impact correctness
+    if (8 * input->size() / num_bits < remaining_keys) {
+      remaining_keys = 8 * input->size() / num_bits;
+    }
+    int bit_index = -1;  // Pending restart from the most significant bit
+    while (remaining_keys > 0) {
+      uint32_t dta = 0;
+      int remaining_bits = num_bits - 1;
+      while (remaining_bits >= 0) {
+        if (bit_index < 0) {
+          b = static_cast<unsigned char>((*input)[0]);
+          input->remove_prefix(1);
+          bit_index = 7;
+        }
+        dta |= (b & (1 << bit_index--)) > 0 ? (1 << remaining_bits) : 0;
+        remaining_bits--;
+      }
+      cohort->push_back(dta);
+      remaining_keys--;
+    }
+
+    return cohort->size();
+  }
+
+  static void PfDtaEnc(std::string* output, const std::vector<uint32_t>& cohort,
+                       uint32_t cohort_max) {
     unsigned char num_bits = LeftMostBit(cohort_max);  // Bits per key
-    space_->push_back(num_bits);
-    unsigned char b = 0;  // Tmp byte to fill bit by bit
-    int bit_index = 7;    // Start fill from the most significant bit.
+    output->push_back(num_bits);
+    unsigned char b = 0;  // Tmp byte to fill bits
+    int bit_index = 7;    // Start from the most significant bit
     // Encoding cohort
     for (std::vector<uint32_t>::const_iterator it = cohort.begin();
          it != cohort.end(); ++it) {
@@ -697,14 +711,14 @@ class PfDtaFormat : public CompressedFormat {
       while (remaining_bits >= 0) {
         b |= (*it & (1 << remaining_bits--)) >= 1 ? (1 << bit_index) : 0;
         if (bit_index-- == 0) {
-          space_->push_back(b);
+          output->push_back(b);
           bit_index = 7;
           b = 0;
         }
       }
     }
     if (bit_index != 7) {
-      space_->push_back(b);
+      output->push_back(b);
     }
   }
 };
