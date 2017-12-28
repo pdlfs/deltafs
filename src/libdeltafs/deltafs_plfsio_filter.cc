@@ -155,9 +155,9 @@ class UncompressedFormat {
   size_t bits_;
 };
 
-// Encoding a bitmap in-memory using a roaring-like bitmap representation.
-// Final storage representation is not implemented, and is
-// the job of the subclasses.
+// Encoding a bitmap in-memory using a roaring-like bucketized bitmap
+// representation for fast accesses. Final storage representation
+// is not implemented, and is the job of the subclasses.
 class CompressedFormat {
  public:
   CompressedFormat(const DirOptions& options, std::string* space)
@@ -217,7 +217,7 @@ class CompressedFormat {
   }
 
  protected:
-  class Iter {  // Iterate through all bitmap buckets stored in working_space_
+  class Iter {  // Iterate through all bitmap buckets in working_space_
    public:
     // REQUIRES: parent.extra_keys is sorted
     explicit Iter(const CompressedFormat& parent)
@@ -250,8 +250,8 @@ class CompressedFormat {
     }
 
    private:
-    // Fetch keys for the current bucket
-    // Results are not sorted
+    // Retrieve all keys belonging to the current bucket.
+    // Results are not sorted.
     void Fetch() {
       bucket_keys_.clear();
       const uint32_t bucket_size = static_cast<unsigned char>(
@@ -294,7 +294,7 @@ class CompressedFormat {
     return 0;
   }
 
-  // Partition size for auxiliary lookup tables
+  // Number of user keys for each lookup entry
   static const size_t partition_size_ = 1024;
 
   // In-memory bitmap storage where the entire bitmap
@@ -478,132 +478,88 @@ static size_t DecodingSizeT(const Slice& input, size_t index) {
   return value;
 }
 
-class FastVbPlusFormat : public CompressedFormat {
+// Similar to VbPlusFormat but with an extra lookup table for faster
+// queries. A lookup entry is inserted for each partition_size_
+// keys. Each lookup entry costs 8 bytes, using 4 bytes for
+// an offset, and another 4 bytes for a delta prefix.
+class FastVbPlusFormat : public VbPlusFormat {
  public:
   FastVbPlusFormat(const DirOptions& options, std::string* space)
-      : CompressedFormat(options, space) {}
+      : VbPlusFormat(options, space) {}
 
+  // Convert the in-memory bitmap representation to an on-storage
+  // representation. The in-memory version is stored at working_space_.
+  // The on-storage version will be stored in *space_.
   size_t Finish() {
-    // Header partition lookup table related variable.
-    size_t num_partition = (num_keys_ + partition_size_ - 1) / partition_size_;
-    // For each partition, reserve a space to store a total RL and start index
-    space_->resize(num_partition == 0 ? 8 : num_partition * 8);
-    size_t parti_ele_count = 0;
-    size_t parti_total_rl = 0;
-    size_t parti_index = 0;
-    // Starting address of current partition
-    EncodingSizeT(space_, parti_index * 8 + 4, space_->size());
-
-    std::sort(extra_keys_.begin(), extra_keys_.end());
-    size_t overflowed_idx = 0;
-    size_t last_one = 0;
-    std::vector<size_t> bucket_keys;
-
-    // For every bucket
-    for (size_t i = 0; i < num_buckets_; i++) {
-      // Bucket key size
-      unsigned char key_num =
-          static_cast<unsigned char>(working_space_[bytes_per_bucket_ * i]);
-      size_t offset = bytes_per_bucket_ * i + 1;
-      // Clear vector for repeated use.
-      bucket_keys.clear();
-      for (int j = 0; j < key_num; j++) {
-        if (j < bytes_per_bucket_ - 1)
-          bucket_keys.push_back(
-              static_cast<unsigned char>(working_space_[offset + j]) +
-              (i << 8));
-        else
-          bucket_keys.push_back(extra_keys_[overflowed_idx++]);
-      }
-      std::sort(bucket_keys.begin(), bucket_keys.end());
-      for (std::vector<size_t>::iterator it = bucket_keys.begin();
-           it != bucket_keys.end(); ++it) {
-        size_t distance = *it - last_one;
-        last_one = *it;
-
-        // If partition is full
-        if (parti_ele_count == partition_size_) {
-          EncodingSizeT(space_, parti_index * 8, parti_total_rl);
-          parti_ele_count = 0;
-          parti_total_rl = 0;
-          parti_index += 1;
-          EncodingSizeT(space_, parti_index * 8 + 4, space_->size());
+    uint32_t last_key = 0;
+    // Accumulated delta covering deltas both before
+    // and in the current partition
+    uint32_t partition_dta_prefix = 0;
+    size_t partition_index = 0;
+    size_t partition_num_keys = 0;
+    CompressedFormat::Finish();  // Sort extra keys
+    size_t num_partitions = (num_keys_ + partition_size_ - 1) / partition_size_;
+    if (num_partitions == 0) num_partitions = 1;
+    space_->resize(num_partitions * 8, 0);
+    EncodeFixed32(&(*space_)[4], static_cast<uint32_t>(space_->size()));
+    Iter bucket_iter(*this);
+    for (; bucket_iter.Valid(); bucket_iter.Next()) {
+      std::vector<uint32_t>* bucket_keys = bucket_iter.keys();
+      std::sort(bucket_keys->begin(), bucket_keys->end());
+      for (std::vector<uint32_t>::iterator it = bucket_keys->begin();
+           it != bucket_keys->end(); ++it) {
+        uint32_t dta = *it - last_key;
+        // If a partition becomes full
+        if (partition_num_keys == partition_size_) {
+          EncodeFixed32(&(*space_)[partition_index++ * 8],
+                        partition_dta_prefix);
+          EncodeFixed32(&(*space_)[partition_index * 8 + 4],  // Next partition
+                        static_cast<uint32_t>(space_->size()));
+          partition_num_keys = 0;
         }
-        // Update partition stats
-        parti_total_rl += distance;
-        parti_ele_count += 1;
-
-        // Encoding the distance to variable length plus encode.
-        if (distance <= 254) {
-          space_->push_back(static_cast<unsigned char>(distance));
-        } else {
-          space_->push_back(static_cast<unsigned char>(255));
-          distance -= 254;
-          unsigned char b = static_cast<unsigned char>(distance % 128);
-          while (distance / 128 > 0) {
-            // Set continue bit
-            b |= 1 << 7;
-            space_->push_back(b);
-            distance /= 128;
-            b = static_cast<unsigned char>(distance % 128);
-          }
-          space_->push_back(b);
-        }
+        partition_num_keys++;
+        partition_dta_prefix += dta;
+        VbPlusEnc(space_, dta);
+        last_key = *it;
       }
     }
-    // If partition is not empty
-    if (parti_ele_count != 0) {
-      EncodingSizeT(space_, parti_index * 8, parti_total_rl);
+
+    if (partition_num_keys != 0) {
+      EncodeFixed32(&(*space_)[partition_index * 8], partition_dta_prefix);
     }
+
     return space_->size();
   }
 
-  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
-    // Skip partitions
-    size_t start_rl = 0;
-    size_t partition_num = DecodingSizeT(input, 4) / 8;
-
-    size_t parti_idx = 0;
-    for (; parti_idx < partition_num; parti_idx++) {
-      size_t parti_rl = DecodingSizeT(input, parti_idx * 8);
-      if (bit > parti_rl) {
-        bit -= parti_rl;
-      } else {
-        start_rl = DecodingSizeT(input, parti_idx * 8 + 4);
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& bitmap) {
+    Slice input = bitmap;
+    size_t num_partitions = DecodeFixed32(&input[4]) / 8;
+    uint32_t base = 0;
+    size_t partition_index = 0;
+    for (; partition_index < num_partitions; partition_index++) {
+      uint32_t partition_dta_prefix =
+          DecodeFixed32(&input[partition_index * 8]);
+      if (bit <= partition_dta_prefix) {
+        size_t size = DecodeFixed32(&input[partition_index * 8 + 4]);
+        input.remove_prefix(size);
         break;
-      }
-    }
-
-    // Out of range
-    if (parti_idx == partition_num) {
-      return false;
-    }
-
-    const unsigned char signal_mask = 1 << 7;
-    const unsigned char bit_mask = signal_mask - 1;
-    size_t index = 0;
-    for (size_t i = start_rl; i < input.size(); i++) {
-      size_t runLen = 0;
-      size_t bytes = 0;
-      if (static_cast<unsigned char>(input[i]) != 255) {
-        runLen += static_cast<unsigned char>(input[i]);
       } else {
-        runLen += 254;
-        i++;
-        while ((input[i] & signal_mask) != 0) {
-          runLen += static_cast<size_t>(input[i] & bit_mask) << bytes;
-          i++;
-          bytes += 7;
-        }
-        runLen += static_cast<size_t>(input[i]) << bytes;
+        base = partition_dta_prefix;
       }
-      if (index + runLen == bit)
-        return true;
-      else if (index + runLen > bit)
-        return false;
-      else
-        index += runLen;
     }
+
+    // Search within the target partition
+    if (partition_index < num_partitions) {
+      while (!input.empty()) {
+        base += VbPlusDec(&input);
+        if (base == bit) {
+          return true;
+        } else if (base > bit) {
+          return false;
+        }
+      }
+    }
+
     return false;
   }
 };
