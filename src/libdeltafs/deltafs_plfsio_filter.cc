@@ -673,14 +673,14 @@ class PfDtaFormat : public CompressedFormat {
     unsigned char num_bits = static_cast<unsigned char>((*input)[0]);
     input->remove_prefix(1);
     unsigned char b = 0;  // Tmp byte to consume encoded bits
-    size_t remaining_keys = cohort_size_;
+    size_t num_keys = cohort_size_;
     // Will never overflow the buffer space, but may return garbage, though all
     // garbage keys will be zero, which won't impact correctness.
-    if (8 * input->size() / num_bits < remaining_keys) {
-      remaining_keys = 8 * input->size() / num_bits;
+    if (8 * input->size() / num_bits < num_keys) {
+      num_keys = 8 * input->size() / num_bits;
     }
     int bit_index = -1;  // Pending restart from the most significant bit
-    while (remaining_keys > 0) {
+    for (size_t i = 0; i < num_keys; i++) {
       uint32_t dta = 0;
       int remaining_bits = num_bits - 1;
       while (remaining_bits >= 0) {
@@ -692,8 +692,9 @@ class PfDtaFormat : public CompressedFormat {
         dta |= (b & (1 << bit_index--)) > 0 ? (1 << remaining_bits) : 0;
         remaining_bits--;
       }
+      // It is possible to filter out garbage keys here.
+      // This is left as future work.
       cohort->push_back(dta);
-      remaining_keys--;
     }
 
     return cohort->size();
