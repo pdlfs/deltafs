@@ -369,7 +369,7 @@ class VbFormat : public CompressedFormat {
       : CompressedFormat(options, space) {}
 
   static void VbEnc(std::string* output, uint32_t value) {
-    // While more than 7 bits of data are left, emit the least 7 bits
+    // While more than 7 bits of data are left, consume the least 7 bits
     // and set the next-byte flag
     while (value > 127) {
       // |128: Set the next byte flag
@@ -441,7 +441,7 @@ class VbPlusFormat : public VbFormat {
     if (value < 255) {
       output->push_back(value);  // Encode the byte as-is
     } else {
-      output->push_back(255);
+      output->push_back(static_cast<char>(255));
       value -= 254;  // Continue with varint
       VbEnc(output, value);
     }
