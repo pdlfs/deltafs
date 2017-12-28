@@ -334,12 +334,12 @@ class VbFormat : public CompressedFormat {
       : CompressedFormat(options, space) {}
 
   static void VbEnc(std::string* output, uint32_t value) {
-    // While more than 7 bits of data are left, occupy the last output byte
-    // and set the next byte flag
+    // While more than 7 bits of data are left, emit the least 7 bits
+    // and set the next-byte flag
     while (value > 127) {
       // |128: Set the next byte flag
       output->push_back((value & 127) | 128);
-      // Remove the seven bits we just wrote
+      // Remove the 7 bits we just wrote
       value >>= 7;
     }
     output->push_back(value & 127);
