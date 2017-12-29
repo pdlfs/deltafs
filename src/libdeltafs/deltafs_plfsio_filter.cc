@@ -236,7 +236,7 @@ class CompressedFormat {
         static_cast<char>(bucket_size + 1);
     if (bucket_size < estimated_bucket_size_) {
       working_space_[bucket_index * bytes_per_bucket_ + 1 + bucket_size] =
-          static_cast<char>(i & 0xFF);
+          static_cast<char>(i & 255);
     } else {
       extra_keys_.push_back(i);
     }
@@ -268,6 +268,9 @@ class CompressedFormat {
         Fetch();
       }
     }
+
+    // Return the current bucket index.
+    size_t index() const { return bucket_index_; }
 
     // Return a pointer to the bucket keys
     // Contents valid until the next Next() call.
@@ -421,13 +424,13 @@ class CompressedFormat {
     const Slice& bitmap_;
   };
 
-  // In-memory bitmap storage where the entire bitmap
-  // is divided into a set of fixed-sized bucket.
-  // Each bucket is responsible for 256 keys. User keys inserted
-  // are assumed to be uniformly distributed over the key space
-  // so each bucket will get approximately bucket_size_ =
-  // num_keys / num_buckets_ keys.
-  // |<-               key space               ->|  // 2**key_bits_ keys
+  // In-memory bitmap storage where the entire bitmap key space
+  // is divided into a set of fixed-sized buckets.
+  // Each bucket is responsible for a range of 256 keys.
+  // User keys inserted are assumed to be uniformly distributed over
+  // the key space so each bucket will get approximately
+  // bucket_size_ (= num_keys / num_buckets_) keys.
+  // |<-               key space               ->|  // [0, 2**key_bits_)
   //    bucket-0,   bucket-1,   bucket-2, ...  // num_buckets_
   std::string working_space_;  // Temp bitmap storage
   // For keys that cannot fit into the statically allocated buckets
@@ -836,150 +839,80 @@ class FastPfDtaFormat : public PfDtaFormat {
   }
 };
 
-// Roaring bitmap format bucket size 2^8
+// RoaringFormat: encode each bitmap using a fast, lightly-compressed,
+// bucketized bitmap representation. Each bitmap bucket manages a fixed key
+// range consisting of 256 potential keys, and is paired with an 1-byte header
+// indicating the actual number of keys stored in that bucket.
 class RoaringFormat : public CompressedFormat {
  public:
   RoaringFormat(const DirOptions& options, std::string* space)
       : CompressedFormat(options, space) {}
 
-  void Reset(uint32_t num_keys) {
-    CompressedFormat::Reset(num_keys);
-    bucket_size_max_bit_ = 0;
-  }
-
-  void Set(uint32_t i) {
-    // Copy from parent
-    int bucket_index = i >> 8;
-    // Read bucket key number
-    unsigned char key_index = working_space_[bucket_index * bytes_per_bucket_];
-    if (key_index < bytes_per_bucket_ - 1) {
-      // Append to the bucket
-      working_space_[bucket_index * bytes_per_bucket_ + key_index + 1] =
-          i & ((1 << 8) - 1);
-    } else {
-      // Append to overflow vector
-      extra_keys_.push_back(i);
-    }
-    // Update the bucket key number
-    working_space_[bucket_index * bytes_per_bucket_] = key_index + 1;
-
-    // Update max bit
-    bucket_size_max_bit_ |= static_cast<size_t>(key_index + 1);
-  }
-
+  // Convert the in-memory bitmap representation to an on-storage
+  // representation using the fast roaring format. The in-memory
+  // version is stored at working_space_. The on-storage
+  // version will be written into *space_.
   size_t Finish() {
-    std::sort(extra_keys_.begin(), extra_keys_.end());
-    size_t overflowed_idx = 0;
-
-    unsigned char bits_per_len = LeftMostBit(bucket_size_max_bit_);
-    space_->resize(1 + (bits_per_len * num_buckets_ + 7) / 8, 0);
-    (*space_)[0] = bits_per_len;
-
-    // Leave the space at the head to store the size for every buckets
-    // The index of the byte at space_ to encode bucket size.
-    size_t bucket_len_byte_idx = 1;
-
-    unsigned char bucket_len_byte = 0;
-    int bucket_len_bit_idx = 7;  // The index of bit in the constructing byte.
-
-    std::vector<unsigned char> bucket_keys;
-    // For every bucket
-    for (size_t i = 0; i < num_buckets_; i++) {
-      // Bucket key size
-      unsigned char key_num =
-          static_cast<unsigned char>(working_space_[bytes_per_bucket_ * i]);
-      size_t offset = bytes_per_bucket_ * i + 1;
-      // Clear vector for repeated use.
-      bucket_keys.clear();
-      for (int j = 0; j < key_num; j++) {
-        if (j < bytes_per_bucket_ - 1)
-          bucket_keys.push_back(
-              static_cast<unsigned char>(working_space_[offset + j]));
-        else
-          bucket_keys.push_back(
-              static_cast<unsigned char>(extra_keys_[overflowed_idx++] & 255));
+    // Remember total number of buckets
+    PutFixed32(space_, num_buckets_);
+    // Reserve enough buffer space for bucket headers
+    space_->resize(4 + num_buckets_, 0);  // 1 byte per header
+    // Finalize all buckets
+    CompressedFormat::Finish();  // Sort extra keys
+    Iter bucket_iter(*this);
+    for (; bucket_iter.Valid(); bucket_iter.Next()) {
+      std::vector<uint32_t>* bucket_keys = bucket_iter.keys();
+      (*space_)[4 + bucket_iter.index()] =
+          static_cast<char>(bucket_keys->size());
+      std::sort(bucket_keys->begin(), bucket_keys->end());
+      for (std::vector<uint32_t>::iterator it = bucket_keys->begin();
+           it != bucket_keys->end(); ++it) {
+        space_->push_back(*it & 255);
       }
-      std::sort(bucket_keys.begin(), bucket_keys.end());
-      // Encoding bucket size
-      int len_index = bits_per_len - 1;
-      while (len_index >= 0) {
-        bucket_len_byte |=
-            (key_num & (1 << len_index--)) >= 1 ? (1 << bucket_len_bit_idx) : 0;
-        if (bucket_len_bit_idx-- == 0) {
-          (*space_)[bucket_len_byte_idx++] = bucket_len_byte;
-          bucket_len_byte = 0;
-          bucket_len_bit_idx = 7;
-        }
-      }
-      // Fill the offsets of the bucket
-      for (std::vector<unsigned char>::iterator it = bucket_keys.begin();
-           it != bucket_keys.end(); ++it) {
-        // Encoding the distance to roaring bitmap encode.
-        space_->push_back(*it);
-      }
-    }
-
-    if (bucket_len_bit_idx != 7) {
-      (*space_)[bucket_len_byte_idx] = bucket_len_byte;
-      ;
     }
 
     return space_->size();
   }
 
-  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
-    uint32_t bucket_idx = bit >> 8;
-    unsigned char bit_per_len = input[0];
-    int len_byte_idx = 1;
-    size_t offset = 0;
-    size_t len;
-
-    // Get the offset of the bucket
-    unsigned char b = 0;
-    int b_idx = -1;
-    while (bucket_idx-- > 0) {
-      len = 0;
-      int len_index = bit_per_len - 1;
-      while (len_index >= 0) {
-        if (b_idx < 0) {
-          b = static_cast<unsigned char>(input[len_byte_idx++]);
-          b_idx = 7;
-        }
-        len |= (b & (1 << b_idx--)) > 0 ? (1 << len_index) : 0;
-        len_index -= 1;
-      }
-      offset += len;
+  static bool Test(uint32_t bit, size_t key_bits, const Slice& bitmap) {
+    Slice input = bitmap;
+    if (input.size() < 4) {
+      return false;  // Too short to be valid
     }
-
-    // Get the size of the bucket
-    size_t bucket_size = 0;
-    int bucket_size_index = bit_per_len - 1;
-    while (bucket_size_index >= 0) {
-      if (b_idx < 0) {
-        b = static_cast<unsigned char>(input[len_byte_idx++]);
-        b_idx = 7;
-      }
-      bucket_size |= (b & (1 << b_idx--)) > 0 ? (1 << bucket_size_index) : 0;
-      bucket_size_index -= 1;
+    // Recover bucket count
+    const size_t num_buckets = DecodeFixed32(input.data());
+    input.remove_prefix(4);
+    if (input.size() < num_buckets) {  // Pre-mature end of buffer space
+      return false;
     }
-
-    size_t start_idx =
-        1 + ((1 << (key_bits - 8)) /*bucket number*/ * bit_per_len + 7) / 8 +
-        offset;
-    unsigned char target_offset = static_cast<unsigned char>(bit & 255);
-    unsigned char key_offset;
-    for (size_t i = start_idx; i < start_idx + bucket_size; i++) {
-      key_offset = static_cast<unsigned char>(input[i]);
-      if (key_offset == target_offset)
-        return true;
-      else if (key_offset > target_offset)
+    const size_t bucket_index = bit >> 8;  // Target bucket
+    size_t bucket_start = 0;
+    size_t bucket_end = 0;
+    for (size_t i = 0; i <= bucket_index; i++) {
+      if (i < num_buckets) {
+        bucket_start = bucket_end;
+        bucket_end += static_cast<unsigned char>(input[i]);
+      } else {  // No such bucket!
         return false;
+      }
     }
+
+    // Search within the target bucket
+    input.remove_prefix(num_buckets);
+    if (input.size() >= bucket_end) {
+      unsigned char target = bit & 255;
+      for (size_t i = bucket_start; i < bucket_end; i++) {
+        unsigned char key = static_cast<unsigned char>(input[i]);
+        if (key > target) {
+          return false;
+        } else if (key == target) {
+          return true;
+        }
+      }
+    }
+
     return false;
   }
-
- private:
-  size_t bucket_size_max_bit_;
 };
 
 // Partitioned Roaring bitmap format bucket size 2^8
