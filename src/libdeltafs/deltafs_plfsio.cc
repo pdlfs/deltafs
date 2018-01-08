@@ -97,10 +97,7 @@ static bool ParseBitmapFormat(const Slice& key, const Slice& value,
   if (value == "uncompressed") {
     *result = kFmtUncompressed;
     return true;
-  } else if (value == "fast-roaring" || value == "fr") {
-    *result = kFmtFastRoaring;
-    return true;
-  } else if (value == "fast-p-f-delta" || value == "fpfdel") {
+  } else if (value == "fast-p-f-delta" || value == "fpfd") {
     *result = kFmtFastPfDelta;
     return true;
   } else if (value == "fast-vbp" || value == "fvbp") {
@@ -108,6 +105,9 @@ static bool ParseBitmapFormat(const Slice& key, const Slice& value,
     return true;
   } else if (value == "vbp") {
     *result = kFmtVarintPlus;
+    return true;
+  } else if (value == "vb") {
+    *result = kFmtVarint;
     return true;
   } else {
     Warn(__LOG_ARGS__, "Unknown bitmap format: %s=%s, option ignored",
@@ -1026,10 +1026,6 @@ std::string BitmapFilterOptions(const DirOptions& options) {
       snprintf(tmp, sizeof(tmp), "BMP (uncompressed, key_bits=%d)",
                int(options.bm_key_bits));
       return tmp;
-    case kFmtFastRoaring:
-      snprintf(tmp, sizeof(tmp), "BMP (fast r, key_bits=%d)",
-               int(options.bm_key_bits));
-      return tmp;
     case kFmtFastPfDelta:
       snprintf(tmp, sizeof(tmp), "BMP (fast p-f-delta, key_bits=%d)",
                int(options.bm_key_bits));
@@ -1040,6 +1036,10 @@ std::string BitmapFilterOptions(const DirOptions& options) {
       return tmp;
     case kFmtVarintPlus:
       snprintf(tmp, sizeof(tmp), "BMP (vb+, key_bits=%d)",
+               int(options.bm_key_bits));
+      return tmp;
+    case kFmtVarint:
+      snprintf(tmp, sizeof(tmp), "BMP (vb, key_bits=%d)",
                int(options.bm_key_bits));
       return tmp;
     default:
@@ -1231,11 +1231,21 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
     } else {
       delete impl;
     }
-  } else if (options.filter == kFtBitmap) {
-    if (options.bm_fmt == kFmtVarint) {
-      typedef BitmapBlock<VbFormat> VarintBitmapBlock;
-      DirWriterImpl<VarintBitmapBlock>* impl =
-          new DirWriterImpl<VarintBitmapBlock>(options, dirname);
+  } else if (options.filter == kFtBitmap) {  // All bitmap-based formats
+    if (options.bm_fmt == kFmtRoaring) {
+      typedef BitmapBlock<RoaringFormat> RoaringBitmapBlock;
+      DirWriterImpl<RoaringBitmapBlock>* impl =
+          new DirWriterImpl<RoaringBitmapBlock>(options, dirname);
+      status = TryDirOpen(impl);
+      if (status.ok()) {
+        *result = impl;
+      } else {
+        delete impl;
+      }
+    } else if (options.bm_fmt == kFmtFastVarintPlus) {
+      typedef BitmapBlock<FastVbPlusFormat> FastVarintPlusBitmapBlock;
+      DirWriterImpl<FastVarintPlusBitmapBlock>* impl =
+          new DirWriterImpl<FastVarintPlusBitmapBlock>(options, dirname);
       status = TryDirOpen(impl);
       if (status.ok()) {
         *result = impl;
@@ -1252,20 +1262,10 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
       } else {
         delete impl;
       }
-    } else if (options.bm_fmt == kFmtFastVarintPlus) {
-      typedef BitmapBlock<FastVbPlusFormat> PVarintPlusBitmapBlock;
-      DirWriterImpl<PVarintPlusBitmapBlock>* impl =
-          new DirWriterImpl<PVarintPlusBitmapBlock>(options, dirname);
-      status = TryDirOpen(impl);
-      if (status.ok()) {
-        *result = impl;
-      } else {
-        delete impl;
-      }
-    } else if (options.bm_fmt == kFmtPfDelta) {
-      typedef BitmapBlock<PfDeltaFormat> PForDeltaBitmapBlock;
-      DirWriterImpl<PForDeltaBitmapBlock>* impl =
-          new DirWriterImpl<PForDeltaBitmapBlock>(options, dirname);
+    } else if (options.bm_fmt == kFmtVarint) {
+      typedef BitmapBlock<VbFormat> VarintBitmapBlock;
+      DirWriterImpl<VarintBitmapBlock>* impl =
+          new DirWriterImpl<VarintBitmapBlock>(options, dirname);
       status = TryDirOpen(impl);
       if (status.ok()) {
         *result = impl;
@@ -1273,37 +1273,26 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
         delete impl;
       }
     } else if (options.bm_fmt == kFmtFastPfDelta) {
-      typedef BitmapBlock<FastPfDeltaFormat> PpForDeltaBitmapBlock;
-      DirWriterImpl<PpForDeltaBitmapBlock>* impl =
-          new DirWriterImpl<PpForDeltaBitmapBlock>(options, dirname);
+      typedef BitmapBlock<FastPfDeltaFormat> FastPfDeltaBitmapBlock;
+      DirWriterImpl<FastPfDeltaBitmapBlock>* impl =
+          new DirWriterImpl<FastPfDeltaBitmapBlock>(options, dirname);
       status = TryDirOpen(impl);
       if (status.ok()) {
         *result = impl;
       } else {
         delete impl;
       }
-    } else if (options.bm_fmt == kFmtRoaring) {
-      typedef BitmapBlock<RoaringFormat> RoaringBitmapBlock;
-      DirWriterImpl<RoaringBitmapBlock>* impl =
-          new DirWriterImpl<RoaringBitmapBlock>(options, dirname);
+    } else if (options.bm_fmt == kFmtPfDelta) {
+      typedef BitmapBlock<PfDeltaFormat> PfDeltaBitmapBlock;
+      DirWriterImpl<PfDeltaBitmapBlock>* impl =
+          new DirWriterImpl<PfDeltaBitmapBlock>(options, dirname);
       status = TryDirOpen(impl);
       if (status.ok()) {
         *result = impl;
       } else {
         delete impl;
       }
-    } else if (options.bm_fmt == kFmtFastRoaring) {
-      typedef BitmapBlock<FastRoaringFormat> PRoaringBitmapBlock;
-      DirWriterImpl<PRoaringBitmapBlock>* impl =
-          new DirWriterImpl<PRoaringBitmapBlock>(options, dirname);
-      status = TryDirOpen(impl);
-      if (status.ok()) {
-        *result = impl;
-      } else {
-        delete impl;
-      }
-    } else {
-      // Default format: kUncompressedBitmap
+    } else {  // Default format: kUncompressedBitmap
       typedef BitmapBlock<UncompressedFormat> UncompressedBitmapBlock;
       DirWriterImpl<UncompressedBitmapBlock>* impl =
           new DirWriterImpl<UncompressedBitmapBlock>(options, dirname);

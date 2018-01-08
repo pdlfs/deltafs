@@ -255,23 +255,6 @@ TEST(RoaringBitmapFilterTest, RoaringBitmapFmt) {
   }
 }
 
-// Partitioned Roaring bitmap filter
-typedef FilterTest<BitmapBlock<FastRoaringFormat>, BitmapKeyMustMatch>
-    PRoaringBitmapFilterTest;
-
-TEST(PRoaringBitmapFilterTest, PRoaringBitmapFmt) {
-  Random rnd(301);
-  uint32_t num_keys = 0;
-  while (num_keys <= (4 << 10)) {
-    TEST_LogAndApply(this, &rnd, num_keys);
-    if (num_keys == 0) {
-      num_keys = 1;
-    } else {
-      num_keys *= 4;
-    }
-  }
-}
-
 template <typename T, size_t key_bits = 24>
 class PlfsFilterBench {
  public:
@@ -287,7 +270,7 @@ class PlfsFilterBench {
   }
 
   explicit PlfsFilterBench()
-      : num_tables_( GetOption("TABLE_NUM", 64)), key_bits_(key_bits) {
+      : num_tables_(GetOption("TABLE_NUM", 64)), key_bits_(key_bits) {
     options_.bf_bits_per_key = 10;
     options_.bm_key_bits = key_bits_;
 
@@ -345,7 +328,8 @@ class PlfsFilterBench {
     fprintf(stderr, "          Density: %.2f%%\n", 100.0 / num_tables_);
     fprintf(stderr, "     Storage cost: %.2f (bits per key)\n",
             8.0 * size / (num_keys * num_tables_));
-    fprintf(stderr, " Memory footprint: %.2f MiB\n", 1.0 * ft_->memory_usage() / ki / ki);
+    fprintf(stderr, " Memory footprint: %.2f MiB\n",
+            1.0 * ft_->memory_usage() / ki / ki);
 
 #if defined(PDLFS_PLATFORM_POSIX)
     struct rusage usage;
@@ -481,7 +465,6 @@ static void BM_Usage() {
   fprintf(stderr, "pvbp    (bipvbptmap, partitioned varint)\n");
   fprintf(stderr, "pfdelta (bitmap, modified p-for-delta)\n");
   fprintf(stderr, "r       (bitmap, modified roaring)\n");
-  fprintf(stderr, "pr      (bitmap, modified roaring with partitions)\n");
   fprintf(stderr, "\n");
 }
 
@@ -604,21 +587,6 @@ static void BM_LogAndApply(bool read_or_write, const char* fmt) {
           pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::RoaringFormat> >
           PlfsRoaringBitmapBench;
       PlfsRoaringBitmapBench bench;
-      bench.LogAndApply();
-    }
-  } else if (strcmp(fmt + 1, "pr") == 0) {
-    if (read_or_write) {
-      typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastRoaringFormat>,
-          pdlfs::plfsio::BitmapKeyMustMatch>
-          PlfsPRoaringBitmapQueryBench;
-      PlfsPRoaringBitmapQueryBench bench;
-      bench.LogAndApply();
-    } else {
-      typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastRoaringFormat> >
-          PlfsPRoaringBitmapBench;
-      PlfsPRoaringBitmapBench bench;
       bench.LogAndApply();
     }
   } else {

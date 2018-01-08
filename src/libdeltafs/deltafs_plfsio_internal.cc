@@ -1036,23 +1036,16 @@ size_t DirLogger<T>::memory_usage() const {
   }
 }
 
+// Initialize all potential filter templates
 template class DirLogger<BloomBlock>;
 
 template class DirLogger<BitmapBlock<UncompressedFormat> >;
-
-template class DirLogger<BitmapBlock<VbFormat> >;
-
-template class DirLogger<BitmapBlock<VbPlusFormat> >;
-
 template class DirLogger<BitmapBlock<FastVbPlusFormat> >;
-
-template class DirLogger<BitmapBlock<PfDeltaFormat> >;
-
+template class DirLogger<BitmapBlock<VbPlusFormat> >;
+template class DirLogger<BitmapBlock<VbFormat> >;
 template class DirLogger<BitmapBlock<FastPfDeltaFormat> >;
-
+template class DirLogger<BitmapBlock<PfDeltaFormat> >;
 template class DirLogger<BitmapBlock<RoaringFormat> >;
-
-template class DirLogger<BitmapBlock<FastRoaringFormat> >;
 
 template class DirLogger<EmptyFilterBlock>;
 

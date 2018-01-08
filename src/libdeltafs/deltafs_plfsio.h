@@ -62,24 +62,20 @@ enum FilterType {
 
 // Bitmap compression format.
 enum BitmapFormat {
-  // Use uncompressed bitmap format
+  // Use the uncompressed bitmap format
   kFmtUncompressed = 0x00,
-  // Use the varint format
-  kFmtVarint = 0x01,
-  // Use a modified varint format
-  kFmtVarintPlus = 0x02,
-  // Use the p-for-delta compression format
-  kFmtPfDelta = 0x03,
   // Use the roaring bitmap format
-  kFmtRoaring = 0x04,
+  kFmtRoaring = 0x01,
   // Use a modified varint format with a lookup table
-  kFmtFastVarintPlus = 0x05,  // Recommended
-  // Use the p-for-delta compression format
-  // with a lookup table
-  kFmtFastPfDelta = 0x06,
-  // Use the roaring bitmap format
-  // with a lookup table
-  kFmtFastRoaring = 0x07
+  kFmtFastVarintPlus = 0x02,
+  // Use a modified varint format
+  kFmtVarintPlus = 0x03,
+  // Use the original varint format
+  kFmtVarint = 0x04,
+  // Use p-for-delta with a lookup table
+  kFmtFastPfDelta = 0x05,
+  // Use p-for-delta
+  kFmtPfDelta = 0x06
 };
 
 struct DirOptions {

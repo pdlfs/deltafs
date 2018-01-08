@@ -407,8 +407,6 @@ class PlfsIoBench {
       return deffmt;
     } else if (strcmp(env, "bmp") == 0) {
       return kFmtUncompressed;
-    } else if (strcmp(env, "pr") == 0) {
-      return kFmtFastRoaring;
     } else if (strcmp(env, "r") == 0) {
       return kFmtRoaring;
     } else if (strcmp(env, "vbp") == 0) {
@@ -874,8 +872,6 @@ class PlfsIoBench {
     switch (type) {
       case kFmtUncompressed:
         return "Uncompressed";
-      case kFmtFastRoaring:  // Partitioned roaring
-        return "PR";
       case kFmtRoaring:
         return "R";
       case kFmtVarintPlus:
@@ -883,7 +879,7 @@ class PlfsIoBench {
       case kFmtVarint:
         return "VB";
       case kFmtPfDelta:
-        return "PFDelta";
+        return "PFD";
       default:
         return "Unknown";
     }

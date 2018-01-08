@@ -915,182 +915,6 @@ class RoaringFormat : public CompressedFormat {
   }
 };
 
-// Partitioned Roaring bitmap format bucket size 2^8
-class FastRoaringFormat : public CompressedFormat {
- public:
-  FastRoaringFormat(const DirOptions& options, std::string* space)
-      : CompressedFormat(options, space), partition_num_(num_buckets_ >> 8) {}
-
-  void Reset(uint32_t num_keys) {
-    CompressedFormat::Reset(num_keys);
-
-    bucket_size_max_bit_ = 0;
-    partition_sum_.resize(partition_num_, 0);
-  }
-
-  void Set(uint32_t i) {
-    // Copy from parent
-    int bucket_index = i >> 8;
-    // Read bucket key number
-    unsigned char key_index = working_space_[bucket_index * bytes_per_bucket_];
-    if (key_index < bytes_per_bucket_ - 1) {
-      // Append to the bucket
-      working_space_[bucket_index * bytes_per_bucket_ + key_index + 1] =
-          i & 0xff;
-    } else {
-      // Append to overflow vector
-      extra_keys_.push_back(i);
-    }
-    // Update the bucket key number
-    working_space_[bucket_index * bytes_per_bucket_] = key_index + 1;
-
-    int partition_index = bucket_index >> 8;
-    // Update max bit
-    bucket_size_max_bit_ |= static_cast<size_t>(key_index + 1);
-    partition_sum_[partition_index] += 1;
-  }
-
-  size_t Finish() {
-    std::sort(extra_keys_.begin(), extra_keys_.end());
-    size_t overflowed_idx = 0;
-
-    // Reserve space for header (partition sum & bits)
-    space_->resize(partition_num_ * sizeof(uint16_t) + 1, 0);
-
-    for (size_t i = 0; i < partition_num_; i++) {
-      (*space_)[2 * i] = static_cast<char>(partition_sum_[i] & 0xff);
-      (*space_)[2 * i + 1] = static_cast<char>((partition_sum_[i] >> 8) & 0xff);
-    }
-
-    unsigned char bits_per_len = LeftMostBit(bucket_size_max_bit_);
-    (*space_)[partition_num_ * sizeof(uint16_t)] = bits_per_len;
-
-    // Leave the space at the head to store the size for every buckets
-    // The index of the byte at space_ to encode bucket size.
-    size_t bucket_len_byte_idx = space_->size();
-
-    space_->resize(space_->size() + (bits_per_len * num_buckets_ + 7) / 8, 0);
-
-    unsigned char bucket_len_byte = 0;
-    int bucket_len_bit_idx = 7;  // The index of bit in the constructing byte.
-
-    std::vector<unsigned char> bucket_keys;
-    // For every bucket
-    for (size_t i = 0; i < num_buckets_; i++) {
-      // Bucket key size
-      unsigned char key_num =
-          static_cast<unsigned char>(working_space_[bytes_per_bucket_ * i]);
-      size_t offset = bytes_per_bucket_ * i + 1;
-      // Clear vector for repeated use.
-      bucket_keys.clear();
-      for (int j = 0; j < key_num; j++) {
-        if (j < bytes_per_bucket_ - 1)
-          bucket_keys.push_back(
-              static_cast<unsigned char>(working_space_[offset + j]));
-        else
-          bucket_keys.push_back(
-              static_cast<unsigned char>(extra_keys_[overflowed_idx++] & 255));
-      }
-      std::sort(bucket_keys.begin(), bucket_keys.end());
-      // Encoding bucket size
-      int len_index = bits_per_len - 1;
-      while (len_index >= 0) {
-        bucket_len_byte |=
-            (key_num & (1 << len_index--)) >= 1 ? (1 << bucket_len_bit_idx) : 0;
-        if (bucket_len_bit_idx-- == 0) {
-          (*space_)[bucket_len_byte_idx++] = bucket_len_byte;
-          bucket_len_byte = 0;
-          bucket_len_bit_idx = 7;
-        }
-      }
-      // Fill the offsets of the bucket
-      for (std::vector<unsigned char>::iterator it = bucket_keys.begin();
-           it != bucket_keys.end(); ++it) {
-        // Encoding the distance to roaring bitmap encode.
-        space_->push_back(*it);
-      }
-    }
-
-    if (bucket_len_bit_idx != 7) {
-      (*space_)[bucket_len_byte_idx] = bucket_len_byte;
-      ;
-    }
-
-    return space_->size();
-  }
-
-  static bool Test(uint32_t bit, size_t key_bits, const Slice& input) {
-    size_t partition_idx = bit >> 16;
-    size_t bucket_idx = (bit & 0xff00) >> 8;
-    size_t bucket_number = 1 << (key_bits - 8);
-    size_t partition_num = bucket_number >> 8;
-
-    size_t offset = 0;
-    // Traverse partition lookup table
-    for (int i = 0; i < partition_idx; i++) {
-      offset += (input[2 * i] + (input[2 * i + 1] << 8));
-    }
-
-    unsigned char bit_per_len = input[2 * partition_num];
-    int len_byte_idx =
-        2 * partition_num + 1 +
-        (bit_per_len * partition_idx << (8 - 3));  // *256 / 8(bits/byte)
-    size_t len;
-
-    // Get the offset of the bucket
-    unsigned char b = 0;
-    int b_idx = -1;
-    while (bucket_idx-- > 0) {
-      len = 0;
-      int len_index = bit_per_len - 1;
-      while (len_index >= 0) {
-        if (b_idx < 0) {
-          b = static_cast<unsigned char>(input[len_byte_idx++]);
-          b_idx = 7;
-        }
-        len |= (b & (1 << b_idx--)) > 0 ? (1 << len_index) : 0;
-        len_index -= 1;
-      }
-      offset += len;
-    }
-
-    // Get the size of the bucket
-    size_t bucket_size = 0;
-    int bucket_size_index = bit_per_len - 1;
-    while (bucket_size_index >= 0) {
-      if (b_idx < 0) {
-        b = static_cast<unsigned char>(input[len_byte_idx++]);
-        b_idx = 7;
-      }
-      bucket_size |= (b & (1 << b_idx--)) > 0 ? (1 << bucket_size_index) : 0;
-      bucket_size_index -= 1;
-    }
-
-    size_t start_idx =
-        2 * partition_num + 1 + (bucket_number * bit_per_len + 7) / 8 + offset;
-    unsigned char target_offset = static_cast<unsigned char>(bit & 0xff);
-    unsigned char key_offset;
-    for (size_t i = start_idx; i < start_idx + bucket_size; i++) {
-      key_offset = static_cast<unsigned char>(input[i]);
-      if (key_offset == target_offset)
-        return true;
-      else if (key_offset > target_offset)
-        return false;
-    }
-    return false;
-  }
-
-  size_t memory_usage() const {
-    return CompressedFormat::memory_usage() +
-           partition_sum_.size() * sizeof(uint16_t);
-  }
-
- private:
-  size_t bucket_size_max_bit_;
-  std::vector<uint16_t> partition_sum_;
-  size_t partition_num_;
-};
-
 template <typename T>
 int BitmapBlock<T>::chunk_type() {
   return static_cast<int>(kBmpChunk);
@@ -1167,8 +991,6 @@ Slice BitmapBlock<T>::Finish() {
     space_.push_back(static_cast<char>(kFmtFastPfDelta));
   } else if (typeid(T) == typeid(RoaringFormat)) {
     space_.push_back(static_cast<char>(kFmtRoaring));
-  } else if (typeid(T) == typeid(FastRoaringFormat)) {
-    space_.push_back(static_cast<char>(kFmtFastRoaring));
   }
   return space_;
 }
@@ -1183,21 +1005,16 @@ BitmapBlock<T>::~BitmapBlock() {
   delete fmt_;
 }
 
+// Initialize all supported bitmap format templates
 template class BitmapBlock<UncompressedFormat>;
-
+template class BitmapBlock<FastVbPlusFormat>;
+template class BitmapBlock<VbPlusFormat>;
 template class BitmapBlock<VbFormat>;
 
-template class BitmapBlock<VbPlusFormat>;
-
-template class BitmapBlock<FastVbPlusFormat>;
-
+template class BitmapBlock<FastPfDeltaFormat>;
 template class BitmapBlock<PfDeltaFormat>;
 
-template class BitmapBlock<FastPfDeltaFormat>;
-
 template class BitmapBlock<RoaringFormat>;
-
-template class BitmapBlock<FastRoaringFormat>;
 
 // Return true if the target key matches a given bitmap filter. Unlike bloom
 // filters, bitmap filters are designed with no false positives.
@@ -1221,22 +1038,20 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   }
 
   const int compression = input[input.size() - 1];
-  if (compression == kFmtUncompressed) {
-    return UncompressedFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFmtVarint) {
-    return VbFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFmtVarintPlus) {
-    return VbPlusFormat::Test(i, key_bits, bitmap);
+  if (compression == kFmtRoaring) {
+    return RoaringFormat::Test(i, key_bits, bitmap);
   } else if (compression == kFmtFastVarintPlus) {
     return FastVbPlusFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFmtPfDelta) {
-    return PfDeltaFormat::Test(i, key_bits, bitmap);
+  } else if (compression == kFmtVarintPlus) {
+    return VbPlusFormat::Test(i, key_bits, bitmap);
+  } else if (compression == kFmtVarint) {
+    return VbFormat::Test(i, key_bits, bitmap);
   } else if (compression == kFmtFastPfDelta) {
     return FastPfDeltaFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFmtRoaring) {
-    return RoaringFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFmtFastRoaring) {
-    return FastRoaringFormat::Test(i, key_bits, bitmap);
+  } else if (compression == kFmtPfDelta) {
+    return PfDeltaFormat::Test(i, key_bits, bitmap);
+  } else if (compression == kFmtUncompressed) {
+    return UncompressedFormat::Test(i, key_bits, bitmap);
   } else {
     return true;
   }
