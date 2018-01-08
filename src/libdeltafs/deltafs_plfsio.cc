@@ -1263,7 +1263,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
         delete impl;
       }
     } else if (options.bm_fmt == kFmtPfDelta) {
-      typedef BitmapBlock<PfDtaFormat> PForDeltaBitmapBlock;
+      typedef BitmapBlock<PfDeltaFormat> PForDeltaBitmapBlock;
       DirWriterImpl<PForDeltaBitmapBlock>* impl =
           new DirWriterImpl<PForDeltaBitmapBlock>(options, dirname);
       status = TryDirOpen(impl);
@@ -1273,7 +1273,7 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
         delete impl;
       }
     } else if (options.bm_fmt == kFmtFastPfDelta) {
-      typedef BitmapBlock<FastPfDtaFormat> PpForDeltaBitmapBlock;
+      typedef BitmapBlock<FastPfDeltaFormat> PpForDeltaBitmapBlock;
       DirWriterImpl<PpForDeltaBitmapBlock>* impl =
           new DirWriterImpl<PpForDeltaBitmapBlock>(options, dirname);
       status = TryDirOpen(impl);

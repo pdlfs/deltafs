@@ -642,11 +642,11 @@ class FastVbPlusFormat : public VbPlusFormat {
   }
 };
 
-// PfDtaFormat: encode each bitmap using a p-for-delta-based compression
-// scheme for a higher compression rate by bit-level encoding.
-class PfDtaFormat : public CompressedFormat {
+// PfDeltaFormat: encode each bitmap using a p-for-delta-based compression
+// scheme for a higher compression rate by doing bit-level encoding.
+class PfDeltaFormat : public CompressedFormat {
  public:
-  PfDtaFormat(const DirOptions& options, std::string* space)
+  PfDeltaFormat(const DirOptions& options, std::string* space)
       : CompressedFormat(options, space) {}
 
   // Convert the in-memory bitmap representation to an on-storage
@@ -767,14 +767,14 @@ class PfDtaFormat : public CompressedFormat {
   }
 };
 
-// Similar to PfDtaFormat but with an extra lookup table for faster queries.
-// A lookup entry is inserted for each partition_size_ keys.
-// Each lookup entry costs 8 bytes, using 4 bytes for an offset,
+// Similar to PfDeltaFormat but with an extra lookup table for faster queries.
+// A lookup entry is inserted for each partition_size_ keys. Each
+// lookup entry costs 8 bytes, using 4 bytes for an offset,
 // and another 4 bytes for a delta prefix.
-class FastPfDtaFormat : public PfDtaFormat {
+class FastPfDeltaFormat : public PfDeltaFormat {
  public:
-  FastPfDtaFormat(const DirOptions& options, std::string* space)
-      : PfDtaFormat(options, space) {}
+  FastPfDeltaFormat(const DirOptions& options, std::string* space)
+      : PfDeltaFormat(options, space) {}
 
   // Convert the in-memory bitmap representation to an on-storage
   // representation. The in-memory version is stored at working_space_.
@@ -1161,9 +1161,9 @@ Slice BitmapBlock<T>::Finish() {
     space_.push_back(static_cast<char>(kFmtVarintPlus));
   } else if (typeid(T) == typeid(FastVbPlusFormat)) {
     space_.push_back(static_cast<char>(kFmtFastVarintPlus));
-  } else if (typeid(T) == typeid(PfDtaFormat)) {
+  } else if (typeid(T) == typeid(PfDeltaFormat)) {
     space_.push_back(static_cast<char>(kFmtPfDelta));
-  } else if (typeid(T) == typeid(FastPfDtaFormat)) {
+  } else if (typeid(T) == typeid(FastPfDeltaFormat)) {
     space_.push_back(static_cast<char>(kFmtFastPfDelta));
   } else if (typeid(T) == typeid(RoaringFormat)) {
     space_.push_back(static_cast<char>(kFmtRoaring));
@@ -1191,9 +1191,9 @@ template class BitmapBlock<VbPlusFormat>;
 
 template class BitmapBlock<FastVbPlusFormat>;
 
-template class BitmapBlock<PfDtaFormat>;
+template class BitmapBlock<PfDeltaFormat>;
 
-template class BitmapBlock<FastPfDtaFormat>;
+template class BitmapBlock<FastPfDeltaFormat>;
 
 template class BitmapBlock<RoaringFormat>;
 
@@ -1230,9 +1230,9 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   } else if (compression == kFmtFastVarintPlus) {
     return FastVbPlusFormat::Test(i, key_bits, bitmap);
   } else if (compression == kFmtPfDelta) {
-    return PfDtaFormat::Test(i, key_bits, bitmap);
+    return PfDeltaFormat::Test(i, key_bits, bitmap);
   } else if (compression == kFmtFastPfDelta) {
-    return FastPfDtaFormat::Test(i, key_bits, bitmap);
+    return FastPfDeltaFormat::Test(i, key_bits, bitmap);
   } else if (compression == kFmtRoaring) {
     return RoaringFormat::Test(i, key_bits, bitmap);
   } else if (compression == kFmtFastRoaring) {

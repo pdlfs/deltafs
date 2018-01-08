@@ -1046,9 +1046,9 @@ template class DirLogger<BitmapBlock<VbPlusFormat> >;
 
 template class DirLogger<BitmapBlock<FastVbPlusFormat> >;
 
-template class DirLogger<BitmapBlock<PfDtaFormat> >;
+template class DirLogger<BitmapBlock<PfDeltaFormat> >;
 
-template class DirLogger<BitmapBlock<FastPfDtaFormat> >;
+template class DirLogger<BitmapBlock<FastPfDeltaFormat> >;
 
 template class DirLogger<BitmapBlock<RoaringFormat> >;
 

@@ -205,7 +205,7 @@ TEST(PVarintPlusBitmapFilterTest, PVarintPlusBitmapFmt) {
 }
 
 // PForDelta bitmap filter
-typedef FilterTest<BitmapBlock<PfDtaFormat>, BitmapKeyMustMatch>
+typedef FilterTest<BitmapBlock<PfDeltaFormat>, BitmapKeyMustMatch>
     PForDeltaBitmapFilterTest;
 
 TEST(PForDeltaBitmapFilterTest, PForDeltaBitmapFmt) {
@@ -222,7 +222,7 @@ TEST(PForDeltaBitmapFilterTest, PForDeltaBitmapFmt) {
 }
 
 // Partitioned PForDelta bitmap filter
-typedef FilterTest<BitmapBlock<FastPfDtaFormat>, BitmapKeyMustMatch>
+typedef FilterTest<BitmapBlock<FastPfDeltaFormat>, BitmapKeyMustMatch>
     PpForDeltaBitmapFilterTest;
 
 TEST(PpForDeltaBitmapFilterTest, PpForDeltaBitmapFmt) {
@@ -564,14 +564,14 @@ static void BM_LogAndApply(bool read_or_write, const char* fmt) {
   } else if (strcmp(fmt + 1, "pfdelta") == 0) {
     if (read_or_write) {
       typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PfDtaFormat>,
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PfDeltaFormat>,
           pdlfs::plfsio::BitmapKeyMustMatch>
           PlfsPForDeltaBitmapQueryBench;
       PlfsPForDeltaBitmapQueryBench bench;
       bench.LogAndApply();
     } else {
       typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PfDtaFormat> >
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PfDeltaFormat> >
           PlfsPForDeltaBitmapBench;
       PlfsPForDeltaBitmapBench bench;
       bench.LogAndApply();
@@ -579,14 +579,14 @@ static void BM_LogAndApply(bool read_or_write, const char* fmt) {
   } else if (strcmp(fmt + 1, "ppfdelta") == 0) {
     if (read_or_write) {
       typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastPfDtaFormat>,
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastPfDeltaFormat>,
           pdlfs::plfsio::BitmapKeyMustMatch>
           PlfsPpForDeltaBitmapQueryBench;
       PlfsPpForDeltaBitmapQueryBench bench;
       bench.LogAndApply();
     } else {
       typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastPfDtaFormat> >
+          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastPfDeltaFormat> >
           PlfsPpForDeltaBitmapBench;
       PlfsPpForDeltaBitmapBench bench;
       bench.LogAndApply();
