@@ -29,10 +29,12 @@
 namespace pdlfs {
 namespace plfsio {
 
-template <typename T, FilterTester tester, size_t key_bits = 24>
+// A generic filter test that can work with different
+// filter implementations.
+template <typename T, FilterTester tester>
 class FilterTest {
  public:
-  FilterTest() : key_bits_(key_bits), ft_(NULL) {
+  FilterTest(size_t key_bits = 24) : key_bits_(key_bits), ft_(NULL) {
     options_.bf_bits_per_key = 10;  // Override the defaults
     options_.bm_key_bits = key_bits_;
   }
@@ -41,18 +43,22 @@ class FilterTest {
     delete ft_;  // Done
   }
 
+  // Reset the underlying filter.
   void Reset(uint32_t num_keys) {
     if (ft_ == NULL) ft_ = new T(options_, 0);  // Does not reserve memory
     ft_->Reset(num_keys);
   }
 
-  // REQUIRES: Reset() must have been called.
+  // REQUIRES: Reset() must have been called and Finish()
+  // has not been called after the Reset().
   void AddKey(uint32_t seq) {
-    std::string key;
-    PutFixed32(&key, seq);
+    char tmp[4];
+    EncodeFixed32(tmp, seq);
+    Slice key(tmp, sizeof(tmp));
     ft_->AddKey(key);
   }
 
+  // Finalize and obtain filter contents.
   Slice Finish() {
     data_.clear();
     if (ft_ != NULL) {
@@ -65,8 +71,9 @@ class FilterTest {
 
   // REQUIRES: Finish() must have been called.
   bool KeyMayMatch(uint32_t seq) const {
-    std::string key;
-    PutFixed32(&key, seq);
+    char tmp[4];
+    EncodeFixed32(tmp, seq);
+    Slice key(tmp, sizeof(tmp));
     return tester(key, data_);
   }
 
@@ -90,10 +97,9 @@ static void TEST_LogAndApply(T* t, Random* rnd, uint32_t num_keys,
     t->AddKey(*it);
   }
   Slice contents = t->Finish();
-  fprintf(stderr, "%8u keys (%f%% full) %27s]\t%12.2f bits/key\n", num_keys,
+  fprintf(stderr, "%f%% FULL: %.2f per key, %u keys",
           100.0 * double(num_keys) / (1u << key_bits),
-          PrettySize(contents.size()).c_str(),
-          8.0 * double(contents.size()) / num_keys);
+          8.0 * double(contents.size()) / num_keys, num_keys);
   // All keys previously inserted must match
   for (it = keys.begin(); it != keys.end(); ++it) {
     ASSERT_TRUE(t->KeyMayMatch(*it));
@@ -118,12 +124,13 @@ static void TEST_LogAndApply(T* t, Random* rnd, uint32_t num_keys,
       ASSERT_FALSE(t->KeyMayMatch((1u << key_bits) + i));
     }
   }
+
+  fprintf(stderr, " OK! \n");
 }
 
-// Bloom filter
 typedef FilterTest<BloomBlock, BloomKeyMayMatch> BloomFilterTest;
 
-TEST(BloomFilterTest, BloomFmt) {
+TEST(BloomFilterTest, BloomFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
   while (num_keys <= (64 << 10)) {
@@ -136,11 +143,10 @@ TEST(BloomFilterTest, BloomFmt) {
   }
 }
 
-// Uncompressed bitmap filter
 typedef FilterTest<BitmapBlock<UncompressedFormat>, BitmapKeyMustMatch>
     UncompressedBitmapFilterTest;
 
-TEST(UncompressedBitmapFilterTest, UncompressedBitmapFmt) {
+TEST(UncompressedBitmapFilterTest, UncompressedFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
   while (num_keys <= (16 << 10)) {
@@ -153,11 +159,10 @@ TEST(UncompressedBitmapFilterTest, UncompressedBitmapFmt) {
   }
 }
 
-// Varint bitmap filter
 typedef FilterTest<BitmapBlock<VbFormat>, BitmapKeyMustMatch>
-    VarintBitmapFilterTest;
+    VbBitmapFilterTest;
 
-TEST(VarintBitmapFilterTest, VarintBitmapFmt) {
+TEST(VbBitmapFilterTest, VbFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
   while (num_keys <= (4 << 10)) {
@@ -170,11 +175,10 @@ TEST(VarintBitmapFilterTest, VarintBitmapFmt) {
   }
 }
 
-// Varint plus bitmap filter
 typedef FilterTest<BitmapBlock<VbPlusFormat>, BitmapKeyMustMatch>
-    VarintPlusBitmapFilterTest;
+    VbPlusBitmapFilterTest;
 
-TEST(VarintPlusBitmapFilterTest, VarintPlusBitmapFmt) {
+TEST(VbPlusBitmapFilterTest, VbPlusFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
   while (num_keys <= (4 << 10)) {
@@ -187,11 +191,10 @@ TEST(VarintPlusBitmapFilterTest, VarintPlusBitmapFmt) {
   }
 }
 
-// Partitioned Varint plus bitmap filter
 typedef FilterTest<BitmapBlock<FastVbPlusFormat>, BitmapKeyMustMatch>
-    PVarintPlusBitmapFilterTest;
+    FastVbPlusBitmapFilterTest;
 
-TEST(PVarintPlusBitmapFilterTest, PVarintPlusBitmapFmt) {
+TEST(FastVbPlusBitmapFilterTest, FastVbPlusFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
   while (num_keys <= (4 << 10)) {
@@ -204,11 +207,10 @@ TEST(PVarintPlusBitmapFilterTest, PVarintPlusBitmapFmt) {
   }
 }
 
-// PForDelta bitmap filter
 typedef FilterTest<BitmapBlock<PfDeltaFormat>, BitmapKeyMustMatch>
-    PForDeltaBitmapFilterTest;
+    PfDeltaBitmapFilterTest;
 
-TEST(PForDeltaBitmapFilterTest, PForDeltaBitmapFmt) {
+TEST(PfDeltaBitmapFilterTest, PfDeltaFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
   while (num_keys <= (4 << 10)) {
@@ -221,11 +223,10 @@ TEST(PForDeltaBitmapFilterTest, PForDeltaBitmapFmt) {
   }
 }
 
-// Partitioned PForDelta bitmap filter
 typedef FilterTest<BitmapBlock<FastPfDeltaFormat>, BitmapKeyMustMatch>
-    PpForDeltaBitmapFilterTest;
+    FastPfDeltaBitmapFilterTest;
 
-TEST(PpForDeltaBitmapFilterTest, PpForDeltaBitmapFmt) {
+TEST(FastPfDeltaBitmapFilterTest, FastPfDeltaFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
   while (num_keys <= (4 << 10)) {
@@ -238,11 +239,10 @@ TEST(PpForDeltaBitmapFilterTest, PpForDeltaBitmapFmt) {
   }
 }
 
-// Roaring bitmap filter
 typedef FilterTest<BitmapBlock<RoaringFormat>, BitmapKeyMustMatch>
     RoaringBitmapFilterTest;
 
-TEST(RoaringBitmapFilterTest, RoaringBitmapFmt) {
+TEST(RoaringBitmapFilterTest, RoaringFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
   while (num_keys <= (4 << 10)) {
@@ -456,139 +456,61 @@ class PlfsFilterQueryBench {
 
 static void BM_Usage() {
   fprintf(stderr,
-          "Use --bench=ft,<fmt> or --bench=qu,<fmt> to run benchmark.\n\n");
-  fprintf(stderr, "==Valid fmt are:\n");
-  fprintf(stderr, "bf      (bloom filter)\n");
-  fprintf(stderr, "bmp     (bitmap)\n");
-  fprintf(stderr, "vb      (bitmap, varint)\n");
-  fprintf(stderr, "vbp     (bitmap, modified varint)\n");
-  fprintf(stderr, "pvbp    (bipvbptmap, partitioned varint)\n");
-  fprintf(stderr, "pfdelta (bitmap, modified p-for-delta)\n");
-  fprintf(stderr, "r       (bitmap, modified roaring)\n");
+          "Use --bench=ft,<fmt> or --bench=fq,<fmt> to run benchmark.\n\n");
+  fprintf(stderr, "== valid fmt are:\n\n");
+  fprintf(stderr, " bf     (bloom filter)\n");
+  fprintf(stderr, " bmp    (bitmap, uncompressed)\n");
+  fprintf(stderr, " vb     (bitmap, varint)\n");
+  fprintf(stderr, " vbp    (bitmap, modified varint)\n");
+  fprintf(stderr, "fvbp    (bitmap, fast modified varint)\n");
+  fprintf(stderr, " pfd    (bitmap, modified p-for-delta)\n");
+  fprintf(stderr, "fpfd    (bitmap, fast modified p-for-delta)\n");
+  fprintf(stderr, " r      (bitmap, modified roaring)\n");
   fprintf(stderr, "\n");
 }
 
-static void BM_LogAndApply(bool read_or_write, const char* fmt) {
+typedef pdlfs::plfsio::FilterTester BM_Tester;
+template <typename T, BM_Tester M>
+static void BM_LogAndApply(const char* bench) {
+  if (strcmp(bench, "ft") == 0) {
+    typedef pdlfs::plfsio::PlfsFilterQueryBench<T, M> BM_bench;
+    BM_bench bench;
+    bench.LogAndApply();
+  } else if (strcmp(bench, "fq") == 0) {
+    typedef pdlfs::plfsio::PlfsFilterBench<T> BM_bench;
+    BM_bench bench;
+    bench.LogAndApply();
+  } else {
+    BM_Usage();
+  }
+}
+
+template <typename T>
+static void BM_Bmp(const char* bench) {
+  BM_LogAndApply<pdlfs::plfsio::BitmapBlock<T>,
+                 pdlfs::plfsio::BitmapKeyMustMatch>(bench);
+}
+
+static void BM_Parse(const char* bench, const char* fmt) {
   if (fmt[0] != ',') {
     BM_Usage();
   } else if (strcmp(fmt + 1, "bf") == 0) {
-    if (read_or_write) {
-      typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BloomBlock, pdlfs::plfsio::BloomKeyMayMatch>
-          PlfsBloomFilterQueryBench;
-      PlfsBloomFilterQueryBench bench;
-      bench.LogAndApply();
-    } else {
-      typedef pdlfs::plfsio::PlfsFilterBench<pdlfs::plfsio::BloomBlock>
-          PlfsBloomFilterBench;
-      PlfsBloomFilterBench bench;
-      bench.LogAndApply();
-    }
+    BM_LogAndApply<pdlfs::plfsio::BloomBlock, pdlfs::plfsio::BloomKeyMayMatch>(
+        bench);
   } else if (strcmp(fmt + 1, "bmp") == 0) {
-    if (read_or_write) {
-      typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::UncompressedFormat>,
-          pdlfs::plfsio::BitmapKeyMustMatch>
-          PlfsBitmapQueryBench;
-      PlfsBitmapQueryBench bench;
-      bench.LogAndApply();
-    } else {
-      typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::UncompressedFormat> >
-          PlfsBitmapBench;
-      PlfsBitmapBench bench;
-      bench.LogAndApply();
-    }
-  } else if (strcmp(fmt + 1, "vb") == 0) {
-    if (read_or_write) {
-      typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VbFormat>,
-          pdlfs::plfsio::BitmapKeyMustMatch>
-          PlfsVarintBitmapQueryBench;
-      PlfsVarintBitmapQueryBench bench;
-      bench.LogAndApply();
-    } else {
-      typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VbFormat> >
-          PlfsVarintBitmapBench;
-      PlfsVarintBitmapBench bench;
-      bench.LogAndApply();
-    }
-  } else if (strcmp(fmt + 1, "vbp") == 0) {
-    if (read_or_write) {
-      typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VbPlusFormat>,
-          pdlfs::plfsio::BitmapKeyMustMatch>
-          PlfsVarintPlusBitmapQueryBench;
-      PlfsVarintPlusBitmapQueryBench bench;
-      bench.LogAndApply();
-    } else {
-      typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::VbPlusFormat> >
-          PlfsVarintPlusBitmapBench;
-      PlfsVarintPlusBitmapBench bench;
-      bench.LogAndApply();
-    }
-  } else if (strcmp(fmt + 1, "pvbp") == 0) {
-    if (read_or_write) {
-      typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastVbPlusFormat>,
-          pdlfs::plfsio::BitmapKeyMustMatch>
-          PlfsPVarintPlusBitmapQueryBench;
-      PlfsPVarintPlusBitmapQueryBench bench;
-      bench.LogAndApply();
-    } else {
-      typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastVbPlusFormat> >
-          PlfsPVarintPlusBitmapBench;
-      PlfsPVarintPlusBitmapBench bench;
-      bench.LogAndApply();
-    }
-  } else if (strcmp(fmt + 1, "pfdelta") == 0) {
-    if (read_or_write) {
-      typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PfDeltaFormat>,
-          pdlfs::plfsio::BitmapKeyMustMatch>
-          PlfsPForDeltaBitmapQueryBench;
-      PlfsPForDeltaBitmapQueryBench bench;
-      bench.LogAndApply();
-    } else {
-      typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::PfDeltaFormat> >
-          PlfsPForDeltaBitmapBench;
-      PlfsPForDeltaBitmapBench bench;
-      bench.LogAndApply();
-    }
-  } else if (strcmp(fmt + 1, "ppfdelta") == 0) {
-    if (read_or_write) {
-      typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastPfDeltaFormat>,
-          pdlfs::plfsio::BitmapKeyMustMatch>
-          PlfsPpForDeltaBitmapQueryBench;
-      PlfsPpForDeltaBitmapQueryBench bench;
-      bench.LogAndApply();
-    } else {
-      typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::FastPfDeltaFormat> >
-          PlfsPpForDeltaBitmapBench;
-      PlfsPpForDeltaBitmapBench bench;
-      bench.LogAndApply();
-    }
+    BM_Bmp<pdlfs::plfsio::UncompressedFormat>(bench);
   } else if (strcmp(fmt + 1, "r") == 0) {
-    if (read_or_write) {
-      typedef pdlfs::plfsio::PlfsFilterQueryBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::RoaringFormat>,
-          pdlfs::plfsio::BitmapKeyMustMatch>
-          PlfsRoaringBitmapQueryBench;
-      PlfsRoaringBitmapQueryBench bench;
-      bench.LogAndApply();
-    } else {
-      typedef pdlfs::plfsio::PlfsFilterBench<
-          pdlfs::plfsio::BitmapBlock<pdlfs::plfsio::RoaringFormat> >
-          PlfsRoaringBitmapBench;
-      PlfsRoaringBitmapBench bench;
-      bench.LogAndApply();
-    }
+    BM_Bmp<pdlfs::plfsio::RoaringFormat>(bench);
+  } else if (strcmp(fmt + 1, "fvbp") == 0) {
+    BM_Bmp<pdlfs::plfsio::FastVbPlusFormat>(bench);
+  } else if (strcmp(fmt + 1, "vbp") == 0) {
+    BM_Bmp<pdlfs::plfsio::VbPlusFormat>(bench);
+  } else if (strcmp(fmt + 1, "vb") == 0) {
+    BM_Bmp<pdlfs::plfsio::VbFormat>(bench);
+  } else if (strcmp(fmt + 1, "fpfd") == 0) {
+    BM_Bmp<pdlfs::plfsio::FastPfDeltaFormat>(bench);
+  } else if (strcmp(fmt + 1, "pfd") == 0) {
+    BM_Bmp<pdlfs::plfsio::PfDeltaFormat>(bench);
   } else {
     BM_Usage();
   }
@@ -609,9 +531,9 @@ static void BM_Main(int* argc, char*** argv) {
   if (*argc <= 1) {
     BM_Usage();
   } else if (bench_name.starts_with("--bench=ft")) {
-    BM_LogAndApply(false, bench_name.c_str() + strlen("--bench=ft"));
-  } else if (bench_name.starts_with("--bench=qu")) {
-    BM_LogAndApply(true, bench_name.c_str() + strlen("--bench=qu"));
+    BM_Parse("ft", bench_name.c_str() + 10);
+  } else if (bench_name.starts_with("--bench=fq")) {
+    BM_Parse("fq", bench_name.c_str() + 10);
   } else {
     BM_Usage();
   }
