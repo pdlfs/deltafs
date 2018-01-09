@@ -1316,7 +1316,7 @@ class PlfsBfBench : protected PlfsIoBench {
 #endif
 
 static inline void BM_Usage() {
-  fprintf(stderr, "Use --bench=io or --bench=bf to select a benchmark.\n");
+  fprintf(stderr, "Use --bench=io or --bench=qy to select a benchmark.\n");
 }
 
 static void BM_LogAndApply(int* argc, char*** argv) {
@@ -1336,7 +1336,7 @@ static void BM_LogAndApply(int* argc, char*** argv) {
   } else if (bench_name == "--bench=io") {
     pdlfs::plfsio::PlfsIoBench bench;
     bench.LogAndApply();
-  } else if (bench_name == "--bench=bf") {
+  } else if (bench_name == "--bench=qy") {
     pdlfs::plfsio::PlfsBfBench bench;
     bench.LogAndApply();
   } else {
