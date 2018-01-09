@@ -774,13 +774,6 @@ class PlfsIoBench {
       owns_env = true;
     }
     options_.env = env_;
-
-    // Set filter type for io benchmark
-    options_.filter =
-        static_cast<FilterType>(GetOption("FILTER_TYPE", kFtBloomFilter));
-    options_.bm_fmt =
-        static_cast<BitmapFormat>(GetOption("FILTER_FORMAT", kFmtUncompressed));
-
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
     Env::Default()->SleepForMicroseconds(1000);
