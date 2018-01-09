@@ -100,10 +100,10 @@ static bool ParseBitmapFormat(const Slice& key, const Slice& value,
   } else if (value == "roar") {
     *result = kFmtRoaring;
     return true;
-  } else if (value == "fast-vbp") {
+  } else if (value == "fast-vb+") {
     *result = kFmtFastVarintPlus;
     return true;
-  } else if (value == "vbp") {
+  } else if (value == "vb+") {
     *result = kFmtVarintPlus;
     return true;
   } else if (value == "vb") {
@@ -1032,8 +1032,8 @@ std::string BitmapFilterOptions(const DirOptions& options) {
       snprintf(tmp, sizeof(tmp), "BMP (uncompressed, key_bits=%d)",
                int(options.bm_key_bits));
       return tmp;
-    case kFmtFastPfDelta:
-      snprintf(tmp, sizeof(tmp), "BMP (fast p-f-delta, key_bits=%d)",
+    case kFmtRoaring:
+      snprintf(tmp, sizeof(tmp), "BMP (roar, key_bits=%d)",
                int(options.bm_key_bits));
       return tmp;
     case kFmtFastVarintPlus:
@@ -1048,9 +1048,16 @@ std::string BitmapFilterOptions(const DirOptions& options) {
       snprintf(tmp, sizeof(tmp), "BMP (vb, key_bits=%d)",
                int(options.bm_key_bits));
       return tmp;
-    default:
-      snprintf(tmp, sizeof(tmp), "BMP (others, key_bits=%d)",
+    case kFmtFastPfDelta:
+      snprintf(tmp, sizeof(tmp), "BMP (fast p-f-delta, key_bits=%d)",
                int(options.bm_key_bits));
+      return tmp;
+    case kFmtPfDelta:
+      snprintf(tmp, sizeof(tmp), "BMP (p-f-delta, key_bits=%d)",
+               int(options.bm_key_bits));
+      return tmp;
+    default:
+      snprintf(tmp, sizeof(tmp), "BMP (others)");
       return tmp;
   }
 }
