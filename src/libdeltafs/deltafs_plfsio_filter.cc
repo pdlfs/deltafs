@@ -1061,7 +1061,7 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
 }
 
 // Return the corresponding bitmap format according to the given
-// bitmap block type.
+// filter block type. Return -1 for non-bitmap-oriented types.
 template <typename T>
 int BitmapFormatFromType() {
   if (typeid(T) == typeid(BitmapBlock<UncompressedFormat>)) {
@@ -1103,7 +1103,7 @@ int EmptyFilterBlock::chunk_type() {
 EmptyFilterBlock::EmptyFilterBlock(const DirOptions& o, size_t b) {
   space_.resize(0);
 #if __cplusplus >= 201103L
-  space_.shrink_to_fit();  // not available before c++11
+  space_.shrink_to_fit();  // Not available unitl c++11
 #endif
 }
 
