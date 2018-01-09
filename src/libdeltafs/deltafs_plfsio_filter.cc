@@ -1012,6 +1012,15 @@ Slice BitmapBlock<T>::Finish() {
   return space_;
 }
 
+template int BitmapFormatFromType<BitmapBlock<UncompressedFormat> >();
+template int BitmapFormatFromType<BitmapBlock<FastVbPlusFormat> >();
+template int BitmapFormatFromType<BitmapBlock<VbPlusFormat> >();
+template int BitmapFormatFromType<BitmapBlock<VbFormat> >();
+
+template int BitmapFormatFromType<BitmapBlock<FastPfDeltaFormat> >();
+template int BitmapFormatFromType<BitmapBlock<PfDeltaFormat> >();
+
+template int BitmapFormatFromType<BitmapBlock<RoaringFormat> >();
 template int BitmapFormatFromType<EmptyFilterBlock>();
 template int BitmapFormatFromType<BloomBlock>();
 
