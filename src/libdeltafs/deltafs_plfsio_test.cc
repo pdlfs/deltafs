@@ -864,7 +864,7 @@ class PlfsIoBench {
   static const char* ToString(FilterType type) {
     switch (type) {
       case kFtBloomFilter:
-        return "BF (bloom filter)";
+        return "BF (standard bloom filter)";
       case kFtBitmap:
         return "BM (bitmap)";
       default:
@@ -878,10 +878,14 @@ class PlfsIoBench {
         return "Uncompressed";
       case kFmtRoaring:
         return "R";
+      case kFmtFastVarintPlus:
+        return "FAST-VBP";
       case kFmtVarintPlus:
         return "VBP";
       case kFmtVarint:
         return "VB";
+      case kFmtFastPfDelta:
+        return "FAST-PFD";
       case kFmtPfDelta:
         return "PFD";
       default:
