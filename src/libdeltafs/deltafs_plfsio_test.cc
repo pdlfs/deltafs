@@ -309,12 +309,12 @@ TEST(PlfsIoTest, MultiMap) {
 
 namespace {
 
-class FakeWritableFile : public WritableFileWrapper {
+class EmulatedWritableFile : public WritableFileWrapper {
  public:
-  explicit FakeWritableFile(uint64_t bytes_ps, Histogram* hist = NULL,
-                            EventListener* lis = NULL)
+  explicit EmulatedWritableFile(uint64_t bytes_ps, Histogram* hist = NULL,
+                                EventListener* lis = NULL)
       : lis_(lis), prev_write_micros_(0), hist_(hist), bytes_ps_(bytes_ps) {}
-  virtual ~FakeWritableFile() {}
+  virtual ~EmulatedWritableFile() {}
 
   virtual Status Append(const Slice& data) {
     if (!data.empty()) {
@@ -351,12 +351,12 @@ class FakeWritableFile : public WritableFileWrapper {
   Status status_;
 };
 
-class FakeEnv : public EnvWrapper {
+class EmulatedEnv : public EnvWrapper {
  public:
-  FakeEnv(uint64_t bytes_ps, EventListener* lis)
+  EmulatedEnv(uint64_t bytes_ps, EventListener* lis)
       : EnvWrapper(Env::Default()), bytes_ps_(bytes_ps), lis_(lis) {}
 
-  virtual ~FakeEnv() {
+  virtual ~EmulatedEnv() {
     HistIter iter = hists_.begin();
     for (; iter != hists_.end(); ++iter) {
       delete iter->second;
@@ -368,9 +368,9 @@ class FakeEnv : public EnvWrapper {
     if (fname.ends_with(".dat")) {
       Histogram* hist = new Histogram;
       hists_.insert(std::make_pair(fname.ToString(), hist));
-      *r = new FakeWritableFile(bytes_ps_, hist, lis_);
+      *r = new EmulatedWritableFile(bytes_ps_, hist, lis_);
     } else {
-      *r = new FakeWritableFile(bytes_ps_);
+      *r = new EmulatedWritableFile(bytes_ps_);
     }
     return Status::OK();
   }
@@ -409,11 +409,15 @@ class PlfsIoBench {
       return kFmtUncompressed;
     } else if (strcmp(env, "r") == 0) {
       return kFmtRoaring;
+    } else if (strcmp(env, "fvbp") == 0) {
+      return kFmtFastVarintPlus;
     } else if (strcmp(env, "vbp") == 0) {
       return kFmtVarintPlus;
     } else if (strcmp(env, "vb") == 0) {
       return kFmtVarint;
-    } else if (strcmp(env, "pfdelta") == 0) {
+    } else if (strcmp(env, "fpfd") == 0) {
+      return kFmtFastPfDelta;
+    } else if (strcmp(env, "pfd") == 0) {
       return kFmtPfDelta;
     } else {
       return deffmt;
@@ -421,30 +425,29 @@ class PlfsIoBench {
   }
 
   static FilterType GetFilterType(FilterType deftype) {
-    static const FilterType bloom_filter = kFtBloomFilter;
-    static const FilterType bitmap_ft = kFtBitmap;
-    static const FilterType null = kFtNoFilter;
     const char* env = getenv("FT_TYPE");
     if (env == NULL) {
       return deftype;
     } else if (env[0] == 0) {
       return deftype;
     } else if (strcmp(env, "bf") == 0) {
-      return bloom_filter;
+      return kFtBloomFilter;
     } else if (strcmp(env, "bmp") == 0) {
-      return bitmap_ft;
-    } else if (strcmp(env, "vb") == 0) {
-      return bitmap_ft;
-    } else if (strcmp(env, "vbp") == 0) {
-      return bitmap_ft;
+      return kFtBitmap;
     } else if (strcmp(env, "r") == 0) {
-      return bitmap_ft;
-    } else if (strcmp(env, "pr") == 0) {
-      return bitmap_ft;
-    } else if (strcmp(env, "pfdelta") == 0) {
-      return bitmap_ft;
+      return kFtBitmap;
+    } else if (strcmp(env, "fvbp") == 0) {
+      return kFtBitmap;
+    } else if (strcmp(env, "vbp") == 0) {
+      return kFtBitmap;
+    } else if (strcmp(env, "vb") == 0) {
+      return kFtBitmap;
+    } else if (strcmp(env, "fpfd") == 0) {
+      return kFtBitmap;
+    } else if (strcmp(env, "pfd") == 0) {
+      return kFtBitmap;
     } else {
-      return null;
+      return kFtNoFilter;
     }
   }
 
@@ -531,16 +534,16 @@ class PlfsIoBench {
   PlfsIoBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
     mbps_ = GetOption("LINK_SPEED", 6);  // per LANL's configuration
     batched_insertion_ = GetOption("BATCHED_INSERTION", false);
-    batch_size_ = GetOption("BATCH_SIZE", 4) << 10;  // Files per batch op
+    batch_size_ = GetOption("BATCH_SIZE", 4) << 10;  // Files per batch
     ordered_keys_ = GetOption("ORDERED_KEYS", false);
     mfiles_ = GetOption("NUM_FILES", 16);  // 16 million per epoch
 
     num_threads_ = GetOption("NUM_THREADS", 4);  // Threads for bg compaction
-
+    // For advanced perf diagnosis
     print_events_ = GetOption("PRINT_EVENTS", false);
     force_fifo_ = GetOption("FORCE_FIFO", false);
 
-    options_.rank = 0;
+    options_.rank = 0;  // My process id
 #ifndef NDEBUG
     options_.mode = kDmUniqueKey;
 #else
@@ -643,16 +646,17 @@ class PlfsIoBench {
    public:
     BigBatch(const DirOptions& options, const std::vector<uint32_t>& keys,
              int base_offset, int size)
-        : key_size_(options.key_size),
+        : key_size_(options.key_size),  // Num bytes for each key
           dummy_val_(options.value_size, 'x'),
           options_(options),
-          keys_(keys),
+          keys_(keys),  // Pre-generated user keys, optional
           use_external_keys_(!keys_.empty()),
           rnd_insertion_(!options_.skip_sort),
-          base_offset_(static_cast<uint32_t>(base_offset)),
-          size_(static_cast<uint32_t>(size)),
-          offset_(size_) {
+          base_offset_(static_cast<uint32_t>(base_offset)),  // Base location
+          size_(static_cast<uint32_t>(size)),                // Batch size
+          offset_(size_) {  // Current cursor location
       ASSERT_TRUE(key_size_ <= sizeof(key_));
+      // Initialize the buffer space for keys
       memset(key_, 0, sizeof(key_));
       if (use_external_keys_) {  // Keys are pre-generated as 32-bit ints
         ASSERT_TRUE(key_size_ >= 4);
@@ -704,8 +708,8 @@ class PlfsIoBench {
 
     void MakeKey() {
       const uint32_t index = base_offset_ + offset_;
-      if (use_external_keys_) {  // Use pre-generated keys
-        assert(index < keys_.size());
+      if (use_external_keys_) {  // Use pre-generated user keys
+        ASSERT_TRUE(index < keys_.size());
         EncodeFixed32(key_, keys_[index]);
       } else if (rnd_insertion_) {  // Random insertion
         // Key collisions are still possible, though very unlikely
@@ -766,7 +770,7 @@ class PlfsIoBench {
     bool owns_env = false;
     if (env_ == NULL) {
       const uint64_t speed = static_cast<uint64_t>(mbps_ << 20);
-      env_ = new FakeEnv(speed, &printer_);
+      env_ = new EmulatedEnv(speed, &printer_);
       owns_env = true;
     }
     options_.env = env_;
@@ -991,7 +995,7 @@ class PlfsIoBench {
     fprintf(stderr, "           Avg I/O Size: %.3f MiB\n",
             1.0 * stats.data_bytes / stats.data_ops / ki / ki);
     if (owns_env) {
-      const Histogram* hist = dynamic_cast<FakeEnv*>(env_)->GetHist(".dat");
+      const Histogram* hist = dynamic_cast<EmulatedEnv*>(env_)->GetHist(".dat");
       ASSERT_TRUE(hist != NULL);
       fprintf(stderr, "                   MTBW: %.3f s\n",
               hist->Average() / k / k);
