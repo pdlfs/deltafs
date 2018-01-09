@@ -10,11 +10,13 @@
 #include "deltafs_plfsio_filter.h"
 #include "deltafs_plfsio_format.h"
 
-#include "deltafs_plfsio.h"
+#include "deltafs_plfsio.h"  // For DirOptions
+
+#include "pdlfs-common/logging.h"
 
 #include <assert.h>
 #include <algorithm>
-#include <typeinfo>  // operator typeid
+#include <typeinfo>  // For operator typeid
 
 namespace pdlfs {
 namespace plfsio {
@@ -922,7 +924,7 @@ int BitmapBlock<T>::chunk_type() {
 
 template <typename T>
 BitmapBlock<T>::BitmapBlock(const DirOptions& options, size_t bytes_to_reserve)
-    : key_bits_(options.bm_key_bits) {
+    : key_bits_(options.bm_key_bits), bm_fmt_(int(options.bm_fmt)) {
   // Reserve extra 2 bytes for storing key_bits and the compression type
   if (bytes_to_reserve != 0) {
     space_.reserve(bytes_to_reserve + 2);
@@ -969,6 +971,27 @@ void BitmapBlock<T>::AddKey(const Slice& key) {
 }
 
 template <typename T>
+int BitmapFormatFromType() {
+  if (typeid(T) == typeid(UncompressedFormat)) {
+    return static_cast<int>(kFmtUncompressed);
+  } else if (typeid(T) == typeid(VbFormat)) {
+    return static_cast<int>(kFmtVarint);
+  } else if (typeid(T) == typeid(VbPlusFormat)) {
+    return static_cast<int>(kFmtVarintPlus);
+  } else if (typeid(T) == typeid(FastVbPlusFormat)) {
+    return static_cast<int>(kFmtFastVarintPlus);
+  } else if (typeid(T) == typeid(PfDeltaFormat)) {
+    return static_cast<int>(kFmtPfDelta);
+  } else if (typeid(T) == typeid(FastPfDeltaFormat)) {
+    return static_cast<int>(kFmtFastPfDelta);
+  } else if (typeid(T) == typeid(RoaringFormat)) {
+    return static_cast<int>(kFmtRoaring);
+  } else {
+    return -1;
+  }
+}
+
+template <typename T>
 Slice BitmapBlock<T>::Finish() {
   assert(fmt_ != NULL);
   finished_ = true;
@@ -976,22 +999,14 @@ Slice BitmapBlock<T>::Finish() {
   space_.resize(len);
   // Remember the size of the domain space
   space_.push_back(static_cast<char>(key_bits_));
-  // Remember the compression type
-  if (typeid(T) == typeid(UncompressedFormat)) {
-    space_.push_back(static_cast<char>(kFmtUncompressed));
-  } else if (typeid(T) == typeid(VbFormat)) {
-    space_.push_back(static_cast<char>(kFmtVarint));
-  } else if (typeid(T) == typeid(VbPlusFormat)) {
-    space_.push_back(static_cast<char>(kFmtVarintPlus));
-  } else if (typeid(T) == typeid(FastVbPlusFormat)) {
-    space_.push_back(static_cast<char>(kFmtFastVarintPlus));
-  } else if (typeid(T) == typeid(PfDeltaFormat)) {
-    space_.push_back(static_cast<char>(kFmtPfDelta));
-  } else if (typeid(T) == typeid(FastPfDeltaFormat)) {
-    space_.push_back(static_cast<char>(kFmtFastPfDelta));
-  } else if (typeid(T) == typeid(RoaringFormat)) {
-    space_.push_back(static_cast<char>(kFmtRoaring));
+  // Remember the bitmap format
+  const int fmt = BitmapFormatFromType<T>();
+#ifndef NDEBUG
+  if (fmt != bm_fmt_) {
+    Warn(__LOG_ARGS__, "Bitmap format option does not match class type");
   }
+#endif
+  space_.push_back(static_cast<char>(fmt));
   return space_;
 }
 

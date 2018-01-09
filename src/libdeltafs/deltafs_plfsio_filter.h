@@ -93,6 +93,9 @@ class FastVbPlusFormat;
 class VbPlusFormat;
 class VbFormat;
 
+template <typename T>
+int BitmapFormatFromType();  // Return the corresponding bitmap format.
+
 // A simple filter backed by a bitmap.
 template <typename T = UncompressedFormat>
 class BitmapBlock {
@@ -124,14 +127,16 @@ class BitmapBlock {
   // Return the underlying buffer space.
   std::string* buffer_store() { return &space_; }
 
+  // Report total filter memory usage
   size_t memory_usage() const;
-  static int chunk_type();  // Return the corresponding chunk type
+  static int chunk_type();  // Return the corresponding LOG chunk type
 
  private:
   // No copying allowed
   void operator=(const BitmapBlock&);
   BitmapBlock(const BitmapBlock&);
   const size_t key_bits_;  // Key size in bits
+  const int bm_fmt_;
 
   bool finished_;  // If Finish() has been called
   std::string space_;
