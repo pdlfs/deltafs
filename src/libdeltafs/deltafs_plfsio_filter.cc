@@ -970,21 +970,23 @@ void BitmapBlock<T>::AddKey(const Slice& key) {
   fmt_->Set(i);
 }
 
+// Return the corresponding bitmap format according to the given
+// bitmap block type.
 template <typename T>
 int BitmapFormatFromType() {
-  if (typeid(T) == typeid(UncompressedFormat)) {
+  if (typeid(T) == typeid(BitmapBlock<UncompressedFormat>)) {
     return static_cast<int>(kFmtUncompressed);
-  } else if (typeid(T) == typeid(VbFormat)) {
-    return static_cast<int>(kFmtVarint);
-  } else if (typeid(T) == typeid(VbPlusFormat)) {
-    return static_cast<int>(kFmtVarintPlus);
-  } else if (typeid(T) == typeid(FastVbPlusFormat)) {
+  } else if (typeid(T) == typeid(BitmapBlock<FastVbPlusFormat>)) {
     return static_cast<int>(kFmtFastVarintPlus);
-  } else if (typeid(T) == typeid(PfDeltaFormat)) {
-    return static_cast<int>(kFmtPfDelta);
-  } else if (typeid(T) == typeid(FastPfDeltaFormat)) {
+  } else if (typeid(T) == typeid(BitmapBlock<VbPlusFormat>)) {
+    return static_cast<int>(kFmtVarintPlus);
+  } else if (typeid(T) == typeid(BitmapBlock<VbFormat>)) {
+    return static_cast<int>(kFmtVarint);
+  } else if (typeid(T) == typeid(BitmapBlock<FastPfDeltaFormat>)) {
     return static_cast<int>(kFmtFastPfDelta);
-  } else if (typeid(T) == typeid(RoaringFormat)) {
+  } else if (typeid(T) == typeid(BitmapBlock<PfDeltaFormat>)) {
+    return static_cast<int>(kFmtPfDelta);
+  } else if (typeid(T) == typeid(BitmapBlock<RoaringFormat>)) {
     return static_cast<int>(kFmtRoaring);
   } else {
     return -1;
@@ -1000,7 +1002,7 @@ Slice BitmapBlock<T>::Finish() {
   // Remember the size of the domain space
   space_.push_back(static_cast<char>(key_bits_));
   // Remember the bitmap format
-  const int fmt = BitmapFormatFromType<T>();
+  const int fmt = BitmapFormatFromType<BitmapBlock<T> >();
 #ifndef NDEBUG
   if (fmt != bm_fmt_) {
     Warn(__LOG_ARGS__, "Bitmap format option does not match class type");
@@ -1009,6 +1011,9 @@ Slice BitmapBlock<T>::Finish() {
   space_.push_back(static_cast<char>(fmt));
   return space_;
 }
+
+template int BitmapFormatFromType<EmptyFilterBlock>();
+template int BitmapFormatFromType<BloomBlock>();
 
 template <typename T>
 size_t BitmapBlock<T>::memory_usage() const {

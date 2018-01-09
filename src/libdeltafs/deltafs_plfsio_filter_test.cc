@@ -36,6 +36,7 @@ class FilterTest {
  public:
   FilterTest(size_t key_bits = 24) : key_bits_(key_bits), ft_(NULL) {
     options_.bf_bits_per_key = 10;  // Override the defaults
+    options_.bm_fmt = static_cast<BitmapFormat>(BitmapFormatFromType<T>());
     options_.bm_key_bits = key_bits_;
   }
 
@@ -264,7 +265,8 @@ class PlfsFilterBench {
 
   explicit PlfsFilterBench(size_t key_bits = 24)
       : num_tables_(GetOption("TABLE_NUM", 64)), key_bits_(key_bits) {
-    options_.bf_bits_per_key = 10;
+    options_.bf_bits_per_key = GetOption("BF_BITS", 10);
+    options_.bm_fmt = static_cast<BitmapFormat>(BitmapFormatFromType<T>());
     options_.bm_key_bits = key_bits_;
 
     fprintf(stderr, "Generating keys ... (may take a while)\n");
