@@ -970,29 +970,6 @@ void BitmapBlock<T>::AddKey(const Slice& key) {
   fmt_->Set(i);
 }
 
-// Return the corresponding bitmap format according to the given
-// bitmap block type.
-template <typename T>
-int BitmapFormatFromType() {
-  if (typeid(T) == typeid(BitmapBlock<UncompressedFormat>)) {
-    return static_cast<int>(kFmtUncompressed);
-  } else if (typeid(T) == typeid(BitmapBlock<FastVbPlusFormat>)) {
-    return static_cast<int>(kFmtFastVarintPlus);
-  } else if (typeid(T) == typeid(BitmapBlock<VbPlusFormat>)) {
-    return static_cast<int>(kFmtVarintPlus);
-  } else if (typeid(T) == typeid(BitmapBlock<VbFormat>)) {
-    return static_cast<int>(kFmtVarint);
-  } else if (typeid(T) == typeid(BitmapBlock<FastPfDeltaFormat>)) {
-    return static_cast<int>(kFmtFastPfDelta);
-  } else if (typeid(T) == typeid(BitmapBlock<PfDeltaFormat>)) {
-    return static_cast<int>(kFmtPfDelta);
-  } else if (typeid(T) == typeid(BitmapBlock<RoaringFormat>)) {
-    return static_cast<int>(kFmtRoaring);
-  } else {
-    return -1;
-  }
-}
-
 template <typename T>
 Slice BitmapBlock<T>::Finish() {
   assert(fmt_ != NULL);
@@ -1011,18 +988,6 @@ Slice BitmapBlock<T>::Finish() {
   space_.push_back(static_cast<char>(fmt));
   return space_;
 }
-
-template int BitmapFormatFromType<BitmapBlock<UncompressedFormat> >();
-template int BitmapFormatFromType<BitmapBlock<FastVbPlusFormat> >();
-template int BitmapFormatFromType<BitmapBlock<VbPlusFormat> >();
-template int BitmapFormatFromType<BitmapBlock<VbFormat> >();
-
-template int BitmapFormatFromType<BitmapBlock<FastPfDeltaFormat> >();
-template int BitmapFormatFromType<BitmapBlock<PfDeltaFormat> >();
-
-template int BitmapFormatFromType<BitmapBlock<RoaringFormat> >();
-template int BitmapFormatFromType<EmptyFilterBlock>();
-template int BitmapFormatFromType<BloomBlock>();
 
 template <typename T>
 size_t BitmapBlock<T>::memory_usage() const {
@@ -1095,7 +1060,45 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   return BitmapTestKey(fmt, k, key_bits, bitmap);
 }
 
-int EmptyFilterBlock::chunk_type() { return static_cast<int>(kUnknown); }
+// Return the corresponding bitmap format according to the given
+// bitmap block type.
+template <typename T>
+int BitmapFormatFromType() {
+  if (typeid(T) == typeid(BitmapBlock<UncompressedFormat>)) {
+    return static_cast<int>(kFmtUncompressed);
+  } else if (typeid(T) == typeid(BitmapBlock<FastVbPlusFormat>)) {
+    return static_cast<int>(kFmtFastVarintPlus);
+  } else if (typeid(T) == typeid(BitmapBlock<VbPlusFormat>)) {
+    return static_cast<int>(kFmtVarintPlus);
+  } else if (typeid(T) == typeid(BitmapBlock<VbFormat>)) {
+    return static_cast<int>(kFmtVarint);
+  } else if (typeid(T) == typeid(BitmapBlock<FastPfDeltaFormat>)) {
+    return static_cast<int>(kFmtFastPfDelta);
+  } else if (typeid(T) == typeid(BitmapBlock<PfDeltaFormat>)) {
+    return static_cast<int>(kFmtPfDelta);
+  } else if (typeid(T) == typeid(BitmapBlock<RoaringFormat>)) {
+    return static_cast<int>(kFmtRoaring);
+  } else {
+    return -1;
+  }
+}
+
+// Instantiate for all potential filter block types.
+template int BitmapFormatFromType<BitmapBlock<UncompressedFormat> >();
+template int BitmapFormatFromType<BitmapBlock<FastVbPlusFormat> >();
+template int BitmapFormatFromType<BitmapBlock<VbPlusFormat> >();
+template int BitmapFormatFromType<BitmapBlock<VbFormat> >();
+
+template int BitmapFormatFromType<BitmapBlock<FastPfDeltaFormat> >();
+template int BitmapFormatFromType<BitmapBlock<PfDeltaFormat> >();
+
+template int BitmapFormatFromType<BitmapBlock<RoaringFormat> >();
+template int BitmapFormatFromType<EmptyFilterBlock>();
+template int BitmapFormatFromType<BloomBlock>();
+
+int EmptyFilterBlock::chunk_type() {
+  return static_cast<int>(kUnknown);  // Dummy block type
+}
 
 EmptyFilterBlock::EmptyFilterBlock(const DirOptions& o, size_t b) {
   space_.resize(0);
