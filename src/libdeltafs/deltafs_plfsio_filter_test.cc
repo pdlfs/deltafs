@@ -145,7 +145,6 @@ TEST(BloomFilterTest, BloomFormat) {
 
 typedef FilterTest<BitmapBlock<UncompressedFormat>, BitmapKeyMustMatch>
     UncompressedBitmapFilterTest;
-
 TEST(UncompressedBitmapFilterTest, UncompressedFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
@@ -161,7 +160,6 @@ TEST(UncompressedBitmapFilterTest, UncompressedFormat) {
 
 typedef FilterTest<BitmapBlock<VbFormat>, BitmapKeyMustMatch>
     VbBitmapFilterTest;
-
 TEST(VbBitmapFilterTest, VbFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
@@ -177,7 +175,6 @@ TEST(VbBitmapFilterTest, VbFormat) {
 
 typedef FilterTest<BitmapBlock<VbPlusFormat>, BitmapKeyMustMatch>
     VbPlusBitmapFilterTest;
-
 TEST(VbPlusBitmapFilterTest, VbPlusFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
@@ -193,7 +190,6 @@ TEST(VbPlusBitmapFilterTest, VbPlusFormat) {
 
 typedef FilterTest<BitmapBlock<FastVbPlusFormat>, BitmapKeyMustMatch>
     FastVbPlusBitmapFilterTest;
-
 TEST(FastVbPlusBitmapFilterTest, FastVbPlusFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
@@ -209,7 +205,6 @@ TEST(FastVbPlusBitmapFilterTest, FastVbPlusFormat) {
 
 typedef FilterTest<BitmapBlock<PfDeltaFormat>, BitmapKeyMustMatch>
     PfDeltaBitmapFilterTest;
-
 TEST(PfDeltaBitmapFilterTest, PfDeltaFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
@@ -225,7 +220,6 @@ TEST(PfDeltaBitmapFilterTest, PfDeltaFormat) {
 
 typedef FilterTest<BitmapBlock<FastPfDeltaFormat>, BitmapKeyMustMatch>
     FastPfDeltaBitmapFilterTest;
-
 TEST(FastPfDeltaBitmapFilterTest, FastPfDeltaFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
@@ -241,7 +235,6 @@ TEST(FastPfDeltaBitmapFilterTest, FastPfDeltaFormat) {
 
 typedef FilterTest<BitmapBlock<RoaringFormat>, BitmapKeyMustMatch>
     RoaringBitmapFilterTest;
-
 TEST(RoaringBitmapFilterTest, RoaringFormat) {
   Random rnd(301);
   uint32_t num_keys = 0;
@@ -255,21 +248,21 @@ TEST(RoaringBitmapFilterTest, RoaringFormat) {
   }
 }
 
-template <typename T, size_t key_bits = 24>
+template <typename T>
 class PlfsFilterBench {
  public:
   static int GetOption(const char* key, int defval) {
     const char* env = getenv(key);
     if (env == NULL) {
       return defval;
-    } else if (strlen(env) == 0) {
+    } else if (env[0] == 0) {
       return defval;
     } else {
       return atoi(env);
     }
   }
 
-  explicit PlfsFilterBench()
+  explicit PlfsFilterBench(size_t key_bits = 24)
       : num_tables_(GetOption("TABLE_NUM", 64)), key_bits_(key_bits) {
     options_.bf_bits_per_key = 10;
     options_.bm_key_bits = key_bits_;
@@ -283,13 +276,29 @@ class PlfsFilterBench {
     ft_ = new T(options_, 0);
   }
 
-  ~PlfsFilterBench() { delete ft_; }
+  ~PlfsFilterBench() {
+    if (ft_ != NULL) {
+      delete ft_;
+    }
+  }
 
 #if defined(PDLFS_PLATFORM_POSIX)
   static inline double ToSecs(const struct timeval* tv) {
     return tv->tv_sec + tv->tv_usec / 1000.0 / 1000.0;
   }
 #endif
+
+  Slice BuildFilter(size_t num_keys, std::vector<uint32_t>::iterator& it) {
+    char tmp[4];
+    Slice key(tmp, sizeof(tmp));
+    ft_->Reset(num_keys);
+    for (size_t i = 0; i < num_keys; i++) {
+      EncodeFixed32(tmp, *it);
+      ft_->AddKey(key);
+      ++it;
+    }
+    return ft_->Finish();
+  }
 
   void LogAndApply() {
     const double k = 1000.0, ki = 1024.0;
@@ -300,20 +309,12 @@ class PlfsFilterBench {
     ASSERT_EQ(r0, 0);
 #endif
     fprintf(stderr, "Inserting keys ... (%d tables)\n", int(num_tables_));
-    size_t size = 0;  // Total filter size
+    size_t size = 0;  // Accumulated filter size
     const size_t num_keys = (1u << key_bits_) / num_tables_;  // Keys per table
     std::vector<uint32_t>::iterator it = keys_.begin();
-    std::string buf;  // Buffer space for keys
     for (size_t j = 0; j < num_tables_; j++) {
       fprintf(stderr, "\r%d/%d", int(j), int(num_tables_));
-      ft_->Reset(num_keys);
-      for (size_t i = 0; i < num_keys; i++) {
-        buf.clear();
-        PutFixed32(&buf, *it);
-        ft_->AddKey(buf);
-        ++it;
-      }
-      Slice contents = ft_->Finish();
+      Slice contents = BuildFilter(num_keys, it);
       size += contents.size();
     }
     fprintf(stderr, "\r%d/%d\n", int(num_tables_), int(num_tables_));
@@ -322,13 +323,13 @@ class PlfsFilterBench {
     const uint64_t dura = end - start;
 
     fprintf(stderr, "----------------------------------------\n");
-    fprintf(stderr, "  Keys per filter: %d\n", int(num_keys));
-    fprintf(stderr, "      Num filters: %d\n", int(num_tables_));
-    fprintf(stderr, "Total filter size: %.2f MiB\n", 1.0 * size / ki / ki);
+    fprintf(stderr, "  Keys Per Filter: %d\n", int(num_keys));
+    fprintf(stderr, "      Num Filters: %d\n", int(num_tables_));
+    fprintf(stderr, "Total Filter Size: %.2f MiB\n", 1.0 * size / ki / ki);
     fprintf(stderr, "          Density: %.2f%%\n", 100.0 / num_tables_);
-    fprintf(stderr, "     Storage cost: %.2f (bits per key)\n",
+    fprintf(stderr, "     Storage Cost: %.2f (bits per key)\n",
             8.0 * size / (num_keys * num_tables_));
-    fprintf(stderr, " Memory footprint: %.2f MiB\n",
+    fprintf(stderr, " Memory Footprint: %.2f MiB\n",
             1.0 * ft_->memory_usage() / ki / ki);
 
 #if defined(PDLFS_PLATFORM_POSIX)
@@ -344,14 +345,15 @@ class PlfsFilterBench {
     CPU_ZERO(&cpu_set);
     int r2 = sched_getaffinity(getpid(), sizeof(cpu_set), &cpu_set);
     ASSERT_EQ(r2, 0);
-    fprintf(stderr, "    Num CPU Cores: %d\n", CPU_COUNT(&cpu_set));
+    const int cc = CPU_COUNT(&cpu_set);
+    fprintf(stderr, "    Num CPU Cores: %d\n", cc);
     fprintf(stderr, "        CPU Usage: %.1f%%\n",
-            k * k * (utime + stime) / dura * 100);
+            k * k * (utime + stime) / dura / cc * 100);
 #endif
 #endif
   }
 
- private:
+ protected:
   const size_t num_tables_;  // Num tables per epoch
   const size_t key_bits_;
   std::vector<uint32_t> keys_;
@@ -360,88 +362,47 @@ class PlfsFilterBench {
 };
 
 template <typename T, FilterTester tester>
-class PlfsFilterQueryBench {
+class PlfsFilterQueryBench : public PlfsFilterBench<T> {
  public:
-  PlfsFilterQueryBench(size_t table_num = 64)
-      : table_num_(table_num), rnd_(301) {
-    options_.bf_bits_per_key = 10;  // Override the defaults
-    options_.bm_key_bits = 24;
-    ft_ = new T(options_, 0);  // Does not reserve memory
-  }
+  explicit PlfsFilterQueryBench(size_t key_bits = 24)
+      : PlfsFilterBench<T>(key_bits) {}
 
-  ~PlfsFilterQueryBench() { delete ft_; }
+  void RunQueries(size_t num_keys, std::vector<uint32_t>::iterator& it,
+                  const Slice& filter) {
+    const size_t ckpt = num_keys / 100;
+    char tmp[4];
+    Slice key(tmp, sizeof(tmp));
+    for (size_t i = 0; i < num_keys; i++) {
+      if (i % ckpt == 0) {
+        fprintf(stderr, "\r%d/%d", int(i), int(num_keys));
+      }
+      EncodeFixed32(tmp, *it);
+      tester(key, filter);
+      ++it;
+    }
+    fprintf(stderr, "\r%d/%d\n", int(num_keys), int(num_keys));
+  }
 
   void LogAndApply() {
-    BuildFilter();
-    RunQueries();
-  }
-
- protected:
-  void BuildFilter() {
-    fprintf(stderr, "\rInserting key...");
-    int key_num = (1 << 24) / table_num_;
-    ft_->Reset(key_num);
-    uint32_t max = 0;
-    for (int i = 0; i < key_num; i++) {
-      uint32_t key = rnd_.Uniform(1 << 24);  // Random 24-bit keys
-      max = key > max ? key : max;
-      std::string key_seq;
-      PutFixed32(&key_seq, key);
-      keys_.push_back(key_seq);
-      ft_->AddKey(key_seq);
-    }
-    ft_->Finish();
-    fprintf(stderr, "\rFilter construction finished! max key: %u\n", max);
-  }
-
-  void RunQueries() {
-    int key_num = (1 << 24) / table_num_;
-    const uint64_t start = Env::Default()->NowMicros();
-    uint64_t now = start;
-    uint64_t max = 0;
-    uint64_t min = -1;
-    fprintf(stderr, "Query keys...\n");
-    int i = 0;
-    for (std::vector<std::string>::iterator it = keys_.begin();
-         it != keys_.end(); ++it, ++i) {
-      if (i % (1 << 15) == (1 << 15) - 1) {
-        fprintf(stderr, "\r%.2f%%", 100.0 * (i + 1) / key_num);
-      }
-      tester(*it, *(ft_->buffer_store()));
-      uint64_t interval = Env::Default()->NowMicros() - now;
-      if (interval < min) {
-        min = interval;
-      } else if (interval > max) {
-        max = interval;
-      }
-      latency_.Add(interval);
-      now = Env::Default()->NowMicros();
-    }
-
-    uint64_t dura = Env::Default()->NowMicros() - start;
-
-    Report(dura, min, max);
-  }
-
-  void Report(uint64_t dura, double min, double max) {
     const double k = 1000.0;
-    fprintf(stderr, "\n----------------------------------------\n");
+    const size_t num_keys = (1u << this->key_bits_) / this->num_tables_;
+    fprintf(stderr, "Inserting keys ... (%d keys)\n", int(num_keys));
+    std::vector<uint32_t>::iterator it = this->keys_.begin();
+    const std::string contents = this->BuildFilter(num_keys, it).ToString();
+    fprintf(stderr, "Re-shuffling keys ...\n");
+    std::random_shuffle(this->keys_.begin(), it);
+    fprintf(stderr, "Done!\n");
+    fprintf(stderr, "Testing ...\n");
+    const uint64_t start = Env::Default()->NowMicros();
+    it = this->keys_.begin();
+    RunQueries(num_keys, it, contents);
+    fprintf(stderr, "Done!\n");
+    uint64_t dura = Env::Default()->NowMicros() - start;
+    fprintf(stderr, "----------------------------------------\n");
     fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
-    fprintf(stderr, "          Avg Read Time: %.3f us (per key)\n",
-            latency_.Average());
-    fprintf(stderr, "       Median Read Time: %.3f us (per key)\n",
-            latency_.Median());
-    fprintf(stderr, "          Min Read Time: %.3f us (per key)\n", min);
-    fprintf(stderr, "          Max Read Time: %.3f us (per key)\n", max);
+    fprintf(stderr, " Avg. Latency Per Query: %.3f us\n",
+            double(dura) / num_keys);
   }
-
- private:
-  size_t table_num_;
-  Random rnd_;
-  DirOptions options_;
-  std::vector<std::string> keys_;
-  T* ft_;
-  Histogram latency_;
 };
 
 }  // namespace plfsio
@@ -472,11 +433,11 @@ static void BM_Usage() {
 typedef pdlfs::plfsio::FilterTester BM_Tester;
 template <typename T, BM_Tester M>
 static void BM_LogAndApply(const char* bench) {
-  if (strcmp(bench, "ft") == 0) {
+  if (strcmp(bench, "fq") == 0) {
     typedef pdlfs::plfsio::PlfsFilterQueryBench<T, M> BM_bench;
     BM_bench bench;
     bench.LogAndApply();
-  } else if (strcmp(bench, "fq") == 0) {
+  } else if (strcmp(bench, "ft") == 0) {
     typedef pdlfs::plfsio::PlfsFilterBench<T> BM_bench;
     BM_bench bench;
     bench.LogAndApply();
