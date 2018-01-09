@@ -1036,8 +1036,33 @@ template class BitmapBlock<PfDeltaFormat>;
 
 template class BitmapBlock<RoaringFormat>;
 
-// Return true if the target key matches a given bitmap filter. Unlike bloom
-// filters, bitmap filters are designed with no false positives.
+// Return true if the target key is present in the given bitmap by
+// checking its binary representation.
+static bool BitmapTestKey(int fmt, uint32_t k, size_t key_bits,
+                          const Slice& rep) {
+#define BMP_TESTKEY(T) T::Test(k, key_bits, rep)
+  if (fmt == kFmtUncompressed) {
+    return BMP_TESTKEY(UncompressedFormat);
+  } else if (fmt == kFmtFastVarintPlus) {
+    return BMP_TESTKEY(FastVbPlusFormat);
+  } else if (fmt == kFmtVarintPlus) {
+    return BMP_TESTKEY(VbPlusFormat);
+  } else if (fmt == kFmtVarint) {
+    return BMP_TESTKEY(VbFormat);
+  } else if (fmt == kFmtFastPfDelta) {
+    return BMP_TESTKEY(FastPfDeltaFormat);
+  } else if (fmt == kFmtPfDelta) {
+    return BMP_TESTKEY(PfDeltaFormat);
+  } else if (fmt == kFmtRoaring) {
+    return BMP_TESTKEY(RoaringFormat);
+  } else {  // Consider it a match for unknown formats
+    return true;
+  }
+#undef BMP_TESTKEY
+}
+
+// Return true if the target key matches a given bitmap filter input. Note that
+// unlike bloom filters, bitmap filters are designed with no false positives.
 bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   const size_t len = input.size();
   if (len < 2) {
@@ -1047,34 +1072,18 @@ bool BitmapKeyMustMatch(const Slice& key, const Slice& input) {
   Slice bitmap =
       input;  // Net bitmap representation (maybe in a compressed form)
   bitmap.remove_suffix(2);
-  uint32_t i = BitmapIndex(key);
+  uint32_t k = BitmapIndex(key);
 
   // Recover the domain space
   const size_t key_bits = static_cast<unsigned char>(input[input.size() - 2]);
 
   size_t bits = 1u << key_bits;
-  if (i >= bits) {
+  if (k >= bits) {
     return false;  // Out of bound
   }
 
-  const int compression = input[input.size() - 1];
-  if (compression == kFmtRoaring) {
-    return RoaringFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFmtFastVarintPlus) {
-    return FastVbPlusFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFmtVarintPlus) {
-    return VbPlusFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFmtVarint) {
-    return VbFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFmtFastPfDelta) {
-    return FastPfDeltaFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFmtPfDelta) {
-    return PfDeltaFormat::Test(i, key_bits, bitmap);
-  } else if (compression == kFmtUncompressed) {
-    return UncompressedFormat::Test(i, key_bits, bitmap);
-  } else {
-    return true;
-  }
+  const int fmt = input[input.size() - 1];
+  return BitmapTestKey(fmt, k, key_bits, bitmap);
 }
 
 int EmptyFilterBlock::chunk_type() { return static_cast<int>(kUnknown); }
