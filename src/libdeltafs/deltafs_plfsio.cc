@@ -97,10 +97,10 @@ static bool ParseBitmapFormat(const Slice& key, const Slice& value,
   if (value == "uncompressed") {
     *result = kFmtUncompressed;
     return true;
-  } else if (value == "fast-p-f-delta" || value == "fpfd") {
-    *result = kFmtFastPfDelta;
+  } else if (value == "roar") {
+    *result = kFmtRoaring;
     return true;
-  } else if (value == "fast-vbp" || value == "fvbp") {
+  } else if (value == "fast-vbp") {
     *result = kFmtFastVarintPlus;
     return true;
   } else if (value == "vbp") {
@@ -108,6 +108,12 @@ static bool ParseBitmapFormat(const Slice& key, const Slice& value,
     return true;
   } else if (value == "vb") {
     *result = kFmtVarint;
+    return true;
+  } else if (value == "fast-p-f-delta") {
+    *result = kFmtFastPfDelta;
+    return true;
+  } else if (value == "p-f-delta") {
+    *result = kFmtPfDelta;
     return true;
   } else {
     Warn(__LOG_ARGS__, "Unknown bitmap format: %s=%s, option ignored",
