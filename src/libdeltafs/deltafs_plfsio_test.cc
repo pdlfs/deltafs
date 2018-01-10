@@ -857,7 +857,7 @@ class PlfsIoBench {
   static const char* ToString(FilterType type) {
     switch (type) {
       case kFtBloomFilter:
-        return "BF (standard bloom filter)";
+        return "BF (std bloom filter)";
       case kFtBitmap:
         return "BM (bitmap)";
       default:
@@ -922,8 +922,8 @@ class PlfsIoBench {
     } else {
       fprintf(stderr, "      Batched Insertion: No\n");
     }
-    fprintf(stderr, "           Ordered Keys: %s\n",
-            ordered_keys_ ? "Yes" : "No");
+    fprintf(stderr, "              User Keys: prepared=%s, ordered=%s\n",
+            keys_.empty() ? "No" : "Yes", ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "    Indexes Compression: %s\n",
             options_.compression == kSnappyCompression ? "Yes" : "No");
     fprintf(stderr, "                FT Type: %s\n", ToString(options_.filter));
