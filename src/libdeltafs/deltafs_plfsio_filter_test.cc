@@ -490,10 +490,10 @@ static void BM_Main(int* argc, char*** argv) {
   pdlfs::Slice bench_name;
   if (*argc > 1) {
     bench_name = pdlfs::Slice((*argv)[*argc - 1]);
-  }
-  if (*argc <= 1) {
+  } else {
     BM_Usage();
-  } else if (bench_name.starts_with("--bench=ft")) {
+  }
+  if (bench_name.starts_with("--bench=ft")) {
     BM_Parse("ft", bench_name.c_str() + 10);
   } else if (bench_name.starts_with("--bench=fq")) {
     BM_Parse("fq", bench_name.c_str() + 10);
