@@ -1314,6 +1314,40 @@ class PlfsBfBench : protected PlfsIoBench {
 
 static inline void BM_Usage() {
   fprintf(stderr, "Use --bench=io or --bench=qy to select a benchmark.\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "== workload confs\n");
+  fprintf(stderr, "LINK_SPEED\n");
+  fprintf(stderr, "NUM_FILES\n");
+  fprintf(stderr, "PREPARE_KEYS\n");
+  fprintf(stderr, "ORDERED_KEYS\n");
+  fprintf(stderr, "VALUE_SIZE\n");
+  fprintf(stderr, "KEY_SIZE\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "== plfsdir options\n");
+  fprintf(stderr, "LG_PARTS\n");
+  fprintf(stderr, "MIN_DATA_BUFFER\n");
+  fprintf(stderr, "DATA_BUFFER\n");
+  fprintf(stderr, "MIN_INDEX_BUFFER\n");
+  fprintf(stderr, "INDEX_BUFFER\n");
+  fprintf(stderr, "NUM_THREADS\n");
+  fprintf(stderr, "MEMTABLE_SIZE\n");
+  fprintf(stderr, "BLOCK_BATCH_SIZE\n");
+  fprintf(stderr, "BLOCK_SIZE\n");
+  fprintf(stderr, "BLOCK_UTIL\n");
+  fprintf(stderr, "SNAPPY\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "== plfsdir filter options\n");
+  fprintf(stderr, "FT_TYPE\n");
+  fprintf(stderr, "FT_BITS\n");
+  fprintf(stderr, "BM_KEY_BITS\n");
+  fprintf(stderr, "BF_BITS\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "== adv. options\n");
+  fprintf(stderr, "FORCE_FIFO\n");
+  fprintf(stderr, "FALSE_KEYS\n");
+  fprintf(stderr, "BATCH_INSERTION\n");
+  fprintf(stderr, "BATCH_SIZE\n");
+  fprintf(stderr, "\n");
 }
 
 static void BM_LogAndApply(int* argc, char*** argv) {
