@@ -1164,9 +1164,9 @@ class StringEnv : public EnvWrapper {
 
 }  // anonymous namespace
 
-class PlfsBfBench : protected PlfsIoBench {
+class PlfsQyBench : protected PlfsIoBench {
  public:
-  PlfsBfBench() : PlfsIoBench() {
+  PlfsQyBench() : PlfsIoBench() {
     num_threads_ = 0;
     mbps_ = 0;
 
@@ -1181,7 +1181,7 @@ class PlfsBfBench : protected PlfsIoBench {
     env_ = new StringEnv;
   }
 
-  ~PlfsBfBench() {
+  ~PlfsQyBench() {
     delete[] block_buffer_;
     delete writer_;
     writer_ = NULL;
@@ -1350,7 +1350,19 @@ static inline void BM_Usage() {
   fprintf(stderr, "\n");
 }
 
-static void BM_LogAndApply(int* argc, char*** argv) {
+static void BM_LogAndApply(const char* bench) {
+  if (strcmp(bench, "io") == 0) {
+    pdlfs::plfsio::PlfsIoBench bench;
+    bench.LogAndApply();
+  } else if (strcmp(bench, "qy") == 0) {
+    pdlfs::plfsio::PlfsQyBench bench;
+    bench.LogAndApply();
+  } else {
+    BM_Usage();
+  }
+}
+
+static void BM_Main(int* argc, char*** argv) {
 #if defined(PDLFS_GFLAGS)
   google::ParseCommandLineFlags(argc, argv, true);
 #endif
@@ -1364,12 +1376,8 @@ static void BM_LogAndApply(int* argc, char*** argv) {
   }
   if (*argc <= 1) {
     BM_Usage();
-  } else if (bench_name == "--bench=io") {
-    pdlfs::plfsio::PlfsIoBench bench;
-    bench.LogAndApply();
-  } else if (bench_name == "--bench=qy") {
-    pdlfs::plfsio::PlfsBfBench bench;
-    bench.LogAndApply();
+  } else if (bench_name.starts_with("--bench=")) {
+    BM_LogAndApply(bench_name.c_str() + 8);
   } else {
     BM_Usage();
   }
@@ -1383,7 +1391,7 @@ int main(int argc, char* argv[]) {
   if (!token.starts_with("--bench")) {
     return pdlfs::test::RunAllTests(&argc, &argv);
   } else {
-    BM_LogAndApply(&argc, &argv);
+    BM_Main(&argc, &argv);
     return 0;
   }
 }
