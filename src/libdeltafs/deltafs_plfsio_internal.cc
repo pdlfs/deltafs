@@ -1363,12 +1363,89 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
 }
 
 namespace {
+struct UsrSaverState {
+  // TODO
+};
+
+void UsrSaveValue(void* arg, const Slice& key, const Slice& value) {
+  // TODO
+}
+
+}  // namespace
+
+// List all keys within a given directory epoch.
+// ListContext *ctx may be shared among multiple concurrent lister threads.
+// ListStats *stats is dedicated to the current thread.
+// User callback is expected to be thread-safe.
+Status Dir::DoList(const BlockHandle& h, uint32_t epoch, ListContext* ctx,
+                   ListStats* stats) {
+  Status status;
+  // Load the meta index for the epoch
+  BlockContents meta_index_contents;
+  // We always prefetch and cache all index blocks in memory
+  // so there is no need to allocate an additional
+  // buffer to store the block contents
+  const bool cached = true;
+  status = ReadBlock(indx_, options_, h, &meta_index_contents, cached);
+  if (!status.ok()) {
+    return status;
+  }
+  Block* meta_index_block = new Block(meta_index_contents);
+  Iterator* const iter = meta_index_block->NewIterator(BytewiseComparator());
+  iter->SeekToFirst();
+  std::string epoch_table_key;
+  for (uint32_t table = 0;; table++) {
+    epoch_table_key = EpochTableKey(epoch, table);
+    // Try reusing current iterator position if possible
+    if (!iter->Valid() || iter->key() != epoch_table_key) {
+      iter->Seek(epoch_table_key);
+      if (!iter->Valid()) {
+        break;  // EOF
+      } else if (iter->key() != epoch_table_key) {
+        break;  // No such table
+      }
+    }
+    UsrSaverState arg;
+    // TODO
+    TableHandle table_handle;
+    Slice input = iter->value();
+    status = table_handle.DecodeFrom(&input);
+    iter->Next();
+    if (status.ok()) {
+      IterOptions opts;
+      if (options_.epoch_log_rotation) {
+        opts.file_index = epoch;
+      } else {
+        opts.file_index = 0;
+      }
+      opts.stats = stats;
+      opts.tmp_length = ctx->tmp_length;
+      opts.tmp = ctx->tmp;
+      opts.saver = UsrSaveValue;
+      opts.arg = &arg;
+      status = Iter(opts, table_handle);
+      if (!status.ok()) {
+        break;
+      }
+    }
+  }
+
+  if (status.ok()) {
+    status = iter->status();
+  }
+
+  delete iter;
+  delete meta_index_block;
+  return status;
+}
+
+namespace {
 struct SaverState {
   std::string* dst;
   bool found;
 };
 
-static void SaveValue(void* arg, const Slice& key, const Slice& value) {
+void SaveValue(void* arg, const Slice& key, const Slice& value) {
   SaverState* state = reinterpret_cast<SaverState*>(arg);
   state->dst->append(value.data(), value.size());
   state->found = true;
@@ -1381,19 +1458,13 @@ struct ParaSaverState : public SaverState {
   port::Mutex* mu;
 };
 
-static void ParaSaveValue(void* arg, const Slice& key, const Slice& value) {
+void ParaSaveValue(void* arg, const Slice& key, const Slice& value) {
   ParaSaverState* state = reinterpret_cast<ParaSaverState*>(arg);
   MutexLock ml(state->mu);
   state->offsets->push_back(static_cast<uint32_t>(state->buffer->size()));
   PutVarint32(state->buffer, state->epoch);
   PutLengthPrefixedSlice(state->buffer, value);
   state->found = true;
-}
-
-static inline Iterator* NewRtIterator(Block* block) {
-  Iterator* iter = block->NewIterator(BytewiseComparator());
-  iter->SeekToFirst();
-  return iter;
 }
 
 }  // namespace
@@ -1472,6 +1543,71 @@ Status Dir::DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
   delete iter;
   delete meta_index_block;
   return status;
+}
+
+static inline Iterator* NewRtIterator(Block* block) {
+  Iterator* iter = block->NewIterator(BytewiseComparator());
+  iter->SeekToFirst();
+  return iter;
+}
+
+void Dir::List(uint32_t epoch, ListContext* ctx) {
+  mu_->AssertHeld();
+  if (!ctx->status->ok()) {
+    return;
+  }
+  Iterator* rt_iter = ctx->rt_iter;
+  if (rt_iter == NULL) {
+    rt_iter = NewRtIterator(rt_);
+  }
+  mu_->Unlock();
+  ListStats stats;
+  stats.table_seeks = 0;  // Number of tables touched
+  // Number of data blocks fetched
+  stats.seeks = 0;
+  stats.n = 0;
+  Status status;
+  for (uint32_t dummy = epoch; dummy == epoch; dummy++) {
+    std::string epoch_key = EpochKey(epoch);
+    // Try reusing current iterator position if possible
+    if (!rt_iter->Valid() || rt_iter->key() != epoch_key) {
+      rt_iter->Seek(epoch_key);
+      if (!rt_iter->Valid()) {
+        break;  // EOF
+      } else if (rt_iter->key() != epoch_key) {
+        break;  // No such epoch
+      }
+    }
+    BlockHandle h;  // Handle to the table index block
+    Slice input = rt_iter->value();
+    status = h.DecodeFrom(&input);
+    rt_iter->Next();
+    if (status.ok()) {
+      status = DoList(h, epoch, ctx, &stats);
+    } else {
+      // Skip the epoch
+    }
+    break;
+  }
+
+  if (status.ok()) {
+    status = rt_iter->status();
+  }
+
+  mu_->Lock();
+  if (rt_iter != ctx->rt_iter) {
+    delete rt_iter;
+  }
+  // Increase the total seek count
+  ctx->num_table_seeks += stats.table_seeks;
+  ctx->num_seeks += stats.seeks;
+  ctx->num_keys += stats.n;
+  assert(ctx->num_open_lists > 0);
+  ctx->num_open_lists--;
+  bg_cv_->SignalAll();
+  if (ctx->status->ok()) {
+    *ctx->status = status;
+  }
 }
 
 void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {

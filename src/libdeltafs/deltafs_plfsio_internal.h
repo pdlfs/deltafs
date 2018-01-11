@@ -411,7 +411,10 @@ class Dir {
   Status Iter(const IterOptions& opts, const TableHandle& h);
 
   struct ListContext {
-    Iterator* rt_iter;
+    Iterator* rt_iter;  // Only used in serial reads
+    void* usr_cb;
+    int num_open_lists;
+    Status* status;
     char* tmp;  // Temporary storage for block contents
     size_t tmp_length;
     size_t num_table_seeks;  // Total number of tables touched
