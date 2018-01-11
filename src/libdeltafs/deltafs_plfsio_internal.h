@@ -280,7 +280,7 @@ class DirLogger {
   int refs_;
 };
 
-// Retrieve directory contents from a pair of indexed log files.
+// Retrieve indexed data from log files.
 class Dir {
  public:
   Dir(const DirOptions& options, port::Mutex*, port::CondVar*);
@@ -336,7 +336,7 @@ class Dir {
     void* arg;
   };
 
-  // Obtain the value to a specific key from a given data block.
+  // Obtain the value to a specific key from a given table data block.
   // If key is found, "opts.saver" will be called. Set *exhausted to true if
   // keys larger than the given one have been seen.
   // NOTE: "opts.saver" may be called multiple times.
@@ -354,7 +354,8 @@ class Dir {
   Status Fetch(const FetchOptions& opts, const Slice& key,
                const TableHandle& h);
 
-  // Obtain the value to a specific key within a given epoch.
+  // Obtain the value to a specific key within a given directory epoch.
+  // GetContext may be shared among multiple concurrent getters.
   // If key is found, value is appended to *ctx->dst.
   // NOTE: a key may appear multiple times within a single epoch.
   // Store an OK status in *ctx->status on success, or a non-OK status on
@@ -382,7 +383,50 @@ class Dir {
   Status DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
                GetContext* ctx, GetStats* stats);
 
+  // Merge results from concurrent getters.
   static void Merge(GetContext* ctx);
+
+  struct ListStats;
+  struct ScanOptions {
+    ListStats* stats;
+    // Log rotation #
+    uint32_t file_index;  // For data log only
+    // Scratch space for temporary data block storage
+    char* tmp;
+    // Scratch size
+    size_t tmp_length;
+    // Callback for handling fetched data
+    Saver saver;
+    // Callback argument
+    void* arg;
+  };
+
+  // Iterate through all keys within a given table.
+  // For each key obtained, "opts.saver" will be called to save the results.
+  // Return OK on success, or a non-OK status on errors.
+  Status Scan(const ScanOptions& opts, const TableHandle& h);
+
+  struct ListContext {
+    Iterator* rt_iter;
+    char* tmp;  // Temporary storage for block contents
+    size_t tmp_length;
+    size_t num_table_seeks;  // Total number of tables touched
+    // Total number of data blocks fetched
+    size_t num_seeks;
+    // Total number of records read
+    size_t num_keys;
+  };
+  void List(uint32_t epoch, ListContext* ctx);
+
+  struct ListStats {
+    size_t table_seeks;  // Total number of tables touched for an epoch
+    // Total number of data blocks fetched for an epoch
+    size_t seeks;
+    // Total number of keys read
+    size_t keys;
+  };
+  Status DoList(const BlockHandle& h, uint32_t epoch, ListContext* ctx,
+                ListStats* stats);
 
   struct BGItem {
     GetContext* ctx;

@@ -1633,11 +1633,10 @@ static Status VerifyOptions(const DirOptions& options, const Footer& footer) {
 
 Status Dir::Open(LogSource* indx) {
   Status status;
-  char space[Footer::kEncodedLength];
+  char tmp[Footer::kEncodedLength];
   Slice input;
-  if (indx->Size() >= sizeof(space)) {
-    status =
-        indx->Read(indx->Size() - sizeof(space), sizeof(space), &input, space);
+  if (indx->Size() >= sizeof(tmp)) {
+    status = indx->Read(indx->Size() - sizeof(tmp), sizeof(tmp), &input, tmp);
   } else {
     status = Status::Corruption("Dir index too short to be valid");
   }
