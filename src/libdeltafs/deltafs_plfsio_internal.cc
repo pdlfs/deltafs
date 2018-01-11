@@ -1129,6 +1129,78 @@ static Status ReadBlock(LogSource* source, const DirOptions& options,
   return status;
 }
 
+// Retrieve all keys from a given data block.
+Status Dir::Iter(const IterOptions& opts, Slice* input) {
+  Status status;
+  BlockHandle handle;
+  status = handle.DecodeFrom(input);
+  if (!status.ok()) {
+    return status;
+  }
+  BlockContents contents;
+  status = ReadBlock(data_, options_, handle, &contents, false, opts.file_index,
+                     opts.tmp, opts.tmp_length);
+  if (!status.ok()) {
+    return status;
+  } else {
+    opts.stats->seeks++;
+  }
+
+  Block* block = new Block(contents);
+  Iterator* const iter = block->NewIterator(BytewiseComparator());
+  iter->SeekToFirst();
+  for (; iter->Valid(); iter->Next()) {
+    opts.saver(opts.arg, iter->key(), iter->value());
+    opts.stats->n++;
+  }
+  if (status.ok()) {
+    status = iter->status();
+  }
+
+  delete iter;
+  delete block;
+  return status;
+}
+
+// Retrieve all keys from a given table and call "opts.saver" to handle the
+// results. Return OK on success and a non-OK status on errors.
+Status Dir::Iter(const IterOptions& opts, const TableHandle& h) {
+  Status status;
+  // Load the index block
+  BlockContents index_contents;
+  BlockHandle index_handle;
+  index_handle.set_offset(h.index_offset());
+  index_handle.set_size(h.index_size());
+  // We always prefetch and cache all index blocks in memory
+  // so there is no need to allocate an additional
+  // buffer to store the block contents
+  const bool cached = true;
+  status = ReadBlock(indx_, options_, index_handle, &index_contents, cached);
+  if (!status.ok()) {
+    return status;
+  } else {
+    opts.stats->table_seeks++;
+  }
+
+  Block* index_block = new Block(index_contents);
+  Iterator* const iter = index_block->NewIterator(BytewiseComparator());
+  iter->SeekToFirst();
+  for (; iter->Valid(); iter->Next()) {
+    Slice input = iter->value();
+    status = Iter(opts, &input);
+    if (!status.ok()) {
+      break;
+    }
+  }
+  if (status.ok()) {
+    status = iter->status();
+  }
+
+  delete iter;
+  delete index_block;
+  return status;
+}
+
 // Retrieve value to a specific key from a given block and call "opts.saver"
 // using the value found. In addition, set *exhausted to true if a larger key
 // has been observed so there is no need to check further.

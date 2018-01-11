@@ -387,7 +387,7 @@ class Dir {
   static void Merge(GetContext* ctx);
 
   struct ListStats;
-  struct ScanOptions {
+  struct IterOptions {
     ListStats* stats;
     // Log rotation #
     uint32_t file_index;  // For data log only
@@ -401,10 +401,14 @@ class Dir {
     void* arg;
   };
 
+  // Iterate through all keys within a given table data block whose block handle
+  // is encoded as *input. Return OK on success, or a non-OK status on errors.
+  Status Iter(const IterOptions& opts, Slice* input);
+
   // Iterate through all keys within a given table.
   // For each key obtained, "opts.saver" will be called to save the results.
   // Return OK on success, or a non-OK status on errors.
-  Status Scan(const ScanOptions& opts, const TableHandle& h);
+  Status Iter(const IterOptions& opts, const TableHandle& h);
 
   struct ListContext {
     Iterator* rt_iter;
@@ -423,7 +427,7 @@ class Dir {
     // Total number of data blocks fetched for an epoch
     size_t seeks;
     // Total number of keys read
-    size_t keys;
+    size_t n;
   };
   Status DoList(const BlockHandle& h, uint32_t epoch, ListContext* ctx,
                 ListStats* stats);
