@@ -1357,7 +1357,8 @@ class DirReaderImpl : public DirReader {
 
   mutable port::Mutex mutex_;
   port::CondVar cond_cv_;
-  Dir** dirs_;  // Lazily initialized directory partitions
+  // Lazily initialized directory partitions
+  Dir** dirs_;
   LogSource* data_;
 };
 
@@ -1563,17 +1564,17 @@ Status DirReader::Open(const DirOptions& _opts, const std::string& dirname,
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", my_rank);
 #endif
   Footer footer;
-  char tmp[Footer::kEncodedLength];
-  std::string buf;  // For primary footer copy
+  std::string dir_info;  // Stores the primary footer copy
   if (options.lg_parts == -1 || options.num_epochs == -1 ||
-      options.paranoid_checks) {
-    status = ReadFileToString(env, DirInfoFileName(dirname).c_str(), &buf);
+      options.paranoid_checks) {  // Skip the footer unless we need more info
+    status = ReadFileToString(env, DirInfoFileName(dirname).c_str(), &dir_info);
     if (!status.ok()) {
       return status;
-    } else if (buf.size() < Footer::kEncodedLength) {
+    } else if (dir_info.size() < Footer::kEncodedLength) {
       return Status::Corruption("Truncated dir info");
     }
-    Slice input = buf;
+    // Get rid of the padding
+    Slice input = dir_info;
     if (input.size() > Footer::kEncodedLength) {
       input.remove_prefix(input.size() - Footer::kEncodedLength);
     }
@@ -1582,7 +1583,7 @@ Status DirReader::Open(const DirOptions& _opts, const std::string& dirname,
       return status;
     }
 
-    // Rewrite any that is apparently wrong
+    // Rewrite potentially ill-specified options
     options = MaybeRewriteOptions(options, footer);
     num_parts = 1u << options.lg_parts;
   }
@@ -1592,7 +1593,7 @@ Status DirReader::Open(const DirOptions& _opts, const std::string& dirname,
   LogSource::LogOptions io_opts;
   io_opts.rank = my_rank;
   io_opts.type = kDefIoType;
-  io_opts.sub_partition = -1;
+  io_opts.sub_partition = -1;  // The data file does not have any sub-partitions
   if (options.epoch_log_rotation) io_opts.num_rotas = options.num_epochs + 1;
   if (options.measure_reads) io_opts.stats = &impl->io_stats_;
   io_opts.env = env;
@@ -1602,18 +1603,21 @@ Status DirReader::Open(const DirOptions& _opts, const std::string& dirname,
   } else if (data->Size(data->LastFileIndex()) < Footer::kEncodedLength) {
     status = Status::Corruption("Data log too short to be valid");
   } else if (options.paranoid_checks) {
-    Slice input;
+    // Also verify the replicated footer if requested
+    Slice contents;
+    char tmp[Footer::kEncodedLength];
     uint64_t off = data->Size(data->LastFileIndex()) - Footer::kEncodedLength;
-    status = data->Read(off, Footer::kEncodedLength, &input, tmp,
+    status = data->Read(off, Footer::kEncodedLength, &contents, tmp,
                         data->LastFileIndex());
     if (status.ok()) {
-      if (!Slice(buf).ends_with(input)) {
+      if (!Slice(dir_info).ends_with(contents)) {
         status = Status::Corruption("Footer replica corrupted");
       }
     }
   }
 
   if (status.ok()) {
+    // Dir indexes to be fetched later
     impl->dirs_ = new Dir*[num_parts]();
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
