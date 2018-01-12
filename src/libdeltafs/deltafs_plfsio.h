@@ -424,6 +424,37 @@ class DirReader {
                          size_t tmp_length = 0, size_t* table_seeks = NULL,
                          size_t* seeks = NULL) = 0;
 
+  // Default: fetch all epochs and allow parallel reads
+  struct ReadOp {
+    ReadOp();
+    uint32_t epoch_start;
+    uint32_t epoch_end;
+    bool no_parallel_reads;
+    size_t* table_seeks;
+    size_t* seeks;
+  };
+  // Obtain the value to a specific key stored in a given epoch range.
+  // Report operation stats in *table_seeks and *seeks.
+  // Return OK on success, or a non-OK status on errors.
+  virtual Status DoIt(const ReadOp& read, const Slice& fid,
+                      std::string* dst) = 0;
+
+  // Default: scan all epochs and allow parallel reads
+  struct ScanOp {
+    ScanOp();
+    uint32_t epoch_start;
+    uint32_t epoch_end;
+    bool no_parallel_reads;
+    size_t* table_seeks;
+    size_t* seeks;
+    size_t* n;
+  };
+  typedef void (*ScanSaver)(void* arg, const Slice& key, const Slice& value);
+  // List all keys stored in a given epoch range.
+  // Report operation stats in *table_seeks, *seeks, and *n.
+  // Return OK on success, or a non-OK status on errors.
+  virtual Status DoIt(const ScanOp& scan, ScanSaver, void*) = 0;
+
   // Return the aggregated I/O stats accumulated so far.
   virtual IoStats GetIoStats() const = 0;
 

@@ -1344,9 +1344,14 @@ class DirReaderImpl : public DirReader {
       size_t* seeks         // Total number of data blocks fetched
   );
 
+  virtual Status DoIt(const ReadOp& read, const Slice& fid, std::string* dst);
+
+  virtual Status DoIt(const ScanOp& scan, ScanSaver, void*);
+
   virtual IoStats GetIoStats() const;
 
  private:
+  Status OpenDir(size_t part);
   RandomAccessFileStats io_stats_;
   friend class DirReader;
 
@@ -1382,6 +1387,124 @@ DirReaderImpl::~DirReaderImpl() {
   if (data_ != NULL) {
     data_->Unref();
   }
+}
+
+// Open a directory partition if it has not been opened before.
+// Return OK on success, or a non-OK status on errors.
+// REQUIRES: mutex_ is locked.
+Status DirReaderImpl::OpenDir(size_t part) {
+  mutex_.AssertHeld();
+  Status status;
+  assert(part < num_parts_);
+  if (dirs_[part] == NULL) {
+    mutex_.Unlock();  // Unlock when reading dir indexes
+    LogSource* indx = NULL;
+    Dir* dir = new Dir(options_, &mutex_, &cond_cv_);
+    dir->Ref();
+    LogSource::LogOptions idx_opts;
+    idx_opts.type = kIdxIoType;
+    idx_opts.sub_partition = static_cast<int>(part);
+    idx_opts.rank = options_.rank;
+    if (options_.measure_reads) idx_opts.seq_stats = &dir->io_stats_;
+    idx_opts.io_size = options_.read_size;
+    idx_opts.env = options_.env;
+    status = LogSource::Open(idx_opts, name_, &indx);
+    if (status.ok()) {
+      status = dir->Open(indx);
+    }
+    mutex_.Lock();
+    if (status.ok()) {
+      dir->InstallDataSource(data_);
+      if (dirs_[part] != NULL) dirs_[part]->Unref();
+      dirs_[part] = dir;
+      dirs_[part]->Ref();
+    }
+    dir->Unref();
+    if (indx != NULL) {
+      indx->Unref();
+    }
+  }
+  return status;
+}
+
+// Perform a scan operation on all partitions.
+// Return OK on success, or a non-OK status on errors.
+Status DirReaderImpl::DoIt(const ScanOp& scan, ScanSaver saver, void* arg) {
+  Status status;
+  MutexLock ml(&mutex_);
+  for (uint32_t part = 0; part < num_parts_; part++) {
+    status = OpenDir(part);
+    if (status.ok()) {
+      assert(dirs_[part] != NULL);
+      Dir* const dir = dirs_[part];
+      dir->Ref();
+      Dir::ScanOptions opts;
+      opts.epoch_start = scan.epoch_start;
+      opts.epoch_end = scan.epoch_end;
+      opts.force_serial_reads = scan.no_parallel_reads;
+      opts.usr_cb = reinterpret_cast<void*>(saver);
+      opts.arg_cb = arg;
+      char tmp[256];  // Temporary buffer space for the read operation
+      opts.tmp_length = sizeof(tmp);
+      opts.tmp = tmp;
+      Dir::ScanStats stats;
+      status = dirs_[part]->Scan(opts, &stats);
+      dir->Unref();
+      if (status.ok()) {
+        if (scan.table_seeks != NULL) {
+          *scan.table_seeks = stats.total_table_seeks;
+        }
+        if (scan.seeks != NULL) {
+          *scan.seeks = stats.total_seeks;
+        }
+        if (scan.n != NULL) {
+          *scan.n = stats.total_keys;
+        }
+      }
+    }
+
+    if (!status.ok()) {
+      break;
+    }
+  }
+
+  return status;
+}
+
+// Perform a read operation for a given file.
+// Return OK on success, or a non-OK status on errors.
+Status DirReaderImpl::DoIt(const ReadOp& read, const Slice& fid,
+                           std::string* dst) {
+  Status status;
+  uint32_t hash = Hash(fid.data(), fid.size(), 0);
+  uint32_t part = hash & part_mask_;
+  MutexLock ml(&mutex_);
+  status = OpenDir(part);
+  if (status.ok()) {
+    assert(dirs_[part] != NULL);
+    Dir* const dir = dirs_[part];
+    dir->Ref();
+    Dir::ReadOptions opts;
+    opts.epoch_start = read.epoch_start;
+    opts.epoch_end = read.epoch_end;
+    opts.force_serial_reads = read.no_parallel_reads;
+    char tmp[256];  // Temporary buffer space for the read operation
+    opts.tmp_length = sizeof(tmp);
+    opts.tmp = tmp;
+    Dir::ReadStats stats;
+    status = dirs_[part]->Read(opts, fid, dst, &stats);
+    dir->Unref();
+    if (status.ok()) {
+      if (read.table_seeks != NULL) {
+        *read.table_seeks = stats.total_table_seeks;
+      }
+      if (read.seeks != NULL) {
+        *read.seeks = stats.total_seeks;
+      }
+    }
+  }
+
+  return status;
 }
 
 Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
