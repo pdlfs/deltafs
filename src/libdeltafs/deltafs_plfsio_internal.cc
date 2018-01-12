@@ -1364,17 +1364,6 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
   return status;
 }
 
-namespace {
-struct UsrSaverState {
-  // TODO
-};
-
-void UsrSaveValue(void* arg, const Slice& key, const Slice& value) {
-  // TODO
-}
-
-}  // namespace
-
 // List all keys within a given directory epoch.
 // ListContext *ctx may be shared among multiple concurrent lister threads.
 // ListStats *stats is dedicated to the current thread.
@@ -1407,8 +1396,6 @@ Status Dir::DoList(const BlockHandle& h, uint32_t epoch, ListContext* ctx,
         break;  // No such table
       }
     }
-    UsrSaverState arg;
-    // TODO
     TableHandle table_handle;
     Slice input = iter->value();
     status = table_handle.DecodeFrom(&input);
@@ -1423,8 +1410,8 @@ Status Dir::DoList(const BlockHandle& h, uint32_t epoch, ListContext* ctx,
       opts.stats = stats;
       opts.tmp_length = ctx->tmp_length;
       opts.tmp = ctx->tmp;
-      opts.saver = UsrSaveValue;
-      opts.arg = &arg;
+      opts.saver = static_cast<Saver>(ctx->usr_cb);
+      opts.arg = ctx->arg_cb;
       status = Iter(opts, table_handle);
       if (!status.ok()) {
         break;
@@ -1752,7 +1739,6 @@ Status Dir::Scan(const ScanOptions& opts, ScanStats* stats) {
   }
   ctx.usr_cb = opts.usr_cb;
   ctx.arg_cb = opts.arg_cb;
-  // TODO
   if (num_epoches_ != 0) {
     uint32_t epoch = opts.epoch_start;
     uint32_t epoch_end = std::min(num_epoches_, opts.epoch_end);
@@ -1762,7 +1748,6 @@ Status Dir::Scan(const ScanOptions& opts, ScanStats* stats) {
       item.epoch = epoch;
       item.dir = this;
       item.ctx = &ctx;
-      // TODO
       if (opts.force_serial_reads || !options_.parallel_reads) {
         List(item.epoch, item.ctx);
       } else if (options_.reader_pool != NULL) {
