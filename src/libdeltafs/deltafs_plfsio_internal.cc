@@ -1410,7 +1410,7 @@ Status Dir::DoList(const BlockHandle& h, uint32_t epoch, ListContext* ctx,
       opts.stats = stats;
       opts.tmp_length = ctx->tmp_length;
       opts.tmp = ctx->tmp;
-      opts.saver = static_cast<Saver>(ctx->usr_cb);
+      opts.saver = reinterpret_cast<Saver>(ctx->usr_cb);
       opts.arg = ctx->arg_cb;
       status = Iter(opts, table_handle);
       if (!status.ok()) {
