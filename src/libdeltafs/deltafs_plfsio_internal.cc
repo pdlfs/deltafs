@@ -1469,6 +1469,10 @@ void ParaSaveValue(void* arg, const Slice& key, const Slice& value) {
 
 }  // namespace
 
+// Obtain the value to a specific key within a given directory epoch.
+// GetContext *ctx may be shared among multiple concurrent getter threads.
+// GetStats *stats is dedicated to the current thread.
+// User callback is expected to be thread-safe.
 Status Dir::DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
                   GetContext* ctx, GetStats* stats) {
   Status status;
@@ -1551,6 +1555,9 @@ static inline Iterator* NewRtIterator(Block* block) {
   return iter;
 }
 
+// List all keys within a given directory epoch.
+// ListContext *ctx may be shared among multiple concurrent lister threads.
+// Return OK on success, or a non-OK status on errors.
 void Dir::List(uint32_t epoch, ListContext* ctx) {
   mu_->AssertHeld();
   if (!ctx->status->ok()) {
@@ -1610,6 +1617,9 @@ void Dir::List(uint32_t epoch, ListContext* ctx) {
   }
 }
 
+// Obtain the value to a specific key at a given directory epoch.
+// GetContext *ctx may be shared among multiple concurrent getter threads.
+// Return OK on success, or a non-OK status on errors.
 void Dir::Get(const Slice& key, uint32_t epoch, GetContext* ctx) {
   mu_->AssertHeld();
   if (!ctx->status->ok()) {
@@ -1716,6 +1726,72 @@ void Dir::Merge(GetContext* ctx) {
   }
 }
 
+// Iterate through all keys stored within a specified epoch range.
+// Return OK on success, or a non-OK status on errors.
+Status Dir::Scan(const ScanOptions& opts, ScanStats* stats) {
+  mu_->AssertHeld();
+  Status status;
+  assert(rt_ != NULL);
+
+  ListContext ctx;
+  ctx.tmp = opts.tmp;  // User-supplied buffer space
+  ctx.tmp_length = opts.tmp_length;
+  ctx.num_open_lists = 0;  // Number of outstanding list operations
+  ctx.status = &status;
+  ctx.num_table_seeks = 0;  // Total number of tables touched
+  // Total number of data blocks fetched
+  ctx.num_seeks = 0;
+  ctx.num_keys = 0;
+  if (!options_.parallel_reads) {
+    // Pre-create the root iterator for serial reads
+    ctx.rt_iter = NewRtIterator(rt_);
+  } else {
+    ctx.rt_iter = NULL;
+  }
+  ctx.usr_cb = opts.arg_cb;
+  // TODO
+  if (num_epoches_ != 0) {
+    uint32_t epoch = opts.epoch_start;
+    uint32_t epoch_end = std::min(num_epoches_, opts.epoch_end);
+    for (; epoch < epoch_end; epoch++) {
+      ctx.num_open_lists++;
+      BGListItem item;
+      item.epoch = epoch;
+      item.dir = this;
+      item.ctx = &ctx;
+      // TODO
+      if (!options_.parallel_reads) {
+        List(item.epoch, item.ctx);
+      } else if (options_.reader_pool != NULL) {
+        options_.reader_pool->Schedule(Dir::BGList, &item);
+      } else if (options_.allow_env_threads) {
+        Env::Default()->Schedule(Dir::BGList, &item);
+      } else {
+        List(item.epoch, item.ctx);
+      }
+      if (!status.ok()) {
+        break;
+      }
+    }
+  }
+
+  // Wait for all outstanding list operations to conclude
+  while (ctx.num_open_lists > 0) {
+    bg_cv_->Wait();
+  }
+
+  delete ctx.rt_iter;
+  if (status.ok()) {
+    if (stats != NULL) {
+      stats->total_keys = ctx.num_keys;
+      stats->total_table_seeks = ctx.num_table_seeks;
+      stats->total_seeks = ctx.num_seeks;
+    }
+  }
+
+  return status;
+}
+
 Status Dir::Read(const Slice& key, std::string* dst, char* tmp,
                  size_t tmp_length, ReadStats* stats) {
   mu_->AssertHeld();
@@ -1745,7 +1821,7 @@ Status Dir::Read(const Slice& key, std::string* dst, char* tmp,
     uint32_t epoch = 0;
     for (; epoch < num_epoches_; epoch++) {
       ctx.num_open_reads++;
-      BGItem item;
+      BGGetItem item;
       item.epoch = epoch;
       item.dir = this;
       item.ctx = &ctx;
@@ -1753,9 +1829,9 @@ Status Dir::Read(const Slice& key, std::string* dst, char* tmp,
       if (!options_.parallel_reads) {
         Get(item.key, item.epoch, item.ctx);
       } else if (options_.reader_pool != NULL) {
-        options_.reader_pool->Schedule(Dir::BGWork, &item);
+        options_.reader_pool->Schedule(Dir::BGGet, &item);
       } else if (options_.allow_env_threads) {
-        Env::Default()->Schedule(Dir::BGWork, &item);
+        Env::Default()->Schedule(Dir::BGGet, &item);
       } else {
         Get(item.key, item.epoch, item.ctx);
       }
@@ -1785,8 +1861,14 @@ Status Dir::Read(const Slice& key, std::string* dst, char* tmp,
   return status;
 }
 
-void Dir::BGWork(void* arg) {
-  BGItem* item = reinterpret_cast<BGItem*>(arg);
+void Dir::BGList(void* arg) {
+  BGListItem* item = reinterpret_cast<BGListItem*>(arg);
+  MutexLock ml(item->dir->mu_);
+  item->dir->List(item->epoch, item->ctx);
+}
+
+void Dir::BGGet(void* arg) {
+  BGGetItem* item = reinterpret_cast<BGGetItem*>(arg);
   MutexLock ml(item->dir->mu_);
   item->dir->Get(item->key, item->epoch, item->ctx);
 }

@@ -298,8 +298,30 @@ class Dir {
     // Total data blocks fetched
     size_t total_seeks;
   };
+
   Status Read(const Slice& key, std::string* dst, char* tmp, size_t tmp_length,
               ReadStats* stats);
+
+  struct ScanOptions {
+    uint32_t epoch_start;
+    uint32_t epoch_end;
+    // User callback to handle retrieved data
+    void* usr_cb;
+    void* arg_cb;
+    // Temporary storage for data blocks
+    size_t tmp_length;
+    char* tmp;
+  };
+
+  struct ScanStats {
+    size_t total_table_seeks;  // Total tables touched
+    // Total data blocks fetched
+    size_t total_seeks;
+    // Total data entries processed
+    size_t total_keys;
+  };
+
+  Status Scan(const ScanOptions& opts, ScanStats* stats);
 
   void InstallDataSource(LogSource* data);
 
@@ -386,6 +408,14 @@ class Dir {
   // Merge results from concurrent getters.
   static void Merge(GetContext* ctx);
 
+  struct BGGetItem {
+    GetContext* ctx;
+    uint32_t epoch;
+    Slice key;
+    Dir* dir;
+  };
+  static void BGGet(void*);
+
   struct ListStats;
   struct IterOptions {
     ListStats* stats;
@@ -435,13 +465,12 @@ class Dir {
   Status DoList(const BlockHandle& h, uint32_t epoch, ListContext* ctx,
                 ListStats* stats);
 
-  struct BGItem {
-    GetContext* ctx;
+  struct BGListItem {
+    ListContext* ctx;
     uint32_t epoch;
-    Slice key;
     Dir* dir;
   };
-  static void BGWork(void*);
+  static void BGList(void*);
 
   // No copying allowed
   void operator=(const Dir&);
