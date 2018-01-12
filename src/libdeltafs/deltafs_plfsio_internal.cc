@@ -1763,7 +1763,7 @@ Status Dir::Scan(const ScanOptions& opts, ScanStats* stats) {
       item.dir = this;
       item.ctx = &ctx;
       // TODO
-      if (!options_.parallel_reads) {
+      if (opts.force_serial_reads || !options_.parallel_reads) {
         List(item.epoch, item.ctx);
       } else if (options_.reader_pool != NULL) {
         options_.reader_pool->Schedule(Dir::BGList, &item);
@@ -1823,15 +1823,16 @@ Status Dir::Read(const ReadOptions& opts, const Slice& key, std::string* dst,
   }
   ctx.dst = dst;
   if (num_epoches_ != 0) {
-    uint32_t epoch = 0;
-    for (; epoch < num_epoches_; epoch++) {
+    uint32_t epoch = opts.epoch_start;
+    uint32_t epoch_end = std::min(num_epoches_, opts.epoch_end);
+    for (; epoch < epoch_end; epoch++) {
       ctx.num_open_reads++;
       BGGetItem item;
       item.epoch = epoch;
       item.dir = this;
       item.ctx = &ctx;
       item.key = key;
-      if (!options_.parallel_reads) {
+      if (opts.force_serial_reads || !options_.parallel_reads) {
         Get(item.key, item.epoch, item.ctx);
       } else if (options_.reader_pool != NULL) {
         options_.reader_pool->Schedule(Dir::BGGet, &item);
@@ -1879,7 +1880,8 @@ void Dir::BGGet(void* arg) {
 }
 
 Dir::ScanOptions::ScanOptions()
-    : epoch_start(0),
+    : force_serial_reads(false),
+      epoch_start(0),
       epoch_end(~static_cast<uint32_t>(0)),
       usr_cb(NULL),
       arg_cb(NULL),
@@ -1887,7 +1889,8 @@ Dir::ScanOptions::ScanOptions()
       tmp(NULL) {}
 
 Dir::ReadOptions::ReadOptions()
-    : epoch_start(0),
+    : force_serial_reads(false),
+      epoch_start(0),
       epoch_end(~static_cast<uint32_t>(0)),
       tmp_length(0),
       tmp(NULL) {}

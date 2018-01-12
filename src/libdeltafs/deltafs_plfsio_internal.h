@@ -295,6 +295,7 @@ class Dir {
   // Return OK on success, or a non-OK status on errors.
   struct ReadOptions {
     ReadOptions();
+    bool force_serial_reads;  // Do not fetch data in parallel
     uint32_t epoch_start;
     uint32_t epoch_end;
     // Temporary storage for data blocks
@@ -313,6 +314,7 @@ class Dir {
 
   struct ScanOptions {
     ScanOptions();
+    bool force_serial_reads;  // Do not fetch data in parallel
     uint32_t epoch_start;
     uint32_t epoch_end;
     // User callback to handle fetched data
