@@ -293,19 +293,29 @@ class Dir {
   // to "dst". A caller may optionally provide a temporary buffer for storing
   // fetched block contents. Read stats will be reported through "*stats".
   // Return OK on success, or a non-OK status on errors.
+  struct ReadOptions {
+    ReadOptions();
+    uint32_t epoch_start;
+    uint32_t epoch_end;
+    // Temporary storage for data blocks
+    size_t tmp_length;
+    char* tmp;
+  };
+
   struct ReadStats {
     size_t total_table_seeks;  // Total tables touched
     // Total data blocks fetched
     size_t total_seeks;
   };
 
-  Status Read(const Slice& key, std::string* dst, char* tmp, size_t tmp_length,
+  Status Read(const ReadOptions& opts, const Slice& key, std::string* dst,
               ReadStats* stats);
 
   struct ScanOptions {
+    ScanOptions();
     uint32_t epoch_start;
     uint32_t epoch_end;
-    // User callback to handle retrieved data
+    // User callback to handle fetched data
     void* usr_cb;
     void* arg_cb;
     // Temporary storage for data blocks
@@ -363,7 +373,7 @@ class Dir {
   // keys larger than the given one have been seen.
   // NOTE: "opts.saver" may be called multiple times.
   // Return OK on success, or a non-OK status on errors.
-  Status Fetch(const FetchOptions& opts, const Slice& key, const BlockHandle& h,
+  Status Fetch(const FetchOptions& opts, const Slice& key, Slice* input,
                bool* exhausted);
 
   // Return true if the given key matches a specific filter block.
@@ -398,8 +408,8 @@ class Dir {
   void Get(const Slice& key, uint32_t epoch, GetContext* ctx);
 
   struct GetStats {
-    size_t table_seeks;  // Total number of tables touched for an epoch
-    // Total number of data blocks fetched for an epoch
+    size_t table_seeks;  // Total tables touched for a certain epoch
+    // Total data blocks fetched for a certain epoch
     size_t seeks;
   };
   Status DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
@@ -443,6 +453,7 @@ class Dir {
   struct ListContext {
     Iterator* rt_iter;  // Only used in serial reads
     void* usr_cb;
+    void* arg_cb;
     int num_open_lists;
     Status* status;
     char* tmp;  // Temporary storage for block contents
@@ -456,8 +467,8 @@ class Dir {
   void List(uint32_t epoch, ListContext* ctx);
 
   struct ListStats {
-    size_t table_seeks;  // Total number of tables touched for an epoch
-    // Total number of data blocks fetched for an epoch
+    size_t table_seeks;  // Total tables touched for a certain epoch
+    // Total data blocks fetched for a certain epoch
     size_t seeks;
     // Total number of keys read
     size_t n;

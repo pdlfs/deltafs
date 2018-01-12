@@ -1425,8 +1425,11 @@ Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
     assert(dirs_[part] != NULL);
     Dir* const dir = dirs_[part];
     dir->Ref();
+    Dir::ReadOptions opts;
+    opts.tmp_length = tmp_length;
+    opts.tmp = tmp;
     Dir::ReadStats stats;
-    status = dirs_[part]->Read(fid, dst, tmp, tmp_length, &stats);
+    status = dirs_[part]->Read(opts, fid, dst, &stats);
     dir->Unref();
     if (status.ok()) {
       if (table_seeks != NULL) {

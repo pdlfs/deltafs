@@ -1201,16 +1201,21 @@ Status Dir::Iter(const IterOptions& opts, const TableHandle& h) {
   return status;
 }
 
-// Retrieve value to a specific key from a given block and call "opts.saver"
-// using the value found. In addition, set *exhausted to true if a larger key
-// has been observed so there is no need to check further.
-// Return OK on success and a non-OK status on errors.
-Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
-                  const BlockHandle& h, bool* exhausted) {
+// Retrieve value to a specific key from a given block whose handle is encoded
+// as *input. Call "opts.saver" using the value found. In addition, set
+// *exhausted to true if a larger key has been observed so there is no need to
+// check further. Return OK on success and a non-OK status on errors.
+Status Dir::Fetch(const FetchOptions& opts, const Slice& key, Slice* input,
+                  bool* exhausted) {
   *exhausted = false;
   Status status;
+  BlockHandle handle;
+  status = handle.DecodeFrom(input);
+  if (!status.ok()) {
+    return status;
+  }
   BlockContents contents;
-  status = ReadBlock(data_, options_, h, &contents, false, opts.file_index,
+  status = ReadBlock(data_, options_, handle, &contents, false, opts.file_index,
                      opts.tmp, opts.tmp_length);
   if (!status.ok()) {
     return status;
@@ -1335,14 +1340,11 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
     }
   }
 
+  // True if a key greater than the target key has been found
   bool exhausted = false;
   for (; iter->Valid(); iter->Next()) {
-    BlockHandle block_handle;
     Slice input = iter->value();
-    status = block_handle.DecodeFrom(&input);
-    if (status.ok()) {
-      status = Fetch(opts, key, block_handle, &exhausted);
-    }
+    status = Fetch(opts, key, &input, &exhausted);
 
     if (!status.ok()) {
       break;
@@ -1726,7 +1728,7 @@ void Dir::Merge(GetContext* ctx) {
   }
 }
 
-// Iterate through all keys stored within a specified epoch range.
+// Iterate through all keys stored within a given epoch range.
 // Return OK on success, or a non-OK status on errors.
 Status Dir::Scan(const ScanOptions& opts, ScanStats* stats) {
   mu_->AssertHeld();
@@ -1748,7 +1750,8 @@ Status Dir::Scan(const ScanOptions& opts, ScanStats* stats) {
   } else {
     ctx.rt_iter = NULL;
   }
-  ctx.usr_cb = opts.arg_cb;
+  ctx.usr_cb = opts.usr_cb;
+  ctx.arg_cb = opts.arg_cb;
   // TODO
   if (num_epoches_ != 0) {
     uint32_t epoch = opts.epoch_start;
@@ -1792,8 +1795,10 @@ Status Dir::Scan(const ScanOptions& opts, ScanStats* stats) {
   return status;
 }
 
-Status Dir::Read(const Slice& key, std::string* dst, char* tmp,
-                 size_t tmp_length, ReadStats* stats) {
+// Obtain value to a specific key within a given epoch range.
+// Return OK on success, or a non-OK status on errors.
+Status Dir::Read(const ReadOptions& opts, const Slice& key, std::string* dst,
+                 ReadStats* stats) {
   mu_->AssertHeld();
   Status status;
   assert(rt_ != NULL);
@@ -1801,8 +1806,8 @@ Status Dir::Read(const Slice& key, std::string* dst, char* tmp,
   std::string buffer;
 
   GetContext ctx;
-  ctx.tmp = tmp;  // User-supplied buffer space
-  ctx.tmp_length = tmp_length;
+  ctx.tmp = opts.tmp;  // User-supplied buffer space
+  ctx.tmp_length = opts.tmp_length;
   ctx.num_open_reads = 0;  // Number of outstanding epoch read operations
   ctx.status = &status;
   ctx.offsets = &offsets;
@@ -1872,6 +1877,20 @@ void Dir::BGGet(void* arg) {
   MutexLock ml(item->dir->mu_);
   item->dir->Get(item->key, item->epoch, item->ctx);
 }
+
+Dir::ScanOptions::ScanOptions()
+    : epoch_start(0),
+      epoch_end(~static_cast<uint32_t>(0)),
+      usr_cb(NULL),
+      arg_cb(NULL),
+      tmp_length(0),
+      tmp(NULL) {}
+
+Dir::ReadOptions::ReadOptions()
+    : epoch_start(0),
+      epoch_end(~static_cast<uint32_t>(0)),
+      tmp_length(0),
+      tmp(NULL) {}
 
 Dir::Dir(const DirOptions& options, port::Mutex* mu, port::CondVar* bg_cv)
     : options_(options),
