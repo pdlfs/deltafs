@@ -1025,7 +1025,7 @@ size_t DirLogger<T>::memory_usage() const {
     stores.push_back(tb_->meta_block_.buffer_store());
     stores.push_back(tb_->indx_block_.buffer_store());
     stores.push_back(tb_->data_block_.buffer_store());
-    if (filter_ != NULL) stores.push_back(filter_->buffer_store());
+    if (filter_ != NULL) result += filter_->memory_usage();
     stores.push_back(tb_->indx_logger_.buffer_store());
     for (size_t i = 0; i < stores.size(); i++) {
       result += stores[i]->capacity();

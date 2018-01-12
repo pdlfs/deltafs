@@ -59,7 +59,7 @@ class BloomBlock {
 
   // Return the underlying buffer space.
   std::string* buffer_store() { return &space_; }
-  size_t memory_usage() const { return space_.size(); }
+  size_t memory_usage() const { return space_.capacity(); }
   static int chunk_type();  // Return the corresponding chunk type
 
  private:
@@ -160,9 +160,11 @@ class EmptyFilterBlock {
   // Finalize filter contents.
   Slice Finish() { return Slice(); }
 
+  static int chunk_type();  // Return the corresponding chunk type
+  // Report total filter memory usage
+  size_t memory_usage() const { return space_.capacity(); }
   // Return the underlying buffer space.
   std::string* buffer_store() { return &space_; }
-  static int chunk_type();  // Return the corresponding chunk type
 
  private:
   std::string space_;
