@@ -1432,6 +1432,11 @@ Status DirReaderImpl::OpenDir(size_t part) {
 Status DirReaderImpl::DoIt(const ScanOp& scan, ScanSaver saver, void* arg) {
   Status status;
   MutexLock ml(&mutex_);
+  Dir::ScanStats stats;
+  stats.total_table_seeks = 0;
+  stats.total_seeks = 0;
+  stats.n = 0;
+
   for (uint32_t part = 0; part < num_parts_; part++) {
     status = OpenDir(part);
     if (status.ok()) {
@@ -1447,24 +1452,25 @@ Status DirReaderImpl::DoIt(const ScanOp& scan, ScanSaver saver, void* arg) {
       char tmp[256];  // Temporary buffer space for the read operation
       opts.tmp_length = sizeof(tmp);
       opts.tmp = tmp;
-      Dir::ScanStats stats;
+
       status = dirs_[part]->Scan(opts, &stats);
       dir->Unref();
-      if (status.ok()) {
-        if (scan.table_seeks != NULL) {
-          *scan.table_seeks = stats.total_table_seeks;
-        }
-        if (scan.seeks != NULL) {
-          *scan.seeks = stats.total_seeks;
-        }
-        if (scan.n != NULL) {
-          *scan.n = stats.n;
-        }
-      }
     }
 
     if (!status.ok()) {
       break;
+    }
+  }
+
+  if (status.ok()) {
+    if (scan.table_seeks != NULL) {
+      *scan.table_seeks = stats.total_table_seeks;
+    }
+    if (scan.seeks != NULL) {
+      *scan.seeks = stats.total_seeks;
+    }
+    if (scan.n != NULL) {
+      *scan.n = stats.n;
     }
   }
 
@@ -1479,6 +1485,10 @@ Status DirReaderImpl::DoIt(const ReadOp& read, const Slice& fid,
   uint32_t hash = Hash(fid.data(), fid.size(), 0);
   uint32_t part = hash & part_mask_;
   MutexLock ml(&mutex_);
+  Dir::ReadStats stats;
+  stats.total_table_seeks = 0;
+  stats.total_seeks = 0;
+
   status = OpenDir(part);
   if (status.ok()) {
     assert(dirs_[part] != NULL);
@@ -1491,16 +1501,17 @@ Status DirReaderImpl::DoIt(const ReadOp& read, const Slice& fid,
     char tmp[256];  // Temporary buffer space for the read operation
     opts.tmp_length = sizeof(tmp);
     opts.tmp = tmp;
-    Dir::ReadStats stats;
+
     status = dirs_[part]->Read(opts, fid, dst, &stats);
     dir->Unref();
-    if (status.ok()) {
-      if (read.table_seeks != NULL) {
-        *read.table_seeks = stats.total_table_seeks;
-      }
-      if (read.seeks != NULL) {
-        *read.seeks = stats.total_seeks;
-      }
+  }
+
+  if (status.ok()) {
+    if (read.table_seeks != NULL) {
+      *read.table_seeks = stats.total_table_seeks;
+    }
+    if (read.seeks != NULL) {
+      *read.seeks = stats.total_seeks;
     }
   }
 
