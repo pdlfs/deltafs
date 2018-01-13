@@ -1189,7 +1189,6 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
                           size_t __keylen, size_t* __sz, size_t* __table_seeks,
                           size_t* __seeks) {
   pdlfs::Status s;
-  char buf[256];  // For storing temporary block contents
   std::string dst;
   char* result = NULL;
 
@@ -1203,8 +1202,10 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
     s = BadArgs();
   } else {
     DirReader* reader = __dir->io.reader;
-    s = reader->ReadAll(pdlfs::Slice(__key, __keylen), &dst, buf, sizeof(buf),
-                        __table_seeks, __seeks);
+    DirReader::ReadOp op;
+    op.table_seeks = __table_seeks;
+    op.seeks = __seeks;
+    s = reader->DoIt(op, pdlfs::Slice(__key, __keylen), &dst);
     if (s.ok()) {
       result = static_cast<char*>(malloc(dst.size()));
       memcpy(result, dst.data(), dst.size());
@@ -1226,7 +1227,6 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
                               size_t* __sz, size_t* __table_seeks,
                               size_t* __seeks) {
   pdlfs::Status s;
-  char buf[256];  // For storing temporary block contents
   std::string dst;
   char* result = NULL;
 
@@ -1241,13 +1241,16 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
   } else {
     char tmp[16];
     DirReader* reader = __dir->io.reader;
+    DirReader::ReadOp op;
+    op.table_seeks = __table_seeks;
+    op.seeks = __seeks;
 #ifdef PLFSIO_HASH_USE_SPOOKY
     pdlfs::Spooky128(__fname, strlen(__fname), 0, 0, tmp);
 #else
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
 #endif
     pdlfs::Slice k(tmp, __dir->options.key_size);
-    s = reader->ReadAll(k, &dst, buf, sizeof(buf), __table_seeks, __seeks);
+    s = reader->DoIt(op, k, &dst);
     if (s.ok()) {
       result = static_cast<char*>(malloc(dst.size()));
       memcpy(result, dst.data(), dst.size());

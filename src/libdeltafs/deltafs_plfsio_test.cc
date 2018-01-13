@@ -158,9 +158,10 @@ class PlfsIoTest {
 
   std::string Read(const Slice& key) {
     std::string tmp;
+    DirReader::ReadOp op;
     if (writer_ != NULL) Finish();
     if (reader_ == NULL) OpenReader();
-    ASSERT_OK(reader_->ReadAll(key, &tmp));
+    ASSERT_OK(reader_->DoIt(op, key, &tmp));
     return tmp;
   }
 
@@ -1177,12 +1178,10 @@ class PlfsQyBench : protected PlfsIoBench {
     options_.verify_checksums = false;
     options_.paranoid_checks = true;
 
-    block_buffer_ = new char[options_.block_size];
     env_ = new StringEnv;
   }
 
   ~PlfsQyBench() {
-    delete[] block_buffer_;
     delete writer_;
     writer_ = NULL;
     delete reader_;
@@ -1227,7 +1226,8 @@ class PlfsQyBench : protected PlfsIoBench {
         memcpy(tmp, &h2, 8);
         k = Slice(tmp, options_.key_size);
       }
-      s = reader_->ReadAll(k, &dummy_buf, block_buffer_, options_.block_size);
+      DirReader::ReadOp op;
+      s = reader_->DoIt(op, k, &dummy_buf);
       if (!s.ok()) {
         break;
       }
@@ -1294,7 +1294,6 @@ class PlfsQyBench : protected PlfsIoBench {
   }
 
   int force_negative_lookups_;
-  char* block_buffer_;
   DirReader* reader_;
 
   uint64_t num_empty_reads_;

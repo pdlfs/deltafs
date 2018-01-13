@@ -1335,17 +1335,7 @@ class DirReaderImpl : public DirReader {
   DirReaderImpl(const DirOptions& opts, const std::string& name);
   virtual ~DirReaderImpl();
 
-  virtual Status ReadAll(
-      const Slice& fid,
-      std::string* dst,     // Buffer space for storing read results
-      char* tmp,            // Temporary space for storing loaded block contents
-      size_t tmp_length,    // Size of the temporary space
-      size_t* table_seeks,  // Total number of tables touched
-      size_t* seeks         // Total number of data blocks fetched
-  );
-
   virtual Status DoIt(const ReadOp& read, const Slice& fid, std::string* dst);
-
   virtual Status DoIt(const ScanOp& scan, ScanSaver, void*);
 
   virtual IoStats GetIoStats() const;
@@ -1516,67 +1506,6 @@ Status DirReaderImpl::DoIt(const ReadOp& read, const Slice& fid,
   }
 
   return status;
-}
-
-Status DirReaderImpl::ReadAll(const Slice& fid, std::string* dst, char* tmp,
-                              size_t tmp_length, size_t* table_seeks,
-                              size_t* seeks) {
-  Status status;
-  uint32_t hash = Hash(fid.data(), fid.size(), 0);
-  uint32_t part = hash & part_mask_;
-  assert(part < num_parts_);
-  MutexLock ml(&mutex_);
-  if (dirs_[part] == NULL) {
-    mutex_.Unlock();  // Unlock when fetching dir indexes
-    LogSource* indx = NULL;
-    Dir* dir = new Dir(options_, &mutex_, &cond_cv_);
-    dir->Ref();
-    LogSource::LogOptions idx_opts;
-    idx_opts.type = kIdxIoType;
-    idx_opts.sub_partition = static_cast<int>(part);
-    idx_opts.rank = options_.rank;
-    if (options_.measure_reads) idx_opts.seq_stats = &dir->io_stats_;
-    idx_opts.io_size = options_.read_size;
-    idx_opts.env = options_.env;
-    status = LogSource::Open(idx_opts, name_, &indx);
-    if (status.ok()) {
-      status = dir->Open(indx);
-    }
-    mutex_.Lock();
-    if (status.ok()) {
-      dir->InstallDataSource(data_);
-      if (dirs_[part] != NULL) dirs_[part]->Unref();
-      dirs_[part] = dir;
-      dirs_[part]->Ref();
-    }
-    dir->Unref();
-    if (indx != NULL) {
-      indx->Unref();
-    }
-  }
-
-  if (status.ok()) {
-    assert(dirs_[part] != NULL);
-    Dir* const dir = dirs_[part];
-    dir->Ref();
-    Dir::ReadOptions opts;
-    opts.tmp_length = tmp_length;
-    opts.tmp = tmp;
-    Dir::ReadStats stats;
-    status = dirs_[part]->Read(opts, fid, dst, &stats);
-    dir->Unref();
-    if (status.ok()) {
-      if (table_seeks != NULL) {
-        *table_seeks = stats.total_table_seeks;
-      }
-      if (seeks != NULL) {
-        *seeks = stats.total_seeks;
-      }
-    }
-    return status;
-  } else {
-    return status;
-  }
 }
 
 IoStats DirReaderImpl::GetIoStats() const {

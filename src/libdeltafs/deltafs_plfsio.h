@@ -419,11 +419,6 @@ class DirReader {
   static Status Open(const DirOptions& options, const std::string& dirname,
                      DirReader** result);
 
-  // Fetch the entire data from a specific file under a given plfs directory.
-  virtual Status ReadAll(const Slice& fid, std::string* dst, char* tmp = NULL,
-                         size_t tmp_length = 0, size_t* table_seeks = NULL,
-                         size_t* seeks = NULL) = 0;
-
   // Default: fetch all epochs and allow parallel reads
   struct ReadOp {
     ReadOp();

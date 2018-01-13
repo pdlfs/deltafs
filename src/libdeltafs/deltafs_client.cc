@@ -910,7 +910,8 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
       plfsio::DirReader* reader = ToReadablePlfsFile(file->fh)->parent->reader;
       assert(reader != NULL);
       std::string buf;
-      s = reader->ReadAll(fentry.nhash, &buf);
+      plfsio::DirReader::ReadOp op;
+      s = reader->DoIt(op, fentry.nhash, &buf);
       if (s.ok()) {
         size_t n = std::min(static_cast<size_t>(size), buf.size());
         if (n != 0) {
@@ -1147,7 +1148,7 @@ Status Client::Mkdirs(const char* path, mode_t mode) {
     mode = MaskMode(mode);
     s = mdscli_->Mkdir(p, mode, NULL, true,  // create_if_missing
                        false                 // error_if_exists
-                       );
+    );
   }
 
 #if VERBOSE >= OP_VERBOSE_LEVEL
