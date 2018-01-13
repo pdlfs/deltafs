@@ -1522,6 +1522,21 @@ IoStats DirReaderImpl::GetIoStats() const {
   return result;
 }
 
+DirReader::ReadOp::ReadOp()
+    : epoch_start(0),
+      epoch_end(~static_cast<uint32_t>(0)),
+      no_parallel_reads(false),
+      table_seeks(NULL),
+      seeks(NULL) {}
+
+DirReader::ScanOp::ScanOp()
+    : epoch_start(0),
+      epoch_end(~static_cast<uint32_t>(0)),
+      no_parallel_reads(false),
+      table_seeks(NULL),
+      seeks(NULL),
+      n(NULL) {}
+
 DirReader::~DirReader() {}
 
 // Return the name of the filter for printing.
