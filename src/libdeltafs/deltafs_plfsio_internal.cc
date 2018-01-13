@@ -1597,7 +1597,7 @@ void Dir::List(uint32_t epoch, ListContext* ctx) {
   // Increase the total seek count
   ctx->num_table_seeks += stats.table_seeks;
   ctx->num_seeks += stats.seeks;
-  ctx->num_keys += stats.n;
+  ctx->n += stats.n;
   assert(ctx->num_open_lists > 0);
   ctx->num_open_lists--;
   bg_cv_->SignalAll();
@@ -1730,7 +1730,7 @@ Status Dir::Scan(const ScanOptions& opts, ScanStats* stats) {
   ctx.num_table_seeks = 0;  // Total number of tables touched
   // Total number of data blocks fetched
   ctx.num_seeks = 0;
-  ctx.num_keys = 0;
+  ctx.n = 0;
   if (!options_.parallel_reads) {
     // Pre-create the root iterator for serial reads
     ctx.rt_iter = NewRtIterator(rt_);
@@ -1771,9 +1771,9 @@ Status Dir::Scan(const ScanOptions& opts, ScanStats* stats) {
   delete ctx.rt_iter;
   if (status.ok()) {
     if (stats != NULL) {
-      stats->total_keys = ctx.num_keys;
-      stats->total_table_seeks = ctx.num_table_seeks;
-      stats->total_seeks = ctx.num_seeks;
+      stats->total_table_seeks += ctx.num_table_seeks;
+      stats->total_seeks += ctx.num_seeks;
+      stats->n += ctx.n;
     }
   }
 
@@ -1841,8 +1841,8 @@ Status Dir::Read(const ReadOptions& opts, const Slice& key, std::string* dst,
   // Merge sort read results
   if (status.ok()) {
     if (stats != NULL) {
-      stats->total_table_seeks = ctx.num_table_seeks;
-      stats->total_seeks = ctx.num_seeks;
+      stats->total_table_seeks += ctx.num_table_seeks;
+      stats->total_seeks += ctx.num_seeks;
     }
     if (options_.parallel_reads) {
       Merge(&ctx);

@@ -289,10 +289,10 @@ class Dir {
   // Return OK on success, or a non-OK status on errors.
   Status Open(LogSource* indx);
 
-  // Obtain the value to a key from all epochs. All value found will be appended
-  // to "dst". A caller may optionally provide a temporary buffer for storing
-  // fetched block contents. Read stats will be reported through "*stats".
-  // Return OK on success, or a non-OK status on errors.
+  // Obtain the value to a key within a given epoch range. All value found will
+  // be appended to "dst". A caller may optionally provide a temporary buffer
+  // for storing fetched block contents. Read stats will be accumulated to
+  // "*stats". Return OK on success, or a non-OK status on errors.
   struct ReadOptions {
     ReadOptions();
     bool force_serial_reads;  // Do not fetch data in parallel
@@ -312,6 +312,10 @@ class Dir {
   Status Read(const ReadOptions& opts, const Slice& key, std::string* dst,
               ReadStats* stats);
 
+  // Iterate through all keys within a given epoch range. A caller may
+  // optionally provide a temporary buffer for storing fetched block contents.
+  // Read stats will be accumulated to "*stats". Return OK on success, or a
+  // non-OK status on errors.
   struct ScanOptions {
     ScanOptions();
     bool force_serial_reads;  // Do not fetch data in parallel
@@ -330,7 +334,7 @@ class Dir {
     // Total data blocks fetched
     size_t total_seeks;
     // Total data entries processed
-    size_t total_keys;
+    size_t n;
   };
 
   Status Scan(const ScanOptions& opts, ScanStats* stats);
@@ -464,7 +468,7 @@ class Dir {
     // Total number of data blocks fetched
     size_t num_seeks;
     // Total number of records read
-    size_t num_keys;
+    size_t n;
   };
   void List(uint32_t epoch, ListContext* ctx);
 

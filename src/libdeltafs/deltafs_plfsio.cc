@@ -1458,7 +1458,7 @@ Status DirReaderImpl::DoIt(const ScanOp& scan, ScanSaver saver, void* arg) {
           *scan.seeks = stats.total_seeks;
         }
         if (scan.n != NULL) {
-          *scan.n = stats.total_keys;
+          *scan.n = stats.n;
         }
       }
     }
