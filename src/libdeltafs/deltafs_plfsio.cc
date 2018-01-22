@@ -1335,8 +1335,8 @@ class DirReaderImpl : public DirReader {
   DirReaderImpl(const DirOptions& opts, const std::string& name);
   virtual ~DirReaderImpl();
 
-  virtual Status DoIt(const ReadOp& read, const Slice& fid, std::string* dst);
-  virtual Status DoIt(const ScanOp& scan, ScanSaver, void*);
+  virtual Status Read(const ReadOp& op, const Slice& fid, std::string* dst);
+  virtual Status Scan(const ScanOp& op, ScanSaver, void*);
 
   virtual IoStats GetIoStats() const;
 
@@ -1419,7 +1419,7 @@ Status DirReaderImpl::OpenDir(size_t part) {
 
 // Perform a scan operation on all partitions.
 // Return OK on success, or a non-OK status on errors.
-Status DirReaderImpl::DoIt(const ScanOp& scan, ScanSaver saver, void* arg) {
+Status DirReaderImpl::Scan(const ScanOp& op, ScanSaver saver, void* arg) {
   Status status;
   MutexLock ml(&mutex_);
   Dir::ScanStats stats;
@@ -1434,9 +1434,9 @@ Status DirReaderImpl::DoIt(const ScanOp& scan, ScanSaver saver, void* arg) {
       Dir* const dir = dirs_[part];
       dir->Ref();
       Dir::ScanOptions opts;
-      opts.epoch_start = scan.epoch_start;
-      opts.epoch_end = scan.epoch_end;
-      opts.force_serial_reads = scan.no_parallel_reads;
+      opts.epoch_start = op.epoch_start;
+      opts.epoch_end = op.epoch_end;
+      opts.force_serial_reads = op.no_parallel_reads;
       opts.usr_cb = reinterpret_cast<void*>(saver);
       opts.arg_cb = arg;
       char tmp[256];  // Temporary buffer space for the read operation
@@ -1453,14 +1453,14 @@ Status DirReaderImpl::DoIt(const ScanOp& scan, ScanSaver saver, void* arg) {
   }
 
   if (status.ok()) {
-    if (scan.table_seeks != NULL) {
-      *scan.table_seeks = stats.total_table_seeks;
+    if (op.table_seeks != NULL) {
+      *op.table_seeks = stats.total_table_seeks;
     }
-    if (scan.seeks != NULL) {
-      *scan.seeks = stats.total_seeks;
+    if (op.seeks != NULL) {
+      *op.seeks = stats.total_seeks;
     }
-    if (scan.n != NULL) {
-      *scan.n = stats.n;
+    if (op.n != NULL) {
+      *op.n = stats.n;
     }
   }
 
@@ -1469,7 +1469,7 @@ Status DirReaderImpl::DoIt(const ScanOp& scan, ScanSaver saver, void* arg) {
 
 // Perform a read operation for a given file.
 // Return OK on success, or a non-OK status on errors.
-Status DirReaderImpl::DoIt(const ReadOp& read, const Slice& fid,
+Status DirReaderImpl::Read(const ReadOp& op, const Slice& fid,
                            std::string* dst) {
   Status status;
   uint32_t hash = Hash(fid.data(), fid.size(), 0);
@@ -1485,9 +1485,9 @@ Status DirReaderImpl::DoIt(const ReadOp& read, const Slice& fid,
     Dir* const dir = dirs_[part];
     dir->Ref();
     Dir::ReadOptions opts;
-    opts.epoch_start = read.epoch_start;
-    opts.epoch_end = read.epoch_end;
-    opts.force_serial_reads = read.no_parallel_reads;
+    opts.epoch_start = op.epoch_start;
+    opts.epoch_end = op.epoch_end;
+    opts.force_serial_reads = op.no_parallel_reads;
     char tmp[256];  // Temporary buffer space for the read operation
     opts.tmp_length = sizeof(tmp);
     opts.tmp = tmp;
@@ -1497,11 +1497,11 @@ Status DirReaderImpl::DoIt(const ReadOp& read, const Slice& fid,
   }
 
   if (status.ok()) {
-    if (read.table_seeks != NULL) {
-      *read.table_seeks = stats.total_table_seeks;
+    if (op.table_seeks != NULL) {
+      *op.table_seeks = stats.total_table_seeks;
     }
-    if (read.seeks != NULL) {
-      *read.seeks = stats.total_seeks;
+    if (op.seeks != NULL) {
+      *op.seeks = stats.total_seeks;
     }
   }
 

@@ -911,7 +911,7 @@ Status Client::Read(int fd, Slice* result, uint64_t size, char* scratch) {
       assert(reader != NULL);
       std::string buf;
       plfsio::DirReader::ReadOp op;
-      s = reader->DoIt(op, fentry.nhash, &buf);
+      s = reader->Read(op, fentry.nhash, &buf);
       if (s.ok()) {
         size_t n = std::min(static_cast<size_t>(size), buf.size());
         if (n != 0) {

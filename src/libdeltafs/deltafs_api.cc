@@ -919,7 +919,7 @@ int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
 
 namespace {
 struct ScanState {
-  void (*saver)(void* arg, const char* key, size_t keylen, const char* d,
+  void (*saver)(void*, const char* key, size_t keylen, const char* d,
                 size_t dlen);
   void* arg;
 };
@@ -1218,7 +1218,7 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
     op.SetEpoch(__epoch);
     op.table_seeks = __table_seeks;
     op.seeks = __seeks;
-    s = reader->DoIt(op, pdlfs::Slice(__key, __keylen), &dst);
+    s = reader->Read(op, pdlfs::Slice(__key, __keylen), &dst);
     if (s.ok()) {
       result = static_cast<char*>(malloc(dst.size()));
       memcpy(result, dst.data(), dst.size());
@@ -1264,7 +1264,7 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
 #endif
     pdlfs::Slice k(tmp, __dir->options.key_size);
-    s = reader->DoIt(op, k, &dst);
+    s = reader->Read(op, k, &dst);
     if (s.ok()) {
       result = static_cast<char*>(malloc(dst.size()));
       memcpy(result, dst.data(), dst.size());
@@ -1302,7 +1302,7 @@ ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
     DirReader::ScanOp op;
     op.SetEpoch(__epoch);
     op.n = &n;
-    s = reader->DoIt(op, ScanSaver, &state);
+    s = reader->Scan(op, ScanSaver, &state);
   }
 
   if (!s.ok()) {

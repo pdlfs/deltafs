@@ -432,8 +432,7 @@ class DirReader {
   // Obtain the value to a specific key stored in a given epoch range.
   // Report operation stats in *table_seeks and *seeks.
   // Return OK on success, or a non-OK status on errors.
-  virtual Status DoIt(const ReadOp& read, const Slice& fid,
-                      std::string* dst) = 0;
+  virtual Status Read(const ReadOp& op, const Slice& fid, std::string* dst) = 0;
 
   // Default: scan all epochs and allow parallel reads
   struct ScanOp {
@@ -450,7 +449,7 @@ class DirReader {
   // List all keys stored in a given epoch range.
   // Report operation stats in *table_seeks, *seeks, and *n.
   // Return OK on success, or a non-OK status on errors.
-  virtual Status DoIt(const ScanOp& scan, ScanSaver, void*) = 0;
+  virtual Status Scan(const ScanOp& op, ScanSaver, void*) = 0;
 
   // Return the aggregated I/O stats accumulated so far.
   virtual IoStats GetIoStats() const = 0;

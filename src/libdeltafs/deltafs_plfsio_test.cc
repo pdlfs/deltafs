@@ -161,7 +161,7 @@ class PlfsIoTest {
     DirReader::ReadOp op;
     if (writer_ != NULL) Finish();
     if (reader_ == NULL) OpenReader();
-    ASSERT_OK(reader_->DoIt(op, key, &tmp));
+    ASSERT_OK(reader_->Read(op, key, &tmp));
     return tmp;
   }
 
@@ -1227,7 +1227,7 @@ class PlfsQyBench : protected PlfsIoBench {
         k = Slice(tmp, options_.key_size);
       }
       DirReader::ReadOp op;
-      s = reader_->DoIt(op, k, &dummy_buf);
+      s = reader_->Read(op, k, &dummy_buf);
       if (!s.ok()) {
         break;
       }
