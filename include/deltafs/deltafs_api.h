@@ -125,14 +125,14 @@ int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
 /* Return the total number of configured memtable partitions. */
 int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name);
-int deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
-                        size_t __keylen, int __epoch, const char* __value,
-                        size_t __sz);
+ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
+                            size_t __keylen, int __epoch, const char* __value,
+                            size_t __sz);
 /* Appends a piece of data into a given file.
    __fname is hashed to become a fixed-sized key.
    Return 0 on success, -1 on errors. */
-int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
-                           int __epoch, const void* __buf, size_t __sz);
+ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
+                               int __epoch, const void* __buf, size_t __sz);
 /* Retrieve data from a given key from a specific epoch, or all epochs.
    Returns NULL if not found. A malloc()ed array otherwise.
    Stores the size of the value in *__sz.
@@ -150,11 +150,11 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
 /* Scan directory contents from a specific epoch, or all epochs.
    Report results to *saver. Return -1 on errors.
    Otherwise, return the total number of entries scanned. */
-int deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
-                         void (*saver)(void* arg, const char* __key,
-                                       size_t __keylen, const char* __value,
-                                       size_t sz),
-                         void* arg);
+ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
+                             void (*saver)(void* arg, const char* __key,
+                                           size_t __keylen, const char* __value,
+                                           size_t sz),
+                             void* arg);
 /* Returns NULL if not found. A malloc()ed array otherwise.
    The result should be deleted by free(). */
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);

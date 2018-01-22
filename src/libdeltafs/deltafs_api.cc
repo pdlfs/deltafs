@@ -1023,9 +1023,9 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
   }
 }
 
-int deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
-                        size_t __keylen, int __epoch, const char* __value,
-                        size_t __sz) {
+ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
+                            size_t __keylen, int __epoch, const char* __value,
+                            size_t __sz) {
   pdlfs::Status s;
 
   if (!IsDirOpened(__dir)) {
@@ -1045,12 +1045,12 @@ int deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
   if (!s.ok()) {
     return DirError(__dir, s);
   } else {
-    return 0;
+    return __sz;
   }
 }
 
-int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
-                           int __epoch, const void* __buf, size_t __sz) {
+ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
+                               int __epoch, const void* __buf, size_t __sz) {
   pdlfs::Status s;
 
   if (!IsDirOpened(__dir)) {
@@ -1078,7 +1078,7 @@ int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
   if (!s.ok()) {
     return DirError(__dir, s);
   } else {
-    return 0;
+    return __sz;
   }
 }
 
@@ -1281,16 +1281,16 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
   }
 }
 
-int deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
-                         void (*saver)(void* arg, const char* __key,
-                                       size_t __keylen, const char* __value,
-                                       size_t sz),
-                         void* arg) {
+ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
+                             void (*saver)(void* arg, const char* __key,
+                                           size_t __keylen, const char* __value,
+                                           size_t sz),
+                             void* arg) {
   pdlfs::Status s;
   ScanState state;
   state.saver = saver;
   state.arg = arg;
-  size_t n;
+  size_t n = 0;
 
   if (!IsDirOpened(__dir)) {
     s = BadArgs();
@@ -1307,7 +1307,7 @@ int deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
   if (!s.ok()) {
     return DirError(__dir, s);
   } else {
-    return int(n);
+    return n;
   }
 }
 
