@@ -919,8 +919,8 @@ int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
 
 namespace {
 struct ScanState {
-  void (*saver)(void* arg, const char* __key, size_t __keylen,
-                const char* __value, size_t sz);
+  void (*saver)(void* arg, const char* key, size_t keylen, const char* d,
+                size_t dlen);
   void* arg;
 };
 
@@ -931,13 +931,13 @@ void ScanSaver(void* arg, const pdlfs::Slice& k, const pdlfs::Slice& v) {
 
 // Pre-defined plfsdir dir modes...  the main difference
 // is on the disposition of duplicated keys inserted
-const pdlfs::plfsio::DirMode DM_MULTIMAP =
-    pdlfs::plfsio::kDmMultiMap;  // Allow duplicated keys -- each duplicated key
-                                 // insertion is regarded as a separate record
-const pdlfs::plfsio::DirMode DM_UNIDROP =  // For debugging only...
-    pdlfs::plfsio::kDmUniqueDrop;          // Discard all duplicated keys
-const pdlfs::plfsio::DirMode DM_UNIK =
-    pdlfs::plfsio::kDmUniqueKey;  // Assume no duplicates
+#define DM_MULTIMAP \
+  pdlfs::plfsio::kDmMultiMap  // Allow duplicated keys -- each duplicated key
+                              // insertion is regarded as a separate record
+#define DM_UNIDROP \
+  pdlfs::plfsio::kDmUniqueDrop               // For debug only ...
+                                             // discard all duplicated keys
+#define DM_UNIK pdlfs::plfsio::kDmUniqueKey  // Assume no duplicates
 
 pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;  // To obtain detailed error status, an error printer must be
@@ -957,7 +957,6 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   dir->options.is_env_pfs = dir->is_env_pfs;
   dir->options.env = dir->env;
 
-  // TODO: support O_RDWR in future
   if (dir->mode == O_WRONLY) {
     DirWriter* writer;
     dir->options.compaction_pool = dir->pool;
@@ -967,7 +966,7 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
     } else {
       dir->io.writer = NULL;
     }
-  } else {
+  } else if (dir->mode == O_RDONLY) {
     DirReader* reader;
     dir->options.reader_pool = dir->pool;
     s = DirReader::Open(dir->options, name, &reader);
@@ -976,6 +975,8 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
     } else {
       dir->io.reader = NULL;
     }
+  } else {
+    s = BadArgs();
   }
 
   // Some options may only be set before
