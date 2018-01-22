@@ -147,6 +147,14 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
 void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
                            int __epoch, size_t* __sz, size_t* __table_seeks,
                            size_t* __seeks);
+/* Scan directory contents from a specific epoch, or all epochs.
+   Report results to *saver. Return -1 on errors.
+   Otherwise, return the total number of entries scanned. */
+int deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
+                         void (*saver)(void* arg, const char* __key,
+                                       size_t __keylen, const char* __value,
+                                       size_t sz),
+                         void* arg);
 /* Returns NULL if not found. A malloc()ed array otherwise.
    The result should be deleted by free(). */
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);

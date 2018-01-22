@@ -438,6 +438,7 @@ class DirReader {
   // Default: scan all epochs and allow parallel reads
   struct ScanOp {
     ScanOp();
+    void SetEpoch(int epoch);
     uint32_t epoch_start;
     uint32_t epoch_end;
     bool no_parallel_reads;

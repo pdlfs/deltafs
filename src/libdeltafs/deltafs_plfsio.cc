@@ -1544,6 +1544,13 @@ DirReader::ScanOp::ScanOp()
       seeks(NULL),
       n(NULL) {}
 
+void DirReader::ScanOp::SetEpoch(int epoch) {
+  if (epoch != -1) {
+    epoch_start = static_cast<uint32_t>(epoch);
+    epoch_end = epoch_start + 1;
+  }
+}
+
 DirReader::~DirReader() {}
 
 // Return the name of the filter for printing.

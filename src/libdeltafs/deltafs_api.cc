@@ -918,6 +918,17 @@ int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
 }
 
 namespace {
+struct ScanState {
+  void (*saver)(void* arg, const char* __key, size_t __keylen,
+                const char* __value, size_t sz);
+  void* arg;
+};
+
+void ScanSaver(void* arg, const pdlfs::Slice& k, const pdlfs::Slice& v) {
+  ScanState* state = reinterpret_cast<ScanState*>(arg);
+  state->saver(state->arg, k.data(), k.size(), v.data(), v.size());
+}
+
 // Pre-defined plfsdir dir modes...  the main difference
 // is on the disposition of duplicated keys inserted
 const pdlfs::plfsio::DirMode DM_MULTIMAP =
@@ -1267,6 +1278,36 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
     return NULL;
   } else {
     return result;
+  }
+}
+
+int deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
+                         void (*saver)(void* arg, const char* __key,
+                                       size_t __keylen, const char* __value,
+                                       size_t sz),
+                         void* arg) {
+  pdlfs::Status s;
+  ScanState state;
+  state.saver = saver;
+  state.arg = arg;
+  size_t n;
+
+  if (!IsDirOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_RDONLY) {
+    s = BadArgs();
+  } else {
+    DirReader* reader = __dir->io.reader;
+    DirReader::ScanOp op;
+    op.SetEpoch(__epoch);
+    op.n = &n;
+    s = reader->DoIt(op, ScanSaver, &state);
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return int(n);
   }
 }
 
