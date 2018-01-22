@@ -125,29 +125,31 @@ int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
 /* Return the total number of configured memtable partitions. */
 int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name);
+/* Put a piece of data into a given key.
+   Return -1 on errors, or num bytes written. */
 ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
                             size_t __keylen, int __epoch, const char* __value,
                             size_t __sz);
 /* Appends a piece of data into a given file.
-   __fname is hashed to become a fixed-sized key.
-   Return 0 on success, -1 on errors. */
+   __fname will be hashed to become a fixed-sized key.
+   Return -1 on errors, or num bytes written. */
 ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
                                int __epoch, const void* __buf, size_t __sz);
-/* Retrieve data from a given key from a specific epoch, or all epochs.
+/* Retrieve data from a given key at a specific epoch, or all epochs.
    Returns NULL if not found. A malloc()ed array otherwise.
    Stores the size of the value in *__sz.
    The result should be deleted by free(). */
 char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
                           size_t __keylen, int __epoch, size_t* __sz,
                           size_t* __table_seeks, size_t* __seeks);
-/* Retrieve data from a given filename from a specific epoch, or all epochs.
+/* Retrieve data from a given filename at a specific epoch, or all epochs.
    Returns NULL if not found. A malloc()ed array otherwise.
    Stores the length of the file in *__sz.
    The result should be deleted by free(). */
 void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
                            int __epoch, size_t* __sz, size_t* __table_seeks,
                            size_t* __seeks);
-/* Scan directory contents from a specific epoch, or all epochs.
+/* Scan directory contents at a specific epoch, or all epochs.
    Report results to *saver. Return -1 on errors.
    Otherwise, return the total number of entries scanned. */
 ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
