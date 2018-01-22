@@ -133,18 +133,20 @@ int deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
    Return 0 on success, -1 on errors. */
 int deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
                            int __epoch, const void* __buf, size_t __sz);
-/* Returns NULL if not found. A malloc()ed array otherwise.
+/* Retrieve data from a given key from a specific epoch, or all epochs.
+   Returns NULL if not found. A malloc()ed array otherwise.
    Stores the size of the value in *__sz.
    The result should be deleted by free(). */
 char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
-                          size_t __keylen, size_t* __sz, size_t* __table_seeks,
-                          size_t* __seeks);
-/* Returns NULL if not found. A malloc()ed array otherwise.
+                          size_t __keylen, int __epoch, size_t* __sz,
+                          size_t* __table_seeks, size_t* __seeks);
+/* Retrieve data from a given filename from a specific epoch, or all epochs.
+   Returns NULL if not found. A malloc()ed array otherwise.
    Stores the length of the file in *__sz.
    The result should be deleted by free(). */
-void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
-                              size_t* __sz, size_t* __table_seeks,
-                              size_t* __seeks);
+void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
+                           int __epoch, size_t* __sz, size_t* __table_seeks,
+                           size_t* __seeks);
 /* Returns NULL if not found. A malloc()ed array otherwise.
    The result should be deleted by free(). */
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);

@@ -1529,6 +1529,13 @@ DirReader::ReadOp::ReadOp()
       table_seeks(NULL),
       seeks(NULL) {}
 
+void DirReader::ReadOp::SetEpoch(int epoch) {
+  if (epoch != -1) {
+    epoch_start = static_cast<uint32_t>(epoch);
+    epoch_end = epoch_start + 1;
+  }
+}
+
 DirReader::ScanOp::ScanOp()
     : epoch_start(0),
       epoch_end(~static_cast<uint32_t>(0)),

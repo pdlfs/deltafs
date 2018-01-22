@@ -1186,8 +1186,8 @@ long long deltafs_plfsdir_get_integer_property(deltafs_plfsdir_t* __dir,
 }
 
 char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
-                          size_t __keylen, size_t* __sz, size_t* __table_seeks,
-                          size_t* __seeks) {
+                          size_t __keylen, int __epoch, size_t* __sz,
+                          size_t* __table_seeks, size_t* __seeks) {
   pdlfs::Status s;
   std::string dst;
   char* result = NULL;
@@ -1203,6 +1203,7 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
   } else {
     DirReader* reader = __dir->io.reader;
     DirReader::ReadOp op;
+    op.SetEpoch(__epoch);
     op.table_seeks = __table_seeks;
     op.seeks = __seeks;
     s = reader->DoIt(op, pdlfs::Slice(__key, __keylen), &dst);
@@ -1223,9 +1224,9 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
   }
 }
 
-void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
-                              size_t* __sz, size_t* __table_seeks,
-                              size_t* __seeks) {
+void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
+                           int __epoch, size_t* __sz, size_t* __table_seeks,
+                           size_t* __seeks) {
   pdlfs::Status s;
   std::string dst;
   char* result = NULL;
@@ -1242,6 +1243,7 @@ void* deltafs_plfsdir_readall(deltafs_plfsdir_t* __dir, const char* __fname,
     char tmp[16];
     DirReader* reader = __dir->io.reader;
     DirReader::ReadOp op;
+    op.SetEpoch(__epoch);
     op.table_seeks = __table_seeks;
     op.seeks = __seeks;
 #ifdef PLFSIO_HASH_USE_SPOOKY
