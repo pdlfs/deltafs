@@ -774,16 +774,13 @@ int deltafs_tp_close(deltafs_tp_t* __tp) {
 struct deltafs_plfsdir {
   pdlfs::Env* env;
   pdlfs::ThreadPool* pool;
-  union {
-    DirWriter* writer;
-    DirReader* reader;
-    void* x;
-  } io;
+  DirWriter* writer;
+  DirReader* reader;
   // If the multi-map mode should be used
   bool multi;
   bool is_env_pfs;
   bool opened;  // If deltafs_plfsdir_open() has been called
-  DirOptions options;
+  DirOptions* options;
   deltafs_printer_t printer;  // Error printer
   void* printer_arg;
   // O_WRONLY or O_RDONLY
@@ -796,16 +793,11 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf,
   if (__mode == O_RDONLY || __mode == O_WRONLY) {
     deltafs_plfsdir_t* dir =
         static_cast<deltafs_plfsdir_t*>(malloc(sizeof(deltafs_plfsdir_t)));
-    dir->options = ParseOptions(__conf);
-    dir->opened = false;
-    dir->printer_arg = NULL;
-    dir->printer = NULL;
-    dir->io.x = NULL;
+    memset(dir, 0, sizeof(deltafs_plfsdir_t));
+    dir->options = new DirOptions(ParseOptions(__conf));
     dir->mode = __mode;
     dir->is_env_pfs = true;
-    dir->multi = false;
     dir->env = DefaultDirEnv();
-    dir->pool = NULL;
     return dir;
   } else {
     SetErrno(BadArgs());
@@ -830,7 +822,7 @@ int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size) {
     __key_size = 16;
   }
   if (__dir != NULL && !__dir->opened) {
-    __dir->options.key_size = __key_size;
+    __dir->options->key_size = __key_size;
     return 0;
   } else {
     SetErrno(BadArgs());
@@ -840,7 +832,7 @@ int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size) {
 
 int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size) {
   if (__dir != NULL && !__dir->opened) {
-    __dir->options.value_size = __val_size;
+    __dir->options->value_size = __val_size;
     return 0;
   } else {
     SetErrno(BadArgs());
@@ -886,7 +878,7 @@ int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
 int deltafs_plfsdir_set_non_blocking(deltafs_plfsdir_t* __dir, int __flag) {
   if (__dir != NULL && !__dir->opened) {
     const bool non_blocking = static_cast<bool>(__flag);
-    __dir->options.non_blocking = non_blocking;
+    __dir->options->non_blocking = non_blocking;
     return 0;
   } else {
     SetErrno(BadArgs());
@@ -898,8 +890,8 @@ int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir,
                                           int __flag) {
   if (__dir != NULL && !__dir->opened) {
     const bool measure_io = static_cast<bool>(__flag);
-    __dir->options.measure_writes = measure_io;
-    __dir->options.measure_reads = measure_io;
+    __dir->options->measure_writes = measure_io;
+    __dir->options->measure_reads = measure_io;
     return 0;
   } else {
     SetErrno(BadArgs());
@@ -909,7 +901,7 @@ int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir,
 
 int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
   if (__dir != NULL) {
-    int lg_parts = __dir->options.lg_parts;
+    int lg_parts = __dir->options->lg_parts;
     return 1 << lg_parts;
   } else {
     SetErrno(BadArgs());
@@ -942,38 +934,35 @@ void ScanSaver(void* arg, const pdlfs::Slice& k, const pdlfs::Slice& v) {
 pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;  // To obtain detailed error status, an error printer must be
                     // set by a user
+
   if (dir->multi) {
     // Allow multiple insertions per key within a single epoch
-    dir->options.mode = DM_MULTIMAP;
+    dir->options->mode = DM_MULTIMAP;
   } else {  // By default, each key is inserted at most once within each epoch
 #ifndef NDEBUG
-    dir->options.mode = DM_UNIDROP;  // Debug duplicates
+    dir->options->mode = DM_UNIDROP;  // Debug duplicates
 #else
-    dir->options.mode = DM_UNIK;
+    dir->options->mode = DM_UNIK;
 #endif
   }
 
-  dir->options.allow_env_threads = false;  // No implicit background threads
-  dir->options.is_env_pfs = dir->is_env_pfs;
-  dir->options.env = dir->env;
+  dir->options->allow_env_threads = false;  // No implicit background threads
+  dir->options->is_env_pfs = dir->is_env_pfs;
+  dir->options->env = dir->env;
 
   if (dir->mode == O_WRONLY) {
     DirWriter* writer;
-    dir->options.compaction_pool = dir->pool;
-    s = DirWriter::Open(dir->options, name, &writer);
+    dir->options->compaction_pool = dir->pool;
+    s = DirWriter::Open(*dir->options, name, &writer);
     if (s.ok()) {
-      dir->io.writer = writer;
-    } else {
-      dir->io.writer = NULL;
+      dir->writer = writer;
     }
   } else if (dir->mode == O_RDONLY) {
     DirReader* reader;
-    dir->options.reader_pool = dir->pool;
-    s = DirReader::Open(dir->options, name, &reader);
+    dir->options->reader_pool = dir->pool;
+    s = DirReader::Open(*dir->options, name, &reader);
     if (s.ok()) {
-      dir->io.reader = reader;
-    } else {
-      dir->io.reader = NULL;
+      dir->reader = reader;
     }
   } else {
     s = BadArgs();
@@ -1038,9 +1027,8 @@ ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
   } else if (__keylen == 0) {
     s = BadArgs();
   } else {
-    DirWriter* writer = __dir->io.writer;
     pdlfs::Slice k(__key, __keylen), v(__value, __sz);
-    s = writer->Append(k, v, __epoch);
+    s = __dir->writer->Append(k, v, __epoch);
   }
 
   if (!s.ok()) {
@@ -1064,16 +1052,15 @@ ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
     s = BadArgs();
   } else {
     char tmp[16];
-    DirWriter* writer = __dir->io.writer;
 #ifdef PLFSIO_HASH_USE_SPOOKY
     pdlfs::Spooky128(__fname, strlen(__fname), 0, 0, tmp);
 #else
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
 #endif
-    pdlfs::Slice k(tmp, __dir->options.key_size);
+    pdlfs::Slice k(tmp, __dir->options->key_size);
     const char* data = static_cast<const char*>(__buf);
     pdlfs::Slice v(data, __sz);
-    s = writer->Append(k, v, __epoch);
+    s = __dir->writer->Append(k, v, __epoch);
   }
 
   if (!s.ok()) {
@@ -1091,8 +1078,7 @@ int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch) {
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
-    DirWriter* writer = __dir->io.writer;
-    s = writer->EpochFlush(__epoch);
+    s = __dir->writer->EpochFlush(__epoch);
   }
 
   if (!s.ok()) {
@@ -1110,8 +1096,7 @@ int deltafs_plfsdir_flush(deltafs_plfsdir_t* __dir, int __epoch) {
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
-    DirWriter* writer = __dir->io.writer;
-    s = writer->Flush(__epoch);
+    s = __dir->writer->Flush(__epoch);
   }
 
   if (!s.ok()) {
@@ -1129,8 +1114,7 @@ int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
-    DirWriter* writer = __dir->io.writer;
-    s = writer->Finish();
+    s = __dir->writer->Finish();
   }
 
   if (!s.ok()) {
@@ -1150,32 +1134,32 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
     pdlfs::Slice k(__key);
     if (__dir->mode == O_WRONLY) {
       if (k == "total_user_data") {
-        uint64_t vsz = __dir->io.writer->TEST_value_bytes();
-        uint64_t ksz = __dir->io.writer->TEST_key_bytes();
+        uint64_t vsz = __dir->writer->TEST_value_bytes();
+        uint64_t ksz = __dir->writer->TEST_key_bytes();
         return MakeChar(ksz + vsz);
       } else if (k == "total_memory_usage") {
-        uint64_t mem = __dir->io.writer->TEST_total_memory_usage();
+        uint64_t mem = __dir->writer->TEST_total_memory_usage();
         return MakeChar(mem);
       } else if (k == "num_keys") {
-        uint64_t nks = __dir->io.writer->TEST_num_keys();
+        uint64_t nks = __dir->writer->TEST_num_keys();
         return MakeChar(nks);
       } else if (k == "num_dropped_keys") {
-        uint64_t nds = __dir->io.writer->TEST_num_dropped_keys();
+        uint64_t nds = __dir->writer->TEST_num_dropped_keys();
         return MakeChar(nds);
       } else if (k == "sstable_filter_bytes") {
-        uint64_t fsz = __dir->io.writer->TEST_raw_filter_contents();
+        uint64_t fsz = __dir->writer->TEST_raw_filter_contents();
         return MakeChar(fsz);
       } else if (k == "sstable_index_bytes") {
-        uint64_t isz = __dir->io.writer->TEST_raw_index_contents();
+        uint64_t isz = __dir->writer->TEST_raw_index_contents();
         return MakeChar(isz);
       } else if (k == "sstable_data_bytes") {
-        uint64_t dsz = __dir->io.writer->TEST_raw_data_contents();
+        uint64_t dsz = __dir->writer->TEST_raw_data_contents();
         return MakeChar(dsz);
       } else if (k == "num_data_blocks") {
-        uint64_t nbs = __dir->io.writer->TEST_num_data_blocks();
+        uint64_t nbs = __dir->writer->TEST_num_data_blocks();
         return MakeChar(nbs);
       } else if (k == "num_sstables") {
-        uint64_t tbs = __dir->io.writer->TEST_num_sstables();
+        uint64_t tbs = __dir->writer->TEST_num_sstables();
         return MakeChar(tbs);
       }
     } else if (__dir->mode == O_RDONLY) {
@@ -1213,12 +1197,11 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
   } else if (__keylen == 0) {
     s = BadArgs();
   } else {
-    DirReader* reader = __dir->io.reader;
     DirReader::ReadOp op;
     op.SetEpoch(__epoch);
     op.table_seeks = __table_seeks;
     op.seeks = __seeks;
-    s = reader->Read(op, pdlfs::Slice(__key, __keylen), &dst);
+    s = __dir->reader->Read(op, pdlfs::Slice(__key, __keylen), &dst);
     if (s.ok()) {
       result = static_cast<char*>(malloc(dst.size()));
       memcpy(result, dst.data(), dst.size());
@@ -1253,7 +1236,6 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
     s = BadArgs();
   } else {
     char tmp[16];
-    DirReader* reader = __dir->io.reader;
     DirReader::ReadOp op;
     op.SetEpoch(__epoch);
     op.table_seeks = __table_seeks;
@@ -1263,8 +1245,8 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
 #else
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
 #endif
-    pdlfs::Slice k(tmp, __dir->options.key_size);
-    s = reader->Read(op, k, &dst);
+    pdlfs::Slice k(tmp, __dir->options->key_size);
+    s = __dir->reader->Read(op, k, &dst);
     if (s.ok()) {
       result = static_cast<char*>(malloc(dst.size()));
       memcpy(result, dst.data(), dst.size());
@@ -1298,11 +1280,10 @@ ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
   } else if (__dir->mode != O_RDONLY) {
     s = BadArgs();
   } else {
-    DirReader* reader = __dir->io.reader;
     DirReader::ScanOp op;
     op.SetEpoch(__epoch);
     op.n = &n;
-    s = reader->Scan(op, ScanSaver, &state);
+    s = __dir->reader->Scan(op, ScanSaver, &state);
   }
 
   if (!s.ok()) {
@@ -1316,9 +1297,9 @@ int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
   if (__dir != NULL) {
     if (__dir->opened) {
       if (__dir->mode == O_WRONLY)
-        delete __dir->io.writer;
+        delete __dir->writer;
       else if (__dir->mode == O_RDONLY)
-        delete __dir->io.reader;
+        delete __dir->reader;
       else {
         // Skip
       }
