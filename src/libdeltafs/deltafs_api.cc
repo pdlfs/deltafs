@@ -649,6 +649,14 @@ typedef pdlfs::plfsio::DirWriter DirWriter;
 // Dir Reader
 typedef pdlfs::plfsio::DirReader DirReader;
 
+// Dir mode
+typedef pdlfs::plfsio::DirMode DirMode;
+
+// Default dir mode
+inline DirMode DefaultDirMode() {  // Assuming unique keys
+  return pdlfs::plfsio::kDmUniqueKey;
+}
+
 // Default system env.
 inline pdlfs::Env* DefaultDirEnv() {
 #if defined(PDLFS_PLATFORM_POSIX)
@@ -797,6 +805,7 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf,
     dir->options = new DirOptions(ParseOptions(__conf));
     dir->mode = __mode;
     dir->is_env_pfs = true;
+    dir->options->mode = DefaultDirMode();
     dir->env = DefaultDirEnv();
     return dir;
   } else {
@@ -921,30 +930,24 @@ void ScanSaver(void* arg, const pdlfs::Slice& k, const pdlfs::Slice& v) {
   state->saver(state->arg, k.data(), k.size(), v.data(), v.size());
 }
 
-// Pre-defined plfsdir dir modes...  the main difference
-// is on the disposition of duplicated keys inserted
-#define DM_MULTIMAP \
-  pdlfs::plfsio::kDmMultiMap  // Allow duplicated keys -- each duplicated key
-                              // insertion is regarded as a separate record
-#define DM_UNIDROP \
-  pdlfs::plfsio::kDmUniqueDrop               // For debug only ...
-                                             // discard all duplicated keys
-#define DM_UNIK pdlfs::plfsio::kDmUniqueKey  // Assume no duplicates
+inline void FinalizeDirMode(deltafs_plfsdir_t* dir) {
+  if (dir->multi) {
+    DirMode multimap = pdlfs::plfsio::kDmMultiMap;
+    // Allow multiple insertions per key within a single epoch
+    dir->options->mode = multimap;
+  } else {  // By default, each key is inserted at most once within each epoch
+#ifndef NDEBUG
+    DirMode drop = pdlfs::plfsio::kDmUniqueDrop;
+    dir->options->mode = drop;  // Debug duplicates
+#endif
+  }
+}
 
 pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;  // To obtain detailed error status, an error printer must be
                     // set by a user
 
-  if (dir->multi) {
-    // Allow multiple insertions per key within a single epoch
-    dir->options->mode = DM_MULTIMAP;
-  } else {  // By default, each key is inserted at most once within each epoch
-#ifndef NDEBUG
-    dir->options->mode = DM_UNIDROP;  // Debug duplicates
-#else
-    dir->options->mode = DM_UNIK;
-#endif
-  }
+  FinalizeDirMode(dir);
 
   dir->options->allow_env_threads = false;  // No implicit background threads
   dir->options->is_env_pfs = dir->is_env_pfs;
