@@ -1,20 +1,19 @@
-#pragma once
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
-#include <stdint.h>
-#include <stdio.h>
+#pragma once
 
 #include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/iterator.h"
+
+#include <stdint.h>
+#include <stdio.h>
 
 namespace pdlfs {
 
@@ -162,17 +161,24 @@ class DB {
   virtual void CompactRange(const Slice* begin, const Slice* end) = 0;
 
   // Immediately force a minor compaction on the current MemTable.
-  // Return OK on success, or a non-OK status on errors.
+  // Depending on the given options, may or may not wait for the resulting
+  // compaction to finish. Return OK on success, or a non-OK status on errors.
+  // REQUIRES: db must remain active during this operation.
   virtual Status FlushMemTable(const FlushOptions& options) = 0;
 
   // Call "fsync" on the write-ahead log file.
   // Return OK on success, or a non-OK status on errors.
   virtual Status SyncWAL() = 0;
 
-  // Insert native Table files under a specified directory into Level-0.
+  // Keep scheduling compactions until no compaction is needed.
+  // Wait for all compactions to finish.
+  // REQUIRES: db must remain active during this operation.
+  virtual void WaitForCompactions() = 0;
+
+  // Insert raw Table files under a specified directory into Level-0.
   // Return OK on success, or a non-OK status on errors.
   virtual Status AddL0Tables(const InsertOptions& options,
-                             const std::string& src_dir) = 0;
+                             const std::string& dir) = 0;
 
   // Extract a logic range of keys into raw Table files that will be stored
   // under the specified dump directory.  If there is no key within the
@@ -180,7 +186,7 @@ class DB {
   // is not NULL, they are piggy-backed to the caller.
   // Return OK on success, or a non-OK status on errors.
   virtual Status Dump(const DumpOptions& options, const Range& range,
-                      const std::string& dst_dir, SequenceNumber* min_seq,
+                      const std::string& dir, SequenceNumber* min_seq,
                       SequenceNumber* max_seq) = 0;
 
  private:

@@ -1,20 +1,13 @@
-#pragma once
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
-#include <deque>
-#include <set>
-
-#include "options_internal.h"
-#include "write_batch_internal.h"
+#pragma once
 
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/leveldb/db/db.h"
@@ -22,6 +15,12 @@
 #include "pdlfs-common/leveldb/db/snapshot.h"
 #include "pdlfs-common/log_writer.h"
 #include "pdlfs-common/port.h"
+
+#include "options_internal.h"
+#include "write_batch_internal.h"
+
+#include <deque>
+#include <set>
 
 namespace pdlfs {
 
@@ -52,6 +51,7 @@ class DBImpl : public DB {
   virtual bool GetProperty(const Slice& property, std::string* value);
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
   virtual void CompactRange(const Slice* begin, const Slice* end);
+  virtual void WaitForCompactions();
   virtual Status AddL0Tables(const InsertOptions&, const std::string& dir);
   virtual Status Dump(const DumpOptions&, const Range& range,
                       const std::string& dir, SequenceNumber* min_seq,

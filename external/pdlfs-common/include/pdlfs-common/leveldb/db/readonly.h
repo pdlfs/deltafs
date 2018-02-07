@@ -1,13 +1,12 @@
-#pragma once
-
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+#pragma once
 
 #include "pdlfs-common/leveldb/db/db.h"
 
@@ -37,6 +36,7 @@ class ReadonlyDB : public DB {
   virtual Status Write(const WriteOptions&, WriteBatch* updates);
   virtual Status AddL0Tables(const InsertOptions&, const std::string& dir);
   virtual void CompactRange(const Slice* begin, const Slice* end);
+  virtual void WaitForCompactions();
 
   // Load an existing db image produced by another db.
   virtual Status Load() = 0;

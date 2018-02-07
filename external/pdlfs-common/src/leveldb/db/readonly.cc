@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -16,6 +16,8 @@ ReadonlyDB::~ReadonlyDB() {}
 Status ReadonlyDB::SyncWAL() { return Status::ReadOnly(Slice()); }
 
 void ReadonlyDB::CompactRange(const Slice* begin, const Slice* end) {}
+
+void ReadonlyDB::WaitForCompactions() {}
 
 Status ReadonlyDB::FlushMemTable(const FlushOptions&) {
   return Status::ReadOnly(Slice());

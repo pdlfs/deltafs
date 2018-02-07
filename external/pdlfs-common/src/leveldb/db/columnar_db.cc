@@ -37,4 +37,8 @@ void ColumnarDB::CompactRange(const Slice* begin, const Slice* end) {
   // Empty
 }
 
+void ColumnarDB::WaitForCompactions() {
+  // Empty
+}
+
 }  // namespace pdlfs

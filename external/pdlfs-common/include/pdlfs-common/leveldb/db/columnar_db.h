@@ -1,13 +1,12 @@
-#pragma once
-
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+#pragma once
 
 #include "pdlfs-common/leveldb/db/db.h"
 
@@ -45,6 +44,7 @@ class ColumnarDB : public DB {
   virtual bool GetProperty(const Slice& property, std::string* value);
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
   virtual void CompactRange(const Slice* begin, const Slice* end);
+  virtual void WaitForCompactions();
   virtual Status AddL0Tables(const InsertOptions&, const std::string& dir);
   virtual Status Dump(const DumpOptions&, const Range& range,
                       const std::string& dir, SequenceNumber* min_seq,

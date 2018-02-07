@@ -210,24 +210,32 @@ Status DBImpl::NewDB() {
   return s;
 }
 
-Status DBImpl::SyncWAL() {
-  WriteOptions ignored;
-  return Write(ignored, &sync_wal_);
+Status DBImpl::SyncWAL() {  // Force fsync on the write ahead log file
+  return Write(WriteOptions(), &sync_wal_);
 }
 
 Status DBImpl::FlushMemTable(const FlushOptions& options) {
-  WriteOptions ignored;
-  Status s = Write(ignored, &flush_memtable_);
+  Status s = Write(WriteOptions(), &flush_memtable_);
   if (s.ok() && options.wait) {
     MutexLock l(&mutex_);
+    // Either mine is being compacted, or someone else's table
+    // is being compacted.
     while (imm_ != NULL && bg_error_.ok()) {
       bg_cv_.Wait();
     }
-    if (imm_ != NULL) {
+    if (!bg_error_.ok()) {
       s = bg_error_;
     }
   }
   return s;
+}
+
+void DBImpl::WaitForCompactions() {
+  MutexLock l(&mutex_);
+  while (HasCompaction() && bg_error_.ok()) {
+    MaybeScheduleCompaction();
+    bg_cv_.Wait();
+  }
 }
 
 void DBImpl::MaybeIgnoreError(Status* s) const {
