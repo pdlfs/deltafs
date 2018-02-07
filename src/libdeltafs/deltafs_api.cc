@@ -780,8 +780,8 @@ int deltafs_tp_close(deltafs_tp_t* __tp) {
 }
 
 struct deltafs_plfsdir {
-  pdlfs::Env* env;
-  pdlfs::ThreadPool* pool;
+  pdlfs::Env* env;          // Not owned by us
+  pdlfs::ThreadPool* pool;  // Not owned by us
   bool db_force_final_compaction;
   uint32_t db_epoch;
   pdlfs::DB* db;
@@ -876,6 +876,16 @@ int deltafs_plfsdir_set_thread_pool(deltafs_plfsdir_t* __dir,
   }
 }
 
+int deltafs_plfsdir_set_rank(deltafs_plfsdir_t* __dir, int __rank) {
+  if (__dir != NULL && !__dir->opened) {
+    __dir->options->rank = __rank;
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
 int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
                                     deltafs_printer_t __printer,
                                     void* __printer_arg) {
@@ -953,6 +963,9 @@ pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
   dboptions.create_if_missing = true;
   dboptions.compaction_pool = dir->pool;
   dboptions.env = dir->env;
+
+  if (dir->mode == O_RDONLY) dboptions.disable_compaction = true;
+  if (dir->mode == O_WRONLY) dboptions.error_if_exists = true;
   s = pdlfs::DB::Open(dboptions, dbname, &dir->db);
 
   return s;
@@ -1046,9 +1059,6 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   // To obtain detailed error status, an error printer
   // must be set by the caller
   pdlfs::Status s;
-  if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB)
-    return OpenAsLevelDb(dir, name);
-
   FinalizeDirMode(dir);
 
   dir->options->allow_env_threads = false;  // No implicit background threads
@@ -1102,7 +1112,11 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
   } else if (__name == NULL || __name[0] == 0) {
     s = BadArgs();
   } else {
-    s = OpenDir(__dir, __name);
+    if (__dir->io_engine != DELTAFS_PLFSDIR_LEVELDB) {
+      s = OpenDir(__dir, __name);
+    } else {
+      s = OpenAsLevelDb(__dir, __name);
+    }
   }
 
   if (s.ok()) {
@@ -1431,6 +1445,7 @@ ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
 int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
   if (__dir == NULL) return 0;
 
+  delete __dir->options;
   delete __dir->writer;
   delete __dir->reader;
   delete __dir->db;
