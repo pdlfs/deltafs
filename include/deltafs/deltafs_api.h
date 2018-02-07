@@ -102,10 +102,15 @@ int deltafs_tp_close(deltafs_tp_t* __tp);
  */
 struct deltafs_plfsdir; /* Opaque handle for an opened deltafs plfsdir */
 typedef struct deltafs_plfsdir deltafs_plfsdir_t;
+/* Use the default plfsdir storage engine */
+#define DELTAFS_PLFSDIR_DEFAULT 0
+/* Use leveldb as the storage engine
+   Some features may become unavailable */
+#define DELTAFS_PLFSDIR_LEVELDB 1
 /* Returns NULL on errors. A heap-allocated plfsdir handle otherwise.
    The returned object should be deleted via deltafs_plfsdir_free_handle(). */
-deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf,
-                                                 int __mode);
+deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
+                                                 int __io_engine);
 int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size);
 int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size);
 /* Enforce multimap semantics */

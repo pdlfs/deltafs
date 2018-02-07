@@ -782,6 +782,9 @@ int deltafs_tp_close(deltafs_tp_t* __tp) {
 struct deltafs_plfsdir {
   pdlfs::Env* env;
   pdlfs::ThreadPool* pool;
+  bool db_force_final_compaction;
+  uint32_t db_epoch;
+  pdlfs::DB* db;
   DirWriter* writer;
   DirReader* reader;
   // If the multi-map mode should be used
@@ -791,17 +794,19 @@ struct deltafs_plfsdir {
   DirOptions* options;
   deltafs_printer_t printer;  // Error printer
   void* printer_arg;
+  int io_engine;
   // O_WRONLY or O_RDONLY
   int mode;
 };
 
-deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf,
-                                                 int __mode) {
+deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
+                                                 int __io_engine) {
   __mode = __mode & O_ACCMODE;
   if (__mode == O_RDONLY || __mode == O_WRONLY) {
     deltafs_plfsdir_t* dir =
         static_cast<deltafs_plfsdir_t*>(malloc(sizeof(deltafs_plfsdir_t)));
     memset(dir, 0, sizeof(deltafs_plfsdir_t));
+    dir->io_engine = __io_engine;
     dir->options = new DirOptions(ParseOptions(__conf));
     dir->mode = __mode;
     dir->is_env_pfs = true;
@@ -930,6 +935,100 @@ void ScanSaver(void* arg, const pdlfs::Slice& k, const pdlfs::Slice& v) {
   state->saver(state->arg, k.data(), k.size(), v.data(), v.size());
 }
 
+std::string LevelDbName(const std::string& parent, int rank) {
+  char tmp[20];
+  snprintf(tmp, sizeof(tmp), "db-%08x", rank);
+  return parent + "/" + tmp;
+}
+
+pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
+  pdlfs::Status s;
+  int rank = dir->options->rank;
+  std::string dbname = LevelDbName(parent, rank);
+  pdlfs::DBOptions dboptions;
+
+  dboptions.skip_lock_file = true;
+  dboptions.disable_seek_compaction = true;
+  dboptions.disable_write_ahead_log = true;
+  dboptions.create_if_missing = true;
+  dboptions.compaction_pool = dir->pool;
+  dboptions.env = dir->env;
+  s = pdlfs::DB::Open(dboptions, dbname, &dir->db);
+
+  return s;
+}
+
+pdlfs::Status DbPut(deltafs_plfsdir_t* dir, const pdlfs::Slice& key,
+                    const pdlfs::Slice& value) {
+  pdlfs::Status s;
+  pdlfs::WriteOptions options;
+  options.sync = false;
+
+  std::string composite = key.ToString();
+  pdlfs::PutFixed32(&composite, dir->db_epoch);
+  s = dir->db->Put(options, composite, value);
+
+  return s;
+}
+
+pdlfs::Status DbEpochFlush(deltafs_plfsdir_t* dir) {
+  pdlfs::Status s;
+  pdlfs::FlushOptions options;
+  options.wait = false;
+
+  s = dir->db->FlushMemTable(options);
+
+  dir->db_epoch++;
+
+  return s;
+}
+
+pdlfs::Status DbFlush(deltafs_plfsdir_t* dir) {
+  pdlfs::Status s;
+  pdlfs::FlushOptions options;
+  options.wait = false;
+
+  s = dir->db->FlushMemTable(options);
+
+  return s;
+}
+
+pdlfs::Status DbFin(deltafs_plfsdir_t* dir) {
+  pdlfs::Status s;
+  pdlfs::FlushOptions options;
+  options.wait = true;
+
+  s = dir->db->FlushMemTable(options);
+  if (s.ok() && dir->db_force_final_compaction) {
+    dir->db->CompactRange(NULL, NULL);
+  }
+
+  return s;
+}
+
+pdlfs::Status DbGet(deltafs_plfsdir_t* dir, const pdlfs::Slice& key,
+                    std::string* value) {
+  pdlfs::Status s;
+  pdlfs::ReadOptions options;
+  options.fill_cache = false;
+  pdlfs::Iterator* iter = dir->db->NewIterator(options);
+  iter->Seek(key);
+
+  for (; iter->Valid(); iter->Next()) {
+    if (iter->key().starts_with(key)) {
+      if (iter->key().size() == key.size() + 4) {
+        value->append(iter->value().data(), iter->value().size());
+      }
+    } else {
+      break;
+    }
+  }
+
+  s = iter->status();
+
+  return s;
+}
+
 inline void FinalizeDirMode(deltafs_plfsdir_t* dir) {
   if (dir->multi) {
     DirMode multimap = pdlfs::plfsio::kDmMultiMap;
@@ -944,8 +1043,11 @@ inline void FinalizeDirMode(deltafs_plfsdir_t* dir) {
 }
 
 pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
-  pdlfs::Status s;  // To obtain detailed error status, an error printer must be
-                    // set by a user
+  // To obtain detailed error status, an error printer
+  // must be set by the caller
+  pdlfs::Status s;
+  if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB)
+    return OpenAsLevelDb(dir, name);
 
   FinalizeDirMode(dir);
 
@@ -969,12 +1071,6 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
     }
   } else {
     s = BadArgs();
-  }
-
-  // Some options may only be set before
-  // a directory is opened
-  if (s.ok()) {
-    dir->opened = true;
   }
 
   return s;
@@ -1009,6 +1105,10 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
     s = OpenDir(__dir, __name);
   }
 
+  if (s.ok()) {
+    __dir->opened = true;
+  }
+
   if (!s.ok()) {
     return DirError(__dir, s);
   } else {
@@ -1031,7 +1131,11 @@ ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
     s = BadArgs();
   } else {
     pdlfs::Slice k(__key, __keylen), v(__value, __sz);
-    s = __dir->writer->Append(k, v, __epoch);
+    if (__dir->io_engine != DELTAFS_PLFSDIR_LEVELDB) {
+      s = __dir->writer->Append(k, v, __epoch);
+    } else {
+      s = DbPut(__dir, k, v);
+    }
   }
 
   if (!s.ok()) {
@@ -1063,7 +1167,11 @@ ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
     pdlfs::Slice k(tmp, __dir->options->key_size);
     const char* data = static_cast<const char*>(__buf);
     pdlfs::Slice v(data, __sz);
-    s = __dir->writer->Append(k, v, __epoch);
+    if (__dir->io_engine != DELTAFS_PLFSDIR_LEVELDB) {
+      s = __dir->writer->Append(k, v, __epoch);
+    } else {
+      s = DbPut(__dir, k, v);
+    }
   }
 
   if (!s.ok()) {
@@ -1081,7 +1189,11 @@ int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch) {
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
-    s = __dir->writer->EpochFlush(__epoch);
+    if (__dir->io_engine != DELTAFS_PLFSDIR_LEVELDB) {
+      s = __dir->writer->EpochFlush(__epoch);
+    } else {
+      s = DbEpochFlush(__dir);
+    }
   }
 
   if (!s.ok()) {
@@ -1099,7 +1211,11 @@ int deltafs_plfsdir_flush(deltafs_plfsdir_t* __dir, int __epoch) {
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
-    s = __dir->writer->Flush(__epoch);
+    if (__dir->io_engine != DELTAFS_PLFSDIR_LEVELDB) {
+      s = __dir->writer->Flush(__epoch);
+    } else {
+      s = DbFlush(__dir);
+    }
   }
 
   if (!s.ok()) {
@@ -1117,7 +1233,11 @@ int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
-    s = __dir->writer->Finish();
+    if (__dir->io_engine != DELTAFS_PLFSDIR_LEVELDB) {
+      s = __dir->writer->Finish();
+    } else {
+      s = DbFin(__dir);
+    }
   }
 
   if (!s.ok()) {
@@ -1135,7 +1255,7 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
     return NULL;
   } else {
     pdlfs::Slice k(__key);
-    if (__dir->mode == O_WRONLY) {
+    if (__dir->writer != NULL) {
       if (k == "total_user_data") {
         uint64_t vsz = __dir->writer->TEST_value_bytes();
         uint64_t ksz = __dir->writer->TEST_key_bytes();
@@ -1165,7 +1285,7 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
         uint64_t tbs = __dir->writer->TEST_num_sstables();
         return MakeChar(tbs);
       }
-    } else if (__dir->mode == O_RDONLY) {
+    } else if (__dir->reader != NULL) {
       // TODO
     }
     return NULL;
@@ -1204,7 +1324,11 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
     op.SetEpoch(__epoch);
     op.table_seeks = __table_seeks;
     op.seeks = __seeks;
-    s = __dir->reader->Read(op, pdlfs::Slice(__key, __keylen), &dst);
+    if (__dir->io_engine != DELTAFS_PLFSDIR_LEVELDB) {
+      s = __dir->reader->Read(op, pdlfs::Slice(__key, __keylen), &dst);
+    } else {
+      s = DbGet(__dir, pdlfs::Slice(__key, __keylen), &dst);
+    }
     if (s.ok()) {
       result = static_cast<char*>(malloc(dst.size()));
       memcpy(result, dst.data(), dst.size());
@@ -1249,7 +1373,11 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
 #endif
     pdlfs::Slice k(tmp, __dir->options->key_size);
-    s = __dir->reader->Read(op, k, &dst);
+    if (__dir->io_engine != DELTAFS_PLFSDIR_LEVELDB) {
+      s = __dir->reader->Read(op, k, &dst);
+    } else {
+      s = DbGet(__dir, k, &dst);
+    }
     if (s.ok()) {
       result = static_cast<char*>(malloc(dst.size()));
       memcpy(result, dst.data(), dst.size());
@@ -1286,7 +1414,11 @@ ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
     DirReader::ScanOp op;
     op.SetEpoch(__epoch);
     op.n = &n;
-    s = __dir->reader->Scan(op, ScanSaver, &state);
+    if (__dir->io_engine != DELTAFS_PLFSDIR_LEVELDB) {
+      s = __dir->reader->Scan(op, ScanSaver, &state);
+    } else {
+      // Not implemented
+    }
   }
 
   if (!s.ok()) {
@@ -1297,18 +1429,13 @@ ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
 }
 
 int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
-  if (__dir != NULL) {
-    if (__dir->opened) {
-      if (__dir->mode == O_WRONLY)
-        delete __dir->writer;
-      else if (__dir->mode == O_RDONLY)
-        delete __dir->reader;
-      else {
-        // Skip
-      }
-    }
-    free(__dir);
-  }
+  if (__dir == NULL) return 0;
+
+  delete __dir->writer;
+  delete __dir->reader;
+  delete __dir->db;
+
+  free(__dir);
 
   return 0;
 }
