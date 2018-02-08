@@ -186,6 +186,7 @@ class DirLogger {
   uint32_t num_dropped_keys() const { return tb_->total_num_dropped_keys_; }
   uint32_t num_data_blocks() const { return tb_->total_num_blocks_; }
   uint32_t num_tables() const { return tb_->total_num_tables_; }
+  uint32_t num_epochs() const { return tb_->num_epochs_; }
 
   // Report memory configurations and usage
   size_t estimated_sstable_size() const { return tb_bytes_; }

@@ -437,8 +437,11 @@ Status DirWriterImpl<T>::InstallDirInfo(const std::string& footer) {
 template <typename T>
 Status DirWriterImpl<T>::Finalize() {
   mutex_.AssertHeld();
-  uint32_t num_epochs = static_cast<uint32_t>(num_epoch_flushes_);
+  const uint32_t num_epochs = dirs_[0]->num_epochs();
+  for (uint32_t i = 1; i < num_parts_; i++)
+    assert(num_epochs == dirs_[i]->num_epochs());
   mutex_.Unlock();  // Unlock during i/o operations
+
   Footer footer = Mkfoot(options_);
   BlockHandle dummy_handle;
 
