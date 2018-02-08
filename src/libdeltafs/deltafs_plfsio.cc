@@ -315,10 +315,12 @@ class DirWriterImpl : public DirWriter {
   port::CondVar bg_cv_;
   port::CondVar cv_;
   const std::string dirname_;
-  int num_epochs_;
   uint32_t num_parts_;
   uint32_t part_mask_;
   Status finish_status_;
+  // Num of epoch flush requests, not necessarily the final epoch counts
+  int num_epoch_flushes_;
+  int num_flushes_;
   // XXX: rather than using a global barrier, using a reference
   // counted epoch object might slightly increase implementation
   // concurrency, though largely not needed so far
@@ -337,9 +339,10 @@ DirWriterImpl<T>::DirWriterImpl(const DirOptions& o, const std::string& d)
       bg_cv_(&mutex_),
       cv_(&mutex_),
       dirname_(d),
-      num_epochs_(0),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
+      num_epoch_flushes_(0),
+      num_flushes_(0),
       has_pending_flush_(false),
       finished_(false),
       dirs_(NULL),
@@ -434,7 +437,7 @@ Status DirWriterImpl<T>::InstallDirInfo(const std::string& footer) {
 template <typename T>
 Status DirWriterImpl<T>::Finalize() {
   mutex_.AssertHeld();
-  uint32_t total_epochs = static_cast<uint32_t>(num_epochs_);
+  uint32_t num_epochs = static_cast<uint32_t>(num_epoch_flushes_);
   mutex_.Unlock();  // Unlock during i/o operations
   Footer footer = Mkfoot(options_);
   BlockHandle dummy_handle;
@@ -442,7 +445,7 @@ Status DirWriterImpl<T>::Finalize() {
   dummy_handle.set_offset(0);
   dummy_handle.set_size(0);
   footer.set_epoch_index_handle(dummy_handle);
-  footer.set_num_epochs(total_epochs);
+  footer.set_num_epochs(num_epochs);
 
   Status status;
   std::string ftdata;
@@ -660,6 +663,8 @@ Status DirWriterImpl<T>::Finish() {
       const bool epoch_flush = true;
       const bool finalize = true;
       status = TryFlush(epoch_flush, finalize);
+      if (status.ok()) num_epoch_flushes_++;
+      if (status.ok()) num_flushes_++;
       if (status.ok()) status = WaitForCompaction();
       if (status.ok()) status = Finalize();
       has_pending_flush_ = false;
@@ -688,10 +693,10 @@ Status DirWriterImpl<T>::EpochFlush(int epoch) {
       break;
     } else if (has_pending_flush_) {
       cv_.Wait();
-    } else if (epoch != -1 && epoch < num_epochs_) {
+    } else if (epoch != -1 && epoch < num_epoch_flushes_) {
       status = Status::AlreadyExists(Slice());
       break;
-    } else if (epoch != -1 && epoch > num_epochs_) {
+    } else if (epoch != -1 && epoch > num_epoch_flushes_) {
       status = Status::NotFound(Slice());
       break;
     } else {
@@ -700,7 +705,8 @@ Status DirWriterImpl<T>::EpochFlush(int epoch) {
       // Schedule a minor compaction for epoch flush
       // Does not wait for completion
       status = TryFlush(epoch_flush);
-      if (status.ok()) num_epochs_++;
+      if (status.ok()) num_epoch_flushes_++;
+      if (status.ok()) num_flushes_++;
       has_pending_flush_ = false;
       cv_.SignalAll();
       break;
@@ -744,12 +750,13 @@ Status DirWriterImpl<T>::Flush(int epoch) {
       break;
     } else if (has_pending_flush_) {
       cv_.Wait();
-    } else if (epoch != -1 && epoch != num_epochs_) {
+    } else if (epoch != -1 && epoch != num_epoch_flushes_) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {
       has_pending_flush_ = true;
       status = TryFlush();
+      if (status.ok()) num_flushes_++;
       has_pending_flush_ = false;
       cv_.SignalAll();
       break;
@@ -768,7 +775,7 @@ Status DirWriterImpl<T>::Write(BatchCursor* cursor, int epoch) {
       break;
     } else if (has_pending_flush_) {
       cv_.Wait();
-    } else if (epoch != -1 && epoch != num_epochs_) {
+    } else if (epoch != -1 && epoch != num_epoch_flushes_) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {
@@ -794,7 +801,7 @@ Status DirWriterImpl<T>::Append(const Slice& fid, const Slice& data,
       break;
     } else if (has_pending_flush_) {
       cv_.Wait();
-    } else if (epoch != -1 && epoch != num_epochs_) {
+    } else if (epoch != -1 && epoch != num_epoch_flushes_) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {
