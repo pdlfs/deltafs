@@ -184,6 +184,7 @@ class DirLogger {
 
   uint32_t num_keys() const { return tb_->total_num_keys_; }
   uint32_t num_dropped_keys() const { return tb_->total_num_dropped_keys_; }
+
   uint32_t num_data_blocks() const { return tb_->total_num_blocks_; }
   uint32_t num_tables() const { return tb_->total_num_tables_; }
   uint32_t num_epochs() const { return tb_->num_epochs_; }
