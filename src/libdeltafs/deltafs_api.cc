@@ -782,7 +782,7 @@ int deltafs_tp_close(deltafs_tp_t* __tp) {
 struct deltafs_plfsdir {
   pdlfs::Env* env;          // Not owned by us
   pdlfs::ThreadPool* pool;  // Not owned by us
-  bool db_wait_for_compaction;
+  bool db_wait_for_compactions;
   uint32_t db_epoch;
   pdlfs::DB* db;
   DirWriter* writer;
@@ -807,7 +807,7 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
         static_cast<deltafs_plfsdir_t*>(malloc(sizeof(deltafs_plfsdir_t)));
     memset(dir, 0, sizeof(deltafs_plfsdir_t));
     dir->io_engine = __io_engine;
-    dir->db_wait_for_compaction = true;
+    dir->db_wait_for_compactions = true;
     dir->options = new DirOptions(ParseOptions(__conf));
     dir->mode = __mode;
     dir->is_env_pfs = true;
@@ -1013,7 +1013,7 @@ pdlfs::Status DbFin(deltafs_plfsdir_t* dir) {
   options.wait = true;
 
   s = dir->db->FlushMemTable(options);
-  if (s.ok() && dir->db_wait_for_compaction) {
+  if (s.ok() && dir->db_wait_for_compactions) {
     dir->db->WaitForCompactions();
   }
 
