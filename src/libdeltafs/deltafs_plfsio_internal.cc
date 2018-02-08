@@ -1916,6 +1916,7 @@ static inline bool UnMatch(U a, V b) {
 // fetched from the storage. Return OK if verification passes.
 static Status VerifyOptions(const DirOptions& options, const Footer& footer) {
   if (UnMatch(options.lg_parts, footer.lg_parts()) ||
+      UnMatch(options.num_epochs, footer.num_epochs()) ||
       UnMatch(options.key_size, footer.key_size()) ||
       UnMatch(options.value_size, footer.value_size()) ||
       UnMatch(options.epoch_log_rotation, footer.epoch_log_rotation()) ||
@@ -1961,6 +1962,9 @@ Status Dir::Open(LogSource* indx) {
   }
 
   num_epoches_ = footer.num_epochs();
+  if (num_epoches_ != options_.num_epochs)
+    Warn(__LOG_ARGS__, "Num epochs does not match dir footer: %u != %u",
+         options_.num_epochs, num_epoches_);
   rt_ = new Block(contents);
   indx_ = indx;
   indx_->Ref();

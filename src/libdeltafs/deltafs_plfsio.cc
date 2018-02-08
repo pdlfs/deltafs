@@ -1658,6 +1658,10 @@ Status DirReader::Open(const DirOptions& _opts, const std::string& dirname,
           int(num_parts), options.lg_parts);
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", my_rank);
 #endif
+  // We have three copies of the footer stored for each dir.
+  // The primary copy is stored in a dedicated per-dir manifest file.
+  // The 2nd copy is attached to the end of the data log file (data log may be
+  // rotated). The last copy is appended to the end of each index log file.
   Footer footer;
   std::string dir_info;  // Stores the primary footer copy
   if (options.lg_parts == -1 || options.num_epochs == -1 ||
