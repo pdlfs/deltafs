@@ -107,6 +107,7 @@ typedef struct deltafs_plfsdir deltafs_plfsdir_t;
 /* Use leveldb as the storage engine
    Some features may become unavailable */
 #define DELTAFS_PLFSDIR_LEVELDB 1
+#define DELTAFS_PLFSDIR_LEVELDB_L0ONLY 3
 /* Returns NULL on errors. A heap-allocated plfsdir handle otherwise.
    The returned object should be deleted via deltafs_plfsdir_free_handle(). */
 deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
