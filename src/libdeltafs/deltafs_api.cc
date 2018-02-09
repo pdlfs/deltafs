@@ -927,6 +927,7 @@ int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir,
 int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
   if (__dir != NULL) {
     int lg_parts = __dir->options->lg_parts;
+    if (lg_parts < 0) lg_parts = 0;
     return 1 << lg_parts;
   } else {
     SetErrno(BadArgs());
