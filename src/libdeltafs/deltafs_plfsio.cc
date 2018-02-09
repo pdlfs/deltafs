@@ -158,6 +158,10 @@ DirOptions ParseDirOptions(const char* input) {
       if (ParseInteger(conf_key, conf_value, &num)) {
         result.lg_parts = int(num);
       }
+    } else if (conf_key == "num_epochs") {
+      if (ParseInteger(conf_key, conf_value, &num)) {
+        result.num_epochs = int(num);
+      }
     } else if (conf_key == "rank") {
       if (ParseInteger(conf_key, conf_value, &num)) {
         result.rank = int(num);
