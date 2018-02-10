@@ -1041,6 +1041,7 @@ pdlfs::Status DbGet(deltafs_plfsdir_t* dir, const pdlfs::Slice& key,
   }
 
   s = iter->status();
+  delete iter;
 
   return s;
 }
