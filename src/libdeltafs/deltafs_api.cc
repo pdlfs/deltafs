@@ -782,7 +782,7 @@ int deltafs_tp_close(deltafs_tp_t* __tp) {
 struct deltafs_plfsdir {
   pdlfs::Env* env;          // Not owned by us
   pdlfs::ThreadPool* pool;  // Not owned by us
-  bool db_wait_for_compactions;
+  bool db_drain_compactions;
   uint32_t db_epoch;
   pdlfs::DB* db;
   DirWriter* writer;
@@ -807,7 +807,7 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
         static_cast<deltafs_plfsdir_t*>(malloc(sizeof(deltafs_plfsdir_t)));
     memset(dir, 0, sizeof(deltafs_plfsdir_t));
     dir->io_engine = __io_engine;
-    dir->db_wait_for_compactions = true;
+    dir->db_drain_compactions = true;
     dir->options = new DirOptions(ParseOptions(__conf));
     dir->mode = __mode;
     dir->is_env_pfs = true;
@@ -1013,11 +1013,13 @@ pdlfs::Status DbFlush(deltafs_plfsdir_t* dir) {
 pdlfs::Status DbFin(deltafs_plfsdir_t* dir) {
   pdlfs::Status s;
   pdlfs::FlushOptions options;
+  if (dir->io_engine != DELTAFS_PLFSDIR_LEVELDB_L0ONLY)
+    options.force_flush_l0 = true;
   options.wait = true;
 
   s = dir->db->FlushMemTable(options);
-  if (s.ok() && dir->db_wait_for_compactions) {
-    dir->db->DrainCompactions();
+  if (s.ok() && dir->db_drain_compactions) {
+    s = dir->db->DrainCompactions();
   }
 
   return s;
