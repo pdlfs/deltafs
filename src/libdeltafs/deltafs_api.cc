@@ -960,6 +960,7 @@ pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
   pdlfs::DBOptions dboptions;
 
   dboptions.skip_lock_file = true;
+  dboptions.compression = pdlfs::kNoCompression;
   dboptions.disable_seek_compaction = true;
   dboptions.disable_write_ahead_log = true;
   dboptions.create_if_missing = true;
