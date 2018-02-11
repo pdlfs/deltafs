@@ -30,7 +30,6 @@
 
 #include <string>
 
-extern "C" {
 #ifndef EHOSTUNREACH
 #define EHOSTUNREACH ENODEV
 #endif
@@ -115,6 +114,7 @@ static void SetErrno(const pdlfs::Status& s) {
   }
 }
 
+extern "C" {
 char* deltafs_getcwd(char* __buf, size_t __sz) {
   if (client == NULL) {
     pdlfs::port::InitOnce(&once, InitClient);
@@ -635,6 +635,8 @@ int deltafs_version_major() { return DELTAFS_VERSION_MAJOR; }
 int deltafs_version_minor() { return DELTAFS_VERSION_MINOR; }
 int deltafs_version_patch() { return DELTAFS_VERSION_PATCH; }
 
+}  // extern C
+
 // -------------------------
 // Light-weight plfsdir api
 // -------------------------
@@ -681,6 +683,7 @@ inline DirOptions ParseOptions(const char* conf) {
 
 }  // namespace
 
+extern "C" {
 struct deltafs_env {
   pdlfs::Env* env;
   // True iff the env is backed by a posix file system
@@ -935,6 +938,8 @@ int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
   }
 }
 
+}  // extern C
+
 namespace {
 struct ScanState {
   void (*saver)(void*, const char* key, size_t keylen, const char* d,
@@ -1111,6 +1116,7 @@ bool IsDirOpened(deltafs_plfsdir_t* dir) {
 
 }  // namespace
 
+extern "C" {
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
   pdlfs::Status s;
 
