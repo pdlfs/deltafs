@@ -216,12 +216,19 @@ Status DBImpl::SyncWAL() {  // Force fsync on the write ahead log file
 
 Status DBImpl::FlushMemTable(const FlushOptions& options) {
   Status s = Write(WriteOptions(), &flush_memtable_);
-  if (s.ok() && options.wait) {
+  if (!s.ok()) {
+    // Abort on errors
+  } else if (options.wait || options.force_flush_l0) {
     MutexLock l(&mutex_);
     // Either mine is being compacted, or someone else's table
     // is being compacted.
     while (imm_ != NULL && bg_error_.ok()) {
       bg_cv_.Wait();
+    }
+    if (options.force_flush_l0 && bg_error_.ok()) {
+      mutex_.Unlock();
+      TEST_CompactRange(0, NULL, NULL);
+      mutex_.Lock();
     }
     if (!bg_error_.ok()) {
       s = bg_error_;

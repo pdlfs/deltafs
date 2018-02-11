@@ -296,6 +296,10 @@ struct WriteOptions {
 
 // Options that control flush operations
 struct FlushOptions {
+  // In addition to the memtable, also flush all
+  // tables in level 0 to deeper levels.
+  // Default: false
+  bool force_flush_l0;
   // Wait synchronously until the flush operation finishes.
   // Default: true
   bool wait;
