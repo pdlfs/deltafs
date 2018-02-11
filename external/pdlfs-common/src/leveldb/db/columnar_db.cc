@@ -24,6 +24,10 @@ Status ColumnarDB::Dump(const DumpOptions& options, const Range& range,
   return Status::NotSupported(Slice());
 }
 
+Status ColumnarDB::WaitForCompactions() {
+  return Status::NotSupported(Slice());
+}
+
 bool ColumnarDB::GetProperty(const Slice& property, std::string* value) {
   return false;
 }
@@ -34,10 +38,6 @@ void ColumnarDB::GetApproximateSizes(const Range* range, int n,
 }
 
 void ColumnarDB::CompactRange(const Slice* begin, const Slice* end) {
-  // Empty
-}
-
-void ColumnarDB::WaitForCompactions() {
   // Empty
 }
 

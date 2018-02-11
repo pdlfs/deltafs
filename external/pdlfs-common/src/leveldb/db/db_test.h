@@ -49,7 +49,7 @@ class EmptyDB : public DB {
     }
   }
   virtual void CompactRange(const Slice* start, const Slice* end) {}
-  virtual void WaitForCompactions() {}
+  virtual Status WaitForCompactions() { return Status::OK(); }
   virtual Status FlushMemTable(const FlushOptions& o) {
     return Status::BufferFull(Slice());
   }
