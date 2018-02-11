@@ -1017,7 +1017,7 @@ pdlfs::Status DbFin(deltafs_plfsdir_t* dir) {
 
   s = dir->db->FlushMemTable(options);
   if (s.ok() && dir->db_wait_for_compactions) {
-    dir->db->WaitForCompactions();
+    dir->db->DrainCompactions();
   }
 
   return s;

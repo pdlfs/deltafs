@@ -173,7 +173,7 @@ class DB {
   // Keep scheduling compactions until no compaction is needed.
   // Wait for all compactions to finish.
   // REQUIRES: db must remain active during this operation.
-  virtual Status WaitForCompactions() = 0;
+  virtual Status DrainCompactions() = 0;
 
   // Insert raw Table files under a specified directory into Level-0.
   // Return OK on success, or a non-OK status on errors.

@@ -24,7 +24,7 @@ Status ColumnarDB::Dump(const DumpOptions& options, const Range& range,
   return Status::NotSupported(Slice());
 }
 
-Status ColumnarDB::WaitForCompactions() {
+Status ColumnarDB::DrainCompactions() {
   return Status::NotSupported(Slice());
 }
 

@@ -44,7 +44,7 @@ class ColumnarDB : public DB {
   virtual bool GetProperty(const Slice& property, std::string* value);
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
   virtual void CompactRange(const Slice* begin, const Slice* end);
-  virtual Status WaitForCompactions();
+  virtual Status DrainCompactions();
   virtual Status AddL0Tables(const InsertOptions&, const std::string& dir);
   virtual Status Dump(const DumpOptions&, const Range& range,
                       const std::string& dir, SequenceNumber* min_seq,

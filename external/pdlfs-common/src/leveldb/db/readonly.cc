@@ -17,7 +17,7 @@ Status ReadonlyDB::SyncWAL() { return Status::OK(); }
 
 void ReadonlyDB::CompactRange(const Slice* begin, const Slice* end) {}
 
-Status ReadonlyDB::WaitForCompactions() { return Status::OK(); }
+Status ReadonlyDB::DrainCompactions() { return Status::OK(); }
 
 Status ReadonlyDB::FlushMemTable(const FlushOptions&) { return Status::OK(); }
 

@@ -230,7 +230,7 @@ Status DBImpl::FlushMemTable(const FlushOptions& options) {
   return s;
 }
 
-Status DBImpl::WaitForCompactions() {
+Status DBImpl::DrainCompactions() {
   Status s;
   MutexLock l(&mutex_);
   while (HasCompaction() && bg_error_.ok()) {
