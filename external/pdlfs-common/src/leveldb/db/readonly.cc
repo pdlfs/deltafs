@@ -13,15 +13,13 @@ namespace pdlfs {
 
 ReadonlyDB::~ReadonlyDB() {}
 
-Status ReadonlyDB::SyncWAL() { return Status::ReadOnly(Slice()); }
+Status ReadonlyDB::SyncWAL() { return Status::OK(); }
 
 void ReadonlyDB::CompactRange(const Slice* begin, const Slice* end) {}
 
 Status ReadonlyDB::WaitForCompactions() { return Status::OK(); }
 
-Status ReadonlyDB::FlushMemTable(const FlushOptions&) {
-  return Status::ReadOnly(Slice());
-}
+Status ReadonlyDB::FlushMemTable(const FlushOptions&) { return Status::OK(); }
 
 Status ReadonlyDB::Put(const WriteOptions&, const Slice& k, const Slice& v) {
   return Status::ReadOnly(Slice());
