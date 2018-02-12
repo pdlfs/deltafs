@@ -1418,7 +1418,22 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
     return NULL;
   } else {
     pdlfs::Slice k(__key);
-    if (__dir->writer != NULL) {
+    if (k.starts_with("io.") && __dir->io_env != NULL) {
+      k.remove_prefix(3);
+      if (k == "total_read_open") {
+        size_t tro = __dir->io_env->TotalFilesOpenedForRead();
+        return MakeChar(tro);
+      } else if (k == "total_bytes_read") {
+        uint64_t tbr = __dir->io_env->TotalBytesRead();
+        return MakeChar(tbr);
+      } else if (k == "total_write_open") {
+        size_t two = __dir->io_env->TotalFilesOpenedForWrite();
+        return MakeChar(two);
+      } else if (k == "total_bytes_written") {
+        uint64_t tbw = __dir->io_env->TotalBytesWritten();
+        return MakeChar(tbw);
+      }
+    } else if (__dir->writer != NULL) {
       if (k == "total_user_data") {
         uint64_t vsz = __dir->writer->TEST_value_bytes();
         uint64_t ksz = __dir->writer->TEST_key_bytes();
