@@ -1202,10 +1202,6 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Env* env = dir->env;
   FinalizeDirMode(dir);
 
-  // Avoid duplicated measurements
-  dir->io_options->measure_writes = false;
-  dir->io_options->measure_reads = false;
-
   dir->io_options->allow_env_threads = false;  // No implicit background threads
   dir->io_options->is_env_pfs = dir->is_env_pfs;
 
@@ -1218,6 +1214,7 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   if (dir->mode == O_WRONLY) {
     DirWriter* writer;
     dir->io_options->compaction_pool = dir->pool;
+    dir->io_options->measure_writes = false;
     s = DirWriter::Open(*dir->io_options, name, &writer);
     if (s.ok()) {
       dir->writer = writer;
@@ -1225,6 +1222,7 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   } else if (dir->mode == O_RDONLY) {
     DirReader* reader;
     dir->io_options->reader_pool = dir->pool;
+    dir->io_options->measure_reads = false;
     s = DirReader::Open(*dir->io_options, name, &reader);
     if (s.ok()) {
       dir->reader = reader;
