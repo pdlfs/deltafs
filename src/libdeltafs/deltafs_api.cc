@@ -915,6 +915,7 @@ struct deltafs_plfsdir {
   bool multi;
   bool is_env_pfs;
   bool opened;  // If deltafs_plfsdir_open() has been called
+  bool enable_io_measurement;
   DirOptions* io_options;
   deltafs_printer_t printer;  // Error printer
   void* printer_arg;
@@ -936,6 +937,7 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
     dir->io_options = new DirOptions(ParseOptions(__conf));
     dir->mode = __mode;
     dir->is_env_pfs = true;
+    dir->enable_io_measurement = true;
     dir->io_options->mode = DefaultDirMode();
     dir->env = DefaultDirEnv();
     return dir;
@@ -1040,8 +1042,7 @@ int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir,
                                           int __flag) {
   if (__dir != NULL && !__dir->opened) {
     const bool measure_io = static_cast<bool>(__flag);
-    __dir->io_options->measure_writes = measure_io;
-    __dir->io_options->measure_reads = measure_io;
+    __dir->enable_io_measurement = measure_io;
     return 0;
   } else {
     SetErrno(BadArgs());
@@ -1083,6 +1084,7 @@ std::string LevelDbName(const std::string& parent, int rank) {
 pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
   pdlfs::Status s;
   int rank = dir->io_options->rank;
+  pdlfs::Env* env = dir->env;
   std::string dbname = LevelDbName(parent, rank);
   pdlfs::DBOptions dboptions;
 
@@ -1093,9 +1095,11 @@ pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
   dboptions.create_if_missing = true;
   dboptions.compaction_pool = dir->pool;
 
-  dir->io_env = new DirEnvWrapper(dir->env);
-  dboptions.env = dir->io_env;
-
+  if (dir->enable_io_measurement) {
+    dir->io_env = new DirEnvWrapper(dir->env);
+    env = dir->io_env;
+  }
+  dboptions.env = env;
   if (dir->mode == O_RDONLY || dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY)
     dboptions.disable_compaction = true;
   if (dir->mode == O_WRONLY) dboptions.error_if_exists = true;
@@ -1195,12 +1199,21 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   // To obtain detailed error status, an error printer
   // must be set by the caller
   pdlfs::Status s;
+  pdlfs::Env* env = dir->env;
   FinalizeDirMode(dir);
+
+  // Avoid duplicated measurements
+  dir->io_options->measure_writes = false;
+  dir->io_options->measure_reads = false;
 
   dir->io_options->allow_env_threads = false;  // No implicit background threads
   dir->io_options->is_env_pfs = dir->is_env_pfs;
-  dir->io_env = new DirEnvWrapper(dir->env);
-  dir->io_options->env = dir->io_env;
+
+  if (dir->enable_io_measurement) {
+    dir->io_env = new DirEnvWrapper(dir->env);
+    env = dir->io_env;
+  }
+  dir->io_options->env = env;
 
   if (dir->mode == O_WRONLY) {
     DirWriter* writer;
