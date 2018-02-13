@@ -237,7 +237,8 @@ TableLogger::TableLogger(const DirOptions& options, LogSink* data,
   root_block_.Reserve(estimated_root_index);
 
   uncommitted_indexes_.reserve(1 << 10);
-  data_block_.buffer_store()->reserve(options_.block_batch_size);
+  if (options_.block_batch_size != 0)
+    data_block_.buffer_store()->reserve(options_.block_batch_size);
   data_block_.buffer_store()->clear();
   pending_restart_ = true;
 }
