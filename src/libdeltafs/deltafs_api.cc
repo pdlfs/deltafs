@@ -1100,7 +1100,11 @@ pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
     env = dir->io_env;
   }
   dboptions.env = env;
-  if (dir->mode == O_RDONLY || dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY)
+  if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF)
+    dboptions.filter_policy =
+        pdlfs::NewBloomFilterPolicy(int(dir->io_options->bf_bits_per_key));
+  if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF ||
+      dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY || dir->mode == O_RDONLY)
     dboptions.disable_compaction = true;
   if (dir->mode == O_WRONLY) dboptions.error_if_exists = true;
   s = pdlfs::DB::Open(dboptions, dbname, &dir->db);
@@ -1163,21 +1167,40 @@ pdlfs::Status DbGet(deltafs_plfsdir_t* dir, const pdlfs::Slice& key,
   pdlfs::Status s;
   pdlfs::ReadOptions options;
   options.fill_cache = false;
-  pdlfs::Iterator* iter = dir->db->NewIterator(options);
-  iter->Seek(key);
 
-  for (; iter->Valid(); iter->Next()) {
-    if (iter->key().starts_with(key)) {
-      if (iter->key().size() == key.size() + 4) {
-        value->append(iter->value().data(), iter->value().size());
+  if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF) {
+    std::string composite = key.ToString();
+    for (uint32_t epoch = 0;; epoch++) {
+      composite.resize(key.size());
+      pdlfs::PutFixed32(&composite, epoch);
+      s = dir->db->Get(options, composite, value);
+      if (!s.ok()) {
+        if (s.IsNotFound()) {
+          s = pdlfs::Status::OK();
+        }
+        break;
       }
-    } else {
-      break;
     }
-  }
+  } else {
+    pdlfs::Iterator* iter = dir->db->NewIterator(options);
+    iter->Seek(key);
 
-  s = iter->status();
-  delete iter;
+    for (; iter->Valid(); iter->Next()) {
+      if (iter->key().starts_with(key)) {
+        if (iter->key().size() == key.size() + 4) {
+          value->append(iter->value().data(), iter->value().size());
+        }
+      } else {
+        break;
+      }
+    }
+
+    if (!iter->status().ok()) {
+      s = iter->status();
+    }
+
+    delete iter;
+  }
 
   return s;
 }
