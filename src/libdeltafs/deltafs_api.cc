@@ -921,6 +921,7 @@ extern "C" {
 struct deltafs_plfsdir {
   pdlfs::Env* env;          // Not owned by us
   pdlfs::ThreadPool* pool;  // Not owned by us
+  const pdlfs::FilterPolicy* db_filter;
   bool db_drain_compactions;
   uint32_t db_epoch;
   pdlfs::DB* db;
@@ -1115,15 +1116,19 @@ pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
     env = dir->io_env;
   }
   if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF)
-    dboptions.filter_policy =
+    dir->db_filter =
         pdlfs::NewBloomFilterPolicy(int(dir->io_options->bf_bits_per_key));
   if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF ||
       dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY || dir->mode == O_RDONLY)
     dboptions.disable_compaction = true;
-  if (dir->mode == O_WRONLY) dboptions.error_if_exists = true;
+  if (dir->mode == O_WRONLY) {
+    dboptions.error_if_exists = true;
+  }
 
   dboptions.env = env;
+  dboptions.filter_policy = dir->db_filter;
   s = pdlfs::DB::Open(dboptions, dbname, &dir->db);
+
   return s;
 }
 
@@ -1653,7 +1658,7 @@ int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
   delete __dir->writer;
   delete __dir->reader;
   delete __dir->db;
-
+  delete __dir->db_filter;
   delete __dir->io_options;
   delete __dir->io_env;
   free(__dir);
