@@ -812,6 +812,21 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
   virtual pdlfs::Status NewWritableFile(const char* f, pdlfs::WritableFile** r);
 
   template <typename T>
+  static uint64_t SumUpOps(const std::vector<T*>* v) {
+    uint64_t result = 0;
+    typename std::vector<T*>::const_iterator it = v->begin();
+    for (; it != v->end(); ++it) {
+      result += (*it)->TotalOps();
+    }
+    return result;
+  }
+
+  uint64_t TotalRandomSeeks() const {
+    pdlfs::MutexLock l(&mu_);
+    return SumUpOps(&randomaccessfile_repo_);
+  }
+
+  template <typename T>
   static uint64_t SumUpBytes(const std::vector<T*>* v) {
     uint64_t result = 0;
     typename std::vector<T*>::const_iterator it = v->begin();
@@ -1099,7 +1114,6 @@ pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
     dir->io_env = new DirEnvWrapper(dir->env);
     env = dir->io_env;
   }
-  dboptions.env = env;
   if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF)
     dboptions.filter_policy =
         pdlfs::NewBloomFilterPolicy(int(dir->io_options->bf_bits_per_key));
@@ -1107,8 +1121,9 @@ pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
       dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY || dir->mode == O_RDONLY)
     dboptions.disable_compaction = true;
   if (dir->mode == O_WRONLY) dboptions.error_if_exists = true;
-  s = pdlfs::DB::Open(dboptions, dbname, &dir->db);
 
+  dboptions.env = env;
+  s = pdlfs::DB::Open(dboptions, dbname, &dir->db);
   return s;
 }
 
@@ -1455,6 +1470,9 @@ char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir,
       } else if (k == "total_bytes_written") {
         uint64_t tbw = __dir->io_env->TotalBytesWritten();
         return MakeChar(tbw);
+      } else if (k == "total_seeks") {
+        uint64_t tsk = __dir->io_env->TotalRandomSeeks();
+        return MakeChar(tsk);
       }
     } else if (__dir->writer != NULL) {
       if (k == "total_user_data") {
