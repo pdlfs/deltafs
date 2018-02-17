@@ -1172,7 +1172,8 @@ pdlfs::Status DbFlush(deltafs_plfsdir_t* dir) {
 pdlfs::Status DbFin(deltafs_plfsdir_t* dir) {
   pdlfs::Status s;
   pdlfs::FlushOptions options;
-  if (dir->io_engine != DELTAFS_PLFSDIR_LEVELDB_L0ONLY)
+  if (dir->io_engine != DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF &&
+      dir->io_engine != DELTAFS_PLFSDIR_LEVELDB_L0ONLY)
     options.force_flush_l0 = true;
   options.wait = true;
 
