@@ -1110,12 +1110,14 @@ pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
   dboptions.disable_write_ahead_log = true;
   dboptions.create_if_missing = true;
   dboptions.compaction_pool = dir->pool;
-
+  dboptions.write_buffer_size =  //
+      dir->io_options->total_memtable_budget / 2;
   if (dir->enable_io_measurement) {
     dir->io_env = new DirEnvWrapper(dir->env);
     env = dir->io_env;
   }
-  if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF)
+  if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF &&
+      dir->io_options->bf_bits_per_key != 0)
     dir->db_filter =
         pdlfs::NewBloomFilterPolicy(int(dir->io_options->bf_bits_per_key));
   if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF ||
