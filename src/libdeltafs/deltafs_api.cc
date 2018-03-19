@@ -788,8 +788,27 @@ int deltafs_tp_close(deltafs_tp_t* __tp) {
 
 namespace {
 class DirEnvWrapper : public pdlfs::EnvWrapper {
+  static uint64_t GetNumFromEnv(const char* name) {
+    const char* value = getenv(name);
+    if (value && value[0]) {
+      return strtoull(value, NULL, 10);
+    }
+    return 0;
+  }
+
+  static bool IsEnvSet(const char* name) {
+    const char* value = getenv(name);
+    if (value && value[0]) {
+      return strcmp(value, "0") != 0;
+    }
+    return false;
+  }
+
  public:
-  explicit DirEnvWrapper(Env* base) : EnvWrapper(base) {}
+  explicit DirEnvWrapper(Env* base) : EnvWrapper(base) {
+    rate_ = GetNumFromEnv("DELTAFS_API_RATELIMIT");
+    drop_ = IsEnvSet("DELTAFS_API_DROPDATA");
+  }
 
   template <typename T>
   static void CleanUpRepo(std::vector<T*>* v) {
@@ -866,8 +885,68 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
   mutable pdlfs::port::Mutex mu_;
 
   // No copying allowed
-  void operator=(const DirEnvWrapper& a);
+  void operator=(const DirEnvWrapper& wrapper);
   DirEnvWrapper(const DirEnvWrapper&);
+
+  // Max write speed
+  uint64_t rate_;  // Bytes per second
+  bool drop_;
+
+  class RateLimitingWritableFile : public pdlfs::WritableFile {
+   public:
+    RateLimitingWritableFile(Env* env, WritableFile* base, uint64_t rate,
+                             bool drop)
+        : env_(env), base_(base), bps_(rate), drop_(drop) {}
+
+    virtual ~RateLimitingWritableFile() {
+      delete base_;  // Owned by us
+    }
+
+    virtual pdlfs::Status Append(const pdlfs::Slice& data) {
+      pdlfs::Status status;
+      uint64_t start = env_->NowMicros();
+      uint64_t delay = data.size() * 1000 * 1000 / bps_;
+      if (base_ != NULL && !drop_) {
+        status = base_->Append(data);
+      }
+      if (status.ok()) {
+        uint64_t now = env_->NowMicros();
+        if (delay > 10 && now - start < delay - 10) {
+          int sleep = static_cast<int>(delay + start - now - 10);
+          env_->SleepForMicroseconds(sleep);
+        }
+      }
+      return status;
+    }
+
+    virtual pdlfs::Status Close() {
+      if (base_ != NULL) {
+        return base_->Close();
+      }
+      return status_;
+    }
+
+    virtual pdlfs::Status Flush() {
+      if (base_ != NULL) {
+        return base_->Flush();
+      }
+      return status_;
+    }
+
+    virtual pdlfs::Status Sync() {
+      if (base_ != NULL) {
+        return base_->Sync();
+      }
+      return status_;
+    }
+
+   private:
+    Env* env_;
+    pdlfs::Status status_;
+    WritableFile* base_;
+    uint64_t bps_;  // Bytes per second
+    bool drop_;
+  };
 };
 
 pdlfs::Status DirEnvWrapper::NewSequentialFile(const char* f,
@@ -906,6 +985,8 @@ pdlfs::Status DirEnvWrapper::NewWritableFile(const char* f,
   pdlfs::Status s = target()->NewWritableFile(f, &file);
   if (s.ok()) {
     pdlfs::MutexLock ml(&mu_);
+    if (rate_ != 0)
+      file = new RateLimitingWritableFile(this, file, rate_, drop_);
     pdlfs::WritableFileStats* stats = new pdlfs::WritableFileStats;
     *r = new pdlfs::MeasuredWritableFile(stats, file);
     writablefile_repo_.push_back(stats);
