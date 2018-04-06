@@ -1544,6 +1544,7 @@ DirReader::ReadOp::ReadOp()
       seeks(NULL) {}
 
 void DirReader::ReadOp::SetEpoch(int epoch) {
+  assert(epoch >= -1);
   if (epoch != -1) {
     epoch_start = static_cast<uint32_t>(epoch);
     epoch_end = epoch_start + 1;
@@ -1559,6 +1560,7 @@ DirReader::ScanOp::ScanOp()
       n(NULL) {}
 
 void DirReader::ScanOp::SetEpoch(int epoch) {
+  assert(epoch >= -1);
   if (epoch != -1) {
     epoch_start = static_cast<uint32_t>(epoch);
     epoch_end = epoch_start + 1;

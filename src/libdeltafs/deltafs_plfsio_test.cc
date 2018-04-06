@@ -13,6 +13,7 @@
 #include "deltafs_plfsio_internal.h"
 
 #include "pdlfs-common/histogram.h"
+#include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
@@ -151,9 +152,32 @@ class PlfsIoTest {
     epoch_++;
   }
 
-  void Write(const Slice& key, const Slice& value) {
+  void Append(const Slice& key, const Slice& value) {
     if (writer_ == NULL) OpenWriter();
     ASSERT_OK(writer_->Append(key, value, epoch_));
+  }
+
+  struct SaverState {
+    std::string* tmp;
+    port::Mutex mu;
+  };
+
+  static void SaveValue(void* arg, const Slice& key, const Slice& value) {
+    SaverState* st = reinterpret_cast<SaverState*>(arg);
+    MutexLock ml(&st->mu);
+    st->tmp->append(value.data(), value.size());
+  }
+
+  std::string Scan(int epoch) {
+    std::string tmp;
+    SaverState state;
+    state.tmp = &tmp;
+    DirReader::ScanOp op;
+    op.SetEpoch(epoch);
+    if (writer_ != NULL) Finish();
+    if (reader_ == NULL) OpenReader();
+    ASSERT_OK(reader_->Scan(op, SaveValue, &state));
+    return tmp;
   }
 
   std::string Read(const Slice& key) {
@@ -179,12 +203,12 @@ TEST(PlfsIoTest, Empty) {
 }
 
 TEST(PlfsIoTest, SingleEpoch) {
-  Write("k1", "v1");
-  Write("k2", "v2");
-  Write("k3", "v3");
-  Write("k4", "v4");
-  Write("k5", "v5");
-  Write("k6", "v6");
+  Append("k1", "v1");
+  Append("k2", "v2");
+  Append("k3", "v3");
+  Append("k4", "v4");
+  Append("k5", "v5");
+  Append("k6", "v6");
   MakeEpoch();
   ASSERT_EQ(Read("k1"), "v1");
   ASSERT_TRUE(Read("k1.1").empty());
@@ -197,38 +221,48 @@ TEST(PlfsIoTest, SingleEpoch) {
   ASSERT_EQ(Read("k5"), "v5");
   ASSERT_TRUE(Read("k5.1").empty());
   ASSERT_EQ(Read("k6"), "v6");
+  ASSERT_EQ(Scan(0), "v1v2v3v4v5v6");
+  ASSERT_TRUE(Scan(1).empty());
 }
 
 TEST(PlfsIoTest, MultiEpoch) {
-  Write("k1", "v1");
-  Write("k2", "v2");
+  Append("k1", "v1");
+  Append("k2", "v2");
   MakeEpoch();
-  Write("k1", "v3");
-  Write("k2", "v4");
+  Append("k1", "v3");
+  Append("k2", "v4");
   MakeEpoch();
-  Write("k1", "v5");
-  Write("k2", "v6");
+  Append("k1", "v5");
+  Append("k2", "v6");
   MakeEpoch();
   ASSERT_EQ(Read("k1"), "v1v3v5");
   ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2v4v6");
+  ASSERT_EQ(Scan(-1), "v1v2v3v4v5v6");
+  ASSERT_EQ(Scan(0), "v1v2");
+  ASSERT_EQ(Scan(1), "v3v4");
+  ASSERT_EQ(Scan(2), "v5v6");
+  ASSERT_TRUE(Scan(3).empty());
 }
 
 TEST(PlfsIoTest, Snappy) {
   options_.compression = kSnappyCompression;
   options_.force_compression = true;
-  Write("k1", "v1");
-  Write("k2", "v2");
+  Append("k1", "v1");
+  Append("k2", "v2");
   MakeEpoch();
-  Write("k1", "v3");
-  Write("k2", "v4");
+  Append("k1", "v3");
+  Append("k2", "v4");
   MakeEpoch();
-  Write("k1", "v5");
-  Write("k2", "v6");
+  Append("k1", "v5");
+  Append("k2", "v6");
   MakeEpoch();
   ASSERT_EQ(Read("k1"), "v1v3v5");
   ASSERT_TRUE(Read("k1.1").empty());
   ASSERT_EQ(Read("k2"), "v2v4v6");
+  ASSERT_EQ(Scan(0), "v1v2");
+  ASSERT_EQ(Scan(1), "v3v4");
+  ASSERT_EQ(Scan(2), "v5v6");
 }
 
 TEST(PlfsIoTest, LargeBatch) {
@@ -237,12 +271,12 @@ TEST(PlfsIoTest, LargeBatch) {
   char tmp[10];
   for (int i = 0; i < batch_size; i++) {
     snprintf(tmp, sizeof(tmp), "k%07d", i);
-    Write(Slice(tmp), dummy_val);
+    Append(Slice(tmp), dummy_val);
   }
   MakeEpoch();
   for (int i = 0; i < batch_size; i++) {
     snprintf(tmp, sizeof(tmp), "k%07d", i);
-    Write(Slice(tmp), dummy_val);
+    Append(Slice(tmp), dummy_val);
   }
   MakeEpoch();
   for (int i = 0; i < batch_size; i++) {
@@ -257,14 +291,14 @@ TEST(PlfsIoTest, LargeBatch) {
 
 TEST(PlfsIoTest, NoFilter) {
   options_.bf_bits_per_key = 0;
-  Write("k1", "v1");
-  Write("k2", "v2");
+  Append("k1", "v1");
+  Append("k2", "v2");
   MakeEpoch();
-  Write("k3", "v3");
-  Write("k4", "v4");
+  Append("k3", "v3");
+  Append("k4", "v4");
   MakeEpoch();
-  Write("k5", "v5");
-  Write("k6", "v6");
+  Append("k5", "v5");
+  Append("k6", "v6");
   MakeEpoch();
   ASSERT_EQ(Read("k1"), "v1");
   ASSERT_TRUE(Read("k1.1").empty());
@@ -277,33 +311,36 @@ TEST(PlfsIoTest, NoFilter) {
   ASSERT_EQ(Read("k5"), "v5");
   ASSERT_TRUE(Read("k5.1").empty());
   ASSERT_EQ(Read("k6"), "v6");
+  ASSERT_EQ(Scan(0), "v1v2");
+  ASSERT_EQ(Scan(1), "v3v4");
+  ASSERT_EQ(Scan(2), "v5v6");
 }
 
 TEST(PlfsIoTest, LogRotation) {
   options_.epoch_log_rotation = true;
-  Write("k1", "v1");
+  Append("k1", "v1");
   MakeEpoch();
-  Write("k1", "v1");
+  Append("k1", "v1");
   MakeEpoch();
-  Write("k1", "v1");
+  Append("k1", "v1");
   MakeEpoch();
   Finish();
 }
 
 TEST(PlfsIoTest, MultiMap) {
   options_.mode = kDmMultiMap;
-  Write("k1", "v1");
-  Write("k1", "v2");
+  Append("k1", "v1");
+  Append("k1", "v2");
   MakeEpoch();
-  Write("k0", "v3");
-  Write("k1", "v4");
-  Write("k1", "v5");
+  Append("k0", "v3");
+  Append("k1", "v4");
+  Append("k1", "v5");
   MakeEpoch();
-  Write("k1", "v6");
-  Write("k1", "v7");
-  Write("k5", "v8");
+  Append("k1", "v6");
+  Append("k1", "v7");
+  Append("k5", "v8");
   MakeEpoch();
-  Write("k1", "v9");
+  Append("k1", "v9");
   MakeEpoch();
   ASSERT_EQ(Read("k1"), "v1v2v4v5v6v7v9");
 }
