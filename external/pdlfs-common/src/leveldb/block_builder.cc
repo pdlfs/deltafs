@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 The LevelDB Authors.
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -42,38 +42,52 @@
 // restarts[i] contains the offset within the block of the ith restart point.
 namespace pdlfs {
 
-BlockBuilder::BlockBuilder(int restart_interval, const Comparator* cmp)
-    : restart_interval_(restart_interval),
-      cmp_(cmp),
-      buffer_start_(0),
-      counter_(0),
-      finished_(false) {
-  restarts_.push_back(0);  // First restart point is at offset 0
-  if (restart_interval_ < 1) {
-    restart_interval_ = 1;
-  }
+AbstractBlockBuilder::AbstractBlockBuilder(const Comparator* cmp)
+    : buffer_start_(0), finished_(false) {
   if (cmp_ == NULL) {
     cmp_ = BytewiseComparator();
   }
 }
 
-void BlockBuilder::SwitchBuffer(std::string* buffer) {
+BlockBuilder::BlockBuilder(int restart_interval, const Comparator* cmp)
+    : AbstractBlockBuilder(cmp),
+      restart_interval_(restart_interval),
+      counter_(0) {
+  restarts_.push_back(0);  // First restart point is at offset 0
+  if (restart_interval_ < 1) {
+    restart_interval_ = 1;
+  }
+}
+
+void AbstractBlockBuilder::ResetBuffer(std::string* buffer) {
   if (buffer != NULL && buffer != &buffer_) buffer->swap(buffer_);
   buffer_start_ = buffer_.size();
 }
 
-void BlockBuilder::Pad(size_t n) {
+void AbstractBlockBuilder::Pad(size_t n) {
   buffer_.resize(buffer_.size() + n, 0);
   buffer_start_ = buffer_.size();
 }
 
-void BlockBuilder::Reset() {
+void AbstractBlockBuilder::Reset() {
   buffer_.resize(buffer_start_);
+  finished_ = false;
+}
+
+Slice AbstractBlockBuilder::Finish() {
+  assert(!finished_);
+  finished_ = true;
+  Slice result = buffer_;
+  result.remove_prefix(buffer_start_);
+  return result;
+}
+
+void BlockBuilder::Reset() {
+  AbstractBlockBuilder::Reset();
+  last_key_.clear();
   restarts_.clear();
   restarts_.push_back(0);  // First restart point is at offset 0
   counter_ = 0;
-  finished_ = false;
-  last_key_.clear();
 }
 
 size_t BlockBuilder::CurrentSizeEstimate() const {
@@ -92,15 +106,13 @@ Slice BlockBuilder::Finish() {
   for (size_t i = 0; i < restarts_.size(); i++) {
     PutFixed32(&buffer_, restarts_[i]);
   }
-  PutFixed32(&buffer_, restarts_.size());  // Remember the array size
-  finished_ = true;
-  Slice result = buffer_;
-  result.remove_prefix(buffer_start_);
-  return result;
+  uint32_t num_restarts = static_cast<uint32_t>(restarts_.size());
+  PutFixed32(&buffer_, num_restarts);  // Remember the array size
+  return AbstractBlockBuilder::Finish();
 }
 
-Slice BlockBuilder::Finalize(bool crc32c, uint32_t padding_target,
-                             char padding_char) {
+Slice AbstractBlockBuilder::Finalize(bool crc32c, uint32_t padding_target,
+                                     char padding_char) {
   assert(finished_);
   Slice contents = buffer_;  // Contents without the trailer and padding
   contents.remove_prefix(buffer_start_);

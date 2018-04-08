@@ -556,7 +556,7 @@ void TableLogger::Add(const Slice& key, const Slice& value) {
   // Restart the block buffer
   if (pending_restart_) {
     pending_restart_ = false;
-    data_block_.SwitchBuffer(
+    data_block_.ResetBuffer(
         NULL);  // Continue appending to the same underlying buffer
     // Pre-reserve enough space for the leading block handle
     data_block_.Pad(BlockHandle::kMaxEncodedLength);
