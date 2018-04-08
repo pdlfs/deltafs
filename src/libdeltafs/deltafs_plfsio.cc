@@ -331,7 +331,7 @@ class DirWriterImpl : public DirWriter {
   bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
   WritableFileStats io_stats_;
-  const OutputStats** compaction_stats_;
+  const DirOutputStats** compaction_stats_;
   DirBuilder<T>** bu_;
   LogSink* data_;
   Env* env_;
@@ -1114,7 +1114,7 @@ Status DirWriter::TryDirOpen(T* impl) {
   std::vector<DirBuilder<typename T::FilterType>*> builders(num_parts, NULL);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
-  std::vector<const OutputStats*> output_stats;
+  std::vector<const DirOutputStats*> output_stats;
   LogSink::LogOptions io_opts;
   io_opts.rank = my_rank;
   io_opts.type = kDefIoType;
@@ -1142,7 +1142,7 @@ Status DirWriter::TryDirOpen(T* impl) {
       builders[i]->Ref();
       if (status.ok()) {
         builders[i]->Open(data[0], index[i]);
-        const OutputStats* os = builders[i]->output_stats();
+        const DirOutputStats* os = builders[i]->output_stats();
         output_stats.push_back(os);
       } else {
         break;
@@ -1151,7 +1151,7 @@ Status DirWriter::TryDirOpen(T* impl) {
   }
 
   if (status.ok()) {
-    const OutputStats** compaction_stats = new const OutputStats*[num_parts];
+    const DirOutputStats** compaction_stats = new const DirOutputStats*[num_parts];
     DirBuilder<typename T::FilterType>** bu =
         new DirBuilder<typename T::FilterType>*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {

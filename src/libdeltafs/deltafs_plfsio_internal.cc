@@ -183,18 +183,6 @@ size_t WriteBuffer::memory_usage() const {
   return result;
 }
 
-OutputStats::OutputStats()
-    : final_data_size(0),
-      data_size(0),
-      final_meta_index_size(0),
-      meta_index_size(0),
-      final_index_size(0),
-      index_size(0),
-      final_filter_size(0),
-      filter_size(0),
-      value_size(0),
-      key_size(0) {}
-
 TableLogger::TableLogger(const DirOptions& options, LogSink* data,
                          LogSink* indx)
     : options_(options),
@@ -941,7 +929,7 @@ void DirBuilder<T>::CompactMemtable() {
           static_cast<int>(buffer->CurrentBufferSize()),
           static_cast<int>(tb_bytes_));
 #ifndef NDEBUG
-  const OutputStats stats = tb->output_stats_;
+  const DirOutputStats stats = tb->output_stats_;
 #endif
 #endif  // VERBOSE
 #ifndef NDEBUG

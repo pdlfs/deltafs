@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -11,6 +11,7 @@
 
 #include "deltafs_plfsio.h"
 #include "deltafs_plfsio_format.h"
+#include "deltafs_plfsio_idx.h"
 #include "deltafs_plfsio_nio.h"
 #include "deltafs_plfsio_recov.h"
 
@@ -61,30 +62,6 @@ class WriteBuffer {
   class Iter;
 };
 
-struct OutputStats {  // All final sizes include padding and block trailers
-  OutputStats();
-
-  // Total size of data blocks
-  size_t final_data_size;
-  size_t data_size;
-
-  // Total size of meta index blocks and the root meta index block
-  size_t final_meta_index_size;
-  size_t meta_index_size;
-
-  // Total size of index blocks
-  size_t final_index_size;
-  size_t index_size;
-
-  // Total size of filter blocks
-  size_t final_filter_size;
-  size_t filter_size;
-
-  // Total size of user data compacted
-  size_t value_size;
-  size_t key_size;
-};
-
 // Write sorted table contents into a pair of log files.
 class TableLogger {
  public:
@@ -120,7 +97,7 @@ class TableLogger {
   void Commit();
 
   const DirOptions& options_;
-  OutputStats output_stats_;
+  DirOutputStats output_stats_;
 #ifndef NDEBUG
   // Used to verify the uniqueness of all input keys
   std::set<std::string> keys_;
@@ -180,7 +157,7 @@ class DirBuilder {
   Status Open(LogSink* data, LogSink* indx);
 
   // Report compaction stats
-  const OutputStats* output_stats() const { return &tb_->output_stats_; }
+  const DirOutputStats* output_stats() const { return &tb_->output_stats_; }
 
   uint32_t num_keys() const { return tb_->total_num_keys_; }
   uint32_t num_dropped_keys() const { return tb_->total_num_dropped_keys_; }
