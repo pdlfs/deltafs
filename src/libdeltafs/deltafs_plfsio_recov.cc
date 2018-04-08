@@ -7,8 +7,8 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio_log.h"
-#include "deltafs_plfsio_xio.h"
+#include "deltafs_plfsio_recov.h"
+#include "deltafs_plfsio_nio.h"
 
 namespace pdlfs {
 namespace plfsio {
