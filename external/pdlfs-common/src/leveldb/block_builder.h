@@ -21,15 +21,23 @@ class Comparator;
 
 class AbstractBlockBuilder {
  public:
+  // Each builder is associated with a buffer for holding temporary block
+  // contents before Finish() or Finalize() is called. After Finish() or
+  // Finalize(), the builder can be reset and buffer reused for building a new
+  // block.
   explicit AbstractBlockBuilder(const Comparator* cmp);
 
-  // Add zero padding to the underlying buffer space.
+  // Append zeros to the underlying buffer destination.
+  // Must be called after Finish() and before the next Reset().
+  // Added padding cannot be Reset().
   void Pad(size_t n);
 
-  // Optionally, caller may specify a direct buffer space to switch with
-  // the one currently used by the builder.
-  // This allows the builder to append data to an external buffer space and
-  // potentially avoids an extra copy of data.
+  // Specify a new buffer destination to switch with the one currently used by
+  // the builder. This allows the builder to append data to an external buffer
+  // destination and potentially avoids an extra copy of data.  If buffer is
+  // NULL, the current buffer destination will be used so new block contents
+  // will be appended after existing contents.
+  // Must be called after Finish() and before the next Reset().
   void ResetBuffer(std::string* buffer);
 
   // Reset block contents.

@@ -43,7 +43,7 @@
 namespace pdlfs {
 
 AbstractBlockBuilder::AbstractBlockBuilder(const Comparator* cmp)
-    : buffer_start_(0), finished_(false) {
+    : cmp_(cmp), buffer_start_(0), finished_(false) {
   if (cmp_ == NULL) {
     cmp_ = BytewiseComparator();
   }
