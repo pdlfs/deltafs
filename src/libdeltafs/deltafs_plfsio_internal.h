@@ -126,7 +126,7 @@ class TableLogger {
   std::set<std::string> keys_;
 #endif
   template <typename T>
-  friend class DirLogger;
+  friend class DirBuilder;
 
   // No copying allowed
   void operator=(const TableLogger&);
@@ -172,10 +172,10 @@ class BloomBlock;
 // of indexed tables. Implementation is thread-safe and
 // uses background threads.
 template <typename T = BloomBlock>
-class DirLogger {
+class DirBuilder {
  public:
-  DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
-            port::CondVar* cv);
+  DirBuilder(const DirOptions& options, size_t part, port::Mutex* mu,
+             port::CondVar* cv);
 
   Status Open(LogSink* data, LogSink* indx);
 
@@ -239,14 +239,14 @@ class DirLogger {
   template <typename TT>
   friend class DirWriterImpl;
   friend class DirWriter;
-  ~DirLogger();
+  ~DirBuilder();
 
   Status Prepare(bool force = false, bool epoch_flush = false,
                  bool finalize = false);
 
   // No copying allowed
-  void operator=(const DirLogger&);
-  DirLogger(const DirLogger&);
+  void operator=(const DirBuilder&);
+  DirBuilder(const DirBuilder&);
 
   static void BGWork(void*);
   void MaybeScheduleCompaction();

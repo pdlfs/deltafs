@@ -624,8 +624,8 @@ Status TableLogger::Finish() {
 }
 
 template <typename T>
-DirLogger<T>::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
-                        port::CondVar* cv)
+DirBuilder<T>::DirBuilder(const DirOptions& options, size_t part,
+                          port::Mutex* mu, port::CondVar* cv)
     : options_(options),
       bg_cv_(cv),
       mu_(mu),
@@ -709,7 +709,7 @@ DirLogger<T>::DirLogger(const DirOptions& options, size_t part, port::Mutex* mu,
 }
 
 template <typename T>
-DirLogger<T>::~DirLogger() {
+DirBuilder<T>::~DirBuilder() {
   mu_->AssertHeld();
   while (has_bg_compaction_) {
     bg_cv_->Wait();
@@ -721,7 +721,7 @@ DirLogger<T>::~DirLogger() {
 }
 
 template <typename T>
-Status DirLogger<T>::Open(LogSink* data, LogSink* indx) {
+Status DirBuilder<T>::Open(LogSink* data, LogSink* indx) {
   // Open() has not been called before
   assert(!opened_);
   opened_ = true;
@@ -737,14 +737,14 @@ Status DirLogger<T>::Open(LogSink* data, LogSink* indx) {
 
 // True iff there is an on-going background compaction.
 template <typename T>
-bool DirLogger<T>::has_bg_compaction() {
+bool DirBuilder<T>::has_bg_compaction() {
   mu_->AssertHeld();
   return has_bg_compaction_;
 }
 
 // Report background compaction status.
 template <typename T>
-Status DirLogger<T>::bg_status() {
+Status DirBuilder<T>::bg_status() {
   mu_->AssertHeld();
   return bg_status_;
 }
@@ -754,7 +754,7 @@ Status DirLogger<T>::bg_status() {
 // de-referenced by the last opener. Optionally, a caller may force data
 // sync and pre-closing all log files.
 template <typename T>
-Status DirLogger<T>::SyncAndClose() {
+Status DirBuilder<T>::SyncAndClose() {
   Status status;
   if (!opened_) return status;
   assert(data_ != NULL);
@@ -775,7 +775,7 @@ Status DirLogger<T>::SyncAndClose() {
 // options_.non_blocking is set. After a compaction has been scheduled,
 // **wait** until it finishes unless no_wait has been set.
 template <typename T>
-Status DirLogger<T>::Flush(const FlushOptions& flush_options) {
+Status DirBuilder<T>::Flush(const FlushOptions& flush_options) {
   mu_->AssertHeld();
   assert(opened_);
   // Wait for buffer space
@@ -808,7 +808,7 @@ Status DirLogger<T>::Flush(const FlushOptions& flush_options) {
 }
 
 template <typename T>
-Status DirLogger<T>::Add(const Slice& key, const Slice& value) {
+Status DirBuilder<T>::Add(const Slice& key, const Slice& value) {
   mu_->AssertHeld();
   assert(opened_);
   Status status = Prepare();
@@ -824,9 +824,9 @@ Status DirLogger<T>::Add(const Slice& key, const Slice& value) {
 }
 
 template <typename T>
-Status DirLogger<T>::Prepare(bool force /* force minor memtable flush */,
-                             bool epoch_flush /* force epoch flush */,
-                             bool finalize) {
+Status DirBuilder<T>::Prepare(bool force /* force minor memtable flush */,
+                              bool epoch_flush /* force epoch flush */,
+                              bool finalize) {
   mu_->AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
@@ -869,7 +869,7 @@ Status DirLogger<T>::Prepare(bool force /* force minor memtable flush */,
 }
 
 template <typename T>
-void DirLogger<T>::MaybeScheduleCompaction() {
+void DirBuilder<T>::MaybeScheduleCompaction() {
   mu_->AssertHeld();
 
   // Do not schedule more if we are in error status
@@ -888,23 +888,23 @@ void DirLogger<T>::MaybeScheduleCompaction() {
   has_bg_compaction_ = true;
 
   if (options_.compaction_pool != NULL) {
-    options_.compaction_pool->Schedule(DirLogger::BGWork, this);
+    options_.compaction_pool->Schedule(DirBuilder::BGWork, this);
   } else if (options_.allow_env_threads) {
-    Env::Default()->Schedule(DirLogger::BGWork, this);
+    Env::Default()->Schedule(DirBuilder::BGWork, this);
   } else {
     DoCompaction();
   }
 }
 
 template <typename T>
-void DirLogger<T>::BGWork(void* arg) {
-  DirLogger* ins = reinterpret_cast<DirLogger*>(arg);
+void DirBuilder<T>::BGWork(void* arg) {
+  DirBuilder* ins = reinterpret_cast<DirBuilder*>(arg);
   MutexLock ml(ins->mu_);
   ins->DoCompaction();
 }
 
 template <typename T>
-void DirLogger<T>::DoCompaction() {
+void DirBuilder<T>::DoCompaction() {
   mu_->AssertHeld();
   assert(has_bg_compaction_);
   assert(imm_buf_ != NULL);
@@ -919,7 +919,7 @@ void DirLogger<T>::DoCompaction() {
 }
 
 template <typename T>
-void DirLogger<T>::CompactMemtable() {
+void DirBuilder<T>::CompactMemtable() {
   mu_->AssertHeld();
   WriteBuffer* const buffer = imm_buf_;
   assert(buffer != NULL);
@@ -1015,7 +1015,7 @@ void DirLogger<T>::CompactMemtable() {
 }
 
 template <typename T>
-size_t DirLogger<T>::memory_usage() const {
+size_t DirBuilder<T>::memory_usage() const {
   mu_->AssertHeld();
   if (opened_) {
     size_t result = 0;
@@ -1038,17 +1038,17 @@ size_t DirLogger<T>::memory_usage() const {
 }
 
 // Initialize all potential filter templates
-template class DirLogger<BloomBlock>;
+template class DirBuilder<BloomBlock>;
 
-template class DirLogger<BitmapBlock<UncompressedFormat> >;
-template class DirLogger<BitmapBlock<FastVbPlusFormat> >;
-template class DirLogger<BitmapBlock<VbPlusFormat> >;
-template class DirLogger<BitmapBlock<VbFormat> >;
-template class DirLogger<BitmapBlock<FastPfDeltaFormat> >;
-template class DirLogger<BitmapBlock<PfDeltaFormat> >;
-template class DirLogger<BitmapBlock<RoaringFormat> >;
+template class DirBuilder<BitmapBlock<UncompressedFormat> >;
+template class DirBuilder<BitmapBlock<FastVbPlusFormat> >;
+template class DirBuilder<BitmapBlock<VbPlusFormat> >;
+template class DirBuilder<BitmapBlock<VbFormat> >;
+template class DirBuilder<BitmapBlock<FastPfDeltaFormat> >;
+template class DirBuilder<BitmapBlock<PfDeltaFormat> >;
+template class DirBuilder<BitmapBlock<RoaringFormat> >;
 
-template class DirLogger<EmptyFilterBlock>;
+template class DirBuilder<EmptyFilterBlock>;
 
 static Status ReadBlock(LogSource* source, const DirOptions& options,
                         const BlockHandle& handle, BlockContents* result,
