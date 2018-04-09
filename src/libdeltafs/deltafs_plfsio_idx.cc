@@ -38,7 +38,17 @@ DirIndexer::DirIndexer(const DirOptions& options)
 
 DirIndexer::~DirIndexer() {}
 
+// A versatile block builder that uses the LevelDB's SST block format.  In this
+// format, keys are ordered and will be prefix compressed.  Both keys and values
+// can have variable length.  Each block can be seen as a sorted search tree.
+class TreeBlockBuilder : public BlockBuilder {
+ public:
+  explicit TreeBlockBuilder(const DirOptions& options)
+      : BlockBuilder(16, BytewiseComparator()) {}
+};
+
 // Write sorted directory contents into a pair of log files.
+template <typename T = TreeBlockBuilder>
 class DirIndexerImpl : public DirIndexer {
  public:
   DirIndexerImpl(const DirOptions& options, LogSink* data, LogSink* indx);
@@ -48,7 +58,7 @@ class DirIndexerImpl : public DirIndexer {
 
   // Force the start of a new table.
   // REQUIRES: Finish() has not been called.
-  void EndTable(const Slice& filter_contents, ChunkType filter_type);
+  virtual void EndTable(const Slice& filter_contents, ChunkType filter_type);
 
   // Force the start of a new epoch.
   // REQUIRES: Finish() has not been called.
@@ -81,7 +91,7 @@ class DirIndexerImpl : public DirIndexer {
   uint32_t num_uncommitted_data_;  // Number of uncommitted data blocks
   bool pending_restart_;           // Request to restart the data block buffer
   bool pending_commit_;  // Request to commit buffered data and indexes
-  BlockBuilder data_block_;
+  T data_block_;
   BlockBuilder indx_block_;  // Locate the data blocks within a table
   BlockBuilder meta_block_;  // Locate the tables within an epoch
   BlockBuilder root_block_;  // Locate each epoch
@@ -101,14 +111,15 @@ class DirIndexerImpl : public DirIndexer {
   bool finished_;
 };
 
-DirIndexerImpl::DirIndexerImpl(const DirOptions& options, LogSink* data,
-                               LogSink* indx)
+template <typename T>
+DirIndexerImpl<T>::DirIndexerImpl(const DirOptions& options, LogSink* data,
+                                  LogSink* indx)
     : DirIndexer(options),
       num_uncommitted_indx_(0),
       num_uncommitted_data_(0),
       pending_restart_(false),
       pending_commit_(false),
-      data_block_(16),
+      data_block_(options),
       indx_block_(1),
       meta_block_(1),
       root_block_(1),
@@ -143,12 +154,14 @@ DirIndexerImpl::DirIndexerImpl(const DirOptions& options, LogSink* data,
   pending_restart_ = true;
 }
 
-DirIndexerImpl::~DirIndexerImpl() {
+template <typename T>
+DirIndexerImpl<T>::~DirIndexerImpl() {
   indx_sink_->Unref();
   data_sink_->Unref();
 }
 
-void DirIndexerImpl::MakeEpoch() {
+template <typename T>
+void DirIndexerImpl<T>::MakeEpoch() {
   assert(!finished_);  // Finish() has not been called
   EndTable(Slice(), static_cast<ChunkType>(0));
   if (!ok()) {
@@ -222,8 +235,9 @@ void DirIndexerImpl::MakeEpoch() {
   }
 }
 
-void DirIndexerImpl::EndTable(const Slice& filter_contents,
-                              ChunkType filter_type) {
+template <typename T>
+void DirIndexerImpl<T>::EndTable(const Slice& filter_contents,
+                                 ChunkType filter_type) {
   assert(!finished_);  // Finish() has not been called
 
   EndBlock();
@@ -307,7 +321,8 @@ void DirIndexerImpl::EndTable(const Slice& filter_contents,
   }
 }
 
-void DirIndexerImpl::Commit() {
+template <typename T>
+void DirIndexerImpl<T>::Commit() {
   assert(!finished_);  // Finish() has not been called
   // Skip empty commit
   if (data_block_.buffer_store()->empty()) return;
@@ -369,7 +384,8 @@ void DirIndexerImpl::Commit() {
   pending_restart_ = true;
 }
 
-void DirIndexerImpl::EndBlock() {
+template <typename T>
+void DirIndexerImpl<T>::EndBlock() {
   assert(!finished_);               // Finish() has not been called
   if (pending_restart_) return;     // Empty block
   if (data_block_.empty()) return;  // Empty block
@@ -412,7 +428,8 @@ void DirIndexerImpl::EndBlock() {
   }
 }
 
-void DirIndexerImpl::Add(const Slice& key, const Slice& value) {
+template <typename T>
+void DirIndexerImpl<T>::Add(const Slice& key, const Slice& value) {
   assert(!finished_);       // Finish() has not been called
   assert(key.size() != 0);  // Keys cannot be empty
   if (!ok()) return;        // Abort
@@ -485,7 +502,8 @@ void DirIndexerImpl::Add(const Slice& key, const Slice& value) {
   }
 }
 
-Status DirIndexerImpl::Finish() {
+template <typename T>
+Status DirIndexerImpl<T>::Finish() {
   assert(!finished_);  // Finish() has not been called
   MakeEpoch();
   finished_ = true;
@@ -521,7 +539,8 @@ Status DirIndexerImpl::Finish() {
   return status_;
 }
 
-size_t DirIndexerImpl::memory_usage() const {
+template <typename T>
+size_t DirIndexerImpl<T>::memory_usage() const {
   size_t result = 0;
   result += root_block_.memory_usage();
   result += meta_block_.memory_usage();
@@ -533,7 +552,7 @@ size_t DirIndexerImpl::memory_usage() const {
 
 DirIndexer* DirIndexer::Open(const DirOptions& options, LogSink* data,
                              LogSink* indx) {
-  return new DirIndexerImpl(options, data, indx);
+  return new DirIndexerImpl<>(options, data, indx);
 }
 
 }  // namespace plfsio
