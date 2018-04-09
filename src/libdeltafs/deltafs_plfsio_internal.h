@@ -25,6 +25,8 @@
 namespace pdlfs {
 namespace plfsio {
 
+class BloomBlock;
+
 // Non-thread-safe append-only in-memory table.
 class WriteBuffer {
  public:
@@ -62,89 +64,6 @@ class WriteBuffer {
   class Iter;
 };
 
-// Write sorted table contents into a pair of log files.
-class TableLogger {
- public:
-  TableLogger(const DirOptions& options, LogSink* data, LogSink* indx);
-  ~TableLogger();
-
-  bool ok() const { return status_.ok(); }
-  Status status() const { return status_; }
-
-  void Add(const Slice& key, const Slice& value);
-
-  // Force the start of a new table.
-  // Caller may optionally specify a corresponding filter block.
-  // REQUIRES: Finish() has not been called.
-  template <typename T>
-  void EndTable(T* filter, ChunkType filter_type);
-
-  // Force the start of a new epoch.
-  // REQUIRES: Finish() has not been called.
-  void MakeEpoch();
-
-  // Finalize table contents.
-  // No further writes.
-  Status Finish();
-
- private:
-  // End the current block and force the start of a new data block.
-  // REQUIRES: Finish() has not been called.
-  void EndBlock();
-
-  // Flush buffered data blocks and finalize their indexes.
-  // REQUIRES: Finish() has not been called.
-  void Commit();
-
-  const DirOptions& options_;
-  DirOutputStats output_stats_;
-#ifndef NDEBUG
-  // Used to verify the uniqueness of all input keys
-  std::set<std::string> keys_;
-#endif
-  template <typename T>
-  friend class DirBuilder;
-
-  // No copying allowed
-  void operator=(const TableLogger&);
-  TableLogger(const TableLogger&);
-
-  Status status_;
-  std::string smallest_key_;
-  std::string largest_key_;
-  std::string last_key_;
-  uint32_t num_uncommitted_indx_;  // Number of uncommitted index entries
-  uint32_t num_uncommitted_data_;  // Number of uncommitted data blocks
-  bool pending_restart_;           // Request to restart the data block buffer
-  bool pending_commit_;  // Request to commit buffered data and indexes
-  BlockBuilder data_block_;
-  BlockBuilder indx_block_;  // Locate the data blocks within a table
-  BlockBuilder meta_block_;  // Locate the tables within an epoch
-  BlockBuilder root_block_;  // Locate each epoch
-  bool pending_indx_entry_;
-  BlockHandle pending_indx_handle_;
-  bool pending_meta_entry_;
-  TableHandle pending_meta_handle_;
-  bool pending_root_entry_;
-  BlockHandle pending_root_handle_;
-  uint32_t total_num_keys_;
-  uint32_t total_num_dropped_keys_;
-  uint32_t total_num_blocks_;
-  uint32_t total_num_tables_;
-  uint32_t num_tables_;  // Number of tables generated within the current epoch
-  uint32_t num_epochs_;  // Number of epochs generated
-  std::string uncommitted_indexes_;
-  uint64_t pending_data_flush_;  // Offset of the data pending flush
-  uint64_t pending_indx_flush_;  // Offset of the index pending flush
-  LogSink* data_sink_;
-  uint64_t data_offset_;  // Latest data offset
-  LogWriter indx_logger_;
-  LogSink* indx_sink_;
-  bool finished_;
-};
-
-class BloomBlock;
-
 // Sequentially format and write data as multiple sorted runs
 // of indexed tables. Implementation is thread-safe and
 // uses background threads.
@@ -157,14 +76,14 @@ class DirBuilder {
   Status Open(LogSink* data, LogSink* indx);
 
   // Report compaction stats
-  const DirOutputStats* output_stats() const { return &tb_->output_stats_; }
+  const DirOutputStats* output_stats() const { return &idxer_->output_stats_; }
 
-  uint32_t num_keys() const { return tb_->total_num_keys_; }
-  uint32_t num_dropped_keys() const { return tb_->total_num_dropped_keys_; }
+  uint32_t num_keys() const { return idxer_->total_num_keys_; }
+  uint32_t num_dropped_keys() const { return idxer_->total_num_dropped_keys_; }
 
-  uint32_t num_data_blocks() const { return tb_->total_num_blocks_; }
-  uint32_t num_tables() const { return tb_->total_num_tables_; }
-  uint32_t num_epochs() const { return tb_->num_epochs_; }
+  uint32_t num_data_blocks() const { return idxer_->total_num_blocks_; }
+  uint32_t num_tables() const { return idxer_->total_num_tables_; }
+  uint32_t num_epochs() const { return idxer_->num_epochs_; }
 
   // Report memory configurations and usage
   size_t estimated_sstable_size() const { return tb_bytes_; }
@@ -252,7 +171,7 @@ class DirBuilder {
   bool imm_buf_is_final_;
   WriteBuffer buf0_;
   WriteBuffer buf1_;
-  TableLogger* tb_;
+  DirIndexer* idxer_;
   LogSink* data_;
   LogSink* indx_;
   bool opened_;

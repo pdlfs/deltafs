@@ -49,12 +49,17 @@ class DirIndexer {
   explicit DirIndexer(const DirOptions& options);
   virtual ~DirIndexer();
 
+  // Return a new indexer according to the given options.
+  static DirIndexer* Open(const DirOptions& options, LogSink* data,
+                          LogSink* indx);
+
   virtual void Add(const Slice& key, const Slice& value) = 0;
 
   // Finish building the current table. Optionally, a filter can be specified
   // that is associated with the table.
   // REQUIRES: Finish() has not been called.
-  virtual void EndTable(void* filter, ChunkType filter_type) = 0;
+  virtual void EndTable(const Slice& filter_contents,
+                        ChunkType filter_type) = 0;
 
   // Force the start of a new epoch.
   // REQUIRES: Finish() has not been called.
@@ -66,6 +71,7 @@ class DirIndexer {
 
  protected:
   const DirOptions& options_;
+  // Bytes generated for indexes, filters, formatted data, etc
   DirOutputStats output_stats_;
   Status status_;
 
@@ -74,6 +80,16 @@ class DirIndexer {
 
   template <typename T>
   friend class DirBuilder;
+
+  // Indexing counters
+  uint32_t total_num_keys_;
+  uint32_t total_num_dropped_keys_;
+  uint32_t total_num_blocks_;
+  uint32_t total_num_tables_;
+  uint32_t num_tables_;  // Number of tables generated within the current epoch
+  uint32_t num_epochs_;  // Total number of epochs generated
+
+  virtual size_t memory_usage() const = 0;
 
  private:
   // No copying allowed
