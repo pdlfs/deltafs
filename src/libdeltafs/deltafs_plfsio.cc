@@ -31,6 +31,7 @@ DirOptions::DirOptions()
     : total_memtable_budget(4 << 20),
       memtable_util(1.0),
       skip_sort(false),
+      fixed_kv_length(false),
       key_size(8),
       value_size(32),
       filter(kFtBloomFilter),
@@ -1151,18 +1152,18 @@ Status DirWriter::TryDirOpen(T* impl) {
   }
 
   if (status.ok()) {
-    const DirOutputStats** compaction_stats = new const DirOutputStats*[num_parts];
+    const DirOutputStats** compac_stats = new const DirOutputStats*[num_parts];
     DirBuilder<typename T::FilterType>** bu =
         new DirBuilder<typename T::FilterType>*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {
       assert(builders[i] != NULL);
-      compaction_stats[i] = output_stats[i];
+      compac_stats[i] = output_stats[i];
       bu[i] = builders[i];
       bu[i]->Ref();
     }
     impl->data_ = data[0];
     impl->data_->Ref();
-    impl->compaction_stats_ = compaction_stats;
+    impl->compaction_stats_ = compac_stats;
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
     impl->bu_ = bu;
@@ -1194,6 +1195,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
           100 * options.memtable_util);
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.skip_sort -> %s",
           int(options.skip_sort) ? "Yes" : "No");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.fixed_kv_length -> %s",
+          int(options.fixed_kv_length) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.key_size -> %s",
           PrettySize(options.key_size).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.value_size -> %s",
@@ -1587,6 +1590,13 @@ static std::string FilterName(FilterType type) {
 static DirOptions MaybeRewriteOptions(  // Not all options can be fixed
     const DirOptions& options, const Footer& footer) {
   DirOptions result = options;
+  if (static_cast<bool>(footer.fixed_kv_length()) != options.fixed_kv_length)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.fixed_kv_length -> %s (was %s)",
+         static_cast<bool>(footer.fixed_kv_length()) ? "Yes" : "No",
+         options.fixed_kv_length ? "Yes" : "No");
+  result.fixed_kv_length = footer.fixed_kv_length();
+  result.value_size = footer.value_size();
+  result.key_size = footer.key_size();
   if (static_cast<bool>(footer.skip_checksums()) != options.skip_checksums)
     Warn(__LOG_ARGS__, "Dfs.plfsdir.skip_checksums -> %s (was %s)",
          static_cast<bool>(footer.skip_checksums()) ? "Yes" : "No",

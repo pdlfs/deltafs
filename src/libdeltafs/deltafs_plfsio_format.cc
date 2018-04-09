@@ -119,7 +119,8 @@ Footer Mkfoot(const DirOptions& options) {
   result.set_lg_parts(static_cast<uint32_t>(options.lg_parts));
   result.set_value_size(static_cast<uint32_t>(options.value_size));
   result.set_key_size(static_cast<uint32_t>(options.key_size));
-  result.set_fixed_kv_length(static_cast<unsigned char>(false));
+  result.set_fixed_kv_length(
+      static_cast<unsigned char>(options.fixed_kv_length));
   result.set_epoch_log_rotation(
       static_cast<unsigned char>(options.epoch_log_rotation));
   result.set_skip_checksums(static_cast<unsigned char>(options.skip_checksums));

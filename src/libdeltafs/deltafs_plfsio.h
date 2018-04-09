@@ -98,11 +98,15 @@ struct DirOptions {
   // Default: false
   bool skip_sort;
 
-  // Estimated average key size.
+  // If key value length is fixed.
+  // Default: false
+  bool fixed_kv_length;
+
+  // Estimated key size.
   // Default: 8 bytes
   size_t key_size;
 
-  // Estimated average value size.
+  // Estimated value size.
   // Default: 32 bytes
   size_t value_size;
 
