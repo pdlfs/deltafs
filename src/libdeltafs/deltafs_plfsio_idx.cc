@@ -38,14 +38,64 @@ DirIndexer::DirIndexer(const DirOptions& options)
 
 DirIndexer::~DirIndexer() {}
 
-// A versatile block builder that uses the LevelDB's SST block format.  In this
-// format, keys are ordered and will be prefix compressed.  Both keys and values
-// can have variable length.  Each block can be seen as a sorted search tree.
+// A versatile block builder that uses the LevelDB's SST block format.
+// In this format, keys are ordered and will be prefix-compressed. Both keys and
+// values can have variable length. Each block can be seen as a sorted search
+// tree.
 class TreeBlockBuilder : public BlockBuilder {
  public:
   explicit TreeBlockBuilder(const DirOptions& options)
       : BlockBuilder(16, BytewiseComparator()) {}
 };
+
+// A simple block builder that writes data in sequence.
+// In this format, keys are not ordered and will be stored as-is. Both keys and
+// values are fixed sized. Each block can be seen as a simple array.
+class ArrayBlockBuilder : public AbstractBlockBuilder {
+ public:
+  explicit ArrayBlockBuilder(const DirOptions& options)
+      : AbstractBlockBuilder(BytewiseComparator()),
+        value_size_(options.value_size),
+        key_size_(options.key_size) {}
+
+  // REQUIRES: Finish() has not been called since the previous Reset().
+  void Add(const Slice& key, const Slice& value);
+
+  // Finish building the block and return a slice that refers to the block
+  // contents.
+  Slice Finish();
+
+  // Return an estimate of the size of the block we are building.
+  size_t CurrentSizeEstimate() const;
+
+ private:
+  size_t value_size_;
+  size_t key_size_;
+};
+
+void ArrayBlockBuilder::Add(const Slice& key, const Slice& value) {
+  assert(key.size() == key_size_);
+  buffer_.append(key.data(), key_size_);
+  assert(value.size() == value_size_);
+  buffer_.append(value.data(), value_size_);
+}
+
+Slice ArrayBlockBuilder::Finish() {
+  assert(!finished_);
+  // Remember key value sizes for later retrieval
+  PutFixed32(&buffer_, value_size_);
+  PutFixed32(&buffer_, key_size_);
+  return AbstractBlockBuilder::Finish();
+}
+
+size_t ArrayBlockBuilder::CurrentSizeEstimate() const {
+  size_t result = buffer_.size() - buffer_start_;
+  if (!finished_) {
+    return result + 8;
+  } else {
+    return result;
+  }
+}
 
 // Write sorted directory contents into a pair of log files.
 template <typename T = TreeBlockBuilder>
