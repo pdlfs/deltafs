@@ -740,20 +740,37 @@ size_t DirIndexerImpl<T>::memory_usage() const {
   return result;
 }
 
-DirIndexer* DirIndexer::Open(const DirOptions& options, LogSink* data,
-                             LogSink* indx) {
+DirIndexer* DirIndexer::Open  // Use options to determine a block format
+    (const DirOptions& options, LogSink* data, LogSink* indx) {
+  if (options.fixed_kv_length) {
+    return new DirIndexerImpl<ArrayBlockBuilder>(options, data, indx);
+  }
+
+  // Use the default block builder
   return new DirIndexerImpl<>(options, data, indx);
 }
 
 namespace {
+void CleanupArrayIter(void* arg1, void* arg2) {
+  delete reinterpret_cast<ArrayBlock*>(arg1);
+}
+
 void CleanupIter(void* arg1, void* arg2) {
   delete reinterpret_cast<Block*>(arg1);
 }
 
 }  // namespace
 
-Iterator* OpenDirBlock  // Use options to determine block formats
+Iterator* OpenDirBlock  // Use options to determine the block format to use
     (const DirOptions& options, const BlockContents& contents) {
+  if (options.fixed_kv_length) {
+    ArrayBlock* array_block = new ArrayBlock(contents);
+    Iterator* iter = array_block->NewIterator(BytewiseComparator());
+    iter->RegisterCleanup(CleanupArrayIter, array_block, NULL);
+    return iter;
+  }
+
+  // Assume the default format
   Block* block = new Block(contents);
   Iterator* iter = block->NewIterator(BytewiseComparator());
   iter->RegisterCleanup(CleanupIter, block, NULL);
