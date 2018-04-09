@@ -488,6 +488,7 @@ void DirBuilder<T>::CompactMemtable() {
   assert(buffer != NULL);
   const bool is_final = imm_buf_is_final_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
+  const bool is_forced = imm_buf_is_forced_;
   DirIndexer* const idxer = idxer_;
   T* const ft = filter_;
   mu_->Unlock();
@@ -575,7 +576,7 @@ void DirBuilder<T>::CompactMemtable() {
   delete iter;
   mu_->Lock();
   bg_status_ = status;
-  if (imm_buf_is_forced_) {
+  if (is_forced) {
     num_flush_completed_++;
   }
 }
