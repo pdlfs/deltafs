@@ -8,7 +8,7 @@
  */
 
 #include "deltafs_plfsio_idx.h"
-#include "deltafs_plfsio_filter.h"
+#include "deltafs_plfsio_recov.h"
 
 #include <set>
 

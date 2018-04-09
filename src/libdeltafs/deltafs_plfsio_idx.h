@@ -12,7 +12,6 @@
 #include "deltafs_plfsio.h"
 #include "deltafs_plfsio_format.h"
 #include "deltafs_plfsio_nio.h"
-#include "deltafs_plfsio_recov.h"
 
 namespace pdlfs {
 namespace plfsio {
