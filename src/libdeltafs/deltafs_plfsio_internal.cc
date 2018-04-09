@@ -706,8 +706,7 @@ Status Dir::Iter(const IterOptions& opts, Slice* input) {
     opts.stats->seeks++;
   }
 
-  Block* block = new Block(contents);
-  Iterator* const iter = block->NewIterator(BytewiseComparator());
+  Iterator* const iter = OpenDirBlock(options_, contents);
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {
     opts.saver(opts.arg, iter->key(), iter->value());
@@ -718,7 +717,6 @@ Status Dir::Iter(const IterOptions& opts, Slice* input) {
   }
 
   delete iter;
-  delete block;
   return status;
 }
 
@@ -783,8 +781,7 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key, Slice* input,
     opts.stats->seeks++;
   }
 
-  Block* block = new Block(contents);
-  Iterator* const iter = block->NewIterator(BytewiseComparator());
+  Iterator* const iter = OpenDirBlock(options_, contents);
   if (options_.mode != kDmMultiMap) {
     iter->Seek(key);  // Binary search
   } else {
@@ -820,7 +817,6 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key, Slice* input,
   status = iter->status();
 
   delete iter;
-  delete block;
   return status;
 }
 

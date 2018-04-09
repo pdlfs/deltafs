@@ -16,8 +16,10 @@
 namespace pdlfs {
 namespace plfsio {
 
-// Open an iterator on top of a given data block.
-extern Iterator* OpenBlock(const BlockContents& contents);
+// Open an iterator on top of a given data block. The returned the iterator
+// should be deleted when no longer needed.
+extern Iterator* OpenDirBlock  // Use options to determine block formats
+    (const DirOptions& options, const BlockContents& contents);
 
 // Stats for indexed directory data.
 struct DirOutputStats {  // All final sizes include padding and block trailers

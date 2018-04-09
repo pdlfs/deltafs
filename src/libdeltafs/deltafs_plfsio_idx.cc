@@ -742,5 +742,20 @@ DirIndexer* DirIndexer::Open(const DirOptions& options, LogSink* data,
   return new DirIndexerImpl<>(options, data, indx);
 }
 
+namespace {
+void CleanupIter(void* arg1, void* arg2) {
+  delete reinterpret_cast<Block*>(arg1);
+}
+
+}  // namespace
+
+Iterator* OpenDirBlock  // Use options to determine block formats
+    (const DirOptions& options, const BlockContents& contents) {
+  Block* block = new Block(contents);
+  Iterator* iter = block->NewIterator(BytewiseComparator());
+  iter->RegisterCleanup(CleanupIter, block, NULL);
+  return iter;
+}
+
 }  // namespace plfsio
 }  // namespace pdlfs
