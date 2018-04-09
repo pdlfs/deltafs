@@ -245,6 +245,27 @@ TEST(PlfsIoTest, MultiEpoch) {
   ASSERT_TRUE(Scan(3).empty());
 }
 
+TEST(PlfsIoTest, ArrayBlockFmt) {
+  options_.fixed_kv_length = true;
+  options_.value_size = 2;
+  options_.key_size = 2;
+  Append("k1", "v1");
+  Append("k2", "v2");
+  MakeEpoch();
+  Append("k1", "v3");
+  Append("k2", "v4");
+  MakeEpoch();
+  Append("k1", "v5");
+  Append("k2", "v6");
+  MakeEpoch();
+  ASSERT_EQ(Read("k1"), "v1v3v5");
+  ASSERT_TRUE(Read("k1.1").empty());
+  ASSERT_EQ(Read("k2"), "v2v4v6");
+  ASSERT_EQ(Scan(0), "v1v2");
+  ASSERT_EQ(Scan(1), "v3v4");
+  ASSERT_EQ(Scan(2), "v5v6");
+}
+
 TEST(PlfsIoTest, Snappy) {
   options_.compression = kSnappyCompression;
   options_.force_compression = true;
@@ -590,6 +611,7 @@ class PlfsIoBench {
     options_.lg_parts = GetOption("LG_PARTS", 2);
     options_.skip_sort = ordered_keys_ != 0;
     options_.non_blocking = batched_insertion_ != 0;
+    options_.fixed_kv_length = GetOption("FIXED_KV", false) != 0;
     options_.compression =
         GetOption("SNAPPY", false) ? kSnappyCompression : kNoCompression;
     options_.force_compression = true;
@@ -1349,7 +1371,7 @@ class PlfsQyBench : protected PlfsIoBench {
 #endif
 
 static inline void BM_Usage() {
-  fprintf(stderr, "Use --bench=io or --bench=qy to select a benchmark.\n");
+  fprintf(stderr, "Use --bench=io or --bench=qu to select a benchmark.\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "== workload confs\n");
   fprintf(stderr, "LINK_SPEED\n");
@@ -1390,7 +1412,7 @@ static void BM_LogAndApply(const char* bench) {
   if (strcmp(bench, "io") == 0) {
     pdlfs::plfsio::PlfsIoBench bench;
     bench.LogAndApply();
-  } else if (strcmp(bench, "qy") == 0) {
+  } else if (strcmp(bench, "qu") == 0) {
     pdlfs::plfsio::PlfsQyBench bench;
     bench.LogAndApply();
   } else {
