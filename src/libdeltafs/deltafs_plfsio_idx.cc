@@ -109,32 +109,36 @@ class ArrayBlock {
 
  private:
   const char* data_;
-  uint32_t limit_;  // Limit of valid block contents
   size_t size_;
-  size_t value_size_;
-  size_t key_size_;
   bool owned_;  // If data_[] is owned by us
+  uint32_t value_size_;
+  uint32_t key_size_;
+  uint32_t limit_;  // Limit of valid contents
 
   class Iter;
 };
 
 ArrayBlock::ArrayBlock(const BlockContents& contents)
     : data_(contents.data.data()),
-      limit_(0),
       size_(contents.data.size()),
-      owned_(contents.heap_allocated) {
+      owned_(contents.heap_allocated),
+      value_size_(0),
+      key_size_(0),
+      limit_(0) {
   if (size_ < 2 * sizeof(uint32_t)) {
     size_ = 0;  // Error marker
   } else {
     value_size_ = DecodeFixed32(data_ + size_ - 2 * sizeof(uint32_t));
     key_size_ = DecodeFixed32(data_ + size_ - sizeof(uint32_t));
     if (key_size_ == 0) {
-      size_ = 0;  // Keys cannot be empty
-      return;
+      // Keys cannot be empty
+      size_ = 0;
+    } else {
+      limit_ = size_ - (2 * sizeof(uint32_t));
+      uint32_t max_entries = limit_ / (key_size_ + value_size_);
+      // Adjust limit to match key value sizes
+      limit_ = max_entries * (key_size_ + value_size_);
     }
-    limit_ = size_ - (2 * sizeof(uint32_t));
-    uint32_t max_entries = limit_ / (key_size_ + value_size_);
-    limit_ = max_entries * (key_size_ + value_size_);
   }
 }
 
