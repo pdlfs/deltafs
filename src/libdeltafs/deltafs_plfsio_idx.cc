@@ -97,6 +97,139 @@ size_t ArrayBlockBuilder::CurrentSizeEstimate() const {
   }
 }
 
+// Read block contents built by an ArrayBlockBuilder.
+class ArrayBlock {
+ public:
+  // Initialize the block with the specified contents.
+  explicit ArrayBlock(const BlockContents& contents);
+
+  ~ArrayBlock();
+
+  Iterator* NewIterator(const Comparator* comparator);
+
+ private:
+  const char* data_;
+  uint32_t limit_;  // Limit of valid block contents
+  size_t size_;
+  size_t value_size_;
+  size_t key_size_;
+  bool owned_;  // If data_[] is owned by us
+
+  class Iter;
+};
+
+ArrayBlock::ArrayBlock(const BlockContents& contents)
+    : data_(contents.data.data()),
+      limit_(0),
+      size_(contents.data.size()),
+      owned_(contents.heap_allocated) {
+  if (size_ < 2 * sizeof(uint32_t)) {
+    size_ = 0;  // Error marker
+  } else {
+    value_size_ = DecodeFixed32(data_ + size_ - 2 * sizeof(uint32_t));
+    key_size_ = DecodeFixed32(data_ + size_ - sizeof(uint32_t));
+    if (key_size_ == 0) {
+      size_ = 0;  // Keys cannot be empty
+      return;
+    }
+    limit_ = size_ - (2 * sizeof(uint32_t));
+    uint32_t max_entries = limit_ / (key_size_ + value_size_);
+    limit_ = max_entries * (key_size_ + value_size_);
+  }
+}
+
+ArrayBlock::~ArrayBlock() {
+  if (owned_) {
+    delete[] data_;
+  }
+}
+
+class ArrayBlock::Iter : public Iterator {
+ private:
+  const Comparator* const comparator_;
+  const char* const data_;  // Underlying block contents
+  const uint32_t limit_;
+  const size_t value_size_;
+  const size_t key_size_;
+  // Offset in data_ of current entry.  >= limit_ if !Valid
+  uint32_t current_;
+
+  Status status_;
+
+ public:
+  Iter(const Comparator* comparator, const char* data, uint32_t limit,
+       size_t value_size, size_t key_size)
+      : comparator_(comparator),
+        data_(data),
+        limit_(limit),
+        value_size_(value_size),
+        key_size_(key_size),
+        current_(limit) {
+    assert(limit_ % (key_size_ + value_size_) == 0);
+  }
+
+  virtual ~Iter() {}
+  virtual bool Valid() const { return current_ < limit_; }
+  virtual Status status() const { return status_; }
+  virtual Slice key() const {
+    assert(Valid());
+    return Slice(data_ + current_, key_size_);
+  }
+
+  virtual Slice value() const {
+    assert(Valid());
+    return Slice(data_ + current_ + key_size_, value_size_);
+  }
+
+  virtual void Next() {
+    assert(Valid());
+    current_ += key_size_ + value_size_;
+  }
+
+  virtual void Prev() {
+    assert(Valid());
+    if (current_ >= key_size_ + value_size_) {
+      current_ -= key_size_ + value_size_;
+    } else {
+      // No more entries
+      current_ = limit_;
+    }
+  }
+
+  virtual void SeekToFirst() { current_ = 0; }
+
+  virtual void SeekToLast() {
+    if (limit_ >= key_size_ + value_size_) {
+      current_ = limit_ - key_size_ - value_size_;
+    } else {
+      current_ = 0;
+    }
+  }
+
+  // Each seek is a linear search from the beginning of the block.
+  virtual void Seek(const Slice& target) {
+    SeekToFirst();
+    for (; Valid(); Next()) {
+      if (comparator_->Compare(key(), target) == 0) {
+        break;
+      }
+    }
+  }
+};
+
+// Return an iterator to the block contents. The result should be deleted when
+// no longer needed.
+Iterator* ArrayBlock::NewIterator(const Comparator* comparator) {
+  if (size_ < 2 * sizeof(uint32_t)) {
+    return NewErrorIterator(
+        Status::Corruption("Cannot understand block contents"));
+  } else if (limit_ != 0) {
+    return new Iter(comparator, data_, limit_, value_size_, key_size_);
+  } else {
+    return NewEmptyIterator();
+  }
+}
+
 // Write sorted directory contents into a pair of log files.
 template <typename T = TreeBlockBuilder>
 class DirIndexerImpl : public DirIndexer {
