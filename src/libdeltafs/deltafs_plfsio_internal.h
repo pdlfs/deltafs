@@ -167,6 +167,7 @@ class DirBuilder {
   T* filter_;  // T* to allow distinct types of filters to be used
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;
+  bool imm_buf_is_forced_;
   bool imm_buf_is_epoch_flush_;
   bool imm_buf_is_final_;
   WriteBuffer buf0_;

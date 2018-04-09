@@ -196,6 +196,7 @@ DirBuilder<T>::DirBuilder(const DirOptions& options, size_t part,
       filter_(NULL),
       mem_buf_(NULL),
       imm_buf_(NULL),
+      imm_buf_is_forced_(false),
       imm_buf_is_epoch_flush_(false),
       imm_buf_is_final_(false),
       buf0_(options),
@@ -408,9 +409,10 @@ Status DirBuilder<T>::Prepare(bool force /* force minor memtable flush */,
       }
     } else {
       // Attempt to switch to a new write buffer
-      force = false;
       assert(imm_buf_ == NULL);
       imm_buf_ = mem_buf_;
+      if (force) imm_buf_is_forced_ = true;
+      force = false;
       if (epoch_flush) imm_buf_is_epoch_flush_ = true;
       epoch_flush = false;
       if (finalize) imm_buf_is_final_ = true;
@@ -470,6 +472,7 @@ void DirBuilder<T>::DoCompaction() {
   assert(imm_buf_ != NULL);
   CompactMemtable();
   imm_buf_->Reset();
+  imm_buf_is_forced_ = false;
   imm_buf_is_epoch_flush_ = false;
   imm_buf_is_final_ = false;
   imm_buf_ = NULL;
@@ -571,9 +574,10 @@ void DirBuilder<T>::CompactMemtable() {
   Status status = idxer->status();
   delete iter;
   mu_->Lock();
-  num_flush_completed_++;
   bg_status_ = status;
-  return;
+  if (imm_buf_is_forced_) {
+    num_flush_completed_++;
+  }
 }
 
 template <typename T>
