@@ -133,13 +133,16 @@ ArrayBlock::ArrayBlock(const BlockContents& contents)
     if (key_size_ == 0) {
       // Keys cannot be empty
       size_ = 0;
-    } else {
-      limit_ = size_ - (2 * sizeof(uint32_t));
-      uint32_t max_entries = limit_ / (key_size_ + value_size_);
-      // Adjust limit to match key value sizes
-      limit_ = max_entries * (key_size_ + value_size_);
     }
   }
+
+  if (size_ == 0) {
+    return;
+  }
+  limit_ = size_ - (2 * sizeof(uint32_t));
+  uint32_t max_entries = limit_ / (key_size_ + value_size_);
+  // Adjust limit to match key value sizes
+  limit_ = max_entries * (key_size_ + value_size_);
 }
 
 ArrayBlock::~ArrayBlock() {
@@ -153,8 +156,8 @@ class ArrayBlock::Iter : public Iterator {
   const Comparator* const comparator_;
   const char* const data_;  // Underlying block contents
   const uint32_t limit_;
-  const size_t value_size_;
-  const size_t key_size_;
+  const uint32_t value_size_;
+  const uint32_t key_size_;
   // Offset in data_ of current entry.  >= limit_ if !Valid
   uint32_t current_;
 
@@ -162,7 +165,7 @@ class ArrayBlock::Iter : public Iterator {
 
  public:
   Iter(const Comparator* comparator, const char* data, uint32_t limit,
-       size_t value_size, size_t key_size)
+       uint32_t value_size, uint32_t key_size)
       : comparator_(comparator),
         data_(data),
         limit_(limit),
