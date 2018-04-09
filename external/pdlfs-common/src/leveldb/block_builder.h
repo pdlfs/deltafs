@@ -67,6 +67,9 @@ class AbstractBlockBuilder {
   // Return true iff no entries have been added since the last Reset()
   bool empty() const { return buffer_.size() <= buffer_start_; }
 
+  // Report memory usage
+  size_t memory_usage() const { return buffer_.capacity(); }
+
   // Return a pointer to the underlying buffer space
   std::string* buffer_store() { return &buffer_; }
 
