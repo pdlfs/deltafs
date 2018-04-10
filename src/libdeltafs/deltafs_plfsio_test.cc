@@ -464,6 +464,8 @@ class PlfsIoBench {
       return deffmt;
     } else if (env[0] == 0) {
       return deffmt;
+    } else if (strcmp(env, "bf") == 0) {
+      return deffmt;
     } else if (strcmp(env, "bmp") == 0) {
       return kFmtUncompressed;
     } else if (strcmp(env, "r") == 0) {
@@ -479,7 +481,8 @@ class PlfsIoBench {
     } else if (strcmp(env, "pfd") == 0) {
       return kFmtPfDelta;
     } else {
-      return deffmt;
+      fprintf(stderr, "Bad FT_TYPE: %s\n", env);
+      exit(1);
     }
   }
 
@@ -506,7 +509,8 @@ class PlfsIoBench {
     } else if (strcmp(env, "pfd") == 0) {
       return kFtBitmap;
     } else {
-      return kFtNoFilter;
+      fprintf(stderr, "Bad FT_TYPE: %s\n", env);
+      exit(1);
     }
   }
 
@@ -1222,11 +1226,53 @@ class StringEnv : public EnvWrapper {
   FS fs_;
 };
 
+class Histo {
+ public:
+  Histo() { Clear(); }
+
+  void Add(uint32_t seeks) {
+    sum_ += seeks;
+    max_ = std::max(max_, seeks);
+    if (seeks > 9) {
+      seeks = 9;
+    }
+    histo_[seeks]++;
+    num_++;
+  }
+
+  double CDF(uint32_t seeks) {
+    if (num_ == 0) return 0;
+    double subtotal = 0;
+    for (uint32_t i = 0; i <= seeks; i++) {
+      subtotal += histo_[i];
+    }
+    return subtotal / num_;
+  }
+
+  double Average() const {
+    if (num_ == 0) return 0;
+    return sum_ / num_;
+  }
+
+  void Clear() {
+    memset(histo_, 0, sizeof(histo_));
+    max_ = 0;
+    num_ = 0;
+    sum_ = 0;
+  }
+
+  uint32_t max_;
+  uint32_t num_;  // Total number of seek records
+  // Num of times we get i seeks (0<=i<=9)
+  uint32_t histo_[10];
+  double sum_;
+};
+
 }  // anonymous namespace
 
-class PlfsQyBench : protected PlfsIoBench {
+class PlfsQuBench : protected PlfsIoBench {
  public:
-  PlfsQyBench() : PlfsIoBench() {
+  PlfsQuBench() : PlfsIoBench() {
     num_threads_ = 0;
     mbps_ = 0;
 
@@ -1240,7 +1286,7 @@ class PlfsQyBench : protected PlfsIoBench {
     env_ = new StringEnv;
   }
 
-  ~PlfsQyBench() {
+  ~PlfsQuBench() {
     delete writer_;
     writer_ = NULL;
     delete reader_;
@@ -1291,7 +1337,7 @@ class PlfsQyBench : protected PlfsIoBench {
         break;
       }
       const IoStats stats = reader_->GetIoStats();
-      seeks_.Add(10.0 * (stats.data_ops - accumulated_seeks));
+      seeks_.Add(stats.data_ops - accumulated_seeks);
       accumulated_seeks = stats.data_ops;
       num_reads_++;
       if (dummy_buf.empty()) {
@@ -1320,29 +1366,17 @@ class PlfsQyBench : protected PlfsIoBench {
     fprintf(stderr, "              Num Reads: %.2f M\n", num_reads_ / ki / ki);
     fprintf(stderr, "          Num Neg Reads: %.2f M (%.2f%%)\n",
             num_empty_reads_ / ki / ki, 100.0 * num_empty_reads_ / num_reads_);
-    fprintf(stderr, "    Num Seeks Per Epoch: %.3f/%.3f/%.3f (avg/m/std)\n",
-            seeks_.Average() / 10.0, seeks_.Median() / 10.0,
-            seeks_.StandardDeviation() / 10.0);
-    fprintf(stderr, "              10%% Seeks: %.3f\n",
-            seeks_.Percentile(10) / 10.0);
-    fprintf(stderr, "              30%% Seeks: %.3f\n",
-            seeks_.Percentile(30) / 10.0);
-    fprintf(stderr, "              50%% Seeks: %.3f\n",
-            seeks_.Percentile(50) / 10.0);
-    fprintf(stderr, "              70%% Seeks: %.3f\n",
-            seeks_.Percentile(70) / 10.0);
-    fprintf(stderr, "              90%% Seeks: %.3f\n",
-            seeks_.Percentile(90) / 10.0);
-    fprintf(stderr, "              91%% Seeks: %.3f\n",
-            seeks_.Percentile(91) / 10.0);
-    fprintf(stderr, "              93%% Seeks: %.3f\n",
-            seeks_.Percentile(93) / 10.0);
-    fprintf(stderr, "              95%% Seeks: %.3f\n",
-            seeks_.Percentile(95) / 10.0);
-    fprintf(stderr, "              97%% Seeks: %.3f\n",
-            seeks_.Percentile(97) / 10.0);
-    fprintf(stderr, "              99%% Seeks: %.3f\n",
-            seeks_.Percentile(99) / 10.0);
+    fprintf(stderr, "    Avg Seeks Per Epoch: %.3f, MAX=%d\n", seeks_.Average(),
+            int(seeks_.max_));
+    fprintf(stderr, "            CDF 1 Seeks: %.6f\n", seeks_.CDF(1));
+    fprintf(stderr, "                2 Seeks: %.6f\n", seeks_.CDF(2));
+    fprintf(stderr, "                3 Seeks: %.6f\n", seeks_.CDF(3));
+    fprintf(stderr, "                4 Seeks: %.6f\n", seeks_.CDF(4));
+    fprintf(stderr, "                5 Seeks: %.6f\n", seeks_.CDF(5));
+    fprintf(stderr, "                6 Seeks: %.6f\n", seeks_.CDF(6));
+    fprintf(stderr, "                7 Seeks: %.6f\n", seeks_.CDF(7));
+    fprintf(stderr, "                8 Seeks: %.6f\n", seeks_.CDF(8));
+    fprintf(stderr, "               9+ Seeks: %.6f\n", seeks_.CDF(9));
     const IoStats stats = reader_->GetIoStats();
     fprintf(stderr, "  Total Indexes Fetched: %.3f MB\n",
             1.0 * stats.index_bytes / ki / ki);
@@ -1357,7 +1391,7 @@ class PlfsQyBench : protected PlfsIoBench {
 
   uint64_t num_empty_reads_;
   uint64_t num_reads_;
-  Histogram seeks_;
+  Histo seeks_;
 };
 
 }  // namespace plfsio
@@ -1395,7 +1429,7 @@ static inline void BM_Usage() {
   fprintf(stderr, "SNAPPY\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "== plfsdir filter options\n");
-  fprintf(stderr, "FT_TYPE\n");
+  fprintf(stderr, "FT_TYPE (bf, bmp, r, fvbp, fpfd)\n");
   fprintf(stderr, "FT_BITS\n");
   fprintf(stderr, "BM_KEY_BITS\n");
   fprintf(stderr, "BF_BITS\n");
@@ -1413,7 +1447,7 @@ static void BM_LogAndApply(const char* bench) {
     pdlfs::plfsio::PlfsIoBench bench;
     bench.LogAndApply();
   } else if (strcmp(bench, "qu") == 0) {
-    pdlfs::plfsio::PlfsQyBench bench;
+    pdlfs::plfsio::PlfsQuBench bench;
     bench.LogAndApply();
   } else {
     BM_Usage();
