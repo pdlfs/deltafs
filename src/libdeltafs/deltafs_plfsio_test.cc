@@ -1003,7 +1003,8 @@ class PlfsIoBench {
               ToString(options_.bm_fmt));
     }
     fprintf(stderr, "     Num Files Inserted: %d M\n", mfiles_);
-    fprintf(stderr, "        Logic File Data: %d MiB\n", 48 * mfiles_);
+    fprintf(stderr, "        Logic File Data: %d MiB\n",
+            int((options_.key_size + options_.value_size) * mfiles_));
     fprintf(stderr, "  Total MemTable Budget: %d MiB\n",
             int(options_.total_memtable_budget) >> 20);
     fprintf(stderr, "     Estimated SST Size: %.3f MiB\n",
@@ -1036,6 +1037,8 @@ class PlfsIoBench {
     fprintf(stderr, "     Final Phys Indexes: %.3f MiB (+%.2f%%)\n",
             1.0 * stats.index_bytes / ki / ki,
             1.0 * stats.index_bytes / user_bytes * 100);
+    fprintf(stderr, "       Total Index Cost: %.3f (bits per key)\n",
+            8.0 * stats.index_bytes / double(mfiles_ << 20));
     fprintf(stderr, "         Compaction Buf: %d MiB (x%d)\n",
             int(options_.block_batch_size) >> 20, 1 << options_.lg_parts);
     fprintf(stderr, "               Data Buf: %d MiB\n",
@@ -1045,14 +1048,16 @@ class PlfsIoBench {
     fprintf(stderr, "        Total User Data: %.3f MiB (K+V)\n",
             1.0 * user_bytes / ki / ki);
     fprintf(stderr,
-            "    Aggregated SST Data: %.3f MiB (+%.2f%% due to formatting)\n",
+            "    Aggregated SST Data: %.3f MiB (+%.2f%% due to blk encoding)\n",
             1.0 * writer_->TEST_raw_data_contents() / ki / ki,
             1.0 * writer_->TEST_raw_data_contents() / user_bytes * 100 - 100);
     fprintf(stderr,
-            "        Final Phys Data: %.3f MiB (+%.2f%% due to formatting and "
-            "padding)\n",
+            "        Final Phys Data: %.3f MiB (+%.2f%% due to blk encoding "
+            "and padding)\n",
             1.0 * stats.data_bytes / ki / ki,
             1.0 * stats.data_bytes / user_bytes * 100 - 100);
+    fprintf(stderr, "Total Blk Encoding Cost: %.3f (bits per key)\n",
+            8.0 * (stats.data_bytes - user_bytes) / double(mfiles_ << 20));
     fprintf(stderr, "           Avg I/O Size: %.3f MiB\n",
             1.0 * stats.data_bytes / stats.data_ops / ki / ki);
     if (owns_env) {
