@@ -589,11 +589,11 @@ void DirIndexerImpl<T>::EndBlock() {
   const size_t block_size = block_contents.size();
   Slice final_block_contents;  // With the trailer and any inserted padding
   if (options_.block_padding) {
-    // Target size for the final block contents
-    const size_t padding_target =
+    // Target size for the final block contents after padding
+    size_t padding_target =
         options_.block_size - BlockHandle::kMaxEncodedLength;
-    assert(block_size + kBlockTrailerSize <=
-           padding_target);  // Must fit in the space
+    while (padding_target < block_size + kBlockTrailerSize)
+      padding_target += options_.block_size;
     final_block_contents = data_block_.Finalize(
         !options_.skip_checksums, static_cast<uint32_t>(padding_target),
         static_cast<char>(0xff));
