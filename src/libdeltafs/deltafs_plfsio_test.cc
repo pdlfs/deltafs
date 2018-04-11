@@ -266,6 +266,47 @@ TEST(PlfsIoTest, ArrayBlockFmt) {
   ASSERT_EQ(Scan(2), "v5v6");
 }
 
+TEST(PlfsIoTest, Unordered) {
+  options_.mode = kDmUniqueUnordered;
+  Append("k1", "v1");
+  Append("k2", "v2");
+  MakeEpoch();
+  Append("k1", "v3");
+  Append("k2", "v4");
+  MakeEpoch();
+  Append("k1", "v5");
+  Append("k2", "v6");
+  MakeEpoch();
+  ASSERT_EQ(Read("k1"), "v1v3v5");
+  ASSERT_TRUE(Read("k1.1").empty());
+  ASSERT_EQ(Read("k2"), "v2v4v6");
+  ASSERT_EQ(Scan(0), "v1v2");
+  ASSERT_EQ(Scan(1), "v3v4");
+  ASSERT_EQ(Scan(2), "v5v6");
+}
+
+TEST(PlfsIoTest, UnorderedWithArrayBlockFmt) {
+  options_.mode = kDmUniqueUnordered;
+  options_.fixed_kv_length = true;
+  options_.value_size = 2;
+  options_.key_size = 2;
+  Append("k2", "v2");
+  Append("k1", "v1");
+  MakeEpoch();
+  Append("k1", "v3");
+  Append("k2", "v4");
+  MakeEpoch();
+  Append("k2", "v6");
+  Append("k1", "v5");
+  MakeEpoch();
+  ASSERT_EQ(Read("k1"), "v1v3v5");
+  ASSERT_TRUE(Read("k1.1").empty());
+  ASSERT_EQ(Read("k2"), "v2v4v6");
+  ASSERT_EQ(Scan(0), "v2v1");
+  ASSERT_EQ(Scan(1), "v3v4");
+  ASSERT_EQ(Scan(2), "v6v5");
+}
+
 TEST(PlfsIoTest, Snappy) {
   options_.compression = kSnappyCompression;
   options_.force_compression = true;
