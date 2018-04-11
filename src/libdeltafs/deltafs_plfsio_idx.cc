@@ -688,6 +688,9 @@ void DirIndexerImpl<T>::Add(const Slice& key, const Slice& value) {
 
   data_block_.Add(key, value);
   total_num_keys_++;
+  if (IsKeyUnOrdered(options_.mode)) {
+    return;  // Force one block per table
+  }
   if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize +
           BlockHandle::kMaxEncodedLength >=
       static_cast<size_t>(options_.block_size * options_.block_util)) {
