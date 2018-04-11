@@ -16,6 +16,19 @@
 namespace pdlfs {
 namespace plfsio {
 
+// Return true iff directory keys are unique and ordered.
+static inline bool IsKeyUniqueAndOrdered(DirMode mode) {
+  return (mode & 0xF0) == 0x80;
+}
+
+// Return true iff directory keys are unique.
+static inline bool IsKeyUnique(DirMode mode) { return (mode & 0x80) == 0x80; }
+
+// Return true iff directory keys are stored out-of-order.
+static inline bool IsKeyUnOrdered(DirMode mode) {
+  return (mode & 0x10) == 0x10;
+}
+
 // Open an iterator on top of a given data block. The returned the iterator
 // should be deleted when no longer needed.
 extern Iterator* OpenDirBlock  // Use options to determine block formats

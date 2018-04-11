@@ -274,12 +274,12 @@ class Dir {
   };
 
   // Obtain the value to a specific key from a given table data block.
-  // If key is found, "opts.saver" will be called. Set *exhausted to true if
-  // keys larger than the given one have been seen.
-  // NOTE: "opts.saver" may be called multiple times.
-  // Return OK on success, or a non-OK status on errors.
+  // If key is found, "opts.saver" will be called and *found is set to true. In
+  // addition, *exhausted is set to true if any key larger than the given one is
+  // seen. NOTE: "opts.saver" may be called multiple times. Return OK on
+  // success, or a non-OK status on errors.
   Status Fetch(const FetchOptions& opts, const Slice& key, Slice* input,
-               bool* exhausted);
+               bool* found, bool* exhausted);
 
   // Return true if the given key matches a specific filter block.
   bool KeyMayMatch(const Slice& key, const BlockHandle& h);

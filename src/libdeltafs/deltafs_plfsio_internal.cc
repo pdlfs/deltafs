@@ -511,7 +511,11 @@ void DirBuilder<T>::CompactMemtable() {
 #ifndef NDEBUG
   uint32_t num_keys = 0;
 #endif
-  buffer->Finish(options_.skip_sort);
+  bool skip_sort = IsKeyUnOrdered(options_.mode);
+  if (options_.skip_sort) {
+    skip_sort = true;  // Forced by user
+  }
+  buffer->Finish(skip_sort);
   Iterator* const iter = buffer->NewIterator();
   iter->SeekToFirst();
   if (ft != NULL) {
@@ -760,12 +764,13 @@ Status Dir::Iter(const IterOptions& opts, const TableHandle& h) {
 }
 
 // Retrieve value to a specific key from a given block whose handle is encoded
-// as *input. Call "opts.saver" using the value found. In addition, set
-// *exhausted to true if a larger key has been observed so there is no need to
-// check further. Return OK on success and a non-OK status on errors.
+// as *input. Call "opts.saver" using the value found and set *found to true.
+// Set *exhausted to true if a key larger than the target is seen so there is
+// no need to check further. *exhausted is always false if keys are not stored
+// ordered. Return OK on success and a non-OK status on errors.
 Status Dir::Fetch(const FetchOptions& opts, const Slice& key, Slice* input,
-                  bool* exhausted) {
-  *exhausted = false;
+                  bool* found, bool* exhausted) {
+  *found = *exhausted = false;
   Status status;
   BlockHandle handle;
   status = handle.DecodeFrom(input);
@@ -782,39 +787,57 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key, Slice* input,
   }
 
   Iterator* const iter = OpenDirBlock(options_, contents);
-  if (options_.mode != kDmMultiMap) {
+  if (IsKeyUniqueAndOrdered(options_.mode)) {
     iter->Seek(key);  // Binary search
   } else {
+    // Keys are non-unique or stored out-of-order.
+    // Must start from the beginning
     iter->SeekToFirst();
-    while (iter->Valid() && key > iter->key()) {
-      iter->Next();
+    if (!IsKeyUnOrdered(options_.mode)) {  // In case keys are in-order
+      while (iter->Valid() && key > iter->key()) {
+        iter->Next();
+      }
     }
   }
 
-  // The target key is strictly larger than all keys in the
-  // current block, and is also known to be strictly smaller than
-  // all keys in the next block.
-  if (!iter->Valid()) {
-    // Special case for some non-existent keys
-    // that happen to locate in the gap between two
-    // adjacent data blocks
-    *exhausted = true;
+  // Additional checks when keys are stored in-order
+  if (!IsKeyUnOrdered(options_.mode)) {
+    // The target key is strictly larger than all keys in the
+    // current block, and is also known to be strictly smaller than
+    // all keys in the next block...
+    if (!iter->Valid()) {
+      // Special case for some target keys
+      // that happen to locate in the gap between two
+      // adjacent data blocks.
+      // This happens when the target key is greater than the
+      // largest key in the current block but no greater than the
+      // separator that separates the current block
+      // and the next block. That is:
+      // all keys in the current block < target <= separator < all keys in the
+      // next block
+      *exhausted = true;
+    }
   }
 
+  // Collect all results
   for (; iter->Valid(); iter->Next()) {
-    if (iter->key() == key) {
+    if (iter->key() == key) {  // Hit
       opts.saver(opts.arg, key, iter->value());
-      if (options_.mode != kDmMultiMap) {
-        break;  // If keys are unique, we are done
+      if (IsKeyUnique(options_.mode)) {
+        *found = true;
+        break;  // Done
       }
-    } else {
-      assert(iter->key() > key);
+    } else if (!IsKeyUnOrdered(options_.mode)) {
+      // Keys are stored in-order and we come across a larger key.
+      // No more search is needed
       *exhausted = true;
       break;
     }
   }
 
-  status = iter->status();
+  if (status.ok()) {
+    status = iter->status();
+  }
 
   delete iter;
   return status;
@@ -887,26 +910,40 @@ Status Dir::Fetch(const FetchOptions& opts, const Slice& key,
 
   Block* index_block = new Block(index_contents);
   Iterator* const iter = index_block->NewIterator(BytewiseComparator());
-  if (options_.mode != kDmMultiMap) {
+  if (IsKeyUniqueAndOrdered(options_.mode)) {
     iter->Seek(key);  // Binary search
   } else {
+    // Keys are non-unique or stored out-of-order.
+    // Must start from the beginning
     iter->SeekToFirst();
-    while (iter->Valid() && key > iter->key()) {
-      iter->Next();
+    if (!IsKeyUnOrdered(options_.mode)) {  // In case keys are in-order
+      while (iter->Valid() && key > iter->key()) {
+        iter->Next();
+      }
     }
   }
 
-  // True if a key greater than the target key has been found
+  bool found = false;  // True if we found the target key
+  // True if a key greater than the target is seen
   bool exhausted = false;
   for (; iter->Valid(); iter->Next()) {
     Slice input = iter->value();
-    status = Fetch(opts, key, &input, &exhausted);
-
+    status = Fetch(opts, key, &input, &found, &exhausted);
     if (!status.ok()) {
       break;
-    } else if (options_.mode != kDmMultiMap) {
+    }
+    // Unique?  Ordered?  Found?  Exhausted?
+    //   Y        Y         *       *       >> Break (Always check 1 block)
+    //   Y        N         Y       *       >> Break
+    //   Y        N         N       *       >> Continue
+    //   N        Y         *       Y       >> Break
+    //   N        Y         *       N       >> Continue
+    //   N        N         *       *       >> Continue (Always check all)
+    if (IsKeyUniqueAndOrdered(options_.mode)) {
       break;
-    } else if (exhausted) {
+    } else if (exhausted && !IsKeyUnOrdered(options_.mode)) {
+      break;
+    } else if (found && IsKeyUnique(options_.mode)) {
       break;
     }
   }
@@ -1077,8 +1114,10 @@ Status Dir::DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
         opts.arg = &arg;
         status = Fetch(opts, key, table_handle);
       }
+      // Each epoch is stored as a set of tables. If we find one match and
+      // we know keys are unique, we are done.
       if (status.ok() && arg.found) {
-        if (options_.mode != kDmMultiMap) {
+        if (IsKeyUnique(options_.mode)) {
           break;
         }
       }

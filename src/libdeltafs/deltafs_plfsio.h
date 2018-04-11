@@ -37,16 +37,16 @@ struct IoStats {
 
 // Directory semantics
 enum DirMode {
+  // Each epoch is structured as a set of ordered multi-maps.
   // Duplicated keys inserted within an epoch
   // are considered separate records
   kDmMultiMap = 0x00,
-  // Each duplicated key insertion within an epoch overrides the previous
-  // insertion in the same epoch
-  kDmUniqueOverride = 0x01,
+  // Unique keys. But stored unordered.
+  kDmUniqueUnordered = 0x90,
   // Duplicated key insertions are silently discarded
-  kDmUniqueDrop = 0x02,
+  kDmUniqueDrop = 0x81,
   // No duplicated keys, ensured by users
-  kDmUniqueKey = 0x03
+  kDmUniqueKey = 0x80
 };
 
 // Directory filter types. Bitmap-based filters are optimized

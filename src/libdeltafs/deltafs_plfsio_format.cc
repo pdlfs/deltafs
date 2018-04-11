@@ -23,8 +23,8 @@ std::string DirModeName(DirMode mode) {
   switch (mode) {
     case kDmMultiMap:
       return "M/M";
-    case kDmUniqueOverride:
-      return "U/O";
+    case kDmUniqueUnordered:
+      return "U/U";
     case kDmUniqueDrop:
       return "U/D";
     case kDmUniqueKey:
@@ -185,7 +185,7 @@ Status Footer::DecodeFrom(Slice* input) {
     mode_ = static_cast<unsigned char>(start[kEncodedLength - 1]);
     switch (mode_) {
       case kDmMultiMap:
-      case kDmUniqueOverride:
+      case kDmUniqueUnordered:
       case kDmUniqueDrop:
       case kDmUniqueKey:
         break;

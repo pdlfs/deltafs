@@ -624,22 +624,30 @@ void DirIndexerImpl<T>::Add(const Slice& key, const Slice& value) {
   assert(key.size() != 0);  // Keys cannot be empty
   if (!ok()) return;        // Abort
 
-  if (!last_key_.empty()) {
-    // Keys within a single table are inserted in a weakly sorted order
-    assert(key >= last_key_);
-    if (options_.mode == kDmUniqueDrop) {  // Auto deduplicate
-      if (key == last_key_) {
-        total_num_dropped_keys_++;
-        return;  // Drop
-      }
-    } else if (options_.mode != kDmMultiMap) {
-      assert(key != last_key_);  // Keys are strongly ordered, no duplicates
+  if (IsKeyUnOrdered(options_.mode)) {
+    if (smallest_key_.empty() || key < smallest_key_) {
+      smallest_key_ = key.ToString();
     }
+    if (largest_key_.empty() || key > largest_key_) {
+      largest_key_ = key.ToString();
+    }
+  } else {  // Keys within a single table are inserted in a weakly sorted order
+    if (!last_key_.empty()) {
+      assert(key >= last_key_);
+      if (options_.mode == kDmUniqueDrop) {  // Ignore duplicates
+        if (key == last_key_) {
+          total_num_dropped_keys_++;
+          return;  // Drop it
+        }
+      } else if (IsKeyUnique(options_.mode)) {
+        assert(key != last_key_);  // Keys are strongly ordered. No duplicates
+      }
+    }
+    if (smallest_key_.empty()) {
+      smallest_key_ = key.ToString();
+    }
+    largest_key_ = key.ToString();
   }
-  if (smallest_key_.empty()) {
-    smallest_key_ = key.ToString();
-  }
-  largest_key_ = key.ToString();
 
   // Add an index entry if there is one pending insertion
   if (pending_indx_entry_) {
