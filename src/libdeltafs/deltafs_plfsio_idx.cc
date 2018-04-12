@@ -44,10 +44,14 @@ DirIndexer::~DirIndexer() {}
 class TreeBlockBuilder : public BlockBuilder {
  public:
   explicit TreeBlockBuilder(const DirOptions& options)
-      : BlockBuilder(16, BytewiseComparator()) {}
+      : BlockBuilder(16, BytewiseComparator()) {
+    if (IsKeyUnOrdered(options.mode)) {
+      cmp_ = NULL;
+    }
+  }
 };
 
-// A simple block builder that writes data in sequence.
+// A simple block builder that stores data in write order.
 // In this format, key-value pairs are stored as-is. Both keys and values are
 // fixed sized. Each block can be seen as a simple array.
 class ArrayBlockBuilder : public AbstractBlockBuilder {
@@ -55,7 +59,11 @@ class ArrayBlockBuilder : public AbstractBlockBuilder {
   explicit ArrayBlockBuilder(const DirOptions& options)
       : AbstractBlockBuilder(BytewiseComparator()),
         value_size_(options.value_size),
-        key_size_(options.key_size) {}
+        key_size_(options.key_size) {
+    if (IsKeyUnOrdered(options.mode)) {
+      cmp_ = NULL;
+    }
+  }
 
   // REQUIRES: Finish() has not been called since the previous Reset().
   void Add(const Slice& key, const Slice& value);
@@ -162,6 +170,11 @@ class ArrayBlock::Iter : public Iterator {
 
   Status status_;
 
+  inline int Compare(const Slice& a, const Slice& b) const {
+    assert(comparator_ == BytewiseComparator());
+    return a.compare(b);
+  }
+
  public:
   Iter(const Comparator* comparator, const char* data, uint32_t limit,
        uint32_t value_size, uint32_t key_size)
@@ -212,12 +225,37 @@ class ArrayBlock::Iter : public Iterator {
     }
   }
 
-  // Each seek is a linear search from the beginning of the block.
+  // If comparator_ is not NULL, keys are considered ordered and we use binary
+  // search to find the target. Otherwise, linear search is used.
   virtual void Seek(const Slice& target) {
-    SeekToFirst();
-    for (; Valid(); Next()) {
-      if (comparator_->Compare(key(), target) == 0) {
-        break;
+    const uint32_t entry_size = key_size_ + value_size_;
+    uint32_t num_entries = limit_ / entry_size;
+    if (comparator_ != NULL && num_entries != 0) {
+      uint32_t left = 0;
+      uint32_t right = num_entries - 1;
+      while (left < right) {
+        uint32_t mid = (left + right + 1) / 2;
+        Slice mid_key = Slice(data_ + mid * entry_size, key_size_);
+        if (Compare(mid_key, target) < 0) {
+          // Key at mid is smaller than target.
+          left = mid;
+        } else {
+          // Key at mid is >= target.
+          right = mid - 1;
+        }
+      }
+      current_ = left;
+      for (; Valid(); Next()) {
+        if (Compare(key(), target) >= 0) {
+          return;
+        }
+      }
+    } else {
+      SeekToFirst();
+      for (; Valid(); Next()) {
+        if (key() == target) {
+          return;
+        }
       }
     }
   }
@@ -761,11 +799,11 @@ DirIndexer* DirIndexer::Open  // Use options to determine a block format
 }
 
 namespace {
-void CleanupArrayIter(void* arg1, void* arg2) {
+void CleanupArrayBlock(void* arg1, void* arg2) {
   delete reinterpret_cast<ArrayBlock*>(arg1);
 }
 
-void CleanupIter(void* arg1, void* arg2) {
+void CleanupBlock(void* arg1, void* arg2) {
   delete reinterpret_cast<Block*>(arg1);
 }
 
@@ -773,17 +811,21 @@ void CleanupIter(void* arg1, void* arg2) {
 
 Iterator* OpenDirBlock  // Use options to determine the block format to use
     (const DirOptions& options, const BlockContents& contents) {
+  const Comparator* comparator = BytewiseComparator();
+  if (IsKeyUnOrdered(options.mode)) {
+    comparator = NULL;
+  }
   if (options.fixed_kv_length) {
     ArrayBlock* array_block = new ArrayBlock(contents);
-    Iterator* iter = array_block->NewIterator(BytewiseComparator());
-    iter->RegisterCleanup(CleanupArrayIter, array_block, NULL);
+    Iterator* iter = array_block->NewIterator(comparator);
+    iter->RegisterCleanup(CleanupArrayBlock, array_block, NULL);
     return iter;
   }
 
   // Assume the default format
   Block* block = new Block(contents);
-  Iterator* iter = block->NewIterator(BytewiseComparator());
-  iter->RegisterCleanup(CleanupIter, block, NULL);
+  Iterator* iter = block->NewIterator(comparator);
+  iter->RegisterCleanup(CleanupBlock, block, NULL);
   return iter;
 }
 
