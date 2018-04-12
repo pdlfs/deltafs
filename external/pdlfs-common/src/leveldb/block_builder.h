@@ -74,10 +74,10 @@ class AbstractBlockBuilder {
   std::string* buffer_store() { return &buffer_; }
 
  protected:
-  const Comparator* cmp_;
-  std::string buffer_;   // Destination buffer
-  size_t buffer_start_;  // Start offset of the buffer space
-  bool finished_;        // Has Finish() been called?
+  const Comparator* cmp_;  // NULL if keys are not inserted in-order
+  std::string buffer_;     // Destination buffer
+  size_t buffer_start_;    // Start offset of the buffer space
+  bool finished_;          // Has Finish() been called?
 
  private:
   // No copying allowed
@@ -87,7 +87,8 @@ class AbstractBlockBuilder {
 
 class BlockBuilder : public AbstractBlockBuilder {
  public:
-  BlockBuilder(int restart_interval, const Comparator* cmp = NULL);
+  BlockBuilder(int restart_interval, const Comparator* cmp);
+  explicit BlockBuilder(int restart_interval);
 
   // REQUIRES: Finish() has not been called since the last call to Reset().
   // REQUIRES: key is larger than any previously added key

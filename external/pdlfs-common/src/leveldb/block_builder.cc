@@ -43,12 +43,22 @@
 namespace pdlfs {
 
 AbstractBlockBuilder::AbstractBlockBuilder(const Comparator* cmp)
-    : cmp_(cmp), buffer_start_(0), finished_(false) {
-  if (cmp_ == NULL) {
-    cmp_ = BytewiseComparator();
+    : cmp_(cmp), buffer_start_(0), finished_(false) {}
+
+// By default, we assume keys are inserted in strict binary order.
+// This is consistent with LevelDb's semantics.
+BlockBuilder::BlockBuilder(int restart_interval)
+    : AbstractBlockBuilder(BytewiseComparator()),
+      restart_interval_(restart_interval),
+      counter_(0) {
+  restarts_.push_back(0);  // First restart point is at offset 0
+  if (restart_interval_ < 1) {
+    restart_interval_ = 1;
   }
 }
 
+// Here a caller may specify a NULL comparator to indicate that keys are not
+// going to be inserted in any particular order.
 BlockBuilder::BlockBuilder(int restart_interval, const Comparator* cmp)
     : AbstractBlockBuilder(cmp),
       restart_interval_(restart_interval),
@@ -138,7 +148,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   Slice last_key_piece(last_key_);
   assert(!finished_);
   assert(counter_ <= restart_interval_);
-  assert(empty() || cmp_->Compare(key, last_key_piece) >= 0);
+  assert(cmp_ == NULL || empty() || cmp_->Compare(key, last_key_piece) >= 0);
   size_t shared = 0;
   if (counter_ < restart_interval_) {
     // See how much sharing to do with previous string
@@ -148,8 +158,8 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
     }
   } else {
     // Restart compression
-    const ssize_t offset = buffer_.size() - buffer_start_;
-    assert(offset > 0);
+    assert(buffer_.size() >= buffer_start_);
+    const size_t offset = buffer_.size() - buffer_start_;
     restarts_.push_back(static_cast<uint32_t>(offset));
     counter_ = 0;
   }

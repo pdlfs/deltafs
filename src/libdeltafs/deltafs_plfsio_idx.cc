@@ -39,9 +39,8 @@ DirIndexer::DirIndexer(const DirOptions& options)
 DirIndexer::~DirIndexer() {}
 
 // A versatile block builder that uses the LevelDB's SST block format.
-// In this format, keys are ordered and will be prefix-compressed. Both keys and
-// values can have variable length. Each block can be seen as a sorted search
-// tree.
+// In this format, keys will be prefix-compressed. Both keys and values can have
+// variable length. Each block can be seen as a sorted search tree.
 class TreeBlockBuilder : public BlockBuilder {
  public:
   explicit TreeBlockBuilder(const DirOptions& options)
@@ -49,8 +48,8 @@ class TreeBlockBuilder : public BlockBuilder {
 };
 
 // A simple block builder that writes data in sequence.
-// In this format, keys are not ordered and will be stored as-is. Both keys and
-// values are fixed sized. Each block can be seen as a simple array.
+// In this format, key-value pairs are stored as-is. Both keys and values are
+// fixed sized. Each block can be seen as a simple array.
 class ArrayBlockBuilder : public AbstractBlockBuilder {
  public:
   explicit ArrayBlockBuilder(const DirOptions& options)
