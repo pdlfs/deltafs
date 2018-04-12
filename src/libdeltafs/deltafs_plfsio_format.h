@@ -135,6 +135,9 @@ class Footer {
   unsigned char fixed_kv_length() const { return fixed_kv_length_; }
   void set_fixed_kv_length(unsigned char f) { fixed_kv_length_ = f; }
 
+  unsigned char leveldb_compatible() const { return leveldb_compatible_; }
+  void set_leveldb_compatible(unsigned char c) { leveldb_compatible_ = c; }
+
   unsigned char epoch_log_rotation() const { return epoch_log_rotation_; }
   void set_epoch_log_rotation(unsigned char r) { epoch_log_rotation_ = r; }
 
@@ -159,9 +162,9 @@ class Footer {
   Status DecodeFrom(Slice* input);
 
   // Encoded length of a Footer. It consists of one encoded block
-  // handle, a set of persisted options (21 bytes in total),
+  // handle, a set of persisted options (22 bytes in total),
   // and a magic number (8 bytes).
-  enum { kEncodedLength = BlockHandle::kMaxEncodedLength + 21 + 8 };
+  enum { kEncodedLength = BlockHandle::kMaxEncodedLength + 22 + 8 };
 
  private:
   BlockHandle epoch_index_handle_;
@@ -170,6 +173,7 @@ class Footer {
   uint32_t value_size_;
   uint32_t key_size_;
   unsigned char fixed_kv_length_;
+  unsigned char leveldb_compatible_;
   unsigned char epoch_log_rotation_;  // If log rotation has been enabled
   unsigned char skip_checksums_;
   unsigned char filter_type_;
@@ -200,11 +204,12 @@ inline Footer::Footer()
       num_epochs_(~static_cast<uint32_t>(0) /* Invalid */),
       value_size_(~static_cast<uint32_t>(0) /* Invalid */),
       key_size_(~static_cast<uint32_t>(0) /* Invalid */),
-      fixed_kv_length_(~static_cast<unsigned char>(0) /* Invalid */),
-      epoch_log_rotation_(~static_cast<unsigned char>(0) /* Invalid */),
-      skip_checksums_(~static_cast<unsigned char>(0) /* Invalid */),
-      filter_type_(~static_cast<unsigned char>(0) /* Invalid */),
-      mode_(~static_cast<unsigned char>(0) /* Invalid */) {
+      fixed_kv_length_(0xFF /* Invalid */),
+      leveldb_compatible_(0xFF /* Invalid */),
+      epoch_log_rotation_(0xFF /* Invalid */),
+      skip_checksums_(0xFF /* Invalid */),
+      filter_type_(0xFF /* Invalid */),
+      mode_(0xFF /* Invalid */) {
   // Empty
 }
 

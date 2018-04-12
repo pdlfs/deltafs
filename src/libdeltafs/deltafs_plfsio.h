@@ -95,12 +95,17 @@ struct DirOptions {
   // Default: 1 (100%)
   double memtable_util;
 
+  // Always use LevelDb compatible block formats.
+  // Default: true
+  bool leveldb_compatible;
+
   // Skip sorting memtables.
   // This is useful when the input data is inserted in-order.
   // Default: false
   bool skip_sort;
 
   // If key value length is fixed.
+  // This enables alternate block formats when "leveldb_compatible" is OFF.
   // Default: false
   bool fixed_kv_length;
 

@@ -790,21 +790,37 @@ size_t DirIndexerImpl<T>::memory_usage() const {
 
 DirIndexer* DirIndexer::Open  // Use options to determine a block format
     (const DirOptions& options, LogSink* data, LogSink* indx) {
-  if (options.fixed_kv_length) {
-    return new DirIndexerImpl<ArrayBlockBuilder>(options, data, indx);
+  if (!options.leveldb_compatible) {
+    if (options.fixed_kv_length) {
+      return new DirIndexerImpl<ArrayBlockBuilder>(options, data, indx);
+    }
   }
 
-  // Use the default block builder
   return new DirIndexerImpl<>(options, data, indx);
 }
 
 namespace {
+
 void CleanupArrayBlock(void* arg1, void* arg2) {
   delete reinterpret_cast<ArrayBlock*>(arg1);
 }
 
+Iterator* OpenArrayBlock(const Comparator* cmp, const BlockContents& contents) {
+  ArrayBlock* array_block = new ArrayBlock(contents);
+  Iterator* iter = array_block->NewIterator(cmp);
+  iter->RegisterCleanup(CleanupArrayBlock, array_block, NULL);
+  return iter;
+}
+
 void CleanupBlock(void* arg1, void* arg2) {
   delete reinterpret_cast<Block*>(arg1);
+}
+
+Iterator* OpenBlock(const Comparator* cmp, const BlockContents& contents) {
+  Block* block = new Block(contents);
+  Iterator* iter = block->NewIterator(cmp);
+  iter->RegisterCleanup(CleanupBlock, block, NULL);
+  return iter;
 }
 
 }  // namespace
@@ -815,18 +831,13 @@ Iterator* OpenDirBlock  // Use options to determine the block format to use
   if (IsKeyUnOrdered(options.mode)) {
     comparator = NULL;
   }
-  if (options.fixed_kv_length) {
-    ArrayBlock* array_block = new ArrayBlock(contents);
-    Iterator* iter = array_block->NewIterator(comparator);
-    iter->RegisterCleanup(CleanupArrayBlock, array_block, NULL);
-    return iter;
+  if (!options.leveldb_compatible) {
+    if (options.fixed_kv_length) return OpenArrayBlock(comparator, contents);
+    // XXX: should we provide our own block format
+    // to support variable kv?
   }
 
-  // Assume the default format
-  Block* block = new Block(contents);
-  Iterator* iter = block->NewIterator(comparator);
-  iter->RegisterCleanup(CleanupBlock, block, NULL);
-  return iter;
+  return OpenBlock(comparator, contents);
 }
 
 }  // namespace plfsio

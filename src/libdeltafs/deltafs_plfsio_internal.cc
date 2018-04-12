@@ -1515,6 +1515,7 @@ static Status VerifyOptions(const DirOptions& options, const Footer& footer) {
       UnMatch(options.key_size, footer.key_size()) ||
       UnMatch(options.value_size, footer.value_size()) ||
       UnMatch(options.fixed_kv_length, footer.fixed_kv_length()) ||
+      UnMatch(options.leveldb_compatible, footer.leveldb_compatible()) ||
       UnMatch(options.epoch_log_rotation, footer.epoch_log_rotation()) ||
       UnMatch(options.skip_checksums, footer.skip_checksums()) ||
       UnMatch(options.filter, footer.filter_type()) ||

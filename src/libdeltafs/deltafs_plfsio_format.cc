@@ -123,6 +123,8 @@ Footer Mkfoot(const DirOptions& options) {
   result.set_key_size(static_cast<uint32_t>(options.key_size));
   result.set_fixed_kv_length(
       static_cast<unsigned char>(options.fixed_kv_length));
+  result.set_leveldb_compatible(
+      static_cast<unsigned char>(options.leveldb_compatible));
   result.set_epoch_log_rotation(
       static_cast<unsigned char>(options.epoch_log_rotation));
   result.set_skip_checksums(static_cast<unsigned char>(options.skip_checksums));
@@ -132,16 +134,16 @@ Footer Mkfoot(const DirOptions& options) {
 }
 
 void Footer::EncodeTo(std::string* dst) const {
-  static const unsigned char kInvalidUchar = ~static_cast<unsigned char>(0);
   assert(lg_parts_ != ~static_cast<uint32_t>(0));
   assert(num_epochs_ != ~static_cast<uint32_t>(0));
   assert(value_size_ != ~static_cast<uint32_t>(0));
   assert(key_size_ != ~static_cast<uint32_t>(0));
-  assert(fixed_kv_length_ != kInvalidUchar);
-  assert(epoch_log_rotation_ != kInvalidUchar);
-  assert(skip_checksums_ != kInvalidUchar);
-  assert(filter_type_ != kInvalidUchar);
-  assert(mode_ != kInvalidUchar);
+  assert(fixed_kv_length_ != 0xFF);
+  assert(leveldb_compatible_ != 0xFF);
+  assert(epoch_log_rotation_ != 0xFF);
+  assert(skip_checksums_ != 0xFF);
+  assert(filter_type_ != 0xFF);
+  assert(mode_ != 0xFF);
 
   epoch_index_handle_.EncodeTo(dst);
   dst->resize(BlockHandle::kMaxEncodedLength, 0);  // Padding
@@ -152,6 +154,7 @@ void Footer::EncodeTo(std::string* dst) const {
   PutFixed32(dst, value_size_);
   PutFixed32(dst, key_size_);
   dst->push_back(static_cast<char>(fixed_kv_length_));
+  dst->push_back(static_cast<char>(leveldb_compatible_));
   dst->push_back(static_cast<char>(epoch_log_rotation_));
   dst->push_back(static_cast<char>(skip_checksums_));
   dst->push_back(static_cast<char>(filter_type_));
@@ -176,11 +179,12 @@ Status Footer::DecodeFrom(Slice* input) {
   if (magic != kTableMagicNumber) {
     return Status::Corruption("Bad dir footer magic number");
   } else {
-    lg_parts_ = DecodeFixed32(start + kEncodedLength - 21);
-    num_epochs_ = DecodeFixed32(start + kEncodedLength - 17);
-    value_size_ = DecodeFixed32(start + kEncodedLength - 13);
-    key_size_ = DecodeFixed32(start + kEncodedLength - 9);
-    fixed_kv_length_ = static_cast<unsigned char>(start[kEncodedLength - 5]);
+    lg_parts_ = DecodeFixed32(start + kEncodedLength - 22);
+    num_epochs_ = DecodeFixed32(start + kEncodedLength - 18);
+    value_size_ = DecodeFixed32(start + kEncodedLength - 14);
+    key_size_ = DecodeFixed32(start + kEncodedLength - 10);
+    fixed_kv_length_ = static_cast<unsigned char>(start[kEncodedLength - 6]);
+    leveldb_compatible_ = static_cast<unsigned char>(start[kEncodedLength - 5]);
     epoch_log_rotation_ = static_cast<unsigned char>(start[kEncodedLength - 4]);
     skip_checksums_ = static_cast<unsigned char>(start[kEncodedLength - 3]);
     filter_type_ = static_cast<unsigned char>(start[kEncodedLength - 2]);

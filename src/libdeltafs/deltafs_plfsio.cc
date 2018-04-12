@@ -30,6 +30,7 @@ IoStats::IoStats() : index_bytes(0), index_ops(0), data_bytes(0), data_ops(0) {}
 DirOptions::DirOptions()
     : total_memtable_budget(4 << 20),
       memtable_util(1.0),
+      leveldb_compatible(true),
       skip_sort(false),
       fixed_kv_length(false),
       key_size(8),
@@ -1590,6 +1591,12 @@ static std::string FilterName(FilterType type) {
 static DirOptions MaybeRewriteOptions(  // Not all options can be fixed
     const DirOptions& options, const Footer& footer) {
   DirOptions result = options;
+  if (static_cast<bool>(footer.leveldb_compatible()) !=
+      options.leveldb_compatible)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.leveldb_compatible -> %s (was %s)",
+         static_cast<bool>(footer.leveldb_compatible()) ? "Yes" : "No",
+         options.leveldb_compatible ? "Yes" : "No");
+  result.leveldb_compatible = footer.leveldb_compatible();
   if (static_cast<bool>(footer.fixed_kv_length()) != options.fixed_kv_length)
     Warn(__LOG_ARGS__, "Dfs.plfsdir.fixed_kv_length -> %s (was %s)",
          static_cast<bool>(footer.fixed_kv_length()) ? "Yes" : "No",
