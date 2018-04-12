@@ -650,11 +650,15 @@ class PlfsIoBench {
     force_fifo_ = GetOption("FORCE_FIFO", false);
 
     options_.rank = 0;  // My process id
+    if (GetOption("UNORDERED_MODE", false) != 0) {
+      options_.mode = kDmUniqueUnordered;
+    } else {
 #ifndef NDEBUG
-    options_.mode = kDmUniqueKey;
+      options_.mode = kDmUniqueKey;
 #else
-    options_.mode = kDmUniqueDrop;
+      options_.mode = kDmUniqueDrop;
 #endif
+    }
     options_.lg_parts = GetOption("LG_PARTS", 2);
     options_.skip_sort = ordered_keys_ != 0;
     options_.non_blocking = batched_insertion_ != 0;
@@ -670,6 +674,7 @@ class PlfsIoBench {
     options_.block_batch_size =
         static_cast<size_t>(GetOption("BLOCK_BATCH_SIZE", 4) << 20);
     options_.block_util = GetOption("BLOCK_UTIL", 996) / 1000.0;
+    options_.block_padding = GetOption("BLOCK_PADDING", true) != 0;
     options_.bf_bits_per_key = static_cast<size_t>(GetOption("BF_BITS", 14));
     options_.bm_fmt = GetBitmapFilterFormat(kFmtUncompressed);
     options_.bm_key_bits = static_cast<size_t>(GetOption("BM_KEY_BITS", 24));
@@ -1025,15 +1030,20 @@ class PlfsIoBench {
             k * k * (utime + stime) / CPU_COUNT(&cpu_set) / dura * 100);
 #endif
 #endif
+    fprintf(stderr, "               Dir Mode: ordered=%s\n",
+            IsKeyUnOrdered(options_.mode) ? "No" : "Yes");
+    fprintf(stderr,
+            "             Input Keys: pre-generated=%s, pre-sorted=%s\n",
+            keys_.empty() ? "No" : "Yes", ordered_keys_ ? "Yes" : "No");
     if (batched_insertion_) {
       fprintf(stderr, "      Batched Insertion: %d K\n", int(batch_size_ / ki));
     } else {
       fprintf(stderr, "      Batched Insertion: No\n");
     }
-    fprintf(stderr, "              User Keys: prepared=%s, ordered=%s\n",
-            keys_.empty() ? "No" : "Yes", ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "    Indexes Compression: %s\n",
             options_.compression == kSnappyCompression ? "Yes" : "No");
+    fprintf(stderr, "            Blk Padding: %s\n",
+            options_.block_padding ? "Yes" : "No");
     fprintf(stderr, "                 TB Fmt: %s\n",
             options_.leveldb_compatible ? "SST" : "CUSTOM");
     fprintf(stderr, "                FT Type: %s\n", ToString(options_.filter));
@@ -1461,6 +1471,7 @@ static inline void BM_Usage() {
   fprintf(stderr, "== workload confs\n");
   fprintf(stderr, "LINK_SPEED\n");
   fprintf(stderr, "NUM_FILES\n");
+  fprintf(stderr, "UNORDERED_MODE\n");
   fprintf(stderr, "PREPARE_KEYS\n");
   fprintf(stderr, "ORDERED_KEYS\n");
   fprintf(stderr, "LEVELDB_FMT\n");
@@ -1479,6 +1490,7 @@ static inline void BM_Usage() {
   fprintf(stderr, "BLOCK_BATCH_SIZE\n");
   fprintf(stderr, "BLOCK_SIZE\n");
   fprintf(stderr, "BLOCK_UTIL\n");
+  fprintf(stderr, "BLOCK_PADDING\n");
   fprintf(stderr, "SNAPPY\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "== plfsdir filter options\n");
