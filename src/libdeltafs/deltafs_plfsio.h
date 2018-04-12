@@ -41,7 +41,9 @@ enum DirMode {
   // Duplicated keys inserted within an epoch
   // are considered separate records
   kDmMultiMap = 0x00,
-  // Unique keys. But stored unordered.
+  // Duplicated keys. Stored out-of-order.
+  kDmMultiMapUnordered = 0x10,
+  // Unique, un-ordered keys.
   kDmUniqueUnordered = 0x90,
   // Duplicated key insertions are silently discarded
   kDmUniqueDrop = 0x81,
