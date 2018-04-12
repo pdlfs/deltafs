@@ -658,7 +658,8 @@ class PlfsIoBench {
     options_.lg_parts = GetOption("LG_PARTS", 2);
     options_.skip_sort = ordered_keys_ != 0;
     options_.non_blocking = batched_insertion_ != 0;
-    options_.fixed_kv_length = GetOption("FIXED_KV", false) != 0;
+    options_.leveldb_compatible = GetOption("LEVELDB_FMT", true) != 0;
+    options_.fixed_kv_length = GetOption("FIXED_KV", true) != 0;
     options_.compression =
         GetOption("SNAPPY", false) ? kSnappyCompression : kNoCompression;
     options_.force_compression = true;
@@ -1033,6 +1034,8 @@ class PlfsIoBench {
             keys_.empty() ? "No" : "Yes", ordered_keys_ ? "Yes" : "No");
     fprintf(stderr, "    Indexes Compression: %s\n",
             options_.compression == kSnappyCompression ? "Yes" : "No");
+    fprintf(stderr, "                 TB Fmt: %s\n",
+            options_.leveldb_compatible ? "SST" : "CUSTOM");
     fprintf(stderr, "                FT Type: %s\n", ToString(options_.filter));
     fprintf(stderr, "          FT Mem Budget: %d (bits per key)\n",
             int(options_.filter_bits_per_key));
@@ -1050,11 +1053,11 @@ class PlfsIoBench {
             int((options_.key_size + options_.value_size) * mfiles_));
     fprintf(stderr, "  Total MemTable Budget: %d MiB\n",
             int(options_.total_memtable_budget) >> 20);
-    fprintf(stderr, "     Estimated SST Size: %.3f MiB\n",
+    fprintf(stderr, "      Estimated TB Size: %.3f MiB\n",
             writer_->TEST_estimated_sstable_size() / ki / ki);
     fprintf(stderr, "        Planned FT Size: %.3f KiB\n",
             writer_->TEST_planned_filter_size() / ki);
-    fprintf(stderr, "   Estimated Block Size: %d KiB (target util: %.1f%%)\n",
+    fprintf(stderr, "     Estimated Blk Size: %d KiB (target util: %.1f%%)\n",
             int(options_.block_size) >> 10, options_.block_util * 100);
     fprintf(stderr, "Num MemTable Partitions: %d\n", 1 << options_.lg_parts);
     fprintf(stderr, "         Num Bg Threads: %d\n", num_threads_);
@@ -1072,15 +1075,15 @@ class PlfsIoBench {
             int(options_.min_index_buffer) >> 20);
     const uint64_t user_bytes =
         writer_->TEST_key_bytes() + writer_->TEST_value_bytes();
-    fprintf(stderr, " Aggregated SST Indexes: %.3f KiB\n",
+    fprintf(stderr, "  Aggregated TB Indexes: %.3f KiB\n",
             1.0 * writer_->TEST_raw_index_contents() / ki);
     fprintf(stderr, "          Aggregated FT: %.3f MiB (+%.2f%%)\n",
             1.0 * writer_->TEST_raw_filter_contents() / ki / ki,
             1.0 * writer_->TEST_raw_filter_contents() / user_bytes * 100);
-    fprintf(stderr, "     Final Phys Indexes: %.3f MiB (+%.2f%%)\n",
+    fprintf(stderr, "      Final Dir Indexes: %.3f MiB (+%.2f%%)\n",
             1.0 * stats.index_bytes / ki / ki,
             1.0 * stats.index_bytes / user_bytes * 100);
-    fprintf(stderr, "       Total Index Cost: %.3f (bits per key)\n",
+    fprintf(stderr, "             Index Cost: %.3f (bits per key)\n",
             8.0 * stats.index_bytes / double(mfiles_ << 20));
     fprintf(stderr, "         Compaction Buf: %d MiB (x%d)\n",
             int(options_.block_batch_size) >> 20, 1 << options_.lg_parts);
@@ -1091,11 +1094,11 @@ class PlfsIoBench {
     fprintf(stderr, "        Total User Data: %.3f MiB (K+V)\n",
             1.0 * user_bytes / ki / ki);
     fprintf(stderr,
-            "    Aggregated SST Data: %.3f MiB (+%.2f%% due to blk encoding)\n",
+            "     Aggregated TB Data: %.3f MiB (+%.2f%% due to blk encoding)\n",
             1.0 * writer_->TEST_raw_data_contents() / ki / ki,
             1.0 * writer_->TEST_raw_data_contents() / user_bytes * 100 - 100);
     fprintf(stderr,
-            "        Final Phys Data: %.3f MiB (+%.2f%% due to blk encoding "
+            "         Final Dir Data: %.3f MiB (+%.2f%% due to blk encoding "
             "and padding)\n",
             1.0 * stats.data_bytes / ki / ki,
             1.0 * stats.data_bytes / user_bytes * 100 - 100);
@@ -1112,12 +1115,12 @@ class PlfsIoBench {
       fprintf(stderr, "                   MTBW: N/A\n");
     }
     const uint32_t num_tables = writer_->TEST_num_sstables();
-    fprintf(stderr, "              Total SST: %d\n", int(num_tables));
-    fprintf(stderr, "  Avg SST Per Partition: %.1f\n",
+    fprintf(stderr, "               Total TB: %d\n", int(num_tables));
+    fprintf(stderr, "       TB Per Partition: %.1f\n",
             1.0 * num_tables / (1 << options_.lg_parts));
-    fprintf(stderr, "       Total SST Blocks: %d\n",
+    fprintf(stderr, "           Total TB Blk: %d\n",
             int(writer_->TEST_num_data_blocks()));
-    fprintf(stderr, "         Total SST Keys: %.1f M (%d dropped)\n",
+    fprintf(stderr, "   Total Keys Compacted: %.1f M (%d dropped)\n",
             1.0 * writer_->TEST_num_keys() / ki / ki,
             int(writer_->TEST_num_dropped_keys()));
     fprintf(stderr, "             Value Size: %d Bytes\n",
@@ -1460,6 +1463,8 @@ static inline void BM_Usage() {
   fprintf(stderr, "NUM_FILES\n");
   fprintf(stderr, "PREPARE_KEYS\n");
   fprintf(stderr, "ORDERED_KEYS\n");
+  fprintf(stderr, "LEVELDB_FMT\n");
+  fprintf(stderr, "FIXED_KV\n");
   fprintf(stderr, "VALUE_SIZE\n");
   fprintf(stderr, "KEY_SIZE\n");
   fprintf(stderr, "\n");
