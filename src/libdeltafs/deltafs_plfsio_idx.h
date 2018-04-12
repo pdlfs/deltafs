@@ -17,14 +17,28 @@ namespace pdlfs {
 namespace plfsio {
 
 // Return true iff directory keys are unique and ordered.
+// In such cases, we always use binary search to lookup keys and each point
+// lookup within an epoch or a table stops immediate once we find a match.
 static inline bool IsKeyUniqueAndOrdered(DirMode mode) {
   return (mode & 0xF0) == 0x80;
 }
 
 // Return true iff directory keys are unique.
+// In such cases, each point lookup within an epoch or a table stops immediate
+// once we find a match. However, if keys are stored out-of-order, we will have
+// to use linear search to find our first match. On the other hand, if keys are
+// not unique, we will resort to linear search for point lookups and each point
+// lookup within an epoch or a table will continue even if we already find one
+// or more matches. In such cases, however, a point lookup is able to stop
+// immediate once we come across a key that is greater than the target key as
+// long as keys are stored in-order.
 static inline bool IsKeyUnique(DirMode mode) { return (mode & 0x80) == 0x80; }
 
 // Return true iff directory keys are stored out-of-order.
+// In such cases, we always use linear search for point lookups. If keys are
+// unique, each point lookup within an epoch or a table stops immediate once we
+// find a match. Otherwise, such lookup has to continue even when multiple
+// matches have been found.
 static inline bool IsKeyUnOrdered(DirMode mode) {
   return (mode & 0x10) == 0x10;
 }
