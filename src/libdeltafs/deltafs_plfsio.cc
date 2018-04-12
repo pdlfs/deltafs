@@ -1588,51 +1588,43 @@ static std::string FilterName(FilterType type) {
 }
 
 // Override options in accordance with the given footer.
-static DirOptions MaybeRewriteOptions(  // Not all options can be fixed
-    const DirOptions& options, const Footer& footer) {
-  DirOptions result = options;
-  if (static_cast<bool>(footer.leveldb_compatible()) !=
-      options.leveldb_compatible)
-    Warn(__LOG_ARGS__, "Dfs.plfsdir.leveldb_compatible -> %s (was %s)",
-         static_cast<bool>(footer.leveldb_compatible()) ? "Yes" : "No",
-         options.leveldb_compatible ? "Yes" : "No");
-  result.leveldb_compatible = footer.leveldb_compatible();
-  if (static_cast<bool>(footer.fixed_kv_length()) != options.fixed_kv_length)
+static DirOptions MaybeRewriteOptions(  // Only a subset of options are checked
+    const DirOptions& origin, const Footer& footer) {
+  DirOptions result = ApplyFooter(origin, footer);
+  if (result.value_size != origin.value_size)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.value_size -> %d (was %d)",
+         int(result.value_size), int(origin.value_size));
+  if (result.key_size != origin.key_size)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.key_size -> %d (was %d)",
+         int(result.key_size), int(origin.key_size));
+  if (result.fixed_kv_length != origin.fixed_kv_length)
     Warn(__LOG_ARGS__, "Dfs.plfsdir.fixed_kv_length -> %s (was %s)",
-         static_cast<bool>(footer.fixed_kv_length()) ? "Yes" : "No",
-         options.fixed_kv_length ? "Yes" : "No");
-  result.fixed_kv_length = footer.fixed_kv_length();
-  result.value_size = footer.value_size();
-  result.key_size = footer.key_size();
-  if (static_cast<bool>(footer.skip_checksums()) != options.skip_checksums)
-    Warn(__LOG_ARGS__, "Dfs.plfsdir.skip_checksums -> %s (was %s)",
-         static_cast<bool>(footer.skip_checksums()) ? "Yes" : "No",
-         options.skip_checksums ? "Yes" : "No");
-  result.skip_checksums = static_cast<bool>(footer.skip_checksums());
-  if (static_cast<bool>(footer.epoch_log_rotation()) !=
-      options.epoch_log_rotation)
+         result.fixed_kv_length ? "Yes" : "No",
+         origin.fixed_kv_length ? "Yes" : "No");
+  if (result.leveldb_compatible != origin.leveldb_compatible)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.leveldb_compatible -> %s (was %s)",
+         result.leveldb_compatible ? "Yes" : "No",
+         origin.leveldb_compatible ? "Yes" : "No");
+  if (result.epoch_log_rotation != origin.epoch_log_rotation)
     Warn(__LOG_ARGS__, "Dfs.plfsdir.epoch_log_rotation -> %s (was %s)",
-         static_cast<bool>(footer.epoch_log_rotation()) ? "Yes" : "No",
-         options.epoch_log_rotation ? "Yes" : "No");
-  result.epoch_log_rotation = static_cast<bool>(footer.epoch_log_rotation());
-  if (static_cast<FilterType>(footer.filter_type()) != options.filter)
+         result.epoch_log_rotation ? "Yes" : "No",
+         origin.epoch_log_rotation ? "Yes" : "No");
+  if (result.skip_checksums != origin.skip_checksums)
+    Warn(__LOG_ARGS__, "Dfs.plfsdir.skip_checksums -> %s (was %s)",
+         result.skip_checksums ? "Yes" : "No",
+         origin.skip_checksums ? "Yes" : "No");
+  if (result.filter != origin.filter)
     Warn(__LOG_ARGS__, "Dfs.plfsdir.filter -> %s (was %s)",
-         FilterName(static_cast<FilterType>(footer.filter_type())).c_str(),
-         FilterName(options.filter).c_str());
-  result.filter = static_cast<FilterType>(footer.filter_type());
-  if (static_cast<DirMode>(footer.mode()) != options.mode)
+         FilterName(result.filter).c_str(), FilterName(origin.filter).c_str());
+  if (result.mode != origin.mode)
     Warn(__LOG_ARGS__, "Dfs.plfsdir.mode -> %s (was %s)",
-         DirModeName(static_cast<DirMode>(footer.mode())).c_str(),
-         DirModeName(options.mode).c_str());
-  result.mode = static_cast<DirMode>(footer.mode());
-  if (static_cast<int>(footer.num_epochs()) != options.num_epochs)
+         DirModeName(result.mode).c_str(), DirModeName(origin.mode).c_str());
+  if (result.num_epochs != origin.num_epochs)
     Warn(__LOG_ARGS__, "Dfs.plfsdir.num_epochs -> %d (was %d)",
-         static_cast<int>(footer.num_epochs()), options.num_epochs);
-  result.num_epochs = static_cast<int>(footer.num_epochs());
-  if (static_cast<int>(footer.lg_parts()) != options.lg_parts)
+         result.num_epochs, origin.num_epochs);
+  if (result.lg_parts != origin.lg_parts)
     Warn(__LOG_ARGS__, "Dfs.plfsdir.memtable_parts -> %d (was %d)",
-         1 << footer.lg_parts(), 1 << options.lg_parts);
-  result.lg_parts = static_cast<int>(footer.lg_parts());
+         1 << result.lg_parts, 1 << origin.lg_parts);
   return result;
 }
 

@@ -116,6 +116,21 @@ Status EpochStone::DecodeFrom(Slice* input) {
   }
 }
 
+DirOptions ApplyFooter(const DirOptions& options, const Footer& footer) {
+  DirOptions result = options;
+  result.lg_parts = int(footer.lg_parts());
+  result.num_epochs = int(footer.num_epochs());
+  result.value_size = footer.value_size();
+  result.key_size = footer.key_size();
+  result.fixed_kv_length = footer.fixed_kv_length();
+  result.leveldb_compatible = footer.leveldb_compatible();
+  result.epoch_log_rotation = footer.epoch_log_rotation();
+  result.skip_checksums = footer.skip_checksums();
+  result.filter = static_cast<FilterType>(footer.filter_type());
+  result.mode = static_cast<DirMode>(footer.mode());
+  return result;
+}
+
 Footer Mkfoot(const DirOptions& options) {
   Footer result;
   result.set_lg_parts(static_cast<uint32_t>(options.lg_parts));

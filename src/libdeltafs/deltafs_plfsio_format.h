@@ -180,6 +180,9 @@ class Footer {
   unsigned char mode_;
 };
 
+// Override directory options using a specified footer.
+extern DirOptions ApplyFooter(const DirOptions& origin, const Footer& footer);
+
 extern Footer Mkfoot(const DirOptions& options);
 
 extern std::string DirInfoFileName(const std::string& dirname);
