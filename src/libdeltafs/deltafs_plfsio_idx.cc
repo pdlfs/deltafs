@@ -244,7 +244,7 @@ class ArrayBlock::Iter : public Iterator {
           right = mid - 1;
         }
       }
-      current_ = left;
+      current_ = left * entry_size;
       for (; Valid(); Next()) {
         if (Compare(key(), target) >= 0) {
           return;
