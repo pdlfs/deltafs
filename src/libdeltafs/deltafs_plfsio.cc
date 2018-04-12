@@ -1194,6 +1194,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
           PrettySize(options.total_memtable_budget).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_util -> %.2f%%",
           100 * options.memtable_util);
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.leveldb_compatible -> %s",
+          int(options.leveldb_compatible) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.skip_sort -> %s",
           int(options.skip_sort) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.fixed_kv_length -> %s",
