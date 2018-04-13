@@ -1008,6 +1008,7 @@ struct deltafs_plfsdir {
   pdlfs::DB* db;
   DirWriter* writer;
   DirReader* reader;
+  bool unordered;  // If the unordered mode should be used
   // If the multi-map mode should be used
   bool multi;
   bool is_env_pfs;
@@ -1044,9 +1045,29 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
   }
 }
 
+int deltafs_plfsdir_set_unordered(deltafs_plfsdir_t* __dir, int __flag) {
+  if (__dir != NULL && !__dir->opened) {
+    __dir->unordered = static_cast<bool>(__flag);
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
 int deltafs_plfsdir_set_multimap(deltafs_plfsdir_t* __dir, int __flag) {
   if (__dir != NULL && !__dir->opened) {
     __dir->multi = static_cast<bool>(__flag);
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
+int deltafs_plfsdir_force_leveldb_fmt(deltafs_plfsdir_t* __dir, int __flag) {
+  if (__dir != NULL && !__dir->opened) {
+    __dir->io_options->leveldb_compatible = static_cast<bool>(__flag);
     return 0;
   } else {
     SetErrno(BadArgs());
@@ -1310,7 +1331,13 @@ pdlfs::Status DbGet(deltafs_plfsdir_t* dir, const pdlfs::Slice& key,
 }
 
 inline void FinalizeDirMode(deltafs_plfsdir_t* dir) {
-  if (dir->multi) {
+  if (dir->multi && dir->unordered) {
+    DirMode multimap_unordered = pdlfs::plfsio::kDmMultiMapUnordered;
+    dir->io_options->mode = multimap_unordered;
+  } else if (dir->unordered) {
+    DirMode unordered = pdlfs::plfsio::kDmUniqueUnordered;
+    dir->io_options->mode = unordered;
+  } else if (dir->multi) {
     DirMode multimap = pdlfs::plfsio::kDmMultiMap;
     // Allow multiple insertions per key within a single epoch
     dir->io_options->mode = multimap;

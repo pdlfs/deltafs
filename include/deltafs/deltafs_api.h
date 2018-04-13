@@ -115,6 +115,7 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
                                                  int __io_engine);
 int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size);
 int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size);
+int deltafs_plfsdir_set_unordered(deltafs_plfsdir_t* __dir, int __flag);
 /* Enforce multimap semantics */
 int deltafs_plfsdir_set_multimap(deltafs_plfsdir_t* __dir, int __flag);
 /* Set file system env. */
@@ -123,6 +124,7 @@ int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env);
 int deltafs_plfsdir_set_thread_pool(deltafs_plfsdir_t* __dir,
                                     deltafs_tp_t* __tp);
 int deltafs_plfsdir_set_rank(deltafs_plfsdir_t* __dir, int __rank);
+int deltafs_plfsdir_force_leveldb_fmt(deltafs_plfsdir_t* __dir, int __flag);
 int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir, int __flag);
 int deltafs_plfsdir_set_non_blocking(deltafs_plfsdir_t* __dir, int __flag);
 /* Error printer type */
