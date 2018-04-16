@@ -34,13 +34,12 @@ class WriteBuffer {
   ~WriteBuffer() {}
 
   size_t memory_usage() const;  // Report real memory usage
-  // Report estimated memory usage per entry
-  size_t bytes_per_entry() const;
 
   void Reserve(size_t bytes_to_reserve);
   size_t CurrentBufferSize() const { return buffer_.size(); }
   uint32_t NumEntries() const { return num_entries_; }
   bool Add(const Slice& key, const Slice& value);
+  bool NeedCompaction() const { return false; }
   Iterator* NewIterator() const;
   void Finish(bool skip_sort = false);
   void Reset();

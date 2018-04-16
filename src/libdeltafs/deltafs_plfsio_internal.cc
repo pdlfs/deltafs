@@ -172,10 +172,6 @@ bool WriteBuffer::Add(const Slice& key, const Slice& value) {
   return true;
 }
 
-size_t WriteBuffer::bytes_per_entry() const {
-  return bytes_per_entry_;  // Not including the 4-byte memory for the offset
-}
-
 size_t WriteBuffer::memory_usage() const {
   size_t result = 0;
   result += sizeof(uint32_t) * offsets_.capacity();
@@ -376,7 +372,8 @@ Status DirBuilder<T>::Prepare(bool force /* force minor memtable flush */,
     if (!bg_status_.ok()) {
       status = bg_status_;
       break;
-    } else if (!force && mem_buf_->CurrentBufferSize() < buf_threshold_) {
+    } else if (!force && !mem_buf_->NeedCompaction() &&
+               mem_buf_->CurrentBufferSize() < buf_threshold_) {
       // There is room in current write buffer
       break;
     } else if (imm_buf_ != NULL) {
