@@ -1045,6 +1045,16 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
   }
 }
 
+int deltafs_plfsdir_set_fixed_kv(deltafs_plfsdir_t* __dir, int __flag) {
+  if (__dir != NULL && !__dir->opened) {
+    __dir->io_options->fixed_kv_length = static_cast<bool>(__flag);
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
 int deltafs_plfsdir_set_unordered(deltafs_plfsdir_t* __dir, int __flag) {
   if (__dir != NULL && !__dir->opened) {
     __dir->unordered = static_cast<bool>(__flag);

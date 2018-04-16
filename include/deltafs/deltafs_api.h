@@ -126,6 +126,7 @@ int deltafs_plfsdir_set_thread_pool(deltafs_plfsdir_t* __dir,
 int deltafs_plfsdir_set_rank(deltafs_plfsdir_t* __dir, int __rank);
 int deltafs_plfsdir_force_leveldb_fmt(deltafs_plfsdir_t* __dir, int __flag);
 int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir, int __flag);
+int deltafs_plfsdir_set_fixed_kv(deltafs_plfsdir_t* __dir, int __flag);
 int deltafs_plfsdir_set_non_blocking(deltafs_plfsdir_t* __dir, int __flag);
 /* Error printer type */
 typedef void (*deltafs_printer_t)(const char* __err, void* __arg);
