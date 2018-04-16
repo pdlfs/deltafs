@@ -10,6 +10,7 @@
 #include "deltafs_plfsio_idx.h"
 #include "deltafs_plfsio_recov.h"
 
+#include <math.h>
 #include <set>
 
 namespace pdlfs {
@@ -318,6 +319,7 @@ class DirIndexerImpl : public DirIndexer {
   uint32_t num_uncommitted_data_;  // Number of uncommitted data blocks
   bool pending_restart_;           // Request to restart the data block buffer
   bool pending_commit_;  // Request to commit buffered data and indexes
+  size_t block_threshold_;
   T data_block_;
   BlockBuilder indx_block_;  // Locate the data blocks within a table
   BlockBuilder meta_block_;  // Locate the tables within an epoch
@@ -374,6 +376,8 @@ DirIndexerImpl<T>::DirIndexerImpl(const DirOptions& options, LogSink* data,
   const size_t estimated_root_index = 4 << 10;
   root_block_.Reserve(estimated_root_index);
 
+  block_threshold_ =
+      static_cast<size_t>(floor(options_.block_size * options_.block_util));
   uncommitted_indexes_.reserve(1 << 10);
   if (options_.block_batch_size != 0)
     data_block_.buffer_store()->reserve(options_.block_batch_size);
@@ -730,7 +734,7 @@ void DirIndexerImpl<T>::Add(const Slice& key, const Slice& value) {
   }
   if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize +
           BlockHandle::kMaxEncodedLength >=
-      static_cast<size_t>(options_.block_size * options_.block_util)) {
+      block_threshold_) {
     EndBlock();
     // Schedule buffer commit if it is about to full
     if (data_block_.buffer_store()->size() + options_.block_size >
