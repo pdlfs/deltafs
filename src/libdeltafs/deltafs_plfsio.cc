@@ -233,6 +233,14 @@ DirOptions ParseDirOptions(const char* input) {
       if (ParseBool(conf_key, conf_value, &flag)) {
         result.ignore_filters = flag;
       }
+    } else if (conf_key == "fixed_kv") {
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.fixed_kv_length = flag;
+      }
+    } else if (conf_key == "leveldb_compatible") {
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.leveldb_compatible = flag;
+      }
     } else if (conf_key == "filter") {
       if (ParseFilterType(conf_key, conf_value, &filter_type)) {
         result.filter = filter_type;
