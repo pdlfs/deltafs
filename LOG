@@ -1,0 +1,150 @@
+[I] 2018/04/16-11:08:20.386885 7f72b96bab80 Removing /tmp/pdlfs-test-1000/plfsio_test_benchmark/DIR.info ...
+[I] 2018/04/16-11:08:20.387103 7f72b96bab80 Dfs.plfsdir.name -> /tmp/pdlfs-test-1000/plfsio_test_benchmark (mode=write)
+[I] 2018/04/16-11:08:20.387132 7f72b96bab80 Dfs.plfsdir.memtable_budget -> 48.0 MiB (50331648 Bytes)
+[I] 2018/04/16-11:08:20.387136 7f72b96bab80 Dfs.plfsdir.memtable_util -> 99.90%
+[I] 2018/04/16-11:08:20.387138 7f72b96bab80 Dfs.plfsdir.memtable_reserv -> 100.10%
+[I] 2018/04/16-11:08:20.387140 7f72b96bab80 Dfs.plfsdir.leveldb_compatible -> Yes
+[I] 2018/04/16-11:08:20.387142 7f72b96bab80 Dfs.plfsdir.skip_sort -> No
+[I] 2018/04/16-11:08:20.387143 7f72b96bab80 Dfs.plfsdir.fixed_kv_length -> Yes
+[I] 2018/04/16-11:08:20.387144 7f72b96bab80 Dfs.plfsdir.key_size -> 8 Bytes
+[I] 2018/04/16-11:08:20.387145 7f72b96bab80 Dfs.plfsdir.value_size -> 40 Bytes
+[I] 2018/04/16-11:08:20.387149 7f72b96bab80 Dfs.plfsdir.filter -> BF (bits_per_key=14)
+[I] 2018/04/16-11:08:20.387150 7f72b96bab80 Dfs.plfsdir.filter_bits_per_key -> 16
+[I] 2018/04/16-11:08:20.387152 7f72b96bab80 Dfs.plfsdir.block_size -> 32.0 KiB (32768 Bytes)
+[I] 2018/04/16-11:08:20.387153 7f72b96bab80 Dfs.plfsdir.block_util -> 99.60%
+[I] 2018/04/16-11:08:20.387155 7f72b96bab80 Dfs.plfsdir.block_padding -> Yes
+[I] 2018/04/16-11:08:20.387156 7f72b96bab80 Dfs.plfsdir.block_batch_size -> 4.0 MiB (4194304 Bytes)
+[I] 2018/04/16-11:08:20.387158 7f72b96bab80 Dfs.plfsdir.data_buffer -> 8.0 MiB (8388608 Bytes)
+[I] 2018/04/16-11:08:20.387160 7f72b96bab80 Dfs.plfsdir.min_data_buffer -> 6.0 MiB (6291456 Bytes)
+[I] 2018/04/16-11:08:20.387161 7f72b96bab80 Dfs.plfsdir.index_buffer -> 2.0 MiB (2097152 Bytes)
+[I] 2018/04/16-11:08:20.387163 7f72b96bab80 Dfs.plfsdir.min_index_buffer -> 2.0 MiB (2097152 Bytes)
+[I] 2018/04/16-11:08:20.387164 7f72b96bab80 Dfs.plfsdir.tail_padding -> No
+[I] 2018/04/16-11:08:20.387165 7f72b96bab80 Dfs.plfsdir.compaction_pool -> POSIX fixed thread pool: num_threads=4
+[I] 2018/04/16-11:08:20.387166 7f72b96bab80 Dfs.plfsdir.non_blocking -> No
+[I] 2018/04/16-11:08:20.387167 7f72b96bab80 Dfs.plfsdir.compression -> None
+[I] 2018/04/16-11:08:20.387169 7f72b96bab80 Dfs.plfsdir.force_compression -> Yes
+[I] 2018/04/16-11:08:20.387170 7f72b96bab80 Dfs.plfsdir.skip_checksums -> No
+[I] 2018/04/16-11:08:20.387171 7f72b96bab80 Dfs.plfsdir.measure_writes -> Yes
+[I] 2018/04/16-11:08:20.387172 7f72b96bab80 Dfs.plfsdir.epoch_log_rotation -> No
+[I] 2018/04/16-11:08:20.387173 7f72b96bab80 Dfs.plfsdir.allow_env_threads -> No
+[I] 2018/04/16-11:08:20.387174 7f72b96bab80 Dfs.plfsdir.is_env_pfs -> Yes
+[I] 2018/04/16-11:08:20.387175 7f72b96bab80 Dfs.plfsdir.mode -> U/K
+[I] 2018/04/16-11:08:20.387176 7f72b96bab80 Dfs.plfsdir.memtable_parts -> 4 (lg_parts=2)
+[I] 2018/04/16-11:08:20.387177 7f72b96bab80 Dfs.plfsdir.my_rank -> 0
+[I] 2018/04/16-11:08:20.387210 7f72b96bab80 Writing into /tmp/pdlfs-test-1000/plfsio_test_benchmark/L-00000000.dat, buffer=8.0 MiB (8388608 Bytes)
+[I] 2018/04/16-11:08:20.387223 7f72b96bab80 Dfs.plfsdir.memtable.tb_size -> 8 x 4.0 MiB (4194304 Bytes)
+[I] 2018/04/16-11:08:20.387304 7f72b96bab80 Dfs.plfsdir.memtable.ft_size -> 8 x 170.7 KiB (174762 Bytes)
+[I] 2018/04/16-11:08:20.387340 7f72b96bab80 Writing into /tmp/pdlfs-test-1000/plfsio_test_benchmark/L-00000000.idx.00, buffer=2.0 MiB (2097152 Bytes)
+[I] 2018/04/16-11:08:20.387382 7f72b96bab80 Writing into /tmp/pdlfs-test-1000/plfsio_test_benchmark/L-00000000.idx.01, buffer=2.0 MiB (2097152 Bytes)
+[I] 2018/04/16-11:08:20.387413 7f72b96bab80 Writing into /tmp/pdlfs-test-1000/plfsio_test_benchmark/L-00000000.idx.02, buffer=2.0 MiB (2097152 Bytes)
+[I] 2018/04/16-11:08:20.387442 7f72b96bab80 Writing into /tmp/pdlfs-test-1000/plfsio_test_benchmark/L-00000000.idx.03, buffer=2.0 MiB (2097152 Bytes)
+Inserting data...
+0.00%[I] 2018/04/16-11:08:20.528782 7f72b74fb700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+[I] 2018/04/16-11:08:20.529046 7f72b6cfa700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+[I] 2018/04/16-11:08:20.537738 7f72b7cfc700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+[I] 2018/04/16-11:08:20.552643 7f72b64f9700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+50.00%[I] 2018/04/16-11:08:21.363850 7f72b6cfa700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.3 KiB (2385 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:21.363886 7f72b6cfa700 Compaction done: 83803 kv pairs (834840 us)
+[I] 2018/04/16-11:08:24.073308 7f72b74fb700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.4 KiB (2486 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:24.073329 7f72b74fb700 Compaction done: 83803 kv pairs (3544550 us)
+[I] 2018/04/16-11:08:24.073333 7f72b7cfc700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.4 KiB (2438 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:24.073344 7f72b7cfc700 Compaction done: 83803 kv pairs (3535608 us)
+[I] 2018/04/16-11:08:24.073502 7f72b7cfc700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+[I] 2018/04/16-11:08:24.073718 7f72b64f9700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.4 KiB (2408 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:24.073725 7f72b64f9700 Compaction done: 83803 kv pairs (3521091 us)
+[I] 2018/04/16-11:08:24.073748 7f72b64f9700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+[I] 2018/04/16-11:08:24.080064 7f72b6cfa700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+[I] 2018/04/16-11:08:24.085958 7f72b74fb700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+[I] 2018/04/16-11:08:24.819660 7f72b64f9700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.4 KiB (2453 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:24.819695 7f72b64f9700 Compaction done: 83803 kv pairs (745946 us)
+[I] 2018/04/16-11:08:27.500404 7f72b7cfc700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.4 KiB (2415 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:27.500440 7f72b7cfc700 Compaction done: 83803 kv pairs (3426938 us)
+[I] 2018/04/16-11:08:27.500491 7f72b74fb700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.4 KiB (2450 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:27.500501 7f72b74fb700 Compaction done: 83803 kv pairs (3414545 us)
+[I] 2018/04/16-11:08:27.500665 7f72b7cfc700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+[I] 2018/04/16-11:08:27.500805 7f72b6cfa700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.3 KiB (2406 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:27.500811 7f72b6cfa700 Compaction done: 83803 kv pairs (3420750 us)
+[I] 2018/04/16-11:08:27.501058 7f72b64f9700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+[I] 2018/04/16-11:08:27.505804 7f72b74fb700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+[I] 2018/04/16-11:08:27.513604 7f72b6cfa700 Compacting memtable: 4190150/4194304 Bytes (99.90%) ...
+100.00%
+[I] 2018/04/16-11:08:28.391188 7f72b7cfc700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.4 KiB (2500 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:28.391230 7f72b7cfc700 Compaction done: 83803 kv pairs (890564 us)
+[I] 2018/04/16-11:08:28.391272 7f72b7cfc700 Compacting memtable: 574100/4194304 Bytes (13.69%) ...
+[I] 2018/04/16-11:08:29.751700 7f72b64f9700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.4 KiB (2504 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:29.751719 7f72b64f9700 Compaction done: 83803 kv pairs (2250661 us)
+[I] 2018/04/16-11:08:29.752385 7f72b64f9700 Compacting memtable: 568950/4194304 Bytes (13.56%) ...
+[I] 2018/04/16-11:08:31.086522 7f72b7cfc700 	+ D: 575.6 KiB (589464 Bytes), I: 312 Bytes, F: 19.6 KiB (20100 Bytes)
+[I] 2018/04/16-11:08:31.086729 7f72b6cfa700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.4 KiB (2415 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:31.086742 7f72b6cfa700 Compaction done: 83803 kv pairs (3573140 us)
+[I] 2018/04/16-11:08:31.087102 7f72b64f9700 	+ D: 575.6 KiB (589464 Bytes), I: 317 Bytes, F: 19.5 KiB (19920 Bytes)
+[I] 2018/04/16-11:08:31.087583 7f72b74fb700 	+ D: 4.0 MiB (4224492 Bytes), I: 2.4 KiB (2449 Bytes), F: 143.2 KiB (146662 Bytes)
+[I] 2018/04/16-11:08:31.087604 7f72b74fb700 Compaction done: 83803 kv pairs (3581801 us)
+[I] 2018/04/16-11:08:31.091394 7f72b6cfa700 Compacting memtable: 528350/4194304 Bytes (12.60%) ...
+[I] 2018/04/16-11:08:31.091539 7f72b74fb700 Compacting memtable: 475600/4194304 Bytes (11.34%) ...
+[I] 2018/04/16-11:08:31.125237 7f72b7cfc700 Compaction done: 11482 kv pairs (2733950 us)
+[I] 2018/04/16-11:08:31.132233 7f72b7cfc700 Compacting memtable: 0/4194304 Bytes (0.00%) ...
+[I] 2018/04/16-11:08:31.132323 7f72b7cfc700 	+ D: 0 Bytes, I: 0 Bytes, F: 0 Bytes
+[I] 2018/04/16-11:08:31.132371 7f72b7cfc700 Compaction done: 0 kv pairs (141 us)
+[I] 2018/04/16-11:08:31.135745 7f72b64f9700 Compaction done: 11379 kv pairs (1383357 us)
+[I] 2018/04/16-11:08:31.135894 7f72b64f9700 Compacting memtable: 0/4194304 Bytes (0.00%) ...
+[I] 2018/04/16-11:08:31.135912 7f72b64f9700 	+ D: 0 Bytes, I: 0 Bytes, F: 0 Bytes
+[I] 2018/04/16-11:08:31.135925 7f72b64f9700 Compaction done: 0 kv pairs (32 us)
+[I] 2018/04/16-11:08:31.161578 7f72b74fb700 	+ D: 479.7 KiB (491220 Bytes), I: 249 Bytes, F: 16.3 KiB (16652 Bytes)
+[I] 2018/04/16-11:08:31.187402 7f72b6cfa700 	+ D: 543.7 KiB (556716 Bytes), I: 311 Bytes, F: 18.1 KiB (18499 Bytes)
+[I] 2018/04/16-11:08:31.198726 7f72b74fb700 Compaction done: 9512 kv pairs (107183 us)
+[I] 2018/04/16-11:08:31.199037 7f72b74fb700 Compacting memtable: 0/4194304 Bytes (0.00%) ...
+[I] 2018/04/16-11:08:31.199058 7f72b74fb700 	+ D: 0 Bytes, I: 0 Bytes, F: 0 Bytes
+[I] 2018/04/16-11:08:31.199071 7f72b74fb700 Compaction done: 0 kv pairs (36 us)
+[I] 2018/04/16-11:08:31.223886 7f72b6cfa700 Compaction done: 10567 kv pairs (132490 us)
+[I] 2018/04/16-11:08:31.224078 7f72b7cfc700 Compacting memtable: 0/4194304 Bytes (0.00%) ...
+[I] 2018/04/16-11:08:31.224103 7f72b7cfc700 	+ D: 0 Bytes, I: 0 Bytes, F: 0 Bytes
+[I] 2018/04/16-11:08:31.224117 7f72b7cfc700 Compaction done: 0 kv pairs (41 us)
+Done!
+----------------------------------------
+     Total Memory Usage: 67.308 MiB
+             Total Time: 11.552 s
+          User CPU Time: 9.397 s
+        System CPU Time: 0.663 s
+          Num CPU Cores: 4
+              CPU Usage: 21.8%
+               Dir Mode: ordered=Yes
+             Input Keys: pre-generated=No, pre-sorted=No
+      Batched Insertion: No
+    Indexes Compression: No
+            Blk Padding: Yes
+                 TB Fmt: SST
+                FT Type: BF (std bloom filter)
+          FT Mem Budget: 16 (bits per key)
+              BF Budget: 14 (bits per key)
+     Num Files Inserted: 1 M
+        Logic File Data: 48 MiB
+  Total MemTable Budget: 48 MiB
+      Estimated TB Size: 4.000 MiB
+        Planned FT Size: 170.666 KiB
+     Estimated Blk Size: 32 KiB (target util: 99.6%)
+Num MemTable Partitions: 4
+         Num Bg Threads: 4
+    Emulated Link Speed: 6 MiB/s (per log)
+            Write Speed: 4.155 MiB/s (observed by app)
+              Index Buf: 2 MiB (x4)
+     Min Index I/O Size: 2 MiB
+  Aggregated TB Indexes: 29.705 KiB
+          Aggregated FT: 1.750 MiB (+3.65%)
+      Final Dir Indexes: 1.781 MiB (+3.71%)
+             Index Cost: 14.244 (bits per key)
+         Compaction Buf: 4 MiB (x4)
+               Data Buf: 8 MiB
+      Min Data I/O Size: 6 MiB
+        Total User Data: 48.000 MiB (K+V)
+     Aggregated TB Data: 49.927 MiB (+4.01% due to blk encoding)
+         Final Dir Data: 50.500 MiB (+5.21% due to blk encoding and padding)
+Total Blk Encoding Cost: 20.000 (bits per key)
+           Avg I/O Size: 7.214 MiB
+                   MTBW: 1.637 s
+               Total TB: 16
+       TB Per Partition: 4.0
+           Total TB Blk: 1616
+   Total Keys Compacted: 1.0 M (0 dropped)
+             Value Size: 40 Bytes
+               Key Size: 8 Bytes

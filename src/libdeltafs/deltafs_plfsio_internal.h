@@ -154,10 +154,11 @@ class DirBuilder {
   port::CondVar* const bg_cv_;
   port::Mutex* const mu_;
   size_t ft_bits_;
-  size_t ft_bytes_;          // Target bloom filter size
-  uint32_t entries_per_tb_;  // Number of entries packed per table
-  size_t tb_bytes_;          // Target table size
-  size_t part_;              // Partition index
+  size_t ft_bytes_;       // Target bloom filter size
+  size_t buf_threshold_;  // Threshold for write buffer flush
+  size_t buf_reserv_;     // Memory reserved for each write buffer
+  size_t tb_bytes_;       // Target table size
+  size_t part_;           // Partition index
 
   // State below is protected by mutex_
   uint32_t num_flush_requested_;

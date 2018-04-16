@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -206,56 +206,37 @@ DirBuilder<T>::DirBuilder(const DirOptions& options, size_t part,
       indx_(NULL),
       opened_(false),
       refs_(0) {
-  // Determine the right table size and bloom filter size.
-  // Works best when the key and value sizes are fixed.
-  //
-  // Otherwise, if the estimated key or value sizes are greater
-  // than the real average, filter will be allocated with less bytes
-  // and there will be higher false positive rate.
-  //
-  // On the other hand, if the estimated sizes are less than
-  // the real, filter will waste memory and each
-  // write buffer will be allocated with
-  // less memory.
-  assert(buf0_.bytes_per_entry() == buf1_.bytes_per_entry());
-  size_t bytes_per_entry = buf0_.bytes_per_entry();  // Estimated memory usage
-
-  size_t total_bits_per_entry =  // Due to double buffering and filtering
-      2 * (8 * bytes_per_entry) + options_.filter_bits_per_key;
-
-  size_t memory =  // Total write buffer for each memtable partition
+  size_t memory =  // Total write buffer memory for each sub-partition
       options_.total_memtable_budget /
           static_cast<uint32_t>(1 << options_.lg_parts) -
       options_.block_batch_size;  // Reserved for compaction
 
-  // Estimated number of entries per table according to configured key size,
-  // value size, and filter size.
-  entries_per_tb_ = static_cast<uint32_t>(
-      ceil(8.0 * double(memory) / double(total_bits_per_entry)));
+  tb_bytes_ = memory / 2;  // Due to double buffering
 
-  // Memory reserved for each table.
-  // This portion of memory is part of the entire memtable budget stated in
-  // user options. The actual memory, and storage, used may differ.
-  tb_bytes_ = entries_per_tb_ * bytes_per_entry;
+  buf_threshold_ =
+      static_cast<size_t>(floor(tb_bytes_ * options_.memtable_util));
+  buf_reserv_ = static_cast<size_t>(ceil(tb_bytes_ * options_.memtable_reserv));
 
-  // Memory reserved for the filter associated with each table.
-  // This portion of memory is part of the entire memtable budget stated in
-  // user options. The actual memory, and storage, used for filters may differ.
-  ft_bits_ = entries_per_tb_ * options_.filter_bits_per_key;
+  // Estimate filter size
+  size_t entry_size = options_.key_size + options_.value_size;
+  size_t num_keys = tb_bytes_ / entry_size;
+  ft_bits_ = options_.filter_bits_per_key * num_keys;
 
   ft_bytes_ = (ft_bits_ + 7) / 8;
   ft_bits_ = ft_bytes_ * 8;
 
+  if (part == 0) {
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable.tb_size -> %d x %s",
-          2 * (1 << options_.lg_parts), PrettySize(tb_bytes_).c_str());
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable.ft_size -> %d x %s",
-          2 * (1 << options_.lg_parts), PrettySize(ft_bytes_).c_str());
+    Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable.tb_size -> %s",
+            PrettySize(tb_bytes_).c_str());
+    Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable.ft_size -> %s",
+            PrettySize(ft_bytes_).c_str());
 #endif
+  }
 
   // Allocate memory
-  buf0_.Reserve(tb_bytes_);
-  buf1_.Reserve(tb_bytes_);
+  buf0_.Reserve(buf_reserv_);
+  buf1_.Reserve(buf_reserv_);
 
   if (options_.filter == kFtNoFilter) {
     // Skip filter
@@ -395,9 +376,7 @@ Status DirBuilder<T>::Prepare(bool force /* force minor memtable flush */,
     if (!bg_status_.ok()) {
       status = bg_status_;
       break;
-    } else if (!force &&
-               mem_buf_->CurrentBufferSize() <
-                   static_cast<size_t>(tb_bytes_ * options_.memtable_util)) {
+    } else if (!force && mem_buf_->CurrentBufferSize() < buf_threshold_) {
       // There is room in current write buffer
       break;
     } else if (imm_buf_ != NULL) {
@@ -501,9 +480,10 @@ void DirBuilder<T>::CompactMemtable() {
     options_.listener->OnEvent(kCompactionStart, &event);
   }
 #if VERBOSE >= 3
-  Verbose(__LOG_ARGS__, 3, "Compacting memtable: (%d/%d Bytes) ...",
+  Verbose(__LOG_ARGS__, 3, "Compacting memtable: %d/%d Bytes (%.2f%%) ...",
           static_cast<int>(buffer->CurrentBufferSize()),
-          static_cast<int>(tb_bytes_));
+          static_cast<int>(tb_bytes_),
+          100.0 * buffer->CurrentBufferSize() / tb_bytes_);
 #ifndef NDEBUG
   const DirOutputStats stats = idxer->output_stats_;
 #endif

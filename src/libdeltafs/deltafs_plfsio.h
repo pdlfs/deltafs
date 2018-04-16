@@ -85,15 +85,18 @@ struct DirOptions {
 
   // Total memory reserved for write buffering.
   // This includes both the buffer space for memtables and the buffer space for
-  // constructing the data blocks and filter blocks of each table.
-  // This, however, does *not* include the buffer space for accumulating
-  // block writes to ensure an optimized write size.
+  // compaction. This does *NOT* include the buffer space for accumulating
+  // small writes to ensure an optimized I/O size.
   // Default: 4MB
   size_t total_memtable_budget;
 
-  // Flush memtable as soon as it reaches the specified utilization target.
-  // Default: 1 (100%)
+  // Flush memtable when its size >= memtable_size * memtable_util
+  // Default: 0.999
   double memtable_util;
+
+  // Reserve memtable_size * memtable_reserv.
+  // Default: 1.001
+  double memtable_reserv;
 
   // Always use LevelDb compatible block formats.
   // Default: true
@@ -110,10 +113,12 @@ struct DirOptions {
   bool fixed_kv_length;
 
   // Estimated key size.
+  // If not known, keep the default.
   // Default: 8 bytes
   size_t key_size;
 
   // Estimated value size.
+  // If not known, keep the default.
   // Default: 32 bytes
   size_t value_size;
 
@@ -124,9 +129,7 @@ struct DirOptions {
   // Number of bits to reserve per key for filter memory.
   // The actual amount of memory, and storage, used for each key in filters
   // may differ from the reserved memory.
-  // The reserved memory is part of the entire memtable budget. Set to 0 to
-  // avoid pre-reserving memory for filters so all filter memory will be
-  // allocated separately (no longer bounded by the budget).
+  // Set to 0 to avoid pre-reserving memory for filters.
   // Default: 0 bit
   size_t filter_bits_per_key;
 

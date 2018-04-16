@@ -29,7 +29,8 @@ IoStats::IoStats() : index_bytes(0), index_ops(0), data_bytes(0), data_ops(0) {}
 
 DirOptions::DirOptions()
     : total_memtable_budget(4 << 20),
-      memtable_util(1.0),
+      memtable_util(0.999),
+      memtable_reserv(1.001),
       leveldb_compatible(true),
       skip_sort(false),
       fixed_kv_length(false),
@@ -1194,6 +1195,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
           PrettySize(options.total_memtable_budget).c_str());
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_util -> %.2f%%",
           100 * options.memtable_util);
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable_reserv -> %.2f%%",
+          100 * options.memtable_reserv);
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.leveldb_compatible -> %s",
           int(options.leveldb_compatible) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.skip_sort -> %s",
