@@ -223,9 +223,9 @@ DirBuilder<T>::DirBuilder(const DirOptions& options, size_t part,
 
   if (part == 0) {
 #if VERBOSE >= 2
-    Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable.tb_size -> %s",
+    Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.internal.tb_size -> %s",
             PrettySize(tb_bytes_).c_str());
-    Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.memtable.ft_size -> %s",
+    Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.internal.ft_size -> %s",
             PrettySize(ft_bytes_).c_str());
 #endif
   }
