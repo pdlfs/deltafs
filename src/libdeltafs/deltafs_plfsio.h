@@ -91,11 +91,11 @@ struct DirOptions {
   size_t total_memtable_budget;
 
   // Flush memtable when its size >= memtable_size * memtable_util
-  // Default: 0.999
+  // Default: 0.97 (97%)
   double memtable_util;
 
   // Reserve memtable_size * memtable_reserv.
-  // Default: 1.001
+  // Default: 1.00 (100%)
   double memtable_reserv;
 
   // Always use LevelDb compatible block formats.

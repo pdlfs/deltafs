@@ -29,8 +29,8 @@ IoStats::IoStats() : index_bytes(0), index_ops(0), data_bytes(0), data_ops(0) {}
 
 DirOptions::DirOptions()
     : total_memtable_budget(4 << 20),
-      memtable_util(0.999),
-      memtable_reserv(1.001),
+      memtable_util(0.97),
+      memtable_reserv(1.00),
       leveldb_compatible(true),
       skip_sort(false),
       fixed_kv_length(false),
