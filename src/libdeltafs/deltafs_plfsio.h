@@ -402,10 +402,6 @@ class DirWriter {
   // REQUIRES: Finish() has not been called.
   virtual Status EpochFlush(int epoch = -1) = 0;
 
-  // Wait for one background compaction to finish if there is any.
-  // Return OK on success, or a non-OK status on errors.
-  virtual Status WaitForOne() = 0;
-
   // Wait for all on-going background compactions to finish.
   // Return OK on success, or a non-OK status on errors.
   virtual Status Wait() = 0;

@@ -301,7 +301,6 @@ class DirWriterImpl : public DirWriter {
   virtual uint64_t TEST_key_bytes() const;
   virtual uint64_t TEST_value_bytes() const;
 
-  virtual Status WaitForOne();
   virtual Status Wait();
   virtual Status Write(BatchCursor* cursor, int epoch);
   virtual Status Append(const Slice& fid, const Slice& data, int epoch);
@@ -514,14 +513,12 @@ Status DirWriterImpl<T>::ObtainCompactionStatus() {
 template <typename T>
 bool DirWriterImpl<T>::HasCompaction() {
   mutex_.AssertHeld();
-  bool result = false;
   for (size_t i = 0; i < num_parts_; i++) {
     if (idxers_[i]->has_bg_compaction()) {
-      result = true;
-      break;
+      return true;
     }
   }
-  return result;
+  return false;
 }
 
 template <typename T>
@@ -848,35 +845,14 @@ Status DirWriterImpl<T>::TryAppend(const Slice& fid, const Slice& data) {
   return status;
 }
 
-// Wait for an on-going compaction to finish if there is any.
-// Return OK on success, or a non-OK status on errors.
-template <typename T>
-Status DirWriterImpl<T>::WaitForOne() {
-  Status status;
-  MutexLock ml(&mutex_);
-  if (!finished_) {
-    if (HasCompaction()) {
-      bg_cv_.Wait();
-    }
-    status = ObtainCompactionStatus();
-  } else {
-    status = finish_status_;
-  }
-  return status;
-}
-
 // Wait for all on-going compactions to finish.
 // Return OK on success, or a non-OK status on errors.
 template <typename T>
 Status DirWriterImpl<T>::Wait() {
   Status status;
   MutexLock ml(&mutex_);
-  if (!finished_) {
-    status = WaitForCompaction();
-  } else {
-    status = finish_status_;
-  }
-  return status;
+  if (!finished_) return WaitForCompaction();
+  return finish_status_;
 }
 
 template <typename T>
