@@ -917,7 +917,7 @@ uint32_t DirWriterImpl<T>::TEST_num_keys() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += idxers_[i]->num_keys();
+    result += compaction_stats_[i]->total_num_keys_;
   }
   return result;
 }
@@ -927,7 +927,7 @@ uint32_t DirWriterImpl<T>::TEST_num_dropped_keys() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += idxers_[i]->num_dropped_keys();
+    result += compaction_stats_[i]->total_num_dropped_keys_;
   }
   return result;
 }
@@ -937,7 +937,7 @@ uint32_t DirWriterImpl<T>::TEST_num_data_blocks() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += idxers_[i]->num_data_blocks();
+    result += compaction_stats_[i]->total_num_blocks_;
   }
   return result;
 }
@@ -947,7 +947,7 @@ uint32_t DirWriterImpl<T>::TEST_num_sstables() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += idxers_[i]->num_tables();
+    result += compaction_stats_[i]->total_num_tables_;
   }
   return result;
 }
@@ -1153,7 +1153,7 @@ Status DirWriter::TryDirOpen(T* impl) {
       diridxers[i]->Ref();
       if (status.ok()) {
         diridxers[i]->Open(data[0], index[i]);
-        const DirOutputStats* os = diridxers[i]->output_stats();
+        const DirOutputStats* os = &diridxers[i]->stats_;
         output_stats.push_back(os);
       } else {
         break;

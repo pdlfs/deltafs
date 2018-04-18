@@ -118,16 +118,10 @@ class DirIndexer {
 
  private:
   WritableFileStats io_stats_;
+  DirOutputStats stats_;
 
-  // Report compaction stats
-  const DirOutputStats* output_stats() const { return &bu_->output_stats_; }
-
-  uint32_t num_keys() const { return bu_->total_num_keys_; }
-  uint32_t num_dropped_keys() const { return bu_->total_num_dropped_keys_; }
-
-  uint32_t num_data_blocks() const { return bu_->total_num_blocks_; }
-  uint32_t num_tables() const { return bu_->total_num_tables_; }
-  uint32_t num_epochs() const { return bu_->num_epochs_; }
+  // Return the number of epochs generated so far.
+  uint32_t num_epochs() const;
 
   // Report memory configurations and usage
   size_t estimated_sstable_size() const { return tb_bytes_; }

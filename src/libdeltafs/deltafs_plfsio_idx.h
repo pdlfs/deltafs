@@ -52,6 +52,11 @@ extern Iterator* OpenDirBlock  // Use options to determine block formats
 struct DirOutputStats {  // All final sizes include padding and block trailers
   DirOutputStats();
 
+  uint32_t total_num_keys_;
+  uint32_t total_num_dropped_keys_;
+  uint32_t total_num_blocks_;
+  uint32_t total_num_tables_;
+
   // Total size of data blocks
   size_t final_data_size;
   size_t data_size;
@@ -77,12 +82,12 @@ struct DirOutputStats {  // All final sizes include padding and block trailers
 // files.
 class DirBuilder {
  public:
-  explicit DirBuilder(const DirOptions& options);
+  explicit DirBuilder(const DirOptions& options, DirOutputStats* stats);
   virtual ~DirBuilder();
 
   // Return a new indexer according to the given options.
-  static DirBuilder* Open(const DirOptions& options, LogSink* data,
-                          LogSink* indx);
+  static DirBuilder* Open(const DirOptions& options, DirOutputStats* stats,
+                          LogSink* data, LogSink* indx);
 
   virtual void Add(const Slice& key, const Slice& value) = 0;
 
@@ -103,7 +108,7 @@ class DirBuilder {
  protected:
   const DirOptions& options_;
   // Bytes generated for indexes, filters, formatted data, etc
-  DirOutputStats output_stats_;
+  DirOutputStats* stats_;
   Status status_;
 
   bool ok() const { return status_.ok(); }
@@ -112,11 +117,6 @@ class DirBuilder {
   template <typename T>
   friend class DirIndexer;
 
-  // Indexing counters
-  uint32_t total_num_keys_;
-  uint32_t total_num_dropped_keys_;
-  uint32_t total_num_blocks_;
-  uint32_t total_num_tables_;
   uint32_t num_tables_;  // Number of tables generated within the current epoch
   uint32_t num_epochs_;  // Total number of epochs generated
 

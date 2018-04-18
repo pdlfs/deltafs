@@ -17,7 +17,11 @@ namespace pdlfs {
 namespace plfsio {
 
 DirOutputStats::DirOutputStats()
-    : final_data_size(0),
+    : total_num_keys_(0),
+      total_num_dropped_keys_(0),
+      total_num_blocks_(0),
+      total_num_tables_(0),
+      final_data_size(0),
       data_size(0),
       final_meta_index_size(0),
       meta_index_size(0),
@@ -28,14 +32,8 @@ DirOutputStats::DirOutputStats()
       value_size(0),
       key_size(0) {}
 
-DirBuilder::DirBuilder(const DirOptions& options)
-    : options_(options),
-      total_num_keys_(0),
-      total_num_dropped_keys_(0),
-      total_num_blocks_(0),
-      total_num_tables_(0),
-      num_tables_(0),
-      num_epochs_(0) {}
+DirBuilder::DirBuilder(const DirOptions& options, DirOutputStats* stats)
+    : options_(options), stats_(stats), num_tables_(0), num_epochs_(0) {}
 
 DirBuilder::~DirBuilder() {}
 
@@ -279,7 +277,8 @@ Iterator* ArrayBlock::NewIterator(const Comparator* comparator) {
 template <typename T = TreeBlockBuilder>
 class DirBuilderImpl : public DirBuilder {
  public:
-  DirBuilderImpl(const DirOptions& options, LogSink* data, LogSink* indx);
+  DirBuilderImpl(const DirOptions& options, DirOutputStats* stats,
+                 LogSink* data, LogSink* indx);
   virtual ~DirBuilderImpl();
 
   virtual void Add(const Slice& key, const Slice& value);
@@ -341,9 +340,10 @@ class DirBuilderImpl : public DirBuilder {
 };
 
 template <typename T>
-DirBuilderImpl<T>::DirBuilderImpl(const DirOptions& options, LogSink* data,
+DirBuilderImpl<T>::DirBuilderImpl(const DirOptions& options,
+                                  DirOutputStats* stats, LogSink* data,
                                   LogSink* indx)
-    : DirBuilder(options),
+    : DirBuilder(options, stats),
       num_uncommitted_indx_(0),
       num_uncommitted_data_(0),
       pending_restart_(false),
@@ -414,8 +414,8 @@ void DirBuilderImpl<T>::MakeEpoch() {
     const uint64_t meta_index_size = meta_index_contents.size();
     const uint64_t final_meta_index_size =
         meta_index_handle.size() + kBlockTrailerSize;
-    output_stats_.final_meta_index_size += final_meta_index_size;
-    output_stats_.meta_index_size += meta_index_size;
+    stats_->final_meta_index_size += final_meta_index_size;
+    stats_->meta_index_size += meta_index_size;
   } else {
     return;  // Abort
   }
@@ -496,8 +496,8 @@ void DirBuilderImpl<T>::EndTable(const Slice& filter_contents,
   if (ok()) {
     const uint64_t index_size = index_contents.size();
     const uint64_t final_index_size = index_handle.size() + kBlockTrailerSize;
-    output_stats_.final_index_size += final_index_size;
-    output_stats_.index_size += index_size;
+    stats_->final_index_size += final_index_size;
+    stats_->index_size += index_size;
   } else {
     return;  // Abort
   }
@@ -509,8 +509,8 @@ void DirBuilderImpl<T>::EndTable(const Slice& filter_contents,
       const uint64_t filter_size = filter_contents.size();
       const uint64_t final_filter_size =
           filter_handle.size() + kBlockTrailerSize;
-      output_stats_.final_filter_size += final_filter_size;
-      output_stats_.filter_size += filter_size;
+      stats_->final_filter_size += final_filter_size;
+      stats_->filter_size += filter_size;
     } else {
       return;  // Abort
     }
@@ -544,10 +544,10 @@ void DirBuilderImpl<T>::EndTable(const Slice& filter_contents,
   }
 
   if (ok()) {
+    stats_->total_num_tables_++;
     smallest_key_.clear();
     largest_key_.clear();
     last_key_.clear();
-    total_num_tables_++;
     num_tables_++;
   }
 }
@@ -645,17 +645,17 @@ void DirBuilderImpl<T>::EndBlock() {
   const size_t final_block_size = final_block_contents.size();
   const uint64_t block_offset =
       data_block_.buffer_store()->size() - final_block_size;
-  output_stats_.final_data_size += final_block_size;
-  output_stats_.data_size += block_size;
+  stats_->final_data_size += final_block_size;
+  stats_->data_size += block_size;
 
   if (ok()) {
+    stats_->total_num_blocks_++;
     pending_restart_ = true;
     pending_indx_handle_.set_size(block_size);
     pending_indx_handle_.set_offset(block_offset);
     assert(!pending_indx_entry_);
     pending_indx_entry_ = true;
     num_uncommitted_data_++;
-    total_num_blocks_++;
   }
 }
 
@@ -677,7 +677,7 @@ void DirBuilderImpl<T>::Add(const Slice& key, const Slice& value) {
       assert(key >= last_key_);
       if (options_.mode == kDmUniqueDrop) {  // Ignore duplicates
         if (key == last_key_) {
-          total_num_dropped_keys_++;
+          stats_->total_num_dropped_keys_++;
           return;  // Drop it
         }
       } else if (IsKeyUnique(options_.mode)) {
@@ -718,8 +718,8 @@ void DirBuilderImpl<T>::Add(const Slice& key, const Slice& value) {
   }
 
   last_key_ = key.ToString();
-  output_stats_.value_size += value.size();
-  output_stats_.key_size += key.size();
+  stats_->value_size += value.size();
+  stats_->key_size += key.size();
 #ifndef NDEBUG
   if (options_.mode == kDmUniqueKey) {
     assert(keys_.count(last_key_) == 0);
@@ -728,7 +728,7 @@ void DirBuilderImpl<T>::Add(const Slice& key, const Slice& value) {
 #endif
 
   data_block_.Add(key, value);
-  total_num_keys_++;
+  stats_->total_num_keys_++;
   if (IsKeyUnOrdered(options_.mode)) {
     return;  // Force one block per table
   }
@@ -766,8 +766,8 @@ Status DirBuilderImpl<T>::Finish() {
     const uint64_t root_index_size = root_index_contents.size();
     const uint64_t final_root_index_size =
         root_index_handle.size() + kBlockTrailerSize;
-    output_stats_.final_meta_index_size += final_root_index_size;
-    output_stats_.meta_index_size += root_index_size;
+    stats_->final_meta_index_size += final_root_index_size;
+    stats_->meta_index_size += root_index_size;
   } else {
     return status_;
   }
@@ -792,15 +792,17 @@ size_t DirBuilderImpl<T>::memory_usage() const {
   return result;
 }
 
-DirBuilder* DirBuilder::Open  // Use options to determine a block format
-    (const DirOptions& options, LogSink* data, LogSink* indx) {
+// Use options to determine block formats.
+// Directly return the builder instance. This call won't fail.
+DirBuilder* DirBuilder::Open(const DirOptions& options, DirOutputStats* stats,
+                             LogSink* data, LogSink* indx) {
   if (!options.leveldb_compatible) {
     if (options.fixed_kv_length) {
-      return new DirBuilderImpl<ArrayBlockBuilder>(options, data, indx);
+      return new DirBuilderImpl<ArrayBlockBuilder>(options, stats, data, indx);
     }
   }
 
-  return new DirBuilderImpl<>(options, data, indx);
+  return new DirBuilderImpl<>(options, stats, data, indx);
 }
 
 namespace {
