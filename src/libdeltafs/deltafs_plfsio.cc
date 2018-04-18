@@ -1153,7 +1153,7 @@ Status DirWriter::TryDirOpen(T* impl) {
       diridxers[i]->Ref();
       if (status.ok()) {
         diridxers[i]->Open(data[0], index[i]);
-        const DirOutputStats* os = &diridxers[i]->stats_;
+        const DirOutputStats* os = &diridxers[i]->compac_stats_;
         output_stats.push_back(os);
       } else {
         break;
