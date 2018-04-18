@@ -343,7 +343,7 @@ class DirWriterImpl : public DirWriter {
   bool finished_;  // If Finish() has been called
   WritableFileStats io_stats_;
   const DirOutputStats** compaction_stats_;
-  DirBuilder<T>** bu_;
+  DirIndexer<T>** idxers_;
   LogSink* data_;
   Env* env_;
 };
@@ -360,7 +360,7 @@ DirWriterImpl<T>::DirWriterImpl(const DirOptions& o, const std::string& d)
       num_flushes_(0),
       has_pending_flush_(false),
       finished_(false),
-      bu_(NULL),
+      idxers_(NULL),
       data_(NULL),
       env_(options_.env) {}
 
@@ -368,12 +368,12 @@ template <typename T>
 DirWriterImpl<T>::~DirWriterImpl() {
   MutexLock l(&mutex_);
   for (size_t i = 0; i < num_parts_; i++) {
-    if (bu_[i] != NULL) {
-      bu_[i]->Unref();
+    if (idxers_[i] != NULL) {
+      idxers_[i]->Unref();
     }
   }
   delete[] compaction_stats_;
-  delete[] bu_;
+  delete[] idxers_;
   if (data_ != NULL) {
     data_->Unref();
   }
@@ -452,9 +452,9 @@ Status DirWriterImpl<T>::InstallDirInfo(const std::string& footer) {
 template <typename T>
 Status DirWriterImpl<T>::Finalize() {
   mutex_.AssertHeld();
-  const uint32_t num_epochs = bu_[0]->num_epochs();
+  const uint32_t num_epochs = idxers_[0]->num_epochs();
   for (uint32_t i = 1; i < num_parts_; i++)
-    assert(num_epochs == bu_[i]->num_epochs());
+    assert(num_epochs == idxers_[i]->num_epochs());
   mutex_.Unlock();  // Unlock during i/o operations
 
   Footer footer = Mkfoot(options_);
@@ -480,7 +480,7 @@ Status DirWriterImpl<T>::Finalize() {
 
   if (status.ok()) {
     for (size_t i = 0; i < num_parts_; i++) {
-      status = bu_[i]->SyncAndClose();
+      status = idxers_[i]->SyncAndClose();
       if (!status.ok()) {
         break;
       }
@@ -503,7 +503,7 @@ Status DirWriterImpl<T>::ObtainCompactionStatus() {
   mutex_.AssertHeld();
   Status status;
   for (size_t i = 0; i < num_parts_; i++) {
-    status = bu_[i]->bg_status();
+    status = idxers_[i]->bg_status();
     if (!status.ok()) {
       break;
     }
@@ -516,7 +516,7 @@ bool DirWriterImpl<T>::HasCompaction() {
   mutex_.AssertHeld();
   bool result = false;
   for (size_t i = 0; i < num_parts_; i++) {
-    if (bu_[i]->has_bg_compaction()) {
+    if (idxers_[i]->has_bg_compaction()) {
       result = true;
       break;
     }
@@ -554,7 +554,7 @@ Status DirWriterImpl<T>::TryBatchWrites(BatchCursor* cursor) {
     const uint32_t hash = Hash(fid.data(), fid.size(), 0);
     const uint32_t part = hash & part_mask_;
     assert(part < num_parts_);
-    status = bu_[part]->Add(fid, cursor->data());
+    status = idxers_[part]->Add(fid, cursor->data());
 
     if (status.IsBufferFull()) {
       // Try again later
@@ -585,7 +585,7 @@ Status DirWriterImpl<T>::TryBatchWrites(BatchCursor* cursor) {
         for (; it != queue[i].end(); ++it) {
           cursor->Seek(*it);
           if (cursor->Valid()) {
-            status = bu_[i]->Add(cursor->fid(), cursor->data());
+            status = idxers_[i]->Add(cursor->fid(), cursor->data());
           } else {
             status = cursor->status();
           }
@@ -624,11 +624,11 @@ Status DirWriterImpl<T>::TryFlush(bool ef, bool fi) {
   mutex_.AssertHeld();
   assert(has_pending_flush_);
   Status status;
-  std::vector<DirBuilder<T>*> remaining;
-  for (size_t i = 0; i < num_parts_; i++) remaining.push_back(bu_[i]);
-  std::vector<DirBuilder<T>*> waiting_list;
+  std::vector<DirIndexer<T>*> remaining;
+  for (size_t i = 0; i < num_parts_; i++) remaining.push_back(idxers_[i]);
+  std::vector<DirIndexer<T>*> waiting_list;
 
-  typename DirBuilder<T>::FlushOptions flush_options(ef, fi);
+  typename DirIndexer<T>::FlushOptions flush_options(ef, fi);
   while (!remaining.empty()) {
     waiting_list.clear();
     for (size_t i = 0; i < remaining.size(); i++) {
@@ -844,7 +844,7 @@ Status DirWriterImpl<T>::TryAppend(const Slice& fid, const Slice& data) {
   const uint32_t hash = Hash(fid.data(), fid.size(), 0);
   const uint32_t part = hash & part_mask_;
   assert(part < num_parts_);
-  status = bu_[part]->Add(fid, data);
+  status = idxers_[part]->Add(fid, data);
   return status;
 }
 
@@ -884,8 +884,8 @@ IoStats DirWriterImpl<T>::GetIoStats() const {
   MutexLock ml(&mutex_);
   IoStats result;
   for (size_t i = 0; i < num_parts_; i++) {
-    result.index_bytes += bu_[i]->io_stats_.TotalBytes();
-    result.index_ops += bu_[i]->io_stats_.TotalOps();
+    result.index_bytes += idxers_[i]->io_stats_.TotalBytes();
+    result.index_ops += idxers_[i]->io_stats_.TotalOps();
   }
   result.data_bytes = io_stats_.TotalBytes();
   result.data_ops = io_stats_.TotalOps();
@@ -896,7 +896,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_estimated_sstable_size() const {
   MutexLock ml(&mutex_);
   if (num_parts_ != 0) {
-    return bu_[0]->estimated_sstable_size();
+    return idxers_[0]->estimated_sstable_size();
   } else {
     return 0;
   }
@@ -906,7 +906,7 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_planned_filter_size() const {
   MutexLock ml(&mutex_);
   if (num_parts_ != 0) {
-    return bu_[0]->planned_filter_size();
+    return idxers_[0]->planned_filter_size();
   } else {
     return 0;
   }
@@ -917,7 +917,7 @@ uint32_t DirWriterImpl<T>::TEST_num_keys() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += bu_[i]->num_keys();
+    result += idxers_[i]->num_keys();
   }
   return result;
 }
@@ -927,7 +927,7 @@ uint32_t DirWriterImpl<T>::TEST_num_dropped_keys() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += bu_[i]->num_dropped_keys();
+    result += idxers_[i]->num_dropped_keys();
   }
   return result;
 }
@@ -937,7 +937,7 @@ uint32_t DirWriterImpl<T>::TEST_num_data_blocks() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += bu_[i]->num_data_blocks();
+    result += idxers_[i]->num_data_blocks();
   }
   return result;
 }
@@ -947,7 +947,7 @@ uint32_t DirWriterImpl<T>::TEST_num_sstables() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += bu_[i]->num_tables();
+    result += idxers_[i]->num_tables();
   }
   return result;
 }
@@ -956,10 +956,10 @@ template <typename T>
 uint64_t DirWriterImpl<T>::TEST_total_memory_usage() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) result += bu_[i]->memory_usage();
+  for (size_t i = 0; i < num_parts_; i++) result += idxers_[i]->memory_usage();
   result += data_->buffer_store()->capacity();
   for (size_t i = 0; i < num_parts_; i++) {
-    result += bu_[i]->indx_->buffer_store()->capacity();
+    result += idxers_[i]->indx_->buffer_store()->capacity();
   }
   return result;
 }
@@ -1122,7 +1122,7 @@ Status DirWriter::TryDirOpen(T* impl) {
     env->CreateDir(impl->dirname_.c_str());
   }
 
-  std::vector<DirBuilder<typename T::FilterType>*> builders(num_parts, NULL);
+  std::vector<DirIndexer<typename T::FilterType>*> diridxers(num_parts, NULL);
   std::vector<LogSink*> index(num_parts, NULL);
   std::vector<LogSink*> data(1, NULL);  // Shared among all partitions
   std::vector<const DirOutputStats*> output_stats;
@@ -1138,22 +1138,22 @@ Status DirWriter::TryDirOpen(T* impl) {
   status = LogSink::Open(io_opts, impl->dirname_, &data[0]);
   if (status.ok()) {
     for (size_t i = 0; i < num_parts; i++) {
-      builders[i] = new DirBuilder<typename T::FilterType>(
+      diridxers[i] = new DirIndexer<typename T::FilterType>(
           impl->options_, i, &impl->mutex_, &impl->bg_cv_);
       LogSink::LogOptions idx_opts;
       idx_opts.rank = my_rank;
       idx_opts.sub_partition = static_cast<int>(i);
       idx_opts.type = kIdxIoType;
-      if (options->measure_writes) idx_opts.stats = &builders[i]->io_stats_;
+      if (options->measure_writes) idx_opts.stats = &diridxers[i]->io_stats_;
       idx_opts.mu = NULL;
       idx_opts.min_buf = options->min_index_buffer;
       idx_opts.max_buf = options->index_buffer;
       idx_opts.env = env;
       status = LogSink::Open(idx_opts, impl->dirname_, &index[i]);
-      builders[i]->Ref();
+      diridxers[i]->Ref();
       if (status.ok()) {
-        builders[i]->Open(data[0], index[i]);
-        const DirOutputStats* os = builders[i]->output_stats();
+        diridxers[i]->Open(data[0], index[i]);
+        const DirOutputStats* os = diridxers[i]->output_stats();
         output_stats.push_back(os);
       } else {
         break;
@@ -1163,24 +1163,24 @@ Status DirWriter::TryDirOpen(T* impl) {
 
   if (status.ok()) {
     const DirOutputStats** compac_stats = new const DirOutputStats*[num_parts];
-    DirBuilder<typename T::FilterType>** bu =
-        new DirBuilder<typename T::FilterType>*[num_parts];
+    DirIndexer<typename T::FilterType>** idxers =
+        new DirIndexer<typename T::FilterType>*[num_parts];
     for (size_t i = 0; i < num_parts; i++) {
-      assert(builders[i] != NULL);
+      assert(diridxers[i] != NULL);
       compac_stats[i] = output_stats[i];
-      bu[i] = builders[i];
-      bu[i]->Ref();
+      idxers[i] = diridxers[i];
+      idxers[i]->Ref();
     }
     impl->data_ = data[0];
     impl->data_->Ref();
     impl->compaction_stats_ = compac_stats;
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
-    impl->bu_ = bu;
+    impl->idxers_ = idxers;
   }
 
   for (size_t i = 0; i < num_parts; i++) {
-    if (builders[i] != NULL) builders[i]->Unref();
+    if (diridxers[i] != NULL) diridxers[i]->Unref();
     if (index[i] != NULL) index[i]->Unref();
     if (i < data.size()) {
       if (data[i] != NULL) {

@@ -180,8 +180,8 @@ size_t WriteBuffer::memory_usage() const {
 }
 
 template <typename T>
-DirBuilder<T>::DirBuilder(const DirOptions& options, size_t part,
-                          port::Mutex* mu, port::CondVar* cv)
+DirIndexer<T>::DirIndexer(const DirOptions& options, size_t part,
+                              port::Mutex* mu, port::CondVar* cv)
     : options_(options),
       bg_cv_(cv),
       mu_(mu),
@@ -197,7 +197,7 @@ DirBuilder<T>::DirBuilder(const DirOptions& options, size_t part,
       imm_buf_is_final_(false),
       buf0_(options),
       buf1_(options),
-      idxer_(NULL),
+      bu_(NULL),
       data_(NULL),
       indx_(NULL),
       opened_(false),
@@ -247,19 +247,19 @@ DirBuilder<T>::DirBuilder(const DirOptions& options, size_t part,
 }
 
 template <typename T>
-DirBuilder<T>::~DirBuilder() {
+DirIndexer<T>::~DirIndexer() {
   mu_->AssertHeld();
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
-  delete idxer_;
+  delete bu_;
   if (data_ != NULL) data_->Unref();
   if (indx_ != NULL) indx_->Unref();
   delete filter_;
 }
 
 template <typename T>
-Status DirBuilder<T>::Open(LogSink* data, LogSink* indx) {
+Status DirIndexer<T>::Open(LogSink* data, LogSink* indx) {
   // Open() has not been called before
   assert(!opened_);
   opened_ = true;
@@ -268,21 +268,21 @@ Status DirBuilder<T>::Open(LogSink* data, LogSink* indx) {
 
   data_->Ref();
   indx_->Ref();
-  idxer_ = DirIndexer::Open(options_, data, indx);
+  bu_ = DirBuilder::Open(options_, data, indx);
 
   return Status::OK();
 }
 
 // True iff there is an on-going background compaction.
 template <typename T>
-bool DirBuilder<T>::has_bg_compaction() {
+bool DirIndexer<T>::has_bg_compaction() {
   mu_->AssertHeld();
   return has_bg_compaction_;
 }
 
 // Report background compaction status.
 template <typename T>
-Status DirBuilder<T>::bg_status() {
+Status DirIndexer<T>::bg_status() {
   mu_->AssertHeld();
   return bg_status_;
 }
@@ -292,7 +292,7 @@ Status DirBuilder<T>::bg_status() {
 // de-referenced by the last opener. Optionally, a caller may force data
 // sync and pre-closing all log files.
 template <typename T>
-Status DirBuilder<T>::SyncAndClose() {
+Status DirIndexer<T>::SyncAndClose() {
   Status status;
   if (!opened_) return status;
   assert(data_ != NULL);
@@ -313,7 +313,7 @@ Status DirBuilder<T>::SyncAndClose() {
 // options_.non_blocking is set. After a compaction has been scheduled,
 // **wait** until it finishes unless no_wait has been set.
 template <typename T>
-Status DirBuilder<T>::Flush(const FlushOptions& flush_options) {
+Status DirIndexer<T>::Flush(const FlushOptions& flush_options) {
   mu_->AssertHeld();
   assert(opened_);
   // Wait for buffer space
@@ -346,7 +346,7 @@ Status DirBuilder<T>::Flush(const FlushOptions& flush_options) {
 }
 
 template <typename T>
-Status DirBuilder<T>::Add(const Slice& key, const Slice& value) {
+Status DirIndexer<T>::Add(const Slice& key, const Slice& value) {
   mu_->AssertHeld();
   assert(opened_);
   Status status = Prepare();
@@ -362,9 +362,9 @@ Status DirBuilder<T>::Add(const Slice& key, const Slice& value) {
 }
 
 template <typename T>
-Status DirBuilder<T>::Prepare(bool force /* force minor memtable flush */,
-                              bool epoch_flush /* force epoch flush */,
-                              bool finalize) {
+Status DirIndexer<T>::Prepare(bool force /* force minor memtable flush */,
+                                bool epoch_flush /* force epoch flush */,
+                                bool finalize) {
   mu_->AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
@@ -407,7 +407,7 @@ Status DirBuilder<T>::Prepare(bool force /* force minor memtable flush */,
 }
 
 template <typename T>
-void DirBuilder<T>::MaybeScheduleCompaction() {
+void DirIndexer<T>::MaybeScheduleCompaction() {
   mu_->AssertHeld();
 
   // Do not schedule more if we are in error status
@@ -426,23 +426,23 @@ void DirBuilder<T>::MaybeScheduleCompaction() {
   has_bg_compaction_ = true;
 
   if (options_.compaction_pool != NULL) {
-    options_.compaction_pool->Schedule(DirBuilder::BGWork, this);
+    options_.compaction_pool->Schedule(DirIndexer::BGWork, this);
   } else if (options_.allow_env_threads) {
-    Env::Default()->Schedule(DirBuilder::BGWork, this);
+    Env::Default()->Schedule(DirIndexer::BGWork, this);
   } else {
     DoCompaction();
   }
 }
 
 template <typename T>
-void DirBuilder<T>::BGWork(void* arg) {
-  DirBuilder* ins = reinterpret_cast<DirBuilder*>(arg);
+void DirIndexer<T>::BGWork(void* arg) {
+  DirIndexer* ins = reinterpret_cast<DirIndexer*>(arg);
   MutexLock ml(ins->mu_);
   ins->DoCompaction();
 }
 
 template <typename T>
-void DirBuilder<T>::DoCompaction() {
+void DirIndexer<T>::DoCompaction() {
   mu_->AssertHeld();
   assert(has_bg_compaction_);
   assert(imm_buf_ != NULL);
@@ -458,14 +458,14 @@ void DirBuilder<T>::DoCompaction() {
 }
 
 template <typename T>
-void DirBuilder<T>::CompactMemtable() {
+void DirIndexer<T>::CompactMemtable() {
   mu_->AssertHeld();
   WriteBuffer* const buffer = imm_buf_;
   assert(buffer != NULL);
   const bool is_final = imm_buf_is_final_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   const bool is_forced = imm_buf_is_forced_;
-  DirIndexer* const idxer = idxer_;
+  DirBuilder* const bu = bu_;
   T* const ft = filter_;
   mu_->Unlock();
   const uint64_t start = GetCurrentTimeMicros();
@@ -482,7 +482,7 @@ void DirBuilder<T>::CompactMemtable() {
           static_cast<int>(tb_bytes_),
           100.0 * buffer->CurrentBufferSize() / tb_bytes_);
 #ifndef NDEBUG
-  const DirOutputStats stats = idxer->output_stats_;
+  const DirOutputStats stats = bu->output_stats_;
 #endif
 #endif  // VERBOSE
 #ifndef NDEBUG
@@ -505,37 +505,36 @@ void DirBuilder<T>::CompactMemtable() {
     if (ft != NULL) {
       ft->AddKey(iter->key());
     }
-    idxer->Add(iter->key(), iter->value());
-    if (!idxer->ok()) {
+    bu->Add(iter->key(), iter->value());
+    if (!bu->ok()) {
       break;
     }
   }
 
-  if (idxer->ok()) {
+  if (bu->ok()) {
     // Double checks
     assert(num_keys == buffer->NumEntries());
     // Inject the filter into the table
     Slice fc = (ft != NULL) ? ft->Finish() : Slice();
-    idxer->EndTable(fc, static_cast<ChunkType>(T::chunk_type()));
+    bu->EndTable(fc, static_cast<ChunkType>(T::chunk_type()));
 #if VERBOSE >= 3
 #ifndef NDEBUG
     Verbose(
         __LOG_ARGS__, 3, "\t+ D: %s, I: %s, F: %s",
-        PrettySize(idxer->output_stats_.final_data_size - stats.final_data_size)
+        PrettySize(bu->output_stats_.final_data_size - stats.final_data_size)
             .c_str(),
-        PrettySize(idxer->output_stats_.final_index_size -
-                   stats.final_index_size)
+        PrettySize(bu->output_stats_.final_index_size - stats.final_index_size)
             .c_str(),
-        PrettySize(idxer->output_stats_.final_filter_size -
+        PrettySize(bu->output_stats_.final_filter_size -
                    stats.final_filter_size)
             .c_str());
 #endif
 #endif  // VERBOSE
     if (is_epoch_flush) {
-      idxer->MakeEpoch();
+      bu->MakeEpoch();
     }
     if (is_final) {
-      idxer->Finish();
+      bu->Finish();
     }
   }
 
@@ -553,7 +552,7 @@ void DirBuilder<T>::CompactMemtable() {
           static_cast<int>(end - start));
 #endif
 
-  Status status = idxer->status();
+  Status status = bu->status();
   delete iter;
   mu_->Lock();
   bg_status_ = status;
@@ -563,14 +562,14 @@ void DirBuilder<T>::CompactMemtable() {
 }
 
 template <typename T>
-size_t DirBuilder<T>::memory_usage() const {
+size_t DirIndexer<T>::memory_usage() const {
   mu_->AssertHeld();
   if (opened_) {
     size_t result = 0;
     result += buf0_.memory_usage();
     result += buf1_.memory_usage();
     if (filter_ != NULL) result += filter_->memory_usage();
-    result += idxer_->memory_usage();
+    result += bu_->memory_usage();
     return result;
   } else {
     return 0;
@@ -578,17 +577,17 @@ size_t DirBuilder<T>::memory_usage() const {
 }
 
 // Initialize all potential filter templates
-template class DirBuilder<BloomBlock>;
+template class DirIndexer<BloomBlock>;
 
-template class DirBuilder<BitmapBlock<UncompressedFormat> >;
-template class DirBuilder<BitmapBlock<FastVbPlusFormat> >;
-template class DirBuilder<BitmapBlock<VbPlusFormat> >;
-template class DirBuilder<BitmapBlock<VbFormat> >;
-template class DirBuilder<BitmapBlock<FastPfDeltaFormat> >;
-template class DirBuilder<BitmapBlock<PfDeltaFormat> >;
-template class DirBuilder<BitmapBlock<RoaringFormat> >;
+template class DirIndexer<BitmapBlock<UncompressedFormat> >;
+template class DirIndexer<BitmapBlock<FastVbPlusFormat> >;
+template class DirIndexer<BitmapBlock<VbPlusFormat> >;
+template class DirIndexer<BitmapBlock<VbFormat> >;
+template class DirIndexer<BitmapBlock<FastPfDeltaFormat> >;
+template class DirIndexer<BitmapBlock<PfDeltaFormat> >;
+template class DirIndexer<BitmapBlock<RoaringFormat> >;
 
-template class DirBuilder<EmptyFilterBlock>;
+template class DirIndexer<EmptyFilterBlock>;
 
 static Status ReadBlock(LogSource* source, const DirOptions& options,
                         const BlockHandle& handle, BlockContents* result,

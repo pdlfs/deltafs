@@ -75,13 +75,13 @@ struct DirOutputStats {  // All final sizes include padding and block trailers
 
 // Index streaming directory data and write the results into a pair of log
 // files.
-class DirIndexer {
+class DirBuilder {
  public:
-  explicit DirIndexer(const DirOptions& options);
-  virtual ~DirIndexer();
+  explicit DirBuilder(const DirOptions& options);
+  virtual ~DirBuilder();
 
   // Return a new indexer according to the given options.
-  static DirIndexer* Open(const DirOptions& options, LogSink* data,
+  static DirBuilder* Open(const DirOptions& options, LogSink* data,
                           LogSink* indx);
 
   virtual void Add(const Slice& key, const Slice& value) = 0;
@@ -110,7 +110,7 @@ class DirIndexer {
   Status status() const { return status_; }
 
   template <typename T>
-  friend class DirBuilder;
+  friend class DirIndexer;
 
   // Indexing counters
   uint32_t total_num_keys_;
@@ -124,8 +124,8 @@ class DirIndexer {
 
  private:
   // No copying allowed
-  void operator=(const DirIndexer&);
-  DirIndexer(const DirIndexer&);
+  void operator=(const DirBuilder&);
+  DirBuilder(const DirBuilder&);
 };
 
 }  // namespace plfsio

@@ -63,30 +63,17 @@ class WriteBuffer {
   class Iter;
 };
 
-// Sequentially format and write data as multiple sorted runs
-// of indexed tables. Implementation is thread-safe and
+// Write directory data as multiple runs of indexed tables.
+// Implementation is thread-safe and
 // uses background threads.
 template <typename T = BloomBlock>
-class DirBuilder {
+class DirIndexer {
  public:
-  DirBuilder(const DirOptions& options, size_t part, port::Mutex* mu,
+  DirIndexer(const DirOptions& options, size_t part, port::Mutex* mu,
              port::CondVar* cv);
 
   Status Open(LogSink* data, LogSink* indx);
 
-  // Report compaction stats
-  const DirOutputStats* output_stats() const { return &idxer_->output_stats_; }
-
-  uint32_t num_keys() const { return idxer_->total_num_keys_; }
-  uint32_t num_dropped_keys() const { return idxer_->total_num_dropped_keys_; }
-
-  uint32_t num_data_blocks() const { return idxer_->total_num_blocks_; }
-  uint32_t num_tables() const { return idxer_->total_num_tables_; }
-  uint32_t num_epochs() const { return idxer_->num_epochs_; }
-
-  // Report memory configurations and usage
-  size_t estimated_sstable_size() const { return tb_bytes_; }
-  size_t planned_filter_size() const { return ft_bytes_; }
   size_t memory_usage() const;  // Report actual memory usage
 
   // REQUIRES: mutex_ has been locked
@@ -131,17 +118,32 @@ class DirBuilder {
 
  private:
   WritableFileStats io_stats_;
+
+  // Report compaction stats
+  const DirOutputStats* output_stats() const { return &bu_->output_stats_; }
+
+  uint32_t num_keys() const { return bu_->total_num_keys_; }
+  uint32_t num_dropped_keys() const { return bu_->total_num_dropped_keys_; }
+
+  uint32_t num_data_blocks() const { return bu_->total_num_blocks_; }
+  uint32_t num_tables() const { return bu_->total_num_tables_; }
+  uint32_t num_epochs() const { return bu_->num_epochs_; }
+
+  // Report memory configurations and usage
+  size_t estimated_sstable_size() const { return tb_bytes_; }
+  size_t planned_filter_size() const { return ft_bytes_; }
+
   template <typename TT>
   friend class DirWriterImpl;
   friend class DirWriter;
-  ~DirBuilder();
+  ~DirIndexer();
 
   Status Prepare(bool force = false, bool epoch_flush = false,
                  bool finalize = false);
 
   // No copying allowed
-  void operator=(const DirBuilder&);
-  DirBuilder(const DirBuilder&);
+  void operator=(const DirIndexer&);
+  DirIndexer(const DirIndexer&);
 
   static void BGWork(void*);
   void MaybeScheduleCompaction();
@@ -172,7 +174,7 @@ class DirBuilder {
   bool imm_buf_is_final_;
   WriteBuffer buf0_;
   WriteBuffer buf1_;
-  DirIndexer* idxer_;
+  DirBuilder* bu_;
   LogSink* data_;
   LogSink* indx_;
   bool opened_;

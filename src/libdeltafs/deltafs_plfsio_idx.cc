@@ -28,7 +28,7 @@ DirOutputStats::DirOutputStats()
       value_size(0),
       key_size(0) {}
 
-DirIndexer::DirIndexer(const DirOptions& options)
+DirBuilder::DirBuilder(const DirOptions& options)
     : options_(options),
       total_num_keys_(0),
       total_num_dropped_keys_(0),
@@ -37,7 +37,7 @@ DirIndexer::DirIndexer(const DirOptions& options)
       num_tables_(0),
       num_epochs_(0) {}
 
-DirIndexer::~DirIndexer() {}
+DirBuilder::~DirBuilder() {}
 
 // A versatile block builder that uses the LevelDB's SST block format.
 // In this format, keys will be prefix-compressed. Both keys and values can have
@@ -277,10 +277,10 @@ Iterator* ArrayBlock::NewIterator(const Comparator* comparator) {
 
 // Write sorted directory contents into a pair of log files.
 template <typename T = TreeBlockBuilder>
-class DirIndexerImpl : public DirIndexer {
+class DirBuilderImpl : public DirBuilder {
  public:
-  DirIndexerImpl(const DirOptions& options, LogSink* data, LogSink* indx);
-  virtual ~DirIndexerImpl();
+  DirBuilderImpl(const DirOptions& options, LogSink* data, LogSink* indx);
+  virtual ~DirBuilderImpl();
 
   virtual void Add(const Slice& key, const Slice& value);
 
@@ -341,9 +341,9 @@ class DirIndexerImpl : public DirIndexer {
 };
 
 template <typename T>
-DirIndexerImpl<T>::DirIndexerImpl(const DirOptions& options, LogSink* data,
+DirBuilderImpl<T>::DirBuilderImpl(const DirOptions& options, LogSink* data,
                                   LogSink* indx)
-    : DirIndexer(options),
+    : DirBuilder(options),
       num_uncommitted_indx_(0),
       num_uncommitted_data_(0),
       pending_restart_(false),
@@ -386,13 +386,13 @@ DirIndexerImpl<T>::DirIndexerImpl(const DirOptions& options, LogSink* data,
 }
 
 template <typename T>
-DirIndexerImpl<T>::~DirIndexerImpl() {
+DirBuilderImpl<T>::~DirBuilderImpl() {
   indx_sink_->Unref();
   data_sink_->Unref();
 }
 
 template <typename T>
-void DirIndexerImpl<T>::MakeEpoch() {
+void DirBuilderImpl<T>::MakeEpoch() {
   assert(!finished_);  // Finish() has not been called
   EndTable(Slice(), static_cast<ChunkType>(0));
   if (!ok()) {
@@ -467,7 +467,7 @@ void DirIndexerImpl<T>::MakeEpoch() {
 }
 
 template <typename T>
-void DirIndexerImpl<T>::EndTable(const Slice& filter_contents,
+void DirBuilderImpl<T>::EndTable(const Slice& filter_contents,
                                  ChunkType filter_type) {
   assert(!finished_);  // Finish() has not been called
 
@@ -553,7 +553,7 @@ void DirIndexerImpl<T>::EndTable(const Slice& filter_contents,
 }
 
 template <typename T>
-void DirIndexerImpl<T>::Commit() {
+void DirBuilderImpl<T>::Commit() {
   assert(!finished_);  // Finish() has not been called
   // Skip empty commit
   if (data_block_.buffer_store()->empty()) return;
@@ -616,7 +616,7 @@ void DirIndexerImpl<T>::Commit() {
 }
 
 template <typename T>
-void DirIndexerImpl<T>::EndBlock() {
+void DirBuilderImpl<T>::EndBlock() {
   assert(!finished_);               // Finish() has not been called
   if (pending_restart_) return;     // Empty block
   if (data_block_.empty()) return;  // Empty block
@@ -660,7 +660,7 @@ void DirIndexerImpl<T>::EndBlock() {
 }
 
 template <typename T>
-void DirIndexerImpl<T>::Add(const Slice& key, const Slice& value) {
+void DirBuilderImpl<T>::Add(const Slice& key, const Slice& value) {
   assert(!finished_);       // Finish() has not been called
   assert(key.size() != 0);  // Keys cannot be empty
   if (!ok()) return;        // Abort
@@ -745,7 +745,7 @@ void DirIndexerImpl<T>::Add(const Slice& key, const Slice& value) {
 }
 
 template <typename T>
-Status DirIndexerImpl<T>::Finish() {
+Status DirBuilderImpl<T>::Finish() {
   assert(!finished_);  // Finish() has not been called
   MakeEpoch();
   finished_ = true;
@@ -782,7 +782,7 @@ Status DirIndexerImpl<T>::Finish() {
 }
 
 template <typename T>
-size_t DirIndexerImpl<T>::memory_usage() const {
+size_t DirBuilderImpl<T>::memory_usage() const {
   size_t result = 0;
   result += root_block_.memory_usage();
   result += meta_block_.memory_usage();
@@ -792,15 +792,15 @@ size_t DirIndexerImpl<T>::memory_usage() const {
   return result;
 }
 
-DirIndexer* DirIndexer::Open  // Use options to determine a block format
+DirBuilder* DirBuilder::Open  // Use options to determine a block format
     (const DirOptions& options, LogSink* data, LogSink* indx) {
   if (!options.leveldb_compatible) {
     if (options.fixed_kv_length) {
-      return new DirIndexerImpl<ArrayBlockBuilder>(options, data, indx);
+      return new DirBuilderImpl<ArrayBlockBuilder>(options, data, indx);
     }
   }
 
-  return new DirIndexerImpl<>(options, data, indx);
+  return new DirBuilderImpl<>(options, data, indx);
 }
 
 namespace {
