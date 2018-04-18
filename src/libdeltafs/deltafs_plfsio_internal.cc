@@ -197,7 +197,7 @@ DirIndexer<T>::DirIndexer(const DirOptions& options, size_t part,
       imm_buf_is_final_(false),
       buf0_(options),
       buf1_(options),
-      bu_(NULL),
+      dir_bu_(NULL),
       data_(NULL),
       indx_(NULL),
       opened_(false),
@@ -252,7 +252,7 @@ DirIndexer<T>::~DirIndexer() {
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
-  delete bu_;
+  delete dir_bu_;
   if (data_ != NULL) data_->Unref();
   if (indx_ != NULL) indx_->Unref();
   delete filter_;
@@ -268,7 +268,7 @@ Status DirIndexer<T>::Open(LogSink* data, LogSink* indx) {
 
   data_->Ref();
   indx_->Ref();
-  bu_ = DirBuilder::Open(options_, &stats_, data, indx);
+  dir_bu_ = DirBuilder::Open(options_, &compac_stats_, data, indx);
 
   return Status::OK();
 }
@@ -465,7 +465,7 @@ void DirIndexer<T>::CompactMemtable() {
   const bool is_final = imm_buf_is_final_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   const bool is_forced = imm_buf_is_forced_;
-  DirBuilder* const bu = bu_;
+  DirBuilder* const bu = dir_bu_;
   T* const ft = filter_;
   mu_->Unlock();
   const uint64_t start = GetCurrentTimeMicros();
@@ -482,7 +482,7 @@ void DirIndexer<T>::CompactMemtable() {
           static_cast<int>(tb_bytes_),
           100.0 * buffer->CurrentBufferSize() / tb_bytes_);
 #ifndef NDEBUG
-  const DirOutputStats stats(stats_);
+  const DirOutputStats prev(compac_stats_);
 #endif
 #endif  // VERBOSE
 #ifndef NDEBUG
@@ -519,11 +519,13 @@ void DirIndexer<T>::CompactMemtable() {
     bu->EndTable(fc, static_cast<ChunkType>(T::chunk_type()));
 #if VERBOSE >= 3
 #ifndef NDEBUG
-    Verbose(
-        __LOG_ARGS__, 3, "\t+ D: %s, I: %s, F: %s",
-        PrettySize(stats_.final_data_size - stats.final_data_size).c_str(),
-        PrettySize(stats_.final_index_size - stats.final_index_size).c_str(),
-        PrettySize(stats_.final_filter_size - stats.final_filter_size).c_str());
+    Verbose(__LOG_ARGS__, 3, "\t+ D: %s, I: %s, F: %s",
+            PrettySize(compac_stats_.final_data_size - prev.final_data_size)
+                .c_str(),
+            PrettySize(compac_stats_.final_index_size - prev.final_index_size)
+                .c_str(),
+            PrettySize(compac_stats_.final_filter_size - prev.final_filter_size)
+                .c_str());
 #endif
 #endif  // VERBOSE
     if (is_epoch_flush) {
@@ -561,8 +563,8 @@ template <typename T>
 uint32_t DirIndexer<T>::num_epochs() const {
   mu_->AssertHeld();
   if (opened_) {
-    assert(bu_ != NULL);
-    return bu_->num_epochs_;
+    assert(dir_bu_ != NULL);
+    return dir_bu_->num_epochs_;
   } else {
     return 0;
   }
@@ -576,8 +578,8 @@ size_t DirIndexer<T>::memory_usage() const {
     result += buf0_.memory_usage();
     result += buf1_.memory_usage();
     if (filter_ != NULL) result += filter_->memory_usage();
-    assert(bu_ != NULL);
-    result += bu_->memory_usage();
+    assert(dir_bu_ != NULL);
+    result += dir_bu_->memory_usage();
     return result;
   } else {
     return 0;

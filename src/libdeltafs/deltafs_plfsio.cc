@@ -342,7 +342,7 @@ class DirWriterImpl : public DirWriter {
   bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
   WritableFileStats io_stats_;
-  const DirOutputStats** compaction_stats_;
+  const DirOutputStats** compac_stats_;
   DirIndexer<T>** idxers_;
   LogSink* data_;
   Env* env_;
@@ -372,7 +372,7 @@ DirWriterImpl<T>::~DirWriterImpl() {
       idxers_[i]->Unref();
     }
   }
-  delete[] compaction_stats_;
+  delete[] compac_stats_;
   delete[] idxers_;
   if (data_ != NULL) {
     data_->Unref();
@@ -917,7 +917,7 @@ uint32_t DirWriterImpl<T>::TEST_num_keys() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += compaction_stats_[i]->total_num_keys_;
+    result += compac_stats_[i]->total_num_keys_;
   }
   return result;
 }
@@ -927,7 +927,7 @@ uint32_t DirWriterImpl<T>::TEST_num_dropped_keys() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += compaction_stats_[i]->total_num_dropped_keys_;
+    result += compac_stats_[i]->total_num_dropped_keys_;
   }
   return result;
 }
@@ -937,7 +937,7 @@ uint32_t DirWriterImpl<T>::TEST_num_data_blocks() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += compaction_stats_[i]->total_num_blocks_;
+    result += compac_stats_[i]->total_num_blocks_;
   }
   return result;
 }
@@ -947,7 +947,7 @@ uint32_t DirWriterImpl<T>::TEST_num_sstables() const {
   MutexLock ml(&mutex_);
   uint32_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += compaction_stats_[i]->total_num_tables_;
+    result += compac_stats_[i]->total_num_tables_;
   }
   return result;
 }
@@ -969,7 +969,7 @@ uint64_t DirWriterImpl<T>::TEST_raw_index_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += compaction_stats_[i]->index_size;
+    result += compac_stats_[i]->index_size;
   }
   return result;
 }
@@ -979,7 +979,7 @@ uint64_t DirWriterImpl<T>::TEST_raw_filter_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += compaction_stats_[i]->filter_size;
+    result += compac_stats_[i]->filter_size;
   }
   return result;
 }
@@ -989,7 +989,7 @@ uint64_t DirWriterImpl<T>::TEST_raw_data_contents() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += compaction_stats_[i]->data_size;
+    result += compac_stats_[i]->data_size;
   }
   return result;
 }
@@ -999,7 +999,7 @@ uint64_t DirWriterImpl<T>::TEST_value_bytes() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += compaction_stats_[i]->value_size;
+    result += compac_stats_[i]->value_size;
   }
   return result;
 }
@@ -1009,7 +1009,7 @@ uint64_t DirWriterImpl<T>::TEST_key_bytes() const {
   MutexLock ml(&mutex_);
   uint64_t result = 0;
   for (size_t i = 0; i < num_parts_; i++) {
-    result += compaction_stats_[i]->key_size;
+    result += compac_stats_[i]->key_size;
   }
   return result;
 }
@@ -1173,7 +1173,7 @@ Status DirWriter::TryDirOpen(T* impl) {
     }
     impl->data_ = data[0];
     impl->data_->Ref();
-    impl->compaction_stats_ = compac_stats;
+    impl->compac_stats_ = compac_stats;
     impl->part_mask_ = num_parts - 1;
     impl->num_parts_ = num_parts;
     impl->idxers_ = idxers;

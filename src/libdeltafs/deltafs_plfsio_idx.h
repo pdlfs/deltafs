@@ -107,8 +107,7 @@ class DirBuilder {
 
  protected:
   const DirOptions& options_;
-  // Bytes generated for indexes, filters, formatted data, etc
-  DirOutputStats* stats_;
+  DirOutputStats* compac_stats_;
   Status status_;
 
   bool ok() const { return status_.ok(); }

@@ -118,7 +118,7 @@ class DirIndexer {
 
  private:
   WritableFileStats io_stats_;
-  DirOutputStats stats_;
+  DirOutputStats compac_stats_;
 
   // Return the number of epochs generated so far.
   uint32_t num_epochs() const;
@@ -168,7 +168,7 @@ class DirIndexer {
   bool imm_buf_is_final_;
   WriteBuffer buf0_;
   WriteBuffer buf1_;
-  DirBuilder* bu_;
+  DirBuilder* dir_bu_;
   LogSink* data_;
   LogSink* indx_;
   bool opened_;
