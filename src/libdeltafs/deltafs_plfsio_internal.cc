@@ -48,60 +48,73 @@ WriteBuffer::WriteBuffer(const DirOptions& options)
 class WriteBuffer::Iter : public Iterator {
  public:
   explicit Iter(const WriteBuffer* write_buffer)
-      : cursor_(-1),
+      : buffer_(write_buffer->buffer_),
         offsets_(&write_buffer->offsets_[0]),
         num_entries_(write_buffer->num_entries_),
-        buffer_(write_buffer->buffer_) {}
+        cursor_(num_entries_) {}
+
+  virtual void Next() {
+    assert(Valid());
+    cursor_++;
+    TryParseNextEntry();
+  }
+
+  virtual void Prev() {
+    assert(Valid());
+    cursor_--;
+    TryParseNextEntry();
+  }
 
   virtual ~Iter() {}
-  virtual void Next() { cursor_++; }
-  virtual void Prev() { cursor_--; }
-  virtual Status status() const { return Status::OK(); }
-  virtual bool Valid() const { return cursor_ >= 0 && cursor_ < num_entries_; }
-  virtual void SeekToFirst() { cursor_ = 0; }
-  virtual void SeekToLast() { cursor_ = num_entries_ - 1; }
+  virtual bool Valid() const { return status_.ok() && cursor_ < num_entries_; }
+  virtual Status status() const { return status_; }
+  virtual void SeekToFirst() {
+    cursor_ = 0;
+    TryParseNextEntry();
+  }
+  virtual void SeekToLast() {
+    if (num_entries_ != 0) {
+      cursor_ = num_entries_ - 1;
+    } else {
+      cursor_ = 0;
+    }
+    TryParseNextEntry();
+  }
   virtual void Seek(const Slice& target) {
     // Not supported
   }
 
+  void TryParseNextEntry() {
+    if (Valid()) {
+      size_t offset = offsets_[cursor_];
+      Slice input = buffer_;
+      assert(input.size() >= offset);
+      input.remove_prefix(offset);
+      if (!GetLengthPrefixedSlice(&input, &key_) ||
+          !GetLengthPrefixedSlice(&input, &value_)) {
+        status_ = Status::Corruption("Bad memory contents");
+      }
+    }
+  }
+
   virtual Slice key() const {
     assert(Valid());
-    Slice result;
-    const char* p = &buffer_[offsets_[cursor_]];
-    Slice input = buffer_;
-    assert(p - buffer_.data() >= 0);
-    input.remove_prefix(p - buffer_.data());
-    if (GetLengthPrefixedSlice(&input, &result)) {
-      return result;
-    } else {
-      assert(false);
-      result = Slice();
-      return result;
-    }
+    return key_;
   }
 
   virtual Slice value() const {
     assert(Valid());
-    Slice result;
-    const char* p = &buffer_[offsets_[cursor_]];
-    Slice input = buffer_;
-    assert(p - buffer_.data() >= 0);
-    input.remove_prefix(p - buffer_.data());
-    if (GetLengthPrefixedSlice(&input, &result) &&
-        GetLengthPrefixedSlice(&input, &result)) {
-      return result;
-    } else {
-      assert(false);
-      result = Slice();
-      return result;
-    }
+    return value_;
   }
 
  private:
-  int cursor_;
-  const uint32_t* offsets_;
-  int num_entries_;
+  Status status_;
+  Slice value_;  // Cached value
+  Slice key_;    // Cached key
   Slice buffer_;
+  const uint32_t* offsets_;
+  uint32_t num_entries_;
+  uint32_t cursor_;
 };
 
 Iterator* WriteBuffer::NewIterator() const {
