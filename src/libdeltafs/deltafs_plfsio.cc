@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -56,7 +56,6 @@ DirOptions::DirOptions()
       read_size(8 << 20),
       parallel_reads(false),
       non_blocking(false),
-      slowdown_micros(0),
       paranoid_checks(false),
       ignore_filters(false),
       compression(kNoCompression),
@@ -292,7 +291,6 @@ struct DirWriter::Rep {
   Status EnsureDataPadding(LogSink* sink, size_t footer_size);
   Status InstallDirInfo(const std::string& footer);
   Status Finalize();
-  void MaybeSlowdownCaller();
 
   const DirOptions options_;
   mutable port::Mutex io_mutex_;  // Protecting the shared data log
@@ -345,17 +343,6 @@ DirWriter::Rep::~Rep() {
   delete[] idxers_;
   if (data_ != NULL) {
     data_->Unref();
-  }
-}
-
-void DirWriter::Rep::MaybeSlowdownCaller() {
-  mutex_.AssertHeld();
-  Env* const env = options_.env;
-  const int micros = static_cast<int>(options_.slowdown_micros);
-  if (micros != 0) {
-    mutex_.Unlock();
-    env->SleepForMicroseconds(micros);
-    mutex_.Lock();
   }
 }
 
@@ -780,9 +767,6 @@ Status DirWriter::Append(const Slice& fid, const Slice& data, int epoch) {
       status = rep_->TryAppend(fid, data);
       rep_->has_pending_flush_ = false;
       rep_->cv_.SignalAll();
-      if (status.IsBufferFull()) {
-        rep_->MaybeSlowdownCaller();
-      }
       break;
     }
   }

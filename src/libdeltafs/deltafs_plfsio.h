@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -236,11 +236,6 @@ struct DirOptions {
   // Default: false
   bool non_blocking;
 
-  // Number of microseconds to slowdown if a writer cannot make progress
-  // because the system has run out of its buffer space.
-  // Default: 0
-  uint64_t slowdown_micros;
-
   // If true, the implementation will do aggressive checking of the
   // data it is processing and will stop early if it detects any
   // errors.
@@ -333,14 +328,13 @@ class DirWriter {
   // Report the I/O stats for logging the data and the indexes.
   IoStats GetIoStats() const;
 
-  // Return the estimated size of each sst.
-  // This is the amount of memory we reserve for each sst.
+  // Return the estimated size of each SSTable.
   // The actual memory, and storage, used by each sst may differ.
   uint64_t TEST_estimated_sstable_size() const;
 
   // Return the planned size of each filter.
   // This is the amount of memory we reserve for the filter associated with each
-  // sst. The actual memory, and storage, used by each filter may differ.
+  // table. The actual memory, and storage, used by each filter may differ.
   uint64_t TEST_planned_filter_size() const;
 
   // Return the total number of keys inserted so far.
