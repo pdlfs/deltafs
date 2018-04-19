@@ -179,6 +179,80 @@ size_t WriteBuffer::memory_usage() const {
   return result;
 }
 
+DirCompactor::DirCompactor(const DirOptions& options, DirBuilder* bu)
+    : options_(options), bu_(bu) {}
+
+DirCompactor::~DirCompactor() { delete bu_; }
+
+Status DirCompactor::MakeEpoch() {
+  bu_->MakeEpoch();
+  return bu_->status_;
+}
+
+Status DirCompactor::Finish() {
+  bu_->Finish();
+  return bu_->status_;
+}
+
+template <typename T>
+class FilteredDirCompactor : public DirCompactor {
+ public:
+  FilteredDirCompactor(const DirOptions& options, DirBuilder* bu, T* filter)
+      : DirCompactor(options, bu), filter_(filter) {}
+  virtual ~FilteredDirCompactor();
+
+  virtual void Compact(WriteBuffer* buf);
+
+  virtual size_t memory_usage() const;
+
+ private:
+  T* filter_;
+};
+
+template <typename T>
+FilteredDirCompactor<T>::~FilteredDirCompactor() {
+  delete filter_;
+}
+
+template <typename T>
+size_t FilteredDirCompactor<T>::memory_usage() const {
+  size_t result = 0;
+  if (filter_ != NULL) result += filter_->memory_usage();
+  result += bu_->memory_usage();
+  return result;
+}
+
+template <typename T>
+void FilteredDirCompactor<T>::Compact(WriteBuffer* buf) {
+  IterType* const iter = static_cast<IterType*>(buf->NewIterator());
+  iter->IterType::SeekToFirst();
+  if (filter_ != NULL) {
+    filter_->Reset(buf->NumEntries());
+  }
+  for (; iter->IterType::Valid(); iter->IterType::Next()) {
+    Slice key(iter->IterType::key());
+    if (filter_ != NULL) {
+      filter_->AddKey(key);
+    }
+    bu_->Add(key, iter->IterType::value());
+    if (!ok()) {
+      break;
+    }
+  }
+
+  if (!ok()) {
+    return;
+  }
+
+  Slice filter_contents;
+  if (filter_ != NULL) {
+    filter_contents = filter_->Finish();
+  }
+  const ChunkType filter_type = static_cast<ChunkType>(T::chunk_type());
+  bu_->EndTable(filter_contents, filter_type);
+  delete iter;
+}
+
 template <typename T>
 DirIndexer<T>::DirIndexer(const DirOptions& options, size_t part,
                           port::Mutex* mu, port::CondVar* cv)

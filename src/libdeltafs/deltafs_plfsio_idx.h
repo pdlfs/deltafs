@@ -78,11 +78,11 @@ struct DirOutputStats {  // All final sizes include padding and block trailers
   size_t key_size;
 };
 
-// Index streaming directory data and write the results into a pair of log
-// files.
+// Index streaming directory data and write the results
+// into a pair of log files.
 class DirBuilder {
  public:
-  explicit DirBuilder(const DirOptions& options, DirOutputStats* stats);
+  DirBuilder(const DirOptions& options, DirOutputStats* stats);
   virtual ~DirBuilder();
 
   // Return a new indexer according to the given options.
@@ -105,25 +105,26 @@ class DirBuilder {
   // No further writes.
   virtual Status Finish() = 0;
 
+  virtual size_t memory_usage() const = 0;
+
+  bool ok() const { return status_.ok(); }
+  Status status() const { return status_; }
+
  protected:
   const DirOptions& options_;
   DirOutputStats* compac_stats_;
   Status status_;
 
-  bool ok() const { return status_.ok(); }
-  Status status() const { return status_; }
-
   template <typename T>
   friend class DirIndexer;
+  friend class DirCompactor;
 
   uint32_t num_tables_;  // Number of tables generated within the current epoch
   uint32_t num_epochs_;  // Total number of epochs generated
 
-  virtual size_t memory_usage() const = 0;
-
  private:
   // No copying allowed
-  void operator=(const DirBuilder&);
+  void operator=(const DirBuilder& db);
   DirBuilder(const DirBuilder&);
 };
 

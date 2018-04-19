@@ -45,6 +45,7 @@ class WriteBuffer {
   void Reset();
 
  private:
+  friend class DirCompactor;
   struct STLLessThan;
   // Estimated memory usage per entry (including overhead due to varint
   // encoding)
@@ -61,6 +62,36 @@ class WriteBuffer {
   WriteBuffer(const WriteBuffer&);
 
   class Iter;
+};
+
+// Abstract compaction interface.
+class DirCompactor {
+ public:
+  DirCompactor(const DirOptions& options, DirBuilder* bu);
+  virtual ~DirCompactor();
+
+  virtual void Compact(WriteBuffer* buf) = 0;
+
+  virtual Status MakeEpoch() = 0;
+
+  virtual Status Finish() = 0;
+
+  virtual size_t memory_usage() const = 0;
+
+ protected:
+  template <typename T>
+  friend class DirIndexer;
+  typedef WriteBuffer::Iter IterType;
+  bool ok() const { return bu_->ok(); }
+  Status status() const { return bu_->status_; }
+  uint32_t num_epochs() const { return bu_->num_epochs_; }
+  const DirOptions& options_;
+  DirBuilder* bu_;
+
+ private:
+  // No copying allowed
+  void operator=(const DirCompactor& dc);
+  DirCompactor(const DirCompactor&);
 };
 
 // Write directory data as multiple runs of indexed tables.
