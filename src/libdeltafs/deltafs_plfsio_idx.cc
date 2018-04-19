@@ -275,11 +275,11 @@ Iterator* ArrayBlock::NewIterator(const Comparator* comparator) {
 
 // Write sorted directory contents into a pair of log files.
 template <typename T = TreeBlockBuilder>
-class DirBuilderImpl : public DirBuilder {
+class FastDirBuilder : public DirBuilder {
  public:
-  DirBuilderImpl(const DirOptions& options, DirOutputStats* stats,
+  FastDirBuilder(const DirOptions& options, DirOutputStats* stats,
                  LogSink* data, LogSink* indx);
-  virtual ~DirBuilderImpl();
+  virtual ~FastDirBuilder();
 
   virtual void Add(const Slice& key, const Slice& value);
 
@@ -340,7 +340,7 @@ class DirBuilderImpl : public DirBuilder {
 };
 
 template <typename T>
-DirBuilderImpl<T>::DirBuilderImpl(const DirOptions& options,
+FastDirBuilder<T>::FastDirBuilder(const DirOptions& options,
                                   DirOutputStats* stats, LogSink* data,
                                   LogSink* indx)
     : DirBuilder(options, stats),
@@ -386,13 +386,13 @@ DirBuilderImpl<T>::DirBuilderImpl(const DirOptions& options,
 }
 
 template <typename T>
-DirBuilderImpl<T>::~DirBuilderImpl() {
+FastDirBuilder<T>::~FastDirBuilder() {
   indx_sink_->Unref();
   data_sink_->Unref();
 }
 
 template <typename T>
-void DirBuilderImpl<T>::MakeEpoch() {
+void FastDirBuilder<T>::MakeEpoch() {
   assert(!finished_);  // Finish() has not been called
   EndTable(Slice(), static_cast<ChunkType>(0));
   if (!ok()) {
@@ -467,7 +467,7 @@ void DirBuilderImpl<T>::MakeEpoch() {
 }
 
 template <typename T>
-void DirBuilderImpl<T>::EndTable(const Slice& filter_contents,
+void FastDirBuilder<T>::EndTable(const Slice& filter_contents,
                                  ChunkType filter_type) {
   assert(!finished_);  // Finish() has not been called
 
@@ -553,7 +553,7 @@ void DirBuilderImpl<T>::EndTable(const Slice& filter_contents,
 }
 
 template <typename T>
-void DirBuilderImpl<T>::Commit() {
+void FastDirBuilder<T>::Commit() {
   assert(!finished_);  // Finish() has not been called
   // Skip empty commit
   if (data_block_.buffer_store()->empty()) return;
@@ -616,7 +616,7 @@ void DirBuilderImpl<T>::Commit() {
 }
 
 template <typename T>
-void DirBuilderImpl<T>::EndBlock() {
+void FastDirBuilder<T>::EndBlock() {
   assert(!finished_);               // Finish() has not been called
   if (pending_restart_) return;     // Empty block
   if (data_block_.empty()) return;  // Empty block
@@ -660,7 +660,7 @@ void DirBuilderImpl<T>::EndBlock() {
 }
 
 template <typename T>
-void DirBuilderImpl<T>::Add(const Slice& key, const Slice& value) {
+void FastDirBuilder<T>::Add(const Slice& key, const Slice& value) {
   assert(!finished_);       // Finish() has not been called
   assert(key.size() != 0);  // Keys cannot be empty
   if (!ok()) return;        // Abort
@@ -745,7 +745,7 @@ void DirBuilderImpl<T>::Add(const Slice& key, const Slice& value) {
 }
 
 template <typename T>
-Status DirBuilderImpl<T>::Finish() {
+Status FastDirBuilder<T>::Finish() {
   assert(!finished_);  // Finish() has not been called
   MakeEpoch();
   finished_ = true;
@@ -782,7 +782,7 @@ Status DirBuilderImpl<T>::Finish() {
 }
 
 template <typename T>
-size_t DirBuilderImpl<T>::memory_usage() const {
+size_t FastDirBuilder<T>::memory_usage() const {
   size_t result = 0;
   result += root_block_.memory_usage();
   result += meta_block_.memory_usage();
@@ -798,11 +798,11 @@ DirBuilder* DirBuilder::Open(const DirOptions& options, DirOutputStats* stats,
                              LogSink* data, LogSink* indx) {
   if (!options.leveldb_compatible) {
     if (options.fixed_kv_length) {
-      return new DirBuilderImpl<ArrayBlockBuilder>(options, stats, data, indx);
+      return new FastDirBuilder<ArrayBlockBuilder>(options, stats, data, indx);
     }
   }
 
-  return new DirBuilderImpl<>(options, stats, data, indx);
+  return new FastDirBuilder<>(options, stats, data, indx);
 }
 
 namespace {
