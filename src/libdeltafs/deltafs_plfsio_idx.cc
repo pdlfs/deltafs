@@ -295,7 +295,7 @@ class FastDirBuilder : public DirBuilder {
   // No further writes.
   virtual Status Finish();
 
- protected:
+  // Report memory usage.
   virtual size_t memory_usage() const;
 
  private:
