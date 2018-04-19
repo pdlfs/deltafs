@@ -48,7 +48,7 @@ static inline bool IsKeyUnOrdered(DirMode mode) {
 extern Iterator* OpenDirBlock  // Use options to determine block formats
     (const DirOptions& options, const BlockContents& contents);
 
-// Stats for indexed directory data.
+// Directory compaction stats
 struct DirOutputStats {  // All final sizes include padding and block trailers
   DirOutputStats();
 
@@ -78,14 +78,13 @@ struct DirOutputStats {  // All final sizes include padding and block trailers
   size_t key_size;
 };
 
-// Index streaming directory data and write the results
-// into a pair of log files.
+// Directory builder interface.
 class DirBuilder {
  public:
   DirBuilder(const DirOptions& options, DirOutputStats* stats);
   virtual ~DirBuilder();
 
-  // Return a new indexer according to the given options.
+  // Return a new builder according to the given options.
   static DirBuilder* Open(const DirOptions& options, DirOutputStats* stats,
                           LogSink* data, LogSink* indx);
 
@@ -105,15 +104,16 @@ class DirBuilder {
   // No further writes.
   virtual Status Finish() = 0;
 
+  // Report memory usage.
   virtual size_t memory_usage() const = 0;
-
-  bool ok() const { return status_.ok(); }
 
  protected:
   friend class DirCompactor;
   const DirOptions& options_;
   DirOutputStats* const compac_stats_;
   Status status_;
+
+  bool ok() const { return status_.ok(); }
 
   uint32_t num_tables_;  // Number of tables generated within the current epoch
   uint32_t num_epochs_;  // Total number of epochs generated
