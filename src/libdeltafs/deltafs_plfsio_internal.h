@@ -79,7 +79,6 @@ class DirCompactor {
   virtual size_t memory_usage() const = 0;
 
  protected:
-  template <typename T>
   friend class DirIndexer;
   typedef WriteBuffer::Iter IterType;
   bool ok() const { return bu_->ok(); }
@@ -97,7 +96,6 @@ class DirCompactor {
 // Write directory data as multiple runs of indexed tables.
 // Implementation is thread-safe and
 // uses background threads.
-template <typename T = BloomBlock>
 class DirIndexer {
  public:
   DirIndexer(const DirOptions& options, size_t part, port::Mutex* mu,
@@ -158,11 +156,12 @@ class DirIndexer {
   size_t estimated_sstable_size() const { return tb_bytes_; }
   size_t planned_filter_size() const { return ft_bytes_; }
 
-  template <typename TT>
   friend class DirWriterImpl;
   friend class DirWriter;
   ~DirIndexer();
 
+  DirCompactor* OpenBitmapCompactor(DirBuilder* bu);
+  DirCompactor* OpenCompactor(DirBuilder* bu);
   Status Prepare(bool force = false, bool epoch_flush = false,
                  bool finalize = false);
 

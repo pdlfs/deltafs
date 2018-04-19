@@ -325,6 +325,8 @@ extern DirOptions ParseDirOptions(const char* conf);
 // Be very careful using this method.
 extern Status DestroyDir(const std::string& dirname, const DirOptions& options);
 
+class DirWriterImpl;
+
 // Deltafs Plfs Dir Writer
 class DirWriter {
  public:
@@ -411,8 +413,7 @@ class DirWriter {
   virtual Status Finish() = 0;
 
  private:
-  template <typename T>
-  static Status TryDirOpen(T* impl);
+  static Status TryDirOpen(DirWriterImpl* impl);
 
   void operator=(const DirWriter& d);  // No copying allowed
   DirWriter(const DirWriter&);

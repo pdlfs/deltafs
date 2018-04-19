@@ -267,9 +267,8 @@ void FilteredDirCompactor<T>::Compact(WriteBuffer* buf) {
   delete iter;
 }
 
-template <typename T>
-DirIndexer<T>::DirIndexer(const DirOptions& options, size_t part,
-                          port::Mutex* mu, port::CondVar* cv)
+DirIndexer::DirIndexer(const DirOptions& options, size_t part, port::Mutex* mu,
+                       port::CondVar* cv)
     : options_(options),
       bg_cv_(cv),
       mu_(mu),
@@ -324,8 +323,7 @@ DirIndexer<T>::DirIndexer(const DirOptions& options, size_t part,
   mem_buf_ = &buf0_;
 }
 
-template <typename T>
-DirIndexer<T>::~DirIndexer() {
+DirIndexer::~DirIndexer() {
   mu_->AssertHeld();
   while (has_bg_compaction_) {
     bg_cv_->Wait();
@@ -335,8 +333,48 @@ DirIndexer<T>::~DirIndexer() {
   if (indx_ != NULL) indx_->Unref();
 }
 
-template <typename T>
-Status DirIndexer<T>::Open(LogSink* data, LogSink* indx) {
+DirCompactor* DirIndexer::OpenBitmapCompactor(DirBuilder* bu) {
+#define BMP_COMPACTOR(T, opts, bu, ft_bytes) \
+  new FilteredDirCompactor<T>(opts, bu, new T(opts, ft_bytes))
+  if (options_.bm_fmt == kFmtRoaring) {
+    typedef BitmapBlock<RoaringFormat> R;
+    return BMP_COMPACTOR(R, options_, bu, ft_bytes_);
+  } else if (options_.bm_fmt == kFmtFastVarintPlus) {
+    typedef BitmapBlock<FastVbPlusFormat> FVP;
+    return BMP_COMPACTOR(FVP, options_, bu, ft_bytes_);
+  } else if (options_.bm_fmt == kFmtVarintPlus) {
+    typedef BitmapBlock<VbPlusFormat> VP;
+    return BMP_COMPACTOR(VP, options_, bu, ft_bytes_);
+  } else if (options_.bm_fmt == kFmtVarint) {
+    typedef BitmapBlock<VbFormat> V;
+    return BMP_COMPACTOR(V, options_, bu, ft_bytes_);
+  } else if (options_.bm_fmt == kFmtFastPfDelta) {
+    typedef BitmapBlock<FastPfDeltaFormat> FPFD;
+    return BMP_COMPACTOR(FPFD, options_, bu, ft_bytes_);
+  } else if (options_.bm_fmt == kFmtPfDelta) {
+    typedef BitmapBlock<PfDeltaFormat> PFD;
+    return BMP_COMPACTOR(PFD, options_, bu, ft_bytes_);
+  } else {  // Default format: kUncompressedBitmap
+    typedef BitmapBlock<UncompressedFormat> U;
+    return BMP_COMPACTOR(U, options_, bu, ft_bytes_);
+  }
+
+#undef BMP_COMPACTOR
+}
+
+DirCompactor* DirIndexer::OpenCompactor(DirBuilder* bu) {
+  if (options_.filter == kFtBloomFilter) {
+    BloomBlock* bf = NULL;
+    if (options_.bf_bits_per_key != 0) bf = new BloomBlock(options_, ft_bytes_);
+    return new FilteredDirCompactor<BloomBlock>(options_, bu, bf);
+  } else if (options_.filter == kFtBitmap) {
+    return OpenBitmapCompactor(bu);
+  }
+
+  return new FilteredDirCompactor<EmptyFilterBlock>(options_, bu, NULL);
+}
+
+Status DirIndexer::Open(LogSink* data, LogSink* indx) {
   // Open() has not been called before
   assert(!opened_);
   opened_ = true;
@@ -346,32 +384,20 @@ Status DirIndexer<T>::Open(LogSink* data, LogSink* indx) {
   data_->Ref();
   indx_->Ref();
 
-  T* filter = NULL;
-  if (options_.filter == kFtNoFilter) {
-    // Skip filter
-  } else if (options_.filter != kFtBloomFilter ||
-             options_.bf_bits_per_key != 0) {
-    filter = new T(options_, ft_bytes_);
-  } else {
-    // Skip filter
-  }
-
   DirBuilder* bu = DirBuilder::Open(options_, &compac_stats_, data, indx);
-  compactor_ = new FilteredDirCompactor<T>(options_, bu, filter);
+  compactor_ = OpenCompactor(bu);
 
   return Status::OK();
 }
 
 // True iff there is an on-going background compaction.
-template <typename T>
-bool DirIndexer<T>::has_bg_compaction() {
+bool DirIndexer::has_bg_compaction() {
   mu_->AssertHeld();
   return has_bg_compaction_;
 }
 
 // Report background compaction status.
-template <typename T>
-Status DirIndexer<T>::bg_status() {
+Status DirIndexer::bg_status() {
   mu_->AssertHeld();
   return bg_status_;
 }
@@ -380,8 +406,7 @@ Status DirIndexer<T>::bg_status() {
 // By default, log files are reference-counted and are implicitly closed when
 // de-referenced by the last opener. Optionally, a caller may force data
 // sync and pre-closing all log files.
-template <typename T>
-Status DirIndexer<T>::SyncAndClose() {
+Status DirIndexer::SyncAndClose() {
   Status status;
   if (!opened_) return status;
   assert(data_ != NULL);
@@ -401,8 +426,7 @@ Status DirIndexer<T>::SyncAndClose() {
 // Otherwise, **wait** until a compaction is scheduled unless
 // options_.non_blocking is set. After a compaction has been scheduled,
 // **wait** until it finishes unless no_wait has been set.
-template <typename T>
-Status DirIndexer<T>::Flush(const FlushOptions& flush_options) {
+Status DirIndexer::Flush(const FlushOptions& flush_options) {
   mu_->AssertHeld();
   assert(opened_);
   // Wait for buffer space
@@ -434,8 +458,7 @@ Status DirIndexer<T>::Flush(const FlushOptions& flush_options) {
   return status;
 }
 
-template <typename T>
-Status DirIndexer<T>::Add(const Slice& key, const Slice& value) {
+Status DirIndexer::Add(const Slice& key, const Slice& value) {
   mu_->AssertHeld();
   assert(opened_);
   Status status = Prepare();
@@ -450,10 +473,9 @@ Status DirIndexer<T>::Add(const Slice& key, const Slice& value) {
   return status;
 }
 
-template <typename T>
-Status DirIndexer<T>::Prepare(bool force /* force minor memtable flush */,
-                              bool epoch_flush /* force epoch flush */,
-                              bool finalize) {
+Status DirIndexer::Prepare(bool force /* force minor memtable flush */,
+                           bool epoch_flush /* force epoch flush */,
+                           bool finalize) {
   mu_->AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
@@ -495,8 +517,7 @@ Status DirIndexer<T>::Prepare(bool force /* force minor memtable flush */,
   return status;
 }
 
-template <typename T>
-void DirIndexer<T>::MaybeScheduleCompaction() {
+void DirIndexer::MaybeScheduleCompaction() {
   mu_->AssertHeld();
 
   // Do not schedule more if we are in error status
@@ -523,15 +544,13 @@ void DirIndexer<T>::MaybeScheduleCompaction() {
   }
 }
 
-template <typename T>
-void DirIndexer<T>::BGWork(void* arg) {
+void DirIndexer::BGWork(void* arg) {
   DirIndexer* ins = reinterpret_cast<DirIndexer*>(arg);
   MutexLock ml(ins->mu_);
   ins->DoCompaction();
 }
 
-template <typename T>
-void DirIndexer<T>::DoCompaction() {
+void DirIndexer::DoCompaction() {
   mu_->AssertHeld();
   assert(has_bg_compaction_);
   assert(imm_buf_ != NULL);
@@ -546,8 +565,7 @@ void DirIndexer<T>::DoCompaction() {
   bg_cv_->SignalAll();
 }
 
-template <typename T>
-void DirIndexer<T>::CompactMemtable() {
+void DirIndexer::CompactMemtable() {
   mu_->AssertHeld();
   WriteBuffer* const buffer = imm_buf_;
   assert(buffer != NULL);
@@ -621,8 +639,7 @@ void DirIndexer<T>::CompactMemtable() {
   }
 }
 
-template <typename T>
-uint32_t DirIndexer<T>::num_epochs() const {
+uint32_t DirIndexer::num_epochs() const {
   mu_->AssertHeld();
   if (opened_) {
     assert(compactor_ != NULL);
@@ -632,8 +649,7 @@ uint32_t DirIndexer<T>::num_epochs() const {
   }
 }
 
-template <typename T>
-size_t DirIndexer<T>::memory_usage() const {
+size_t DirIndexer::memory_usage() const {
   mu_->AssertHeld();
   if (opened_) {
     size_t result = 0;
@@ -646,19 +662,6 @@ size_t DirIndexer<T>::memory_usage() const {
     return 0;
   }
 }
-
-// Initialize all potential filter templates
-template class DirIndexer<BloomBlock>;
-
-template class DirIndexer<BitmapBlock<UncompressedFormat> >;
-template class DirIndexer<BitmapBlock<FastVbPlusFormat> >;
-template class DirIndexer<BitmapBlock<VbPlusFormat> >;
-template class DirIndexer<BitmapBlock<VbFormat> >;
-template class DirIndexer<BitmapBlock<FastPfDeltaFormat> >;
-template class DirIndexer<BitmapBlock<PfDeltaFormat> >;
-template class DirIndexer<BitmapBlock<RoaringFormat> >;
-
-template class DirIndexer<EmptyFilterBlock>;
 
 static Status ReadBlock(LogSource* source, const DirOptions& options,
                         const BlockHandle& handle, BlockContents* result,
