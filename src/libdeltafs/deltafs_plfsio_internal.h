@@ -191,7 +191,6 @@ class DirIndexer {
   uint32_t num_flush_completed_;
   bool has_bg_compaction_;
   Status bg_status_;
-  T* filter_;  // T* to allow distinct types of filters to be used
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;
   bool imm_buf_is_forced_;
@@ -199,7 +198,7 @@ class DirIndexer {
   bool imm_buf_is_final_;
   WriteBuffer buf0_;
   WriteBuffer buf1_;
-  DirBuilder* dir_bu_;
+  DirCompactor* compactor_;
   LogSink* data_;
   LogSink* indx_;
   bool opened_;

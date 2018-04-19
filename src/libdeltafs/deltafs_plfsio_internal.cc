@@ -203,6 +203,10 @@ class FilteredDirCompactor : public DirCompactor {
 
   virtual void Compact(WriteBuffer* buf);
 
+  virtual Status MakeEpoch();
+
+  virtual Status Finish();
+
   virtual size_t memory_usage() const;
 
  private:
@@ -212,6 +216,16 @@ class FilteredDirCompactor : public DirCompactor {
 template <typename T>
 FilteredDirCompactor<T>::~FilteredDirCompactor() {
   delete filter_;
+}
+
+template <typename T>
+Status FilteredDirCompactor<T>::MakeEpoch() {
+  return DirCompactor::MakeEpoch();
+}
+
+template <typename T>
+Status FilteredDirCompactor<T>::Finish() {
+  return DirCompactor::Finish();
 }
 
 template <typename T>
@@ -263,7 +277,6 @@ DirIndexer<T>::DirIndexer(const DirOptions& options, size_t part,
       num_flush_requested_(0),
       num_flush_completed_(0),
       has_bg_compaction_(false),
-      filter_(NULL),
       mem_buf_(NULL),
       imm_buf_(NULL),
       imm_buf_is_forced_(false),
@@ -271,7 +284,7 @@ DirIndexer<T>::DirIndexer(const DirOptions& options, size_t part,
       imm_buf_is_final_(false),
       buf0_(options),
       buf1_(options),
-      dir_bu_(NULL),
+      compactor_(NULL),
       data_(NULL),
       indx_(NULL),
       opened_(false),
@@ -308,15 +321,6 @@ DirIndexer<T>::DirIndexer(const DirOptions& options, size_t part,
   buf0_.Reserve(buf_reserv_);
   buf1_.Reserve(buf_reserv_);
 
-  if (options_.filter == kFtNoFilter) {
-    // Skip filter
-  } else if (options_.filter != kFtBloomFilter ||
-             options_.bf_bits_per_key != 0) {
-    filter_ = new T(options_, ft_bytes_);
-  } else {
-    // Skip filter
-  }
-
   mem_buf_ = &buf0_;
 }
 
@@ -326,10 +330,9 @@ DirIndexer<T>::~DirIndexer() {
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
-  delete dir_bu_;
+  delete compactor_;
   if (data_ != NULL) data_->Unref();
   if (indx_ != NULL) indx_->Unref();
-  delete filter_;
 }
 
 template <typename T>
@@ -342,7 +345,19 @@ Status DirIndexer<T>::Open(LogSink* data, LogSink* indx) {
 
   data_->Ref();
   indx_->Ref();
-  dir_bu_ = DirBuilder::Open(options_, &compac_stats_, data, indx);
+
+  T* filter = NULL;
+  if (options_.filter == kFtNoFilter) {
+    // Skip filter
+  } else if (options_.filter != kFtBloomFilter ||
+             options_.bf_bits_per_key != 0) {
+    filter = new T(options_, ft_bytes_);
+  } else {
+    // Skip filter
+  }
+
+  DirBuilder* bu = DirBuilder::Open(options_, &compac_stats_, data, indx);
+  compactor_ = new FilteredDirCompactor<T>(options_, bu, filter);
 
   return Status::OK();
 }
@@ -539,8 +554,7 @@ void DirIndexer<T>::CompactMemtable() {
   const bool is_final = imm_buf_is_final_;
   const bool is_epoch_flush = imm_buf_is_epoch_flush_;
   const bool is_forced = imm_buf_is_forced_;
-  DirBuilder* const bu = dir_bu_;
-  T* const ft = filter_;
+  DirCompactor* c = compactor_;
   mu_->Unlock();
   const uint64_t start = GetCurrentTimeMicros();
   if (options_.listener != NULL) {
@@ -559,38 +573,13 @@ void DirIndexer<T>::CompactMemtable() {
   const DirOutputStats prev(compac_stats_);
 #endif
 #endif  // VERBOSE
-#ifndef NDEBUG
-  uint32_t num_keys = 0;
-#endif
   bool skip_sort = IsKeyUnOrdered(options_.mode);
   if (options_.skip_sort) {
     skip_sort = true;  // Forced by user
   }
   buffer->Finish(skip_sort);
-  Iterator* const iter = buffer->NewIterator();
-  iter->SeekToFirst();
-  if (ft != NULL) {
-    ft->Reset(buffer->NumEntries());
-  }
-  for (; iter->Valid(); iter->Next()) {
-#ifndef NDEBUG
-    num_keys++;
-#endif
-    if (ft != NULL) {
-      ft->AddKey(iter->key());
-    }
-    bu->Add(iter->key(), iter->value());
-    if (!bu->ok()) {
-      break;
-    }
-  }
-
-  if (bu->ok()) {
-    // Double checks
-    assert(num_keys == buffer->NumEntries());
-    // Inject the filter into the table
-    Slice fc = (ft != NULL) ? ft->Finish() : Slice();
-    bu->EndTable(fc, static_cast<ChunkType>(T::chunk_type()));
+  c->Compact(buffer);
+  if (c->ok()) {
 #if VERBOSE >= 3
 #ifndef NDEBUG
     Verbose(__LOG_ARGS__, 3, "\t+ D: %s, I: %s, F: %s",
@@ -603,10 +592,10 @@ void DirIndexer<T>::CompactMemtable() {
 #endif
 #endif  // VERBOSE
     if (is_epoch_flush) {
-      bu->MakeEpoch();
+      c->MakeEpoch();
     }
     if (is_final) {
-      bu->Finish();
+      c->Finish();
     }
   }
 
@@ -624,8 +613,7 @@ void DirIndexer<T>::CompactMemtable() {
           static_cast<int>(end - start));
 #endif
 
-  Status status = bu->status();
-  delete iter;
+  Status status = c->status();
   mu_->Lock();
   bg_status_ = status;
   if (is_forced) {
@@ -637,8 +625,8 @@ template <typename T>
 uint32_t DirIndexer<T>::num_epochs() const {
   mu_->AssertHeld();
   if (opened_) {
-    assert(dir_bu_ != NULL);
-    return dir_bu_->num_epochs_;
+    assert(compactor_ != NULL);
+    return compactor_->num_epochs();
   } else {
     return 0;
   }
@@ -651,9 +639,8 @@ size_t DirIndexer<T>::memory_usage() const {
     size_t result = 0;
     result += buf0_.memory_usage();
     result += buf1_.memory_usage();
-    if (filter_ != NULL) result += filter_->memory_usage();
-    assert(dir_bu_ != NULL);
-    result += dir_bu_->memory_usage();
+    assert(compactor_ != NULL);
+    result += compactor_->memory_usage();
     return result;
   } else {
     return 0;
