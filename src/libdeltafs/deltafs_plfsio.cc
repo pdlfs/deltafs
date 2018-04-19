@@ -278,36 +278,11 @@ DirOptions ParseDirOptions(const char* input) {
   return result;
 }
 
-class DirWriterImpl : public DirWriter {
+struct DirWriter::Rep {
  public:
-  DirWriterImpl(const DirOptions& opts, const std::string& dirname);
-  virtual ~DirWriterImpl();
+  Rep(const DirOptions& opts, const std::string& dirname);
+  ~Rep();
 
-  virtual IoStats GetIoStats() const;
-
-  virtual uint32_t TEST_num_sstables() const;
-  virtual uint32_t TEST_num_keys() const;
-  virtual uint32_t TEST_num_dropped_keys() const;
-  virtual uint32_t TEST_num_data_blocks() const;
-
-  virtual uint64_t TEST_estimated_sstable_size() const;
-  virtual uint64_t TEST_planned_filter_size() const;
-  virtual uint64_t TEST_total_memory_usage() const;
-
-  virtual uint64_t TEST_raw_index_contents() const;
-  virtual uint64_t TEST_raw_filter_contents() const;
-  virtual uint64_t TEST_raw_data_contents() const;
-  virtual uint64_t TEST_key_bytes() const;
-  virtual uint64_t TEST_value_bytes() const;
-
-  virtual Status Wait();
-  virtual Status Write(BatchCursor* cursor, int epoch);
-  virtual Status Append(const Slice& fid, const Slice& data, int epoch);
-  virtual Status Flush(int epoch);
-  virtual Status EpochFlush(int epoch);
-  virtual Status Finish();
-
- private:
   bool HasCompaction();
   Status ObtainCompactionStatus();
   Status WaitForCompaction();
@@ -318,7 +293,6 @@ class DirWriterImpl : public DirWriter {
   Status InstallDirInfo(const std::string& footer);
   Status Finalize();
   void MaybeSlowdownCaller();
-  friend class DirWriter;
 
   const DirOptions options_;
   mutable port::Mutex io_mutex_;  // Protecting the shared data log
@@ -344,7 +318,7 @@ class DirWriterImpl : public DirWriter {
   Env* env_;
 };
 
-DirWriterImpl::DirWriterImpl(const DirOptions& o, const std::string& d)
+DirWriter::Rep::Rep(const DirOptions& o, const std::string& d)
     : options_(o),
       bg_cv_(&mutex_),
       cv_(&mutex_),
@@ -355,11 +329,12 @@ DirWriterImpl::DirWriterImpl(const DirOptions& o, const std::string& d)
       num_flushes_(0),
       has_pending_flush_(false),
       finished_(false),
+      compac_stats_(NULL),
       idxers_(NULL),
       data_(NULL),
       env_(options_.env) {}
 
-DirWriterImpl::~DirWriterImpl() {
+DirWriter::Rep::~Rep() {
   MutexLock l(&mutex_);
   for (size_t i = 0; i < num_parts_; i++) {
     if (idxers_[i] != NULL) {
@@ -373,7 +348,7 @@ DirWriterImpl::~DirWriterImpl() {
   }
 }
 
-void DirWriterImpl::MaybeSlowdownCaller() {
+void DirWriter::Rep::MaybeSlowdownCaller() {
   mutex_.AssertHeld();
   Env* const env = options_.env;
   const int micros = static_cast<int>(options_.slowdown_micros);
@@ -384,7 +359,7 @@ void DirWriterImpl::MaybeSlowdownCaller() {
   }
 }
 
-Status DirWriterImpl::EnsureDataPadding(LogSink* sink, size_t footer_size) {
+Status DirWriter::Rep::EnsureDataPadding(LogSink* sink, size_t footer_size) {
   Status status;
   sink->Lock();  // Ltell() and Lwrite() must go as an atomic operation
   // Add enough padding to ensure the final size of the index log
@@ -401,7 +376,7 @@ Status DirWriterImpl::EnsureDataPadding(LogSink* sink, size_t footer_size) {
   return status;
 }
 
-Status DirWriterImpl::InstallDirInfo(const std::string& footer) {
+Status DirWriter::Rep::InstallDirInfo(const std::string& footer) {
   WritableFile* file;
   const std::string fname = DirInfoFileName(dirname_);
   Status status = env_->NewWritableFile(fname.c_str(), &file);
@@ -440,7 +415,7 @@ Status DirWriterImpl::InstallDirInfo(const std::string& footer) {
   return status;
 }
 
-Status DirWriterImpl::Finalize() {
+Status DirWriter::Rep::Finalize() {
   mutex_.AssertHeld();
   const uint32_t num_epochs = idxers_[0]->num_epochs();
   for (uint32_t i = 1; i < num_parts_; i++)
@@ -488,7 +463,7 @@ Status DirWriterImpl::Finalize() {
   return status;
 }
 
-Status DirWriterImpl::ObtainCompactionStatus() {
+Status DirWriter::Rep::ObtainCompactionStatus() {
   mutex_.AssertHeld();
   Status status;
   for (size_t i = 0; i < num_parts_; i++) {
@@ -500,7 +475,7 @@ Status DirWriterImpl::ObtainCompactionStatus() {
   return status;
 }
 
-bool DirWriterImpl::HasCompaction() {
+bool DirWriter::Rep::HasCompaction() {
   mutex_.AssertHeld();
   for (size_t i = 0; i < num_parts_; i++) {
     if (idxers_[i]->has_bg_compaction()) {
@@ -510,7 +485,7 @@ bool DirWriterImpl::HasCompaction() {
   return false;
 }
 
-Status DirWriterImpl::WaitForCompaction() {
+Status DirWriter::Rep::WaitForCompaction() {
   mutex_.AssertHeld();
   Status status;
   while (true) {
@@ -524,7 +499,7 @@ Status DirWriterImpl::WaitForCompaction() {
   return status;
 }
 
-Status DirWriterImpl::TryBatchWrites(BatchCursor* cursor) {
+Status DirWriter::Rep::TryBatchWrites(BatchCursor* cursor) {
   mutex_.AssertHeld();
   assert(has_pending_flush_);
   assert(options_.non_blocking);
@@ -603,7 +578,7 @@ Status DirWriterImpl::TryBatchWrites(BatchCursor* cursor) {
 // later. Return immediately as soon as all partitions have a minor compaction
 // scheduled. Will not wait for all compactions to finish.
 // Return OK on success, or a non-OK status on errors.
-Status DirWriterImpl::TryFlush(bool ef, bool fi) {
+Status DirWriter::Rep::TryFlush(bool ef, bool fi) {
   mutex_.AssertHeld();
   assert(has_pending_flush_);
   Status status;
@@ -611,7 +586,7 @@ Status DirWriterImpl::TryFlush(bool ef, bool fi) {
   for (size_t i = 0; i < num_parts_; i++) remaining.push_back(idxers_[i]);
   std::vector<DirIndexer*> waiting_list;
 
-  typename DirIndexer::FlushOptions flush_options(ef, fi);
+  DirIndexer::FlushOptions flush_options(ef, fi);
   while (!remaining.empty()) {
     waiting_list.clear();
     for (size_t i = 0; i < remaining.size(); i++) {
@@ -649,28 +624,28 @@ Status DirWriterImpl::TryFlush(bool ef, bool fi) {
 // completed) before processing this one. After this call, either success or
 // error, no further write operation will be allowed in future.
 // Return OK on success, or a non-OK status on errors.
-Status DirWriterImpl::Finish() {
+Status DirWriter::Finish() {
   Status status;
-  MutexLock ml(&mutex_);
+  MutexLock ml(&rep_->mutex_);
   while (true) {
-    if (finished_) {
-      status = finish_status_;  // Return the cached result
+    if (rep_->finished_) {
+      status = rep_->finish_status_;  // Return the cached result
       break;
-    } else if (has_pending_flush_) {
-      cv_.Wait();
+    } else if (rep_->has_pending_flush_) {
+      rep_->cv_.Wait();
     } else {
-      has_pending_flush_ = true;
+      rep_->has_pending_flush_ = true;
       const bool epoch_flush = true;
       const bool finalize = true;
-      status = TryFlush(epoch_flush, finalize);
-      if (status.ok()) num_epoch_flushes_++;
-      if (status.ok()) num_flushes_++;
-      if (status.ok()) status = WaitForCompaction();
-      if (status.ok()) status = Finalize();
-      has_pending_flush_ = false;
-      cv_.SignalAll();
-      finish_status_ = status;
-      finished_ = true;
+      status = rep_->TryFlush(epoch_flush, finalize);
+      if (status.ok()) rep_->num_epoch_flushes_++;
+      if (status.ok()) rep_->num_flushes_++;
+      if (status.ok()) status = rep_->WaitForCompaction();
+      if (status.ok()) status = rep_->Finalize();
+      rep_->has_pending_flush_ = false;
+      rep_->cv_.SignalAll();
+      rep_->finish_status_ = status;
+      rep_->finished_ = true;
       break;
     }
   }
@@ -683,31 +658,31 @@ Status DirWriterImpl::Finish() {
 // pending minor compaction currently waiting to be scheduled, wait until it is
 // scheduled (but not necessarily completed) before validating and submitting
 // this one. Return OK on success, or a non-OK status on errors.
-Status DirWriterImpl::EpochFlush(int epoch) {
+Status DirWriter::EpochFlush(int epoch) {
   Status status;
-  MutexLock ml(&mutex_);
+  MutexLock ml(&rep_->mutex_);
   while (true) {
-    if (finished_) {
+    if (rep_->finished_) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
-    } else if (has_pending_flush_) {
-      cv_.Wait();
-    } else if (epoch != -1 && epoch < num_epoch_flushes_) {
+    } else if (rep_->has_pending_flush_) {
+      rep_->cv_.Wait();
+    } else if (epoch != -1 && epoch < rep_->num_epoch_flushes_) {
       status = Status::AlreadyExists(Slice());
       break;
-    } else if (epoch != -1 && epoch > num_epoch_flushes_) {
+    } else if (epoch != -1 && epoch > rep_->num_epoch_flushes_) {
       status = Status::NotFound(Slice());
       break;
     } else {
-      has_pending_flush_ = true;
+      rep_->has_pending_flush_ = true;
       const bool epoch_flush = true;
       // Schedule a minor compaction for epoch flush
       // Does not wait for completion
-      status = TryFlush(epoch_flush);
-      if (status.ok()) num_epoch_flushes_++;
-      if (status.ok()) num_flushes_++;
-      has_pending_flush_ = false;
-      cv_.SignalAll();
+      status = rep_->TryFlush(epoch_flush);
+      if (status.ok()) rep_->num_epoch_flushes_++;
+      if (status.ok()) rep_->num_flushes_++;
+      rep_->has_pending_flush_ = false;
+      rep_->cv_.SignalAll();
       break;
     }
   }
@@ -719,15 +694,15 @@ Status DirWriterImpl::EpochFlush(int epoch) {
   //  #2. Better to allow log rotation to happen asynchronously --- no
   //    need to wait for compaction to finish
   //  #3. change LogSink->Lrotate() to create log files lazily
-  if (options_.epoch_log_rotation && status.ok()) {
+  if (rep_->options_.epoch_log_rotation && status.ok()) {
     // If log rotation is requested, must wait
     // until compaction completes
-    status = WaitForCompaction();
+    status = rep_->WaitForCompaction();
     if (status.ok()) {
-      data_->Lock();
+      rep_->data_->Lock();
       // Prepare for the next epoch
-      status = data_->Lrotate(epoch + 1);
-      data_->Unlock();
+      status = rep_->data_->Lrotate(epoch + 1);
+      rep_->data_->Unlock();
     }
   }
 
@@ -739,74 +714,74 @@ Status DirWriterImpl::EpochFlush(int epoch) {
 // currently waiting to be scheduled, wait until it is scheduled (but not
 // necessarily completed) before validating and submitting this one.
 // Return OK on success, or a non-OK status on errors.
-Status DirWriterImpl::Flush(int epoch) {
+Status DirWriter::Flush(int epoch) {
   Status status;
-  MutexLock ml(&mutex_);
+  MutexLock ml(&rep_->mutex_);
   while (true) {
-    if (finished_) {
+    if (rep_->finished_) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
-    } else if (has_pending_flush_) {
-      cv_.Wait();
-    } else if (epoch != -1 && epoch != num_epoch_flushes_) {
+    } else if (rep_->has_pending_flush_) {
+      rep_->cv_.Wait();
+    } else if (epoch != -1 && epoch != rep_->num_epoch_flushes_) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {
-      has_pending_flush_ = true;
-      status = TryFlush();
-      if (status.ok()) num_flushes_++;
-      has_pending_flush_ = false;
-      cv_.SignalAll();
+      rep_->has_pending_flush_ = true;
+      status = rep_->TryFlush();
+      if (status.ok()) rep_->num_flushes_++;
+      rep_->has_pending_flush_ = false;
+      rep_->cv_.SignalAll();
       break;
     }
   }
   return status;
 }
 
-Status DirWriterImpl::Write(BatchCursor* cursor, int epoch) {
+Status DirWriter::Write(BatchCursor* cursor, int epoch) {
   Status status;
-  MutexLock ml(&mutex_);
+  MutexLock ml(&rep_->mutex_);
   while (true) {
-    if (finished_) {
+    if (rep_->finished_) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
-    } else if (has_pending_flush_) {
-      cv_.Wait();
-    } else if (epoch != -1 && epoch != num_epoch_flushes_) {
+    } else if (rep_->has_pending_flush_) {
+      rep_->cv_.Wait();
+    } else if (epoch != -1 && epoch != rep_->num_epoch_flushes_) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {
       // Batch writes may trigger one or more flushes
-      has_pending_flush_ = true;
-      status = TryBatchWrites(cursor);
-      has_pending_flush_ = false;
-      cv_.SignalAll();
+      rep_->has_pending_flush_ = true;
+      status = rep_->TryBatchWrites(cursor);
+      rep_->has_pending_flush_ = false;
+      rep_->cv_.SignalAll();
       break;
     }
   }
   return status;
 }
 
-Status DirWriterImpl::Append(const Slice& fid, const Slice& data, int epoch) {
+Status DirWriter::Append(const Slice& fid, const Slice& data, int epoch) {
   Status status;
-  MutexLock ml(&mutex_);
+  MutexLock ml(&rep_->mutex_);
   while (true) {
-    if (finished_) {
+    if (rep_->finished_) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
-    } else if (has_pending_flush_) {
-      cv_.Wait();
-    } else if (epoch != -1 && epoch != num_epoch_flushes_) {
+    } else if (rep_->has_pending_flush_) {
+      rep_->cv_.Wait();
+    } else if (epoch != -1 && epoch != rep_->num_epoch_flushes_) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {
       // Appends may also trigger flushes
-      has_pending_flush_ = true;
-      status = TryAppend(fid, data);
-      has_pending_flush_ = false;
-      cv_.SignalAll();
+      rep_->has_pending_flush_ = true;
+      status = rep_->TryAppend(fid, data);
+      rep_->has_pending_flush_ = false;
+      rep_->cv_.SignalAll();
       if (status.IsBufferFull()) {
-        MaybeSlowdownCaller();
+        rep_->MaybeSlowdownCaller();
       }
       break;
     }
@@ -814,7 +789,7 @@ Status DirWriterImpl::Append(const Slice& fid, const Slice& data, int epoch) {
   return status;
 }
 
-Status DirWriterImpl::TryAppend(const Slice& fid, const Slice& data) {
+Status DirWriter::Rep::TryAppend(const Slice& fid, const Slice& data) {
   mutex_.AssertHeld();
   Status status;
   const uint32_t hash = Hash(fid.data(), fid.size(), 0);
@@ -826,136 +801,138 @@ Status DirWriterImpl::TryAppend(const Slice& fid, const Slice& data) {
 
 // Wait for all on-going compactions to finish.
 // Return OK on success, or a non-OK status on errors.
-Status DirWriterImpl::Wait() {
+Status DirWriter::Wait() {
   Status status;
-  MutexLock ml(&mutex_);
-  if (!finished_) return WaitForCompaction();
-  return finish_status_;
+  MutexLock ml(&rep_->mutex_);
+  if (!rep_->finished_) return rep_->WaitForCompaction();
+  return rep_->finish_status_;
 }
 
-IoStats DirWriterImpl::GetIoStats() const {
-  MutexLock ml(&mutex_);
+IoStats DirWriter::GetIoStats() const {
+  MutexLock ml(&rep_->mutex_);
   IoStats result;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result.index_bytes += idxers_[i]->io_stats_.TotalBytes();
-    result.index_ops += idxers_[i]->io_stats_.TotalOps();
+  for (size_t i = 0; i < rep_->num_parts_; i++) {
+    result.index_bytes += rep_->idxers_[i]->io_stats_.TotalBytes();
+    result.index_ops += rep_->idxers_[i]->io_stats_.TotalOps();
   }
-  result.data_bytes = io_stats_.TotalBytes();
-  result.data_ops = io_stats_.TotalOps();
+  result.data_bytes = rep_->io_stats_.TotalBytes();
+  result.data_ops = rep_->io_stats_.TotalOps();
   return result;
 }
 
-uint64_t DirWriterImpl::TEST_estimated_sstable_size() const {
-  MutexLock ml(&mutex_);
-  if (num_parts_ != 0) {
-    return idxers_[0]->estimated_sstable_size();
+uint64_t DirWriter::TEST_estimated_sstable_size() const {
+  MutexLock ml(&rep_->mutex_);
+  if (rep_->num_parts_ != 0) {
+    return rep_->idxers_[0]->estimated_sstable_size();
   } else {
     return 0;
   }
 }
 
-uint64_t DirWriterImpl::TEST_planned_filter_size() const {
-  MutexLock ml(&mutex_);
-  if (num_parts_ != 0) {
-    return idxers_[0]->planned_filter_size();
+uint64_t DirWriter::TEST_planned_filter_size() const {
+  MutexLock ml(&rep_->mutex_);
+  if (rep_->num_parts_ != 0) {
+    return rep_->idxers_[0]->planned_filter_size();
   } else {
     return 0;
   }
 }
 
-uint32_t DirWriterImpl::TEST_num_keys() const {
-  MutexLock ml(&mutex_);
+uint32_t DirWriter::TEST_num_keys() const {
+  MutexLock ml(&rep_->mutex_);
   uint32_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += compac_stats_[i]->total_num_keys_;
+  for (size_t i = 0; i < rep_->num_parts_; i++) {
+    result += rep_->compac_stats_[i]->total_num_keys_;
   }
   return result;
 }
 
-uint32_t DirWriterImpl::TEST_num_dropped_keys() const {
-  MutexLock ml(&mutex_);
+uint32_t DirWriter::TEST_num_dropped_keys() const {
+  MutexLock ml(&rep_->mutex_);
   uint32_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += compac_stats_[i]->total_num_dropped_keys_;
+  for (size_t i = 0; i < rep_->num_parts_; i++) {
+    result += rep_->compac_stats_[i]->total_num_dropped_keys_;
   }
   return result;
 }
 
-uint32_t DirWriterImpl::TEST_num_data_blocks() const {
-  MutexLock ml(&mutex_);
+uint32_t DirWriter::TEST_num_data_blocks() const {
+  MutexLock ml(&rep_->mutex_);
   uint32_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += compac_stats_[i]->total_num_blocks_;
+  for (size_t i = 0; i < rep_->num_parts_; i++) {
+    result += rep_->compac_stats_[i]->total_num_blocks_;
   }
   return result;
 }
 
-uint32_t DirWriterImpl::TEST_num_sstables() const {
-  MutexLock ml(&mutex_);
+uint32_t DirWriter::TEST_num_sstables() const {
+  MutexLock ml(&rep_->mutex_);
   uint32_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += compac_stats_[i]->total_num_tables_;
+  for (size_t i = 0; i < rep_->num_parts_; i++) {
+    result += rep_->compac_stats_[i]->total_num_tables_;
   }
   return result;
 }
 
-uint64_t DirWriterImpl::TEST_total_memory_usage() const {
-  MutexLock ml(&mutex_);
+uint64_t DirWriter::TEST_total_memory_usage() const {
+  MutexLock ml(&rep_->mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) result += idxers_[i]->memory_usage();
-  result += data_->buffer_store()->capacity();
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += idxers_[i]->indx_->buffer_store()->capacity();
-  }
+  result += rep_->data_->buffer_store()->capacity();
+  for (size_t i = 0; i < rep_->num_parts_; i++)
+    result += rep_->idxers_[i]->indx_->buffer_store()->capacity();
+  for (size_t i = 0; i < rep_->num_parts_; i++)
+    result += rep_->idxers_[i]->memory_usage();
   return result;
 }
 
-uint64_t DirWriterImpl::TEST_raw_index_contents() const {
-  MutexLock ml(&mutex_);
+uint64_t DirWriter::TEST_raw_index_contents() const {
+  MutexLock ml(&rep_->mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += compac_stats_[i]->index_size;
+  for (size_t i = 0; i < rep_->num_parts_; i++) {
+    result += rep_->compac_stats_[i]->index_size;
   }
   return result;
 }
 
-uint64_t DirWriterImpl::TEST_raw_filter_contents() const {
-  MutexLock ml(&mutex_);
+uint64_t DirWriter::TEST_raw_filter_contents() const {
+  MutexLock ml(&rep_->mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += compac_stats_[i]->filter_size;
+  for (size_t i = 0; i < rep_->num_parts_; i++) {
+    result += rep_->compac_stats_[i]->filter_size;
   }
   return result;
 }
 
-uint64_t DirWriterImpl::TEST_raw_data_contents() const {
-  MutexLock ml(&mutex_);
+uint64_t DirWriter::TEST_raw_data_contents() const {
+  MutexLock ml(&rep_->mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += compac_stats_[i]->data_size;
+  for (size_t i = 0; i < rep_->num_parts_; i++) {
+    result += rep_->compac_stats_[i]->data_size;
   }
   return result;
 }
 
-uint64_t DirWriterImpl::TEST_value_bytes() const {
-  MutexLock ml(&mutex_);
+uint64_t DirWriter::TEST_value_bytes() const {
+  MutexLock ml(&rep_->mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += compac_stats_[i]->value_size;
+  for (size_t i = 0; i < rep_->num_parts_; i++) {
+    result += rep_->compac_stats_[i]->value_size;
   }
   return result;
 }
 
-uint64_t DirWriterImpl::TEST_key_bytes() const {
-  MutexLock ml(&mutex_);
+uint64_t DirWriter::TEST_key_bytes() const {
+  MutexLock ml(&rep_->mutex_);
   uint64_t result = 0;
-  for (size_t i = 0; i < num_parts_; i++) {
-    result += compac_stats_[i]->key_size;
+  for (size_t i = 0; i < rep_->num_parts_; i++) {
+    result += rep_->compac_stats_[i]->key_size;
   }
   return result;
 }
 
-DirWriter::~DirWriter() {}
+DirWriter::DirWriter(Rep* rep) : rep_(rep) {}
+
+DirWriter::~DirWriter() { delete rep_; }
 
 template <class T, class V>
 static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
@@ -1047,19 +1024,16 @@ std::string FilterOptions(const DirOptions& options) {
 }  // namespace
 #endif
 
-// Open a directory writer instance according to the instantiated implementation
-// type T. Return OK on success, or a non-OK status on errors.
-Status DirWriter::TryDirOpen(DirWriterImpl* impl) {
+Status DirWriter::TryOpen(Rep* rep) {
   Status status;
-  assert(impl != NULL);
-  assert(dynamic_cast<DirWriter*>(impl) != NULL);
-  const DirOptions* const options = &impl->options_;
+  assert(rep != NULL);
+  const DirOptions* const options = &rep->options_;
   const uint32_t num_parts = static_cast<uint32_t>(1 << options->lg_parts);
   const int my_rank = options->rank;
   Env* const env = options->env;
   if (options->is_env_pfs) {
     // Ignore error since it may already exist
-    env->CreateDir(impl->dirname_.c_str());
+    env->CreateDir(rep->dirname_.c_str());
   }
 
   std::vector<DirIndexer*> diridxers(num_parts, NULL);
@@ -1070,16 +1044,16 @@ Status DirWriter::TryDirOpen(DirWriterImpl* impl) {
   io_opts.rank = my_rank;
   io_opts.type = kDefIoType;
   if (options->epoch_log_rotation) io_opts.rotation = kRotationExtCtrl;
-  if (options->measure_writes) io_opts.stats = &impl->io_stats_;
-  io_opts.mu = &impl->io_mutex_;
+  if (options->measure_writes) io_opts.stats = &rep->io_stats_;
+  io_opts.mu = &rep->io_mutex_;
   io_opts.min_buf = options->min_data_buffer;
   io_opts.max_buf = options->data_buffer;
   io_opts.env = env;
-  status = LogSink::Open(io_opts, impl->dirname_, &data[0]);
+  status = LogSink::Open(io_opts, rep->dirname_, &data[0]);
   if (status.ok()) {
     for (size_t i = 0; i < num_parts; i++) {
       diridxers[i] =
-          new DirIndexer(impl->options_, i, &impl->mutex_, &impl->bg_cv_);
+          new DirIndexer(rep->options_, i, &rep->mutex_, &rep->bg_cv_);
       LogSink::LogOptions idx_opts;
       idx_opts.rank = my_rank;
       idx_opts.sub_partition = static_cast<int>(i);
@@ -1089,7 +1063,7 @@ Status DirWriter::TryDirOpen(DirWriterImpl* impl) {
       idx_opts.min_buf = options->min_index_buffer;
       idx_opts.max_buf = options->index_buffer;
       idx_opts.env = env;
-      status = LogSink::Open(idx_opts, impl->dirname_, &index[i]);
+      status = LogSink::Open(idx_opts, rep->dirname_, &index[i]);
       diridxers[i]->Ref();
       if (status.ok()) {
         diridxers[i]->Open(data[0], index[i]);
@@ -1110,12 +1084,12 @@ Status DirWriter::TryDirOpen(DirWriterImpl* impl) {
       idxers[i] = diridxers[i];
       idxers[i]->Ref();
     }
-    impl->data_ = data[0];
-    impl->data_->Ref();
-    impl->compac_stats_ = compac_stats;
-    impl->part_mask_ = num_parts - 1;
-    impl->num_parts_ = num_parts;
-    impl->idxers_ = idxers;
+    rep->data_ = data[0];
+    rep->data_->Ref();
+    rep->compac_stats_ = compac_stats;
+    rep->part_mask_ = num_parts - 1;
+    rep->num_parts_ = num_parts;
+    rep->idxers_ = idxers;
   }
 
   for (size_t i = 0; i < num_parts; i++) {
@@ -1203,12 +1177,12 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.my_rank -> %d", options.rank);
 #endif
 
-  DirWriterImpl* impl = new DirWriterImpl(options, dirname);
-  Status status = TryDirOpen(impl);
-  if (!status.ok()) {
-    delete impl;
+  Rep* rep = new Rep(options, dirname);
+  Status status = TryOpen(rep);
+  if (status.ok()) {
+    *result = new DirWriter(rep);
   } else {
-    *result = impl;
+    delete rep;
   }
 
   return status;

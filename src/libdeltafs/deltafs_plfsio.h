@@ -325,59 +325,56 @@ extern DirOptions ParseDirOptions(const char* conf);
 // Be very careful using this method.
 extern Status DestroyDir(const std::string& dirname, const DirOptions& options);
 
-class DirWriterImpl;
-
 // Deltafs Plfs Dir Writer
 class DirWriter {
  public:
-  DirWriter() {}
-  virtual ~DirWriter();
+  ~DirWriter();
 
   // Report the I/O stats for logging the data and the indexes.
-  virtual IoStats GetIoStats() const = 0;
+  IoStats GetIoStats() const;
 
   // Return the estimated size of each sst.
   // This is the amount of memory we reserve for each sst.
   // The actual memory, and storage, used by each sst may differ.
-  virtual uint64_t TEST_estimated_sstable_size() const = 0;
+  uint64_t TEST_estimated_sstable_size() const;
 
   // Return the planned size of each filter.
   // This is the amount of memory we reserve for the filter associated with each
   // sst. The actual memory, and storage, used by each filter may differ.
-  virtual uint64_t TEST_planned_filter_size() const = 0;
+  uint64_t TEST_planned_filter_size() const;
 
   // Return the total number of keys inserted so far.
-  virtual uint32_t TEST_num_keys() const = 0;
+  uint32_t TEST_num_keys() const;
 
   // Return the total number of keys rejected so far.
-  virtual uint32_t TEST_num_dropped_keys() const = 0;
+  uint32_t TEST_num_dropped_keys() const;
 
   // Return the total number of data blocks generated so far.
-  virtual uint32_t TEST_num_data_blocks() const = 0;
+  uint32_t TEST_num_data_blocks() const;
 
   // Return the total number of SSTable generated so far.
-  virtual uint32_t TEST_num_sstables() const = 0;
+  uint32_t TEST_num_sstables() const;
 
   // Return the aggregated size of all index blocks.
   // Before compression and excluding any padding or checksum bytes.
-  virtual uint64_t TEST_raw_index_contents() const = 0;
+  uint64_t TEST_raw_index_contents() const;
 
   // Return the aggregated size of all filter blocks.
   // Before compression and excluding any padding or checksum bytes.
-  virtual uint64_t TEST_raw_filter_contents() const = 0;
+  uint64_t TEST_raw_filter_contents() const;
 
   // Return the aggregated size of all data blocks.
   // Excluding any padding or checksum bytes.
-  virtual uint64_t TEST_raw_data_contents() const = 0;
+  uint64_t TEST_raw_data_contents() const;
 
   // Return the aggregated size of all inserted keys.
-  virtual uint64_t TEST_key_bytes() const = 0;
+  uint64_t TEST_key_bytes() const;
 
   // Return the aggregated size of all inserted values.
-  virtual uint64_t TEST_value_bytes() const = 0;
+  uint64_t TEST_value_bytes() const;
 
   // Return the total amount of memory reserved by this directory.
-  virtual uint64_t TEST_total_memory_usage() const = 0;
+  uint64_t TEST_total_memory_usage() const;
 
   // Open an I/O writer against a specified plfs-style directory.
   // Return OK on success, or a non-OK status on errors.
@@ -386,36 +383,38 @@ class DirWriter {
 
   // Perform a batch of file appends in a single operation.
   // REQUIRES: Finish() has not been called.
-  virtual Status Write(BatchCursor* cursor, int epoch = -1) = 0;
+  Status Write(BatchCursor* cursor, int epoch = -1);
 
   // Append a piece of data to a specific file under the directory.
   // Set epoch to -1 to disable epoch validation.
   // REQUIRES: Finish() has not been called.
-  virtual Status Append(const Slice& fid, const Slice& data,
-                        int epoch = -1) = 0;
+  Status Append(const Slice& fid, const Slice& data, int epoch = -1);
 
   // Force a memtable compaction.
   // Set epoch to -1 to disable epoch validation.
   // REQUIRES: Finish() has not been called.
-  virtual Status Flush(int epoch = -1) = 0;
+  Status Flush(int epoch = -1);
 
   // Force a memtable compaction and start a new epoch.
   // Set epoch to -1 to disable epoch validation.
   // REQUIRES: Finish() has not been called.
-  virtual Status EpochFlush(int epoch = -1) = 0;
+  Status EpochFlush(int epoch = -1);
 
   // Wait for all on-going background compactions to finish.
   // Return OK on success, or a non-OK status on errors.
-  virtual Status Wait() = 0;
+  Status Wait();
 
   // Force a compaction and finalize all log files.
   // No further write operation is allowed after this call.
-  virtual Status Finish() = 0;
+  Status Finish();
 
  private:
-  static Status TryDirOpen(DirWriterImpl* impl);
+  struct Rep;
+  Rep* rep_;
+  explicit DirWriter(Rep* rep);
+  static Status TryOpen(Rep* rep);
 
-  void operator=(const DirWriter& d);  // No copying allowed
+  void operator=(const DirWriter& dw);  // No copying allowed
   DirWriter(const DirWriter&);
 };
 

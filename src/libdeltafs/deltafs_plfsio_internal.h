@@ -145,18 +145,16 @@ class DirIndexer {
     }
   }
 
+  // Return the number of epochs generated so far.
+  uint32_t num_epochs() const;
+
  private:
   WritableFileStats io_stats_;
   DirOutputStats compac_stats_;
 
-  // Return the number of epochs generated so far.
-  uint32_t num_epochs() const;
-
-  // Report memory configurations and usage
   size_t estimated_sstable_size() const { return tb_bytes_; }
   size_t planned_filter_size() const { return ft_bytes_; }
 
-  friend class DirWriterImpl;
   friend class DirWriter;
   ~DirIndexer();
 
