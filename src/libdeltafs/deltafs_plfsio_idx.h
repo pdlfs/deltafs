@@ -108,16 +108,12 @@ class DirBuilder {
   virtual size_t memory_usage() const = 0;
 
   bool ok() const { return status_.ok(); }
-  Status status() const { return status_; }
 
  protected:
-  const DirOptions& options_;
-  DirOutputStats* compac_stats_;
-  Status status_;
-
-  template <typename T>
-  friend class DirIndexer;
   friend class DirCompactor;
+  const DirOptions& options_;
+  DirOutputStats* const compac_stats_;
+  Status status_;
 
   uint32_t num_tables_;  // Number of tables generated within the current epoch
   uint32_t num_epochs_;  // Total number of epochs generated
