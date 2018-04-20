@@ -11,7 +11,6 @@
 #include "deltafs_plfsio_recov.h"
 
 #include <math.h>
-#include <set>
 
 namespace pdlfs {
 namespace plfsio {
@@ -40,9 +39,9 @@ DirBuilder::~DirBuilder() {}
 // A versatile block builder that uses the LevelDB's SST block format.
 // In this format, keys will be prefix-compressed. Both keys and values can have
 // variable length. Each block can be seen as a sorted search tree.
-class TreeBlockBuilder : public BlockBuilder {
+class SortedStringBlockBuilder : public BlockBuilder {
  public:
-  explicit TreeBlockBuilder(const DirOptions& options)
+  explicit SortedStringBlockBuilder(const DirOptions& options)
       : BlockBuilder(16, BytewiseComparator()) {
     if (IsKeyUnOrdered(options.mode)) {
       cmp_ = NULL;
@@ -273,72 +272,6 @@ Iterator* ArrayBlock::NewIterator(const Comparator* comparator) {
   }
 }
 
-// Write sorted directory contents into a pair of log files.
-template <typename T = TreeBlockBuilder>
-class FastDirBuilder : public DirBuilder {
- public:
-  FastDirBuilder(const DirOptions& options, DirOutputStats* stats,
-                 LogSink* data, LogSink* indx);
-  virtual ~FastDirBuilder();
-
-  virtual void Add(const Slice& key, const Slice& value);
-
-  // Force the start of a new table.
-  // REQUIRES: Finish() has not been called.
-  virtual void EndTable(const Slice& filter_contents, ChunkType filter_type);
-
-  // Force the start of a new epoch.
-  // REQUIRES: Finish() has not been called.
-  virtual void MakeEpoch();
-
-  // Finalize table contents.
-  // No further writes.
-  virtual Status Finish();
-
-  // Report memory usage.
-  virtual size_t memory_usage() const;
-
- private:
-  // End the current block and force the start of a new data block.
-  // REQUIRES: Finish() has not been called.
-  void EndBlock();
-
-  // Flush buffered data blocks and finalize their indexes.
-  // REQUIRES: Finish() has not been called.
-  void Commit();
-#ifndef NDEBUG
-  // Used to verify the uniqueness of all input keys
-  std::set<std::string> keys_;
-#endif
-
-  std::string smallest_key_;
-  std::string largest_key_;
-  std::string last_key_;
-  uint32_t num_uncommitted_indx_;  // Number of uncommitted index entries
-  uint32_t num_uncommitted_data_;  // Number of uncommitted data blocks
-  bool pending_restart_;           // Request to restart the data block buffer
-  bool pending_commit_;  // Request to commit buffered data and indexes
-  size_t block_threshold_;
-  T data_block_;
-  BlockBuilder indx_block_;  // Locate the data blocks within a table
-  BlockBuilder meta_block_;  // Locate the tables within an epoch
-  BlockBuilder root_block_;  // Locate each epoch
-  bool pending_indx_entry_;
-  BlockHandle pending_indx_handle_;
-  bool pending_meta_entry_;
-  TableHandle pending_meta_handle_;
-  bool pending_root_entry_;
-  BlockHandle pending_root_handle_;
-  std::string uncommitted_indexes_;
-  uint64_t pending_data_flush_;  // Offset of the data pending flush
-  uint64_t pending_indx_flush_;  // Offset of the index pending flush
-  LogSink* data_sink_;
-  uint64_t data_offset_;  // Latest data offset
-  LogWriter indx_logger_;
-  LogSink* indx_sink_;
-  bool finished_;
-};
-
 template <typename T>
 FastDirBuilder<T>::FastDirBuilder(const DirOptions& options,
                                   DirOutputStats* stats, LogSink* data,
@@ -359,7 +292,7 @@ FastDirBuilder<T>::FastDirBuilder(const DirOptions& options,
       pending_indx_flush_(0),
       data_sink_(data),
       data_offset_(0),
-      indx_logger_(options, indx),
+      indx_writter_(new LogWriter(options, indx)),
       indx_sink_(indx),
       finished_(false) {
   // Sanity checks
@@ -387,6 +320,7 @@ FastDirBuilder<T>::FastDirBuilder(const DirOptions& options,
 
 template <typename T>
 FastDirBuilder<T>::~FastDirBuilder() {
+  delete indx_writter_;
   indx_sink_->Unref();
   data_sink_->Unref();
 }
@@ -408,7 +342,7 @@ void FastDirBuilder<T>::MakeEpoch() {
   BlockHandle meta_index_handle;
   Slice meta_index_contents = meta_block_.Finish();
   status_ =
-      indx_logger_.Write(kMetaChunk, meta_index_contents, &meta_index_handle);
+      indx_writter_->Write(kMetaChunk, meta_index_contents, &meta_index_handle);
 
   if (ok()) {
     const uint64_t meta_index_size = meta_index_contents.size();
@@ -445,7 +379,7 @@ void FastDirBuilder<T>::MakeEpoch() {
     stone.set_id(num_epochs_);
     std::string epoch_stone;
     stone.EncodeTo(&epoch_stone);
-    status_ = indx_logger_.SealEpoch(epoch_stone);
+    status_ = indx_writter_->SealEpoch(epoch_stone);
   } else {
     return;  // Abort
   }
@@ -491,7 +425,7 @@ void FastDirBuilder<T>::EndTable(const Slice& filter_contents,
 
   BlockHandle index_handle;
   Slice index_contents = indx_block_.Finish();
-  status_ = indx_logger_.Write(kIdxChunk, index_contents, &index_handle);
+  status_ = indx_writter_->Write(kIdxChunk, index_contents, &index_handle);
 
   if (ok()) {
     const uint64_t index_size = index_contents.size();
@@ -504,7 +438,8 @@ void FastDirBuilder<T>::EndTable(const Slice& filter_contents,
 
   BlockHandle filter_handle;
   if (!filter_contents.empty()) {
-    status_ = indx_logger_.Write(filter_type, filter_contents, &filter_handle);
+    status_ =
+        indx_writter_->Write(filter_type, filter_contents, &filter_handle);
     if (ok()) {
       const uint64_t filter_size = filter_contents.size();
       const uint64_t final_filter_size =
@@ -760,7 +695,7 @@ Status FastDirBuilder<T>::Finish() {
   BlockHandle root_index_handle;
   Slice root_index_contents = root_block_.Finish();
   status_ =
-      indx_logger_.Write(kRtChunk, root_index_contents, &root_index_handle);
+      indx_writter_->Write(kRtChunk, root_index_contents, &root_index_handle);
 
   if (ok()) {
     const uint64_t root_index_size = root_index_contents.size();
@@ -776,7 +711,7 @@ Status FastDirBuilder<T>::Finish() {
   footer.set_epoch_index_handle(root_index_handle);
   footer.set_num_epochs(num_epochs_);
   footer.EncodeTo(&footer_buf);
-  status_ = indx_logger_.Finish(footer_buf);
+  status_ = indx_writter_->Finish(footer_buf);
 
   return status_;
 }

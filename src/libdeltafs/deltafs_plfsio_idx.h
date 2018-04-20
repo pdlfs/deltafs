@@ -13,6 +13,8 @@
 #include "deltafs_plfsio_format.h"
 #include "deltafs_plfsio_nio.h"
 
+#include <set>
+
 namespace pdlfs {
 namespace plfsio {
 
@@ -122,6 +124,76 @@ class DirBuilder {
   // No copying allowed
   void operator=(const DirBuilder& db);
   DirBuilder(const DirBuilder&);
+};
+
+class SortedStringBlockBuilder;
+class ArrayBlockBuilder;
+class LogWriter;
+
+// Write sorted directory contents into a pair of log files.
+template <typename T = SortedStringBlockBuilder>
+class FastDirBuilder : public DirBuilder {
+ public:
+  FastDirBuilder(const DirOptions& options, DirOutputStats* stats,
+                 LogSink* data, LogSink* indx);
+  virtual ~FastDirBuilder();
+
+  virtual void Add(const Slice& key, const Slice& value);
+
+  // Force the start of a new table.
+  // REQUIRES: Finish() has not been called.
+  virtual void EndTable(const Slice& filter_contents, ChunkType filter_type);
+
+  // Force the start of a new epoch.
+  // REQUIRES: Finish() has not been called.
+  virtual void MakeEpoch();
+
+  // Finalize table contents.
+  // No further writes.
+  virtual Status Finish();
+
+  // Report memory usage.
+  virtual size_t memory_usage() const;
+
+ private:
+  // End the current block and force the start of a new data block.
+  // REQUIRES: Finish() has not been called.
+  void EndBlock();
+
+  // Flush buffered data blocks and finalize their indexes.
+  // REQUIRES: Finish() has not been called.
+  void Commit();
+#ifndef NDEBUG
+  // Used to verify the uniqueness of all input keys
+  std::set<std::string> keys_;
+#endif
+
+  std::string smallest_key_;
+  std::string largest_key_;
+  std::string last_key_;
+  uint32_t num_uncommitted_indx_;  // Number of uncommitted index entries
+  uint32_t num_uncommitted_data_;  // Number of uncommitted data blocks
+  bool pending_restart_;           // Request to restart the data block buffer
+  bool pending_commit_;  // Request to commit buffered data and indexes
+  size_t block_threshold_;
+  T data_block_;
+  BlockBuilder indx_block_;  // Locate the data blocks within a table
+  BlockBuilder meta_block_;  // Locate the tables within an epoch
+  BlockBuilder root_block_;  // Locate each epoch
+  bool pending_indx_entry_;
+  BlockHandle pending_indx_handle_;
+  bool pending_meta_entry_;
+  TableHandle pending_meta_handle_;
+  bool pending_root_entry_;
+  BlockHandle pending_root_handle_;
+  std::string uncommitted_indexes_;
+  uint64_t pending_data_flush_;  // Offset of the data pending flush
+  uint64_t pending_indx_flush_;  // Offset of the index pending flush
+  LogSink* data_sink_;
+  uint64_t data_offset_;  // Latest data offset
+  LogWriter* indx_writter_;
+  LogSink* indx_sink_;
+  bool finished_;
 };
 
 }  // namespace plfsio
