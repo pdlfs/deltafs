@@ -104,7 +104,7 @@ class DirBuilder {
 
   // Finalize directory contents.
   // No further writes.
-  virtual Status Finish() = 0;
+  virtual void Finish() = 0;
 
   // Report memory usage.
   virtual size_t memory_usage() const = 0;
@@ -150,7 +150,7 @@ class FastDirBuilder : public DirBuilder {
 
   // Finalize table contents.
   // No further writes.
-  virtual Status Finish();
+  virtual void Finish();
 
   // Report memory usage.
   virtual size_t memory_usage() const;

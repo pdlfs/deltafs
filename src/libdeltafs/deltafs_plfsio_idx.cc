@@ -681,14 +681,16 @@ void FastDirBuilder<T>::Add(const Slice& key, const Slice& value) {
 }
 
 template <typename T>
-Status FastDirBuilder<T>::Finish() {
+void FastDirBuilder<T>::Finish() {
   assert(!finished_);  // Finish() has not been called
   MakeEpoch();
   finished_ = true;
-  if (!ok()) return status_;
+  if (!ok()) {
+    return;
+  }
+
   std::string footer_buf;
   Footer footer = Mkfoot(options_);
-
   assert(!pending_indx_entry_);
   assert(!pending_meta_entry_);
   assert(!pending_root_entry_);
@@ -697,15 +699,17 @@ Status FastDirBuilder<T>::Finish() {
   Slice root_index_contents = root_block_.Finish();
   status_ =
       indx_writter_->Write(kRtChunk, root_index_contents, &root_index_handle);
+  if (!ok()) {
+    return;
+  }
 
-  if (ok()) {
-    const uint64_t root_index_size = root_index_contents.size();
-    const uint64_t final_root_index_size =
-        root_index_handle.size() + kBlockTrailerSize;
-    compac_stats_->final_meta_index_size += final_root_index_size;
-    compac_stats_->meta_index_size += root_index_size;
-  } else {
-    return status_;
+  const uint64_t root_index_size = root_index_contents.size();
+  const uint64_t final_root_index_size =
+      root_index_handle.size() + kBlockTrailerSize;
+  compac_stats_->final_meta_index_size += final_root_index_size;
+  compac_stats_->meta_index_size += root_index_size;
+  if (!ok()) {
+    return;
   }
 
   // Write the final footer
@@ -713,8 +717,6 @@ Status FastDirBuilder<T>::Finish() {
   footer.set_num_epochs(num_epochs_);
   footer.EncodeTo(&footer_buf);
   status_ = indx_writter_->Finish(footer_buf);
-
-  return status_;
 }
 
 template <typename T>
