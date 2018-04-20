@@ -402,11 +402,15 @@ Status DirIndexer::Open(LogSink* data, LogSink* indx) {
   indx_->Ref();
 
   DirBuilder* bu = DirBuilder::Open(options_, &compac_stats_, data, indx);
+  // To reduce runtime overhead (e.g. virtual function calls)
+  // here we always statically bind to one specific
+  // dir builder implementation.
   if (!options_.leveldb_compatible && options_.fixed_kv_length)
     compactor_ = OpenCompactor<FastDirBuilder<ArrayBlockBuilder> >(bu);
+
   if (compactor_ == NULL)  // Use the default block format
     compactor_ = OpenCompactor<FastDirBuilder<> >(bu);
-
+  // No storage I/O so always OK.
   return Status::OK();
 }
 
