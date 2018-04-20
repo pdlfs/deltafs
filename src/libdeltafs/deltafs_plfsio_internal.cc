@@ -207,7 +207,7 @@ Status DirCompactor::Finish() {
   return bu_->status_;
 }
 
-template <typename T>
+template <typename T, typename U>
 class FilteredDirCompactor : public DirCompactor {
  public:
   FilteredDirCompactor(const DirOptions& options, DirBuilder* bu, T* filter)
@@ -226,42 +226,44 @@ class FilteredDirCompactor : public DirCompactor {
   T* filter_;
 };
 
-template <typename T>
-FilteredDirCompactor<T>::~FilteredDirCompactor() {
+template <typename T, typename U>
+FilteredDirCompactor<T, U>::~FilteredDirCompactor() {
   delete filter_;
 }
 
-template <typename T>
-Status FilteredDirCompactor<T>::MakeEpoch() {
+template <typename T, typename U>
+Status FilteredDirCompactor<T, U>::MakeEpoch() {
   return DirCompactor::MakeEpoch();
 }
 
-template <typename T>
-Status FilteredDirCompactor<T>::Finish() {
+template <typename T, typename U>
+Status FilteredDirCompactor<T, U>::Finish() {
   return DirCompactor::Finish();
 }
 
-template <typename T>
-size_t FilteredDirCompactor<T>::memory_usage() const {
+template <typename T, typename U>
+size_t FilteredDirCompactor<T, U>::memory_usage() const {
   size_t result = 0;
   if (filter_ != NULL) result += filter_->memory_usage();
   result += bu_->memory_usage();
   return result;
 }
 
-template <typename T>
-void FilteredDirCompactor<T>::Compact(WriteBuffer* buf) {
+template <typename T, typename U>
+void FilteredDirCompactor<T, U>::Compact(WriteBuffer* buf) {
+  U* const bu = static_cast<U*>(bu_);
   IterType* const iter = static_cast<IterType*>(buf->NewIterator());
+  T* const ft = filter_;
   iter->IterType::SeekToFirst();
-  if (filter_ != NULL) {
-    filter_->Reset(buf->NumEntries());
+  if (ft != NULL) {
+    ft->Reset(buf->NumEntries());
   }
   for (; iter->IterType::Valid(); iter->IterType::Next()) {
     Slice key(iter->IterType::key());
-    if (filter_ != NULL) {
-      filter_->AddKey(key);
+    if (ft != NULL) {
+      ft->AddKey(key);
     }
-    bu_->Add(key, iter->IterType::value());
+    bu->U::Add(key, iter->IterType::value());
     if (!ok()) {
       break;
     }
@@ -272,11 +274,11 @@ void FilteredDirCompactor<T>::Compact(WriteBuffer* buf) {
   }
 
   Slice filter_contents;
-  if (filter_ != NULL) {
-    filter_contents = filter_->Finish();
+  if (ft != NULL) {
+    filter_contents = ft->Finish();
   }
   const ChunkType filter_type = static_cast<ChunkType>(T::chunk_type());
-  bu_->EndTable(filter_contents, filter_type);
+  bu->U::EndTable(filter_contents, filter_type);
   delete iter;
 }
 
@@ -346,9 +348,10 @@ DirIndexer::~DirIndexer() {
   if (indx_ != NULL) indx_->Unref();
 }
 
+template <typename U>
 DirCompactor* DirIndexer::OpenBitmapCompactor(DirBuilder* bu) {
 #define BMP_COMPACTOR(T, opts, bu, ft_bytes) \
-  new FilteredDirCompactor<T>(opts, bu, new T(opts, ft_bytes))
+  new FilteredDirCompactor<T, U>(opts, bu, new T(opts, ft_bytes))
   if (options_.bm_fmt == kFmtRoaring) {
     typedef BitmapBlock<RoaringFormat> R;
     return BMP_COMPACTOR(R, options_, bu, ft_bytes_);
@@ -368,23 +371,24 @@ DirCompactor* DirIndexer::OpenBitmapCompactor(DirBuilder* bu) {
     typedef BitmapBlock<PfDeltaFormat> PFD;
     return BMP_COMPACTOR(PFD, options_, bu, ft_bytes_);
   } else {  // Default format: kUncompressedBitmap
-    typedef BitmapBlock<UncompressedFormat> U;
-    return BMP_COMPACTOR(U, options_, bu, ft_bytes_);
+    typedef BitmapBlock<UncompressedFormat> B;
+    return BMP_COMPACTOR(B, options_, bu, ft_bytes_);
   }
 
 #undef BMP_COMPACTOR
 }
 
+template <typename U>
 DirCompactor* DirIndexer::OpenCompactor(DirBuilder* bu) {
   if (options_.filter == kFtBloomFilter) {
     BloomBlock* bf = NULL;
     if (options_.bf_bits_per_key != 0) bf = new BloomBlock(options_, ft_bytes_);
-    return new FilteredDirCompactor<BloomBlock>(options_, bu, bf);
+    return new FilteredDirCompactor<BloomBlock, U>(options_, bu, bf);
   } else if (options_.filter == kFtBitmap) {
-    return OpenBitmapCompactor(bu);
+    return OpenBitmapCompactor<U>(bu);
   }
 
-  return new FilteredDirCompactor<EmptyFilterBlock>(options_, bu, NULL);
+  return new FilteredDirCompactor<EmptyFilterBlock, U>(options_, bu, NULL);
 }
 
 Status DirIndexer::Open(LogSink* data, LogSink* indx) {
@@ -398,7 +402,10 @@ Status DirIndexer::Open(LogSink* data, LogSink* indx) {
   indx_->Ref();
 
   DirBuilder* bu = DirBuilder::Open(options_, &compac_stats_, data, indx);
-  compactor_ = OpenCompactor(bu);
+  if (!options_.leveldb_compatible && options_.fixed_kv_length)
+    compactor_ = OpenCompactor<FastDirBuilder<ArrayBlockBuilder> >(bu);
+  if (compactor_ == NULL)  // Use the default block format
+    compactor_ = OpenCompactor<FastDirBuilder<> >(bu);
 
   return Status::OK();
 }

@@ -281,7 +281,7 @@ FastDirBuilder<T>::FastDirBuilder(const DirOptions& options,
       num_uncommitted_data_(0),
       pending_restart_(false),
       pending_commit_(false),
-      data_block_(options),
+      data_block_(new T(options)),
       indx_block_(1),
       meta_block_(1),
       root_block_(1),
@@ -313,16 +313,17 @@ FastDirBuilder<T>::FastDirBuilder(const DirOptions& options,
       static_cast<size_t>(floor(options_.block_size * options_.block_util));
   uncommitted_indexes_.reserve(1 << 10);
   if (options_.block_batch_size != 0)
-    data_block_.buffer_store()->reserve(options_.block_batch_size);
-  data_block_.buffer_store()->clear();
+    data_block_->buffer_store()->reserve(options_.block_batch_size);
+  data_block_->buffer_store()->clear();
   pending_restart_ = true;
 }
 
 template <typename T>
 FastDirBuilder<T>::~FastDirBuilder() {
-  delete indx_writter_;
   indx_sink_->Unref();
   data_sink_->Unref();
+  delete indx_writter_;
+  delete data_block_;
 }
 
 template <typename T>
@@ -491,11 +492,11 @@ template <typename T>
 void FastDirBuilder<T>::Commit() {
   assert(!finished_);  // Finish() has not been called
   // Skip empty commit
-  if (data_block_.buffer_store()->empty()) return;
+  if (data_block_->buffer_store()->empty()) return;
   if (!ok()) return;  // Abort
 
   assert(num_uncommitted_data_ == num_uncommitted_indx_);
-  std::string* const buffer = data_block_.buffer_store();
+  std::string* const buffer = data_block_->buffer_store();
 
   Slice key;
   data_sink_->Lock();
@@ -546,22 +547,22 @@ void FastDirBuilder<T>::Commit() {
   pending_commit_ = false;
   num_uncommitted_data_ = num_uncommitted_indx_ = 0;
   uncommitted_indexes_.clear();
-  data_block_.buffer_store()->clear();
+  data_block_->buffer_store()->clear();
   pending_restart_ = true;
 }
 
 template <typename T>
 void FastDirBuilder<T>::EndBlock() {
-  assert(!finished_);               // Finish() has not been called
-  if (pending_restart_) return;     // Empty block
-  if (data_block_.empty()) return;  // Empty block
-  if (!ok()) return;                // Abort
+  assert(!finished_);                // Finish() has not been called
+  if (pending_restart_) return;      // Empty block
+  if (data_block_->empty()) return;  // Empty block
+  if (!ok()) return;                 // Abort
 
   // | <------------ options_.block_size (e.g. 32KB) ------------> |
   //   block handle   block contents  block trailer  block padding
   //                | <---------- final block contents ----------> |
   //                          (LevelDb compatible format)
-  Slice block_contents = data_block_.Finish();
+  Slice block_contents = data_block_->Finish();
   const size_t block_size = block_contents.size();
   Slice final_block_contents;  // With the trailer and any inserted padding
   if (options_.block_padding) {
@@ -570,16 +571,16 @@ void FastDirBuilder<T>::EndBlock() {
         options_.block_size - BlockHandle::kMaxEncodedLength;
     while (padding_target < block_size + kBlockTrailerSize)
       padding_target += options_.block_size;
-    final_block_contents = data_block_.Finalize(
+    final_block_contents = data_block_->Finalize(
         !options_.skip_checksums, static_cast<uint32_t>(padding_target),
         static_cast<char>(0xff));
   } else {
-    final_block_contents = data_block_.Finalize(!options_.skip_checksums);
+    final_block_contents = data_block_->Finalize(!options_.skip_checksums);
   }
 
   const size_t final_block_size = final_block_contents.size();
   const uint64_t block_offset =
-      data_block_.buffer_store()->size() - final_block_size;
+      data_block_->buffer_store()->size() - final_block_size;
   compac_stats_->final_data_size += final_block_size;
   compac_stats_->data_size += block_size;
 
@@ -645,11 +646,11 @@ void FastDirBuilder<T>::Add(const Slice& key, const Slice& value) {
   // Restart the block buffer
   if (pending_restart_) {
     pending_restart_ = false;
-    data_block_.ResetBuffer(
+    data_block_->ResetBuffer(
         NULL);  // Continue appending to the same underlying buffer
     // Pre-reserve enough space for the leading block handle
-    data_block_.Pad(BlockHandle::kMaxEncodedLength);
-    data_block_.Reset();
+    data_block_->Pad(BlockHandle::kMaxEncodedLength);
+    data_block_->Reset();
   }
 
   last_key_ = key.ToString();
@@ -662,17 +663,17 @@ void FastDirBuilder<T>::Add(const Slice& key, const Slice& value) {
   }
 #endif
 
-  data_block_.Add(key, value);
+  data_block_->Add(key, value);
   compac_stats_->total_num_keys_++;
   if (IsKeyUnOrdered(options_.mode)) {
     return;  // Force one block per table
   }
-  if (data_block_.CurrentSizeEstimate() + kBlockTrailerSize +
+  if (data_block_->CurrentSizeEstimate() + kBlockTrailerSize +
           BlockHandle::kMaxEncodedLength >=
       block_threshold_) {
     EndBlock();
     // Schedule buffer commit if it is about to full
-    if (data_block_.buffer_store()->size() + options_.block_size >
+    if (data_block_->buffer_store()->size() + options_.block_size >
         options_.block_batch_size) {
       pending_commit_ = true;
     }
@@ -718,11 +719,10 @@ Status FastDirBuilder<T>::Finish() {
 
 template <typename T>
 size_t FastDirBuilder<T>::memory_usage() const {
-  size_t result = 0;
+  size_t result = data_block_->memory_usage();
   result += root_block_.memory_usage();
   result += meta_block_.memory_usage();
   result += indx_block_.memory_usage();
-  result += data_block_.memory_usage();
   // XXX: Add index log's LogWriter's memory usage as well
   return result;
 }

@@ -158,7 +158,9 @@ class DirIndexer {
   friend class DirWriter;
   ~DirIndexer();
 
+  template <typename U>
   DirCompactor* OpenBitmapCompactor(DirBuilder* bu);
+  template <typename U>
   DirCompactor* OpenCompactor(DirBuilder* bu);
   Status Prepare(bool force = false, bool epoch_flush = false,
                  bool finalize = false);

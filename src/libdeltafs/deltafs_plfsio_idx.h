@@ -176,7 +176,7 @@ class FastDirBuilder : public DirBuilder {
   bool pending_restart_;           // Request to restart the data block buffer
   bool pending_commit_;  // Request to commit buffered data and indexes
   size_t block_threshold_;
-  T data_block_;
+  T* data_block_;
   BlockBuilder indx_block_;  // Locate the data blocks within a table
   BlockBuilder meta_block_;  // Locate the tables within an epoch
   BlockBuilder root_block_;  // Locate each epoch
