@@ -343,9 +343,9 @@ DirIndexer::~DirIndexer() {
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
-  delete compactor_;
   if (data_ != NULL) data_->Unref();
   if (indx_ != NULL) indx_->Unref();
+  delete compactor_;
 }
 
 template <typename U>
@@ -396,15 +396,14 @@ Status DirIndexer::Open(LogSink* data, LogSink* indx) {
   assert(!opened_);
   opened_ = true;
   data_ = data;
-  indx_ = indx;
-
   data_->Ref();
+  indx_ = indx;
   indx_->Ref();
 
-  DirBuilder* bu = DirBuilder::Open(options_, &compac_stats_, data, indx);
-  // To reduce runtime overhead (e.g. virtual function calls)
-  // here we always statically bind to one specific
-  // dir builder implementation.
+  DirBuilder* const bu = DirBuilder::Open(options_, &compac_stats_, data, indx);
+  // To reduce runtime overhead (e.g. c++ virtual function calls)
+  // here we want to statically bind to one specific dir
+  // builder type with one specific block format.
   if (!options_.leveldb_compatible && options_.fixed_kv_length)
     compactor_ = OpenCompactor<FastDirBuilder<ArrayBlockBuilder> >(bu);
 
