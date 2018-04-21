@@ -186,7 +186,7 @@ class FastDirBuilder : public DirBuilder {
   bool pending_meta_entry_;
   TableHandle last_tabl_info_;
   bool pending_root_entry_;
-  BlockHandle last_epok_info_;
+  EpochHandle last_epok_info_;
   std::string uncommitted_indexes_;
   uint64_t pending_data_flush_;  // Offset of the data pending flush
   uint64_t pending_indx_flush_;  // Offset of the index pending flush

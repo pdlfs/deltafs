@@ -1047,8 +1047,8 @@ Status Dir::DoList(const BlockHandle& h, uint32_t epoch, ListContext* ctx,
   if (!status.ok()) {
     return status;
   }
-  Block* meta_index_block = new Block(meta_index_contents);
-  Iterator* const iter = meta_index_block->NewIterator(BytewiseComparator());
+  Block* epoch_index_block = new Block(meta_index_contents);
+  Iterator* const iter = epoch_index_block->NewIterator(BytewiseComparator());
   iter->SeekToFirst();
   std::string epoch_table_key;
   for (uint32_t table = 0;; table++) {
@@ -1090,7 +1090,7 @@ Status Dir::DoList(const BlockHandle& h, uint32_t epoch, ListContext* ctx,
   }
 
   delete iter;
-  delete meta_index_block;
+  delete epoch_index_block;
   return status;
 }
 
@@ -1141,8 +1141,8 @@ Status Dir::DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
   if (!status.ok()) {
     return status;
   }
-  Block* meta_index_block = new Block(meta_index_contents);
-  Iterator* const iter = meta_index_block->NewIterator(BytewiseComparator());
+  Block* epoch_index_block = new Block(meta_index_contents);
+  Iterator* const iter = epoch_index_block->NewIterator(BytewiseComparator());
   iter->SeekToFirst();
   std::string epoch_table_key;
   uint32_t table = 0;
@@ -1202,7 +1202,7 @@ Status Dir::DoGet(const Slice& key, const BlockHandle& h, uint32_t epoch,
   }
 
   delete iter;
-  delete meta_index_block;
+  delete epoch_index_block;
   return status;
 }
 

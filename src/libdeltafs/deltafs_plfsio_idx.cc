@@ -356,8 +356,10 @@ void FastDirBuilder<T>::MakeEpoch() {
   compac_stats_->meta_index_size += meta_index_size;
 
   epok_block_.Reset();
-  last_epok_info_.set_offset(epok_block_handle.offset());
-  last_epok_info_.set_size(epok_block_handle.size());
+  last_epok_info_.set_index_offset(epok_block_handle.offset());
+  last_epok_info_.set_index_size(epok_block_handle.size());
+  last_epok_info_.set_num_tables(num_tables_);
+  last_epok_info_.set_num_ents(num_kvrecs_);
   assert(!pending_root_entry_);
   pending_root_entry_ = true;
 
