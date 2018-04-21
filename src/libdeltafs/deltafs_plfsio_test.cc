@@ -162,10 +162,11 @@ class PlfsIoTest {
     port::Mutex mu;
   };
 
-  static void SaveValue(void* arg, const Slice& key, const Slice& value) {
+  static int SaveValue(void* arg, const Slice& key, const Slice& value) {
     SaverState* st = reinterpret_cast<SaverState*>(arg);
     MutexLock ml(&st->mu);
     st->tmp->append(value.data(), value.size());
+    return 0;
   }
 
   size_t Count(int epoch) {

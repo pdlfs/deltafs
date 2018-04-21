@@ -460,7 +460,7 @@ class DirReader {
     size_t* seeks;
     size_t* n;
   };
-  typedef void (*ScanSaver)(void* arg, const Slice& key, const Slice& value);
+  typedef int (*ScanSaver)(void* arg, const Slice& key, const Slice& value);
   // List all keys stored in a given epoch range.
   // Report operation stats in *table_seeks, *seeks, and *n.
   // Return OK on success, or a non-OK status on errors.

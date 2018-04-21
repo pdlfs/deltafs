@@ -291,7 +291,7 @@ class Dir {
   friend class DirReader;
   ~Dir();
 
-  typedef void (*Saver)(void* arg, const Slice& key, const Slice& value);
+  typedef int (*Saver)(void* arg, const Slice& key, const Slice& value);
 
   struct GetStats;
   struct FetchOptions {

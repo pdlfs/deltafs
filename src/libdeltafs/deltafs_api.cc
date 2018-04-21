@@ -1193,14 +1193,14 @@ int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
 
 namespace {
 struct ScanState {
-  void (*saver)(void*, const char* key, size_t keylen, const char* d,
-                size_t dlen);
+  int (*saver)(void*, const char* key, size_t keylen, const char* d,
+               size_t dlen);
   void* arg;
 };
 
-void ScanSaver(void* arg, const pdlfs::Slice& k, const pdlfs::Slice& v) {
-  ScanState* state = reinterpret_cast<ScanState*>(arg);
-  state->saver(state->arg, k.data(), k.size(), v.data(), v.size());
+int ScanSaver(void* arg, const pdlfs::Slice& k, const pdlfs::Slice& v) {
+  ScanState* s = reinterpret_cast<ScanState*>(arg);
+  return s->saver(s->arg, k.data(), k.size(), v.data(), v.size());
 }
 
 std::string LevelDbName(const std::string& parent, int rank) {
@@ -1741,9 +1741,9 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
 }
 
 ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
-                             void (*saver)(void* arg, const char* __key,
-                                           size_t __keylen, const char* __value,
-                                           size_t sz),
+                             int (*saver)(void* arg, const char* __key,
+                                          size_t __keylen, const char* __value,
+                                          size_t sz),
                              void* arg) {
   pdlfs::Status s;
   ScanState state;

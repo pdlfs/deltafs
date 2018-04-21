@@ -1332,7 +1332,8 @@ Status DirReaderImpl::Scan(const ScanOp& op, ScanSaver saver, void* arg) {
       opts.epoch_start = op.epoch_start;
       opts.epoch_end = op.epoch_end;
       opts.force_serial_reads = op.no_parallel_reads;
-      opts.usr_cb = reinterpret_cast<void*>(saver);
+      Dir::Saver dir_saver = static_cast<Dir::Saver>(saver);
+      opts.usr_cb = reinterpret_cast<void*>(dir_saver);
       opts.arg_cb = arg;
       char tmp[256];  // Temporary buffer space for the read operation
       opts.tmp_length = sizeof(tmp);

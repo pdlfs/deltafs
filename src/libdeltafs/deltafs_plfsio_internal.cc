@@ -786,7 +786,10 @@ Status Dir::Iter(const IterOptions& opts, Slice* input) {
   Iterator* const iter = OpenDirBlock(options_, contents);
   iter->SeekToFirst();
   for (; iter->Valid(); iter->Next()) {
-    opts.saver(opts.arg, iter->key(), iter->value());
+    if (opts.saver(opts.arg, iter->key(), iter->value()) == -1) {
+      // User does not want to continue
+      break;
+    }
     opts.stats->n++;
   }
   if (status.ok()) {
@@ -1100,10 +1103,11 @@ struct SaverState {
   bool found;
 };
 
-void SaveValue(void* arg, const Slice& key, const Slice& value) {
+int SaveValue(void* arg, const Slice& key, const Slice& value) {
   SaverState* state = reinterpret_cast<SaverState*>(arg);
   state->dst->append(value.data(), value.size());
   state->found = true;
+  return 0;
 }
 
 struct ParaSaverState : public SaverState {
@@ -1113,13 +1117,14 @@ struct ParaSaverState : public SaverState {
   port::Mutex* mu;
 };
 
-void ParaSaveValue(void* arg, const Slice& key, const Slice& value) {
+int ParaSaveValue(void* arg, const Slice& key, const Slice& value) {
   ParaSaverState* state = reinterpret_cast<ParaSaverState*>(arg);
   MutexLock ml(state->mu);
   state->offsets->push_back(static_cast<uint32_t>(state->buffer->size()));
   PutVarint32(state->buffer, state->epoch);
   PutLengthPrefixedSlice(state->buffer, value);
   state->found = true;
+  return 0;
 }
 
 }  // namespace

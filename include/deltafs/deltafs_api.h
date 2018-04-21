@@ -164,9 +164,9 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
    epochs if __epoch is -1. Report results to *saver. Return -1 on errors.
    Otherwise, return the total number of entries scanned. */
 ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
-                             void (*saver)(void* arg, const char* __key,
-                                           size_t __keylen, const char* __value,
-                                           size_t sz),
+                             int (*saver)(void* arg, const char* __key,
+                                          size_t __keylen, const char* __value,
+                                          size_t sz),
                              void* arg);
 /* Count the number of keys at a specified epoch, or all epochs if
    __epoch is -1. Return the number of keys found. Return -1 on error. */
