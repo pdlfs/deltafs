@@ -1196,6 +1196,7 @@ class DirReaderImpl : public DirReader {
   DirReaderImpl(const DirOptions& opts, const std::string& name);
   virtual ~DirReaderImpl();
 
+  virtual Status Count(const CountOp& op, size_t* result);
   virtual Status Read(const ReadOp& op, const Slice& fid, std::string* dst);
   virtual Status Scan(const ScanOp& op, ScanSaver, void*);
 
@@ -1278,6 +1279,39 @@ Status DirReaderImpl::OpenDir(size_t part) {
   return status;
 }
 
+// Perform a count operation on all partitions.
+// Return OK on success, or a non-OK status on errors.
+Status DirReaderImpl::Count(const CountOp& op, size_t* result) {
+  Status status;
+  MutexLock ml(&mutex_);
+  size_t subtotal;
+
+  *result = 0;
+  for (uint32_t part = 0; part < num_parts_; part++) {
+    status = OpenDir(part);
+    if (status.ok()) {
+      assert(dirs_[part] != NULL);
+      Dir* const dir = dirs_[part];
+      dir->Ref();
+      Dir::CountOptions opts;
+      opts.epoch_start = op.epoch_start;
+      opts.epoch_end = op.epoch_end;
+
+      status = dirs_[part]->Count(opts, &subtotal);
+      dir->Unref();
+      if (status.ok()) {
+        *result += subtotal;
+      }
+    }
+
+    if (!status.ok()) {
+      break;
+    }
+  }
+
+  return status;
+}
+
 // Perform a scan operation on all partitions.
 // Return OK on success, or a non-OK status on errors.
 Status DirReaderImpl::Scan(const ScanOp& op, ScanSaver saver, void* arg) {
@@ -1328,7 +1362,7 @@ Status DirReaderImpl::Scan(const ScanOp& op, ScanSaver saver, void* arg) {
   return status;
 }
 
-// Perform a read operation for a given file.
+// Perform a read operation for a key.
 // Return OK on success, or a non-OK status on errors.
 Status DirReaderImpl::Read(const ReadOp& op, const Slice& fid,
                            std::string* dst) {
@@ -1381,6 +1415,17 @@ IoStats DirReaderImpl::GetIoStats() const {
   result.data_bytes = io_stats_.TotalBytes();
   result.data_ops = io_stats_.TotalOps();
   return result;
+}
+
+DirReader::CountOp::CountOp()
+    : epoch_start(0), epoch_end(~static_cast<uint32_t>(0)) {}
+
+void DirReader::CountOp::SetEpoch(int epoch) {
+  assert(epoch >= -1);
+  if (epoch != -1) {
+    epoch_start = static_cast<uint32_t>(epoch);
+    epoch_end = epoch_start + 1;
+  }
 }
 
 DirReader::ReadOp::ReadOp()

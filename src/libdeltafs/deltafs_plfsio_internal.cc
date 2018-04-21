@@ -1383,6 +1383,49 @@ void Dir::Merge(GetContext* ctx) {
   }
 }
 
+// Count the total num of keys within a given epoch range.
+// Return OK on success, or a non-OK status on errors.
+Status Dir::Count(const CountOptions& opts, size_t* result) {
+  mu_->AssertHeld();
+  Status status;
+  assert(rt_ != NULL);
+  *result = 0;
+
+  Iterator* rt_iter = NewRtIterator(rt_);
+  if (num_epoches_ != 0) {
+    uint32_t epoch = opts.epoch_start;
+    uint32_t epoch_end = std::min(num_epoches_, opts.epoch_end);
+    for (; epoch < epoch_end; epoch++) {
+      std::string epoch_key = EpochKey(epoch);
+      // Try reusing current iterator position if possible
+      if (!rt_iter->Valid() || rt_iter->key() != epoch_key) {
+        rt_iter->Seek(epoch_key);
+        if (!rt_iter->Valid()) {
+          break;  // EOF
+        } else if (rt_iter->key() != epoch_key) {
+          break;  // No such epoch
+        }
+      }
+      EpochHandle h;  // Handle to the epoch
+      Slice input = rt_iter->value();
+      status = h.DecodeFrom(&input);
+      rt_iter->Next();
+      if (status.ok()) {
+        *result += h.num_ents();
+      } else {
+        break;
+      }
+    }
+  }
+
+  if (status.ok()) {
+    status = rt_iter->status();
+  }
+
+  delete rt_iter;
+  return status;
+}
+
 // Iterate through all keys stored within a given epoch range.
 // Return OK on success, or a non-OK status on errors.
 Status Dir::Scan(const ScanOptions& opts, ScanStats* stats) {
@@ -1547,6 +1590,9 @@ Dir::ReadOptions::ReadOptions()
       epoch_end(~static_cast<uint32_t>(0)),
       tmp_length(0),
       tmp(NULL) {}
+
+Dir::CountOptions::CountOptions()
+    : epoch_start(0), epoch_end(~static_cast<uint32_t>(0)) {}
 
 Dir::Dir(const DirOptions& options, port::Mutex* mu, port::CondVar* bg_cv)
     : options_(options),

@@ -213,6 +213,16 @@ class Dir {
   // Return OK on success, or a non-OK status on errors.
   Status Open(LogSource* indx);
 
+  // Count the total number of keys within a given epoch range.
+  // Return OK on success, or a non-OK status on errors.
+  struct CountOptions {
+    CountOptions();
+    uint32_t epoch_start;
+    uint32_t epoch_end;
+  };
+
+  Status Count(const CountOptions& opts, size_t* result);
+
   // Obtain the value to a key within a given epoch range. All value found will
   // be appended to "dst". A caller may optionally provide a temporary buffer
   // for storing fetched block contents. Read stats will be accumulated to

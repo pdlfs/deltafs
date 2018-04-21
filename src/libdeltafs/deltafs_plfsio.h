@@ -423,6 +423,17 @@ class DirReader {
   static Status Open(const DirOptions& options, const std::string& dirname,
                      DirReader** result);
 
+  // Default: check all epochs.
+  struct CountOp {
+    CountOp();
+    void SetEpoch(int epoch);
+    uint32_t epoch_start;
+    uint32_t epoch_end;
+  };
+  // Obtain the total num of keys stored in a given epoch range.
+  // Return OK on success, or a non-OK status on errors.
+  virtual Status Count(const CountOp& op, size_t* result) = 0;
+
   // Default: fetch all epochs and allow parallel reads
   struct ReadOp {
     ReadOp();
