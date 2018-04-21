@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -51,14 +51,12 @@ enum ChunkType {
   kFooter = 0xfe
 };
 
-// Table handle is a pointer to extends of a file that store the index and
-// filter data of a table. In addition, table handle also stores
-// the key range.
+// Information regarding a table.
 class TableHandle {
  public:
   TableHandle();
 
-  // The offset of the filter block in a file.
+  // The offset of the filter block in a log object.
   uint64_t filter_offset() const { return filter_offset_; }
   void set_filter_offset(uint64_t offset) { filter_offset_ = offset; }
 
@@ -66,7 +64,7 @@ class TableHandle {
   uint64_t filter_size() const { return filter_size_; }
   void set_filter_size(uint64_t size) { filter_size_ = size; }
 
-  // The offset of the index block in a file.
+  // The offset of the index block in a log object.
   uint64_t index_offset() const { return index_offset_; }
   void set_index_offset(uint64_t offset) { index_offset_ = offset; }
 
@@ -94,6 +92,37 @@ class TableHandle {
   uint64_t filter_size_;
   uint64_t index_offset_;
   uint64_t index_size_;
+};
+
+// Information regarding an epoch.
+class EpochHandle {
+ public:
+  EpochHandle();
+
+  // The offset of the epoch index block in a log object.
+  uint64_t index_offset() const { return index_offset_; }
+  void set_index_offset(uint64_t offset) { index_offset_ = offset; }
+
+  // The size of the epoch index block.
+  uint64_t index_size() const { return index_size_; }
+  void set_index_size(uint64_t size) { index_size_ = size; }
+
+  uint32_t num_tables() const { return num_tables_; }
+  void set_num_tables(uint32_t t) { num_tables_ = t; }
+
+  uint32_t num_ents() const { return num_ents_; }
+  void set_num_ents(uint32_t n) { num_ents_ = n; }
+
+  void EncodeTo(std::string* dst) const;
+  Status DecodeFrom(Slice* input);
+
+ private:
+  // Handle to the epoch index block
+  uint64_t index_offset_;
+  uint64_t index_size_;
+  // Epoch stats
+  uint32_t num_tables_;
+  uint32_t num_ents_;
 };
 
 // A special marker representing the completion of an epoch.
@@ -194,6 +223,14 @@ inline TableHandle::TableHandle()
       filter_size_(~static_cast<uint64_t>(0) /* Invalid size */),
       index_offset_(~static_cast<uint64_t>(0) /* Invalid offset */),
       index_size_(~static_cast<uint64_t>(0) /* Invalid size */) {
+  // Empty
+}
+
+inline EpochHandle::EpochHandle()
+    : index_offset_(~static_cast<uint64_t>(0) /* Invalid offset */),
+      index_size_(~static_cast<uint64_t>(0) /* Invalid size */),
+      num_tables_(~static_cast<uint32_t>(0) /* Invalid */),
+      num_ents_(~static_cast<uint32_t>(0) /* Invalid */) {
   // Empty
 }
 

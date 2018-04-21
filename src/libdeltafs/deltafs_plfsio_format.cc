@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -93,6 +93,28 @@ Status TableHandle::DecodeFrom(Slice* input) {
   } else {
     smallest_key_ = smallest_key.ToString();
     largest_key_ = largest_key.ToString();
+    return Status::OK();
+  }
+}
+
+void EpochHandle::EncodeTo(std::string* dst) const {
+  assert(index_offset_ != ~static_cast<uint64_t>(0));
+  assert(index_size_ != ~static_cast<uint64_t>(0));
+  assert(num_tables_ != ~static_cast<uint32_t>(0));
+  assert(num_ents_ != ~static_cast<uint32_t>(0));
+
+  PutVarint64(dst, index_offset_);
+  PutVarint64(dst, index_size_);
+  PutVarint32(dst, num_tables_);
+  PutVarint32(dst, num_ents_);
+}
+
+Status EpochHandle::DecodeFrom(Slice* input) {
+  if (!GetVarint64(input, &index_offset_) ||
+      !GetVarint64(input, &index_size_) || !GetVarint32(input, &num_tables_) ||
+      !GetVarint32(input, &num_ents_)) {
+    return Status::Corruption("Bad epoch handle");
+  } else {
     return Status::OK();
   }
 }
