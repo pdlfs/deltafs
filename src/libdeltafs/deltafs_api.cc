@@ -1773,6 +1773,31 @@ ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
   }
 }
 
+ssize_t deltafs_plfsdir_count(deltafs_plfsdir_t* __dir, int __epoch) {
+  pdlfs::Status s;
+  size_t n = 0;
+
+  if (!IsDirOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_RDONLY) {
+    s = BadArgs();
+  } else {
+    DirReader::CountOp op;
+    op.SetEpoch(__epoch);
+    if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
+      s = __dir->reader->Count(op, &n);
+    } else {
+      // Not implemented
+    }
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return n;
+  }
+}
+
 int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
   if (__dir == NULL) return 0;
 
