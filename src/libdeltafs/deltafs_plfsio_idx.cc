@@ -32,7 +32,11 @@ DirOutputStats::DirOutputStats()
       key_size(0) {}
 
 DirBuilder::DirBuilder(const DirOptions& options, DirOutputStats* stats)
-    : options_(options), compac_stats_(stats), num_tables_(0), num_epochs_(0) {}
+    : options_(options),
+      compac_stats_(stats),
+      num_kvrecs_(0),  // Within the current epoch
+      num_tables_(0),  // Within the current epoch
+      num_epochs_(0) {}
 
 DirBuilder::~DirBuilder() {}
 
@@ -283,7 +287,7 @@ FastDirBuilder<T>::FastDirBuilder(const DirOptions& options,
       pending_commit_(false),
       data_block_(new T(options)),
       indx_block_(1),
-      meta_block_(1),
+      epok_block_(1),
       root_block_(1),
       pending_indx_entry_(false),
       pending_meta_entry_(false),
@@ -305,7 +309,7 @@ FastDirBuilder<T>::FastDirBuilder(const DirOptions& options,
   const size_t estimated_index_size_per_table = 4 << 10;
   indx_block_.Reserve(estimated_index_size_per_table);
   const size_t estimated_meta_index_size_per_epoch = 4 << 10;
-  meta_block_.Reserve(estimated_meta_index_size_per_epoch);
+  epok_block_.Reserve(estimated_meta_index_size_per_epoch);
   const size_t estimated_root_index = 4 << 10;
   root_block_.Reserve(estimated_root_index);
 
@@ -334,68 +338,52 @@ void FastDirBuilder<T>::MakeEpoch() {
     return;  // Abort
   } else if (num_tables_ == 0) {
     return;  // Empty epoch
-  } else if (num_epochs_ >= kMaxEpochNo) {
-    status_ = Status::AssertionFailed("Too many epochs");
-    return;
   }
   EpochStone stone;
 
-  BlockHandle meta_index_handle;
-  Slice meta_index_contents = meta_block_.Finish();
+  BlockHandle epok_block_handle;
+  Slice epok_index_contents = epok_block_.Finish();
   status_ =
-      indx_writter_->Write(kMetaChunk, meta_index_contents, &meta_index_handle);
-
-  if (ok()) {
-    const uint64_t meta_index_size = meta_index_contents.size();
-    const uint64_t final_meta_index_size =
-        meta_index_handle.size() + kBlockTrailerSize;
-    compac_stats_->final_meta_index_size += final_meta_index_size;
-    compac_stats_->meta_index_size += meta_index_size;
-  } else {
-    return;  // Abort
+      indx_writter_->Write(kMetaChunk, epok_index_contents, &epok_block_handle);
+  if (!ok()) {
+    return;
   }
 
-  if (ok()) {
-    meta_block_.Reset();
-    pending_root_handle_.set_offset(meta_index_handle.offset());
-    pending_root_handle_.set_size(meta_index_handle.size());
-    assert(!pending_root_entry_);
-    pending_root_entry_ = true;
-  } else {
-    return;  // Abort
+  const uint64_t meta_index_size = epok_index_contents.size();
+  const uint64_t final_meta_index_size =
+      epok_block_handle.size() + kBlockTrailerSize;
+  compac_stats_->final_meta_index_size += final_meta_index_size;
+  compac_stats_->meta_index_size += meta_index_size;
+
+  epok_block_.Reset();
+  last_epok_info_.set_offset(epok_block_handle.offset());
+  last_epok_info_.set_size(epok_block_handle.size());
+  assert(!pending_root_entry_);
+  pending_root_entry_ = true;
+
+  std::string handle_encoding;
+  last_epok_info_.EncodeTo(&handle_encoding);
+  root_block_.Add(EpochKey(num_epochs_), handle_encoding);
+  pending_root_entry_ = false;
+
+  stone.set_handle(epok_block_handle);
+  stone.set_id(num_epochs_);
+  std::string epoch_stone;
+  stone.EncodeTo(&epoch_stone);
+  status_ = indx_writter_->SealEpoch(epoch_stone);
+  if (!ok()) {
+    return;
   }
 
-  if (num_epochs_ > kMaxEpochNo) {
-    status_ = Status::AssertionFailed("Too many epochs");
-  } else if (pending_root_entry_) {
-    std::string handle_encoding;
-    pending_root_handle_.EncodeTo(&handle_encoding);
-    root_block_.Add(EpochKey(num_epochs_), handle_encoding);
-    pending_root_entry_ = false;
-  }
-
-  // Insert an epoch seal
-  if (ok()) {
-    stone.set_handle(meta_index_handle);
-    stone.set_id(num_epochs_);
-    std::string epoch_stone;
-    stone.EncodeTo(&epoch_stone);
-    status_ = indx_writter_->SealEpoch(epoch_stone);
-  } else {
-    return;  // Abort
-  }
-
-  if (ok()) {
-    pending_indx_flush_ = indx_sink_->Ltell();
-    pending_data_flush_ = data_offset_;
-  }
+  pending_indx_flush_ = indx_sink_->Ltell();
+  pending_data_flush_ = data_offset_;
 
   if (ok()) {
 #ifndef NDEBUG
     // Keys are only required to be unique within an epoch
     keys_.clear();
 #endif
-
+    num_kvrecs_ = 0;
     num_tables_ = 0;
     num_epochs_++;
   }
@@ -412,7 +400,7 @@ void FastDirBuilder<T>::EndTable(const Slice& filter_contents,
   } else if (pending_indx_entry_) {
     BytewiseComparator()->FindShortSuccessor(&last_key_);
     PutLengthPrefixedSlice(&uncommitted_indexes_, last_key_);
-    pending_indx_handle_.EncodeTo(&uncommitted_indexes_);
+    last_data_info_.EncodeTo(&uncommitted_indexes_);
     pending_indx_entry_ = false;
     num_uncommitted_indx_++;
   }
@@ -424,68 +412,58 @@ void FastDirBuilder<T>::EndTable(const Slice& filter_contents,
     return;  // Empty table
   }
 
-  BlockHandle index_handle;
+  BlockHandle index_block_handle;
   Slice index_contents = indx_block_.Finish();
-  status_ = indx_writter_->Write(kIdxChunk, index_contents, &index_handle);
-
-  if (ok()) {
-    const uint64_t index_size = index_contents.size();
-    const uint64_t final_index_size = index_handle.size() + kBlockTrailerSize;
-    compac_stats_->final_index_size += final_index_size;
-    compac_stats_->index_size += index_size;
-  } else {
-    return;  // Abort
+  status_ =
+      indx_writter_->Write(kIdxChunk, index_contents, &index_block_handle);
+  if (!ok()) {
+    return;
   }
+
+  const uint64_t index_size = index_contents.size();
+  const uint64_t final_index_size =
+      index_block_handle.size() + kBlockTrailerSize;
+  compac_stats_->final_index_size += final_index_size;
+  compac_stats_->index_size += index_size;
 
   BlockHandle filter_handle;
   if (!filter_contents.empty()) {
     status_ =
         indx_writter_->Write(filter_type, filter_contents, &filter_handle);
-    if (ok()) {
-      const uint64_t filter_size = filter_contents.size();
-      const uint64_t final_filter_size =
-          filter_handle.size() + kBlockTrailerSize;
-      compac_stats_->final_filter_size += final_filter_size;
-      compac_stats_->filter_size += filter_size;
-    } else {
-      return;  // Abort
+    if (!ok()) {
+      return;
     }
+
+    const uint64_t filter_size = filter_contents.size();
+    const uint64_t final_filter_size = filter_handle.size() + kBlockTrailerSize;
+    compac_stats_->final_filter_size += final_filter_size;
+    compac_stats_->filter_size += filter_size;
   } else {
-    filter_handle.set_offset(0);  // No filter configured
+    filter_handle.set_offset(0);  // No filter installed
     filter_handle.set_size(0);
   }
 
-  if (ok()) {
-    indx_block_.Reset();
-    pending_meta_handle_.set_filter_offset(filter_handle.offset());
-    pending_meta_handle_.set_filter_size(filter_handle.size());
-    pending_meta_handle_.set_index_offset(index_handle.offset());
-    pending_meta_handle_.set_index_size(index_handle.size());
-    assert(!pending_meta_entry_);
-    pending_meta_entry_ = true;
-  } else {
-    return;  // Abort
-  }
+  indx_block_.Reset();
+  last_tabl_info_.set_filter_offset(filter_handle.offset());
+  last_tabl_info_.set_filter_size(filter_handle.size());
+  last_tabl_info_.set_index_offset(index_block_handle.offset());
+  last_tabl_info_.set_index_size(index_block_handle.size());
+  assert(!pending_meta_entry_);
+  pending_meta_entry_ = true;
 
-  if (num_tables_ > kMaxTableNo) {
-    status_ = Status::AssertionFailed("Too many tables");
-  } else if (pending_meta_entry_) {
-    pending_meta_handle_.set_smallest_key(smallest_key_);
-    BytewiseComparator()->FindShortSuccessor(&largest_key_);
-    pending_meta_handle_.set_largest_key(largest_key_);
-    std::string handle_encoding;
-    pending_meta_handle_.EncodeTo(&handle_encoding);
-    meta_block_.Add(EpochTableKey(num_epochs_, num_tables_), handle_encoding);
-    pending_meta_entry_ = false;
-  }
+  last_tabl_info_.set_smallest_key(smallest_key_);
+  BytewiseComparator()->FindShortSuccessor(&largest_key_);
+  last_tabl_info_.set_largest_key(largest_key_);
+  std::string handle_encoding;
+  last_tabl_info_.EncodeTo(&handle_encoding);
+  epok_block_.Add(EpochTableKey(num_epochs_, num_tables_), handle_encoding);
+  pending_meta_entry_ = false;
 
-  if (ok()) {
-    compac_stats_->total_num_tables_++;
-    smallest_key_.clear();
-    largest_key_.clear();
-    last_key_.clear();
-    num_tables_++;
-  }
+  compac_stats_->total_num_tables_++;
+  num_tables_++;  // Num of tables within an epoch
+  smallest_key_.clear();
+  largest_key_.clear();
+  last_key_.clear();
 }
 
 template <typename T>
@@ -561,7 +539,7 @@ void FastDirBuilder<T>::EndBlock() {
   // | <------------ options_.block_size (e.g. 32KB) ------------> |
   //   block handle   block contents  block trailer  block padding
   //                | <---------- final block contents ----------> |
-  //                          (LevelDb compatible format)
+  //                          (LevelDb compatible layout)
   Slice block_contents = data_block_->Finish();
   const size_t block_size = block_contents.size();
   Slice final_block_contents;  // With the trailer and any inserted padding
@@ -587,8 +565,8 @@ void FastDirBuilder<T>::EndBlock() {
   if (ok()) {
     compac_stats_->total_num_blocks_++;
     pending_restart_ = true;
-    pending_indx_handle_.set_size(block_size);
-    pending_indx_handle_.set_offset(block_offset);
+    last_data_info_.set_size(block_size);
+    last_data_info_.set_offset(block_offset);
     assert(!pending_indx_entry_);
     pending_indx_entry_ = true;
     num_uncommitted_data_++;
@@ -630,7 +608,7 @@ void FastDirBuilder<T>::Add(const Slice& key, const Slice& value) {
   if (pending_indx_entry_) {
     BytewiseComparator()->FindShortestSeparator(&last_key_, key);
     PutLengthPrefixedSlice(&uncommitted_indexes_, last_key_);
-    pending_indx_handle_.EncodeTo(&uncommitted_indexes_);
+    last_data_info_.EncodeTo(&uncommitted_indexes_);
     pending_indx_entry_ = false;
     num_uncommitted_indx_++;
   }
@@ -665,6 +643,7 @@ void FastDirBuilder<T>::Add(const Slice& key, const Slice& value) {
 
   data_block_->Add(key, value);
   compac_stats_->total_num_keys_++;
+  num_kvrecs_++;  // Num key-value entries within an epoch
   if (IsKeyUnOrdered(options_.mode)) {
     return;  // Force one block per table
   }
@@ -695,25 +674,21 @@ void FastDirBuilder<T>::Finish() {
   assert(!pending_meta_entry_);
   assert(!pending_root_entry_);
 
-  BlockHandle root_index_handle;
-  Slice root_index_contents = root_block_.Finish();
+  BlockHandle root_block_handle;
+  Slice root_block_contents = root_block_.Finish();
   status_ =
-      indx_writter_->Write(kRtChunk, root_index_contents, &root_index_handle);
+      indx_writter_->Write(kRtChunk, root_block_contents, &root_block_handle);
   if (!ok()) {
     return;
   }
 
-  const uint64_t root_index_size = root_index_contents.size();
-  const uint64_t final_root_index_size =
-      root_index_handle.size() + kBlockTrailerSize;
-  compac_stats_->final_meta_index_size += final_root_index_size;
-  compac_stats_->meta_index_size += root_index_size;
-  if (!ok()) {
-    return;
-  }
+  const uint64_t root_block_size = root_block_contents.size();
+  const uint64_t final_root_block_size =
+      root_block_handle.size() + kBlockTrailerSize;
+  compac_stats_->final_meta_index_size += final_root_block_size;
+  compac_stats_->meta_index_size += root_block_size;
 
-  // Write the final footer
-  footer.set_epoch_index_handle(root_index_handle);
+  footer.set_epoch_index_handle(root_block_handle);
   footer.set_num_epochs(num_epochs_);
   footer.EncodeTo(&footer_buf);
   status_ = indx_writter_->Finish(footer_buf);
@@ -723,7 +698,7 @@ template <typename T>
 size_t FastDirBuilder<T>::memory_usage() const {
   size_t result = data_block_->memory_usage();
   result += root_block_.memory_usage();
-  result += meta_block_.memory_usage();
+  result += epok_block_.memory_usage();
   result += indx_block_.memory_usage();
   // XXX: Add index log's LogWriter's memory usage as well
   return result;

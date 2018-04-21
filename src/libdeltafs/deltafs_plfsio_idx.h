@@ -117,6 +117,7 @@ class DirBuilder {
 
   bool ok() const { return status_.ok(); }
 
+  uint32_t num_kvrecs_;  // Number of records inserted within the current epoch
   uint32_t num_tables_;  // Number of tables generated within the current epoch
   uint32_t num_epochs_;  // Total number of epochs generated
 
@@ -178,14 +179,14 @@ class FastDirBuilder : public DirBuilder {
   size_t block_threshold_;
   T* data_block_;
   BlockBuilder indx_block_;  // Locate the data blocks within a table
-  BlockBuilder meta_block_;  // Locate the tables within an epoch
+  BlockBuilder epok_block_;  // Locate the tables within an epoch
   BlockBuilder root_block_;  // Locate each epoch
   bool pending_indx_entry_;
-  BlockHandle pending_indx_handle_;
+  BlockHandle last_data_info_;
   bool pending_meta_entry_;
-  TableHandle pending_meta_handle_;
+  TableHandle last_tabl_info_;
   bool pending_root_entry_;
-  BlockHandle pending_root_handle_;
+  BlockHandle last_epok_info_;
   std::string uncommitted_indexes_;
   uint64_t pending_data_flush_;  // Offset of the data pending flush
   uint64_t pending_indx_flush_;  // Offset of the index pending flush
