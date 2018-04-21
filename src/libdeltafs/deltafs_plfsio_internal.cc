@@ -1389,6 +1389,7 @@ Status Dir::Count(const CountOptions& opts, size_t* result) {
   mu_->AssertHeld();
   Status status;
   assert(rt_ != NULL);
+  std::string epoch_key;
   *result = 0;
 
   Iterator* rt_iter = NewRtIterator(rt_);
@@ -1396,7 +1397,7 @@ Status Dir::Count(const CountOptions& opts, size_t* result) {
     uint32_t epoch = opts.epoch_start;
     uint32_t epoch_end = std::min(num_epoches_, opts.epoch_end);
     for (; epoch < epoch_end; epoch++) {
-      std::string epoch_key = EpochKey(epoch);
+      epoch_key = EpochKey(epoch);
       // Try reusing current iterator position if possible
       if (!rt_iter->Valid() || rt_iter->key() != epoch_key) {
         rt_iter->Seek(epoch_key);

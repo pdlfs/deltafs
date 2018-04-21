@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -168,6 +168,16 @@ class PlfsIoTest {
     st->tmp->append(value.data(), value.size());
   }
 
+  size_t Count(int epoch) {
+    size_t result;
+    DirReader::CountOp op;
+    op.SetEpoch(epoch);
+    if (writer_ != NULL) Finish();
+    if (reader_ == NULL) OpenReader();
+    ASSERT_OK(reader_->Count(op, &result));
+    return result;
+  }
+
   std::string Scan(int epoch) {
     std::string tmp;
     SaverState state;
@@ -223,6 +233,8 @@ TEST(PlfsIoTest, SingleEpoch) {
   ASSERT_EQ(Read("k6"), "v6");
   ASSERT_EQ(Scan(0), "v1v2v3v4v5v6");
   ASSERT_TRUE(Scan(1).empty());
+  ASSERT_EQ(Count(0), 6);
+  ASSERT_EQ(Count(1), 0);
 }
 
 TEST(PlfsIoTest, MultiEpoch) {
@@ -243,6 +255,10 @@ TEST(PlfsIoTest, MultiEpoch) {
   ASSERT_EQ(Scan(1), "v3v4");
   ASSERT_EQ(Scan(2), "v5v6");
   ASSERT_TRUE(Scan(3).empty());
+  ASSERT_EQ(Count(0), 2);
+  ASSERT_EQ(Count(1), 2);
+  ASSERT_EQ(Count(2), 2);
+  ASSERT_EQ(Count(3), 0);
 }
 
 TEST(PlfsIoTest, ArrayBlockFmt) {
@@ -265,6 +281,10 @@ TEST(PlfsIoTest, ArrayBlockFmt) {
   ASSERT_EQ(Scan(0), "v1v2");
   ASSERT_EQ(Scan(1), "v3v4");
   ASSERT_EQ(Scan(2), "v5v6");
+  ASSERT_EQ(Count(0), 2);
+  ASSERT_EQ(Count(1), 2);
+  ASSERT_EQ(Count(2), 2);
+  ASSERT_EQ(Count(3), 0);
 }
 
 TEST(PlfsIoTest, Unordered) {
@@ -284,6 +304,10 @@ TEST(PlfsIoTest, Unordered) {
   ASSERT_EQ(Scan(0), "v2v1");
   ASSERT_EQ(Scan(1), "v3v4");
   ASSERT_EQ(Scan(2), "v6v5");
+  ASSERT_EQ(Count(0), 2);
+  ASSERT_EQ(Count(1), 2);
+  ASSERT_EQ(Count(2), 2);
+  ASSERT_EQ(Count(3), 0);
 }
 
 TEST(PlfsIoTest, UnorderedWithArrayBlockFmt) {
@@ -307,6 +331,10 @@ TEST(PlfsIoTest, UnorderedWithArrayBlockFmt) {
   ASSERT_EQ(Scan(0), "v2v1");
   ASSERT_EQ(Scan(1), "v3v4");
   ASSERT_EQ(Scan(2), "v6v5");
+  ASSERT_EQ(Count(0), 2);
+  ASSERT_EQ(Count(1), 2);
+  ASSERT_EQ(Count(2), 2);
+  ASSERT_EQ(Count(3), 0);
 }
 
 TEST(PlfsIoTest, Snappy) {
@@ -327,6 +355,10 @@ TEST(PlfsIoTest, Snappy) {
   ASSERT_EQ(Scan(0), "v1v2");
   ASSERT_EQ(Scan(1), "v3v4");
   ASSERT_EQ(Scan(2), "v5v6");
+  ASSERT_EQ(Count(0), 2);
+  ASSERT_EQ(Count(1), 2);
+  ASSERT_EQ(Count(2), 2);
+  ASSERT_EQ(Count(3), 0);
 }
 
 TEST(PlfsIoTest, LargeBatch) {
@@ -378,6 +410,10 @@ TEST(PlfsIoTest, NoFilter) {
   ASSERT_EQ(Scan(0), "v1v2");
   ASSERT_EQ(Scan(1), "v3v4");
   ASSERT_EQ(Scan(2), "v5v6");
+  ASSERT_EQ(Count(0), 2);
+  ASSERT_EQ(Count(1), 2);
+  ASSERT_EQ(Count(2), 2);
+  ASSERT_EQ(Count(3), 0);
 }
 
 TEST(PlfsIoTest, LogRotation) {
