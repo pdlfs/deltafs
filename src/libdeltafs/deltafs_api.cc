@@ -1002,9 +1002,9 @@ pdlfs::Status DirEnvWrapper::NewWritableFile(const char* f,
   pdlfs::Status s = target()->NewWritableFile(f, &file);
   if (s.ok()) {
     pdlfs::MutexLock ml(&mu_);
-    file = new TrafficControlledWritableFile(this, file);
+    pdlfs::WritableFile* tc = new TrafficControlledWritableFile(this, file);
     pdlfs::WritableFileStats* stats = new pdlfs::WritableFileStats;
-    *r = new pdlfs::MeasuredWritableFile(stats, file);
+    *r = new pdlfs::MeasuredWritableFile(stats, tc);
     writablefile_repo_.push_back(stats);
   } else {
     *r = NULL;
