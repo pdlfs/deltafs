@@ -1281,6 +1281,18 @@ pdlfs::Status DbFlush(deltafs_plfsdir_t* dir) {
   return s;
 }
 
+pdlfs::Status DbWait(deltafs_plfsdir_t* dir) {
+  pdlfs::Status s;
+  s = dir->db->DrainCompactions();
+  return s;
+}
+
+pdlfs::Status DbSync(deltafs_plfsdir_t* dir) {
+  pdlfs::Status s;
+  s = dir->db->SyncWAL();
+  return s;
+}
+
 pdlfs::Status DbFin(deltafs_plfsdir_t* dir) {
   pdlfs::Status s;
   pdlfs::FlushOptions options;
@@ -1542,6 +1554,50 @@ int deltafs_plfsdir_flush(deltafs_plfsdir_t* __dir, int __epoch) {
       s = __dir->writer->Flush(__epoch);
     } else {
       s = DbFlush(__dir);
+    }
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+int deltafs_plfsdir_wait(deltafs_plfsdir_t* __dir) {
+  pdlfs::Status s;
+
+  if (!IsDirOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else {
+    if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
+      s = __dir->writer->Wait();
+    } else {
+      s = DbWait(__dir);
+    }
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+int deltafs_plfsdir_sync(deltafs_plfsdir_t* __dir) {
+  pdlfs::Status s;
+
+  if (!IsDirOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else {
+    if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
+      s = __dir->writer->Sync();
+    } else {
+      s = DbSync(__dir);
     }
   }
 
