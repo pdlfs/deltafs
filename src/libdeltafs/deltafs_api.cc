@@ -896,9 +896,9 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
   bool ignore_sync_;
   bool drop_;
 
-  class RateLimitingWritableFile : public pdlfs::WritableFile {
+  class TrafficControlledWritableFile : public pdlfs::WritableFile {
    public:
-    RateLimitingWritableFile(DirEnvWrapper* wrapper, WritableFile* base)
+    TrafficControlledWritableFile(DirEnvWrapper* wrapper, WritableFile* base)
         : maxbw_(wrapper->rate_),
           sync_on_close_(wrapper->sync_on_close_),
           ignore_sync_(wrapper->ignore_sync_),
@@ -906,7 +906,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
           base_(base),
           env_(wrapper) {}
 
-    virtual ~RateLimitingWritableFile() {
+    virtual ~TrafficControlledWritableFile() {
       delete base_;  // Owned by us
     }
 
@@ -1002,7 +1002,7 @@ pdlfs::Status DirEnvWrapper::NewWritableFile(const char* f,
   pdlfs::Status s = target()->NewWritableFile(f, &file);
   if (s.ok()) {
     pdlfs::MutexLock ml(&mu_);
-    file = new RateLimitingWritableFile(this, file);
+    file = new TrafficControlledWritableFile(this, file);
     pdlfs::WritableFileStats* stats = new pdlfs::WritableFileStats;
     *r = new pdlfs::MeasuredWritableFile(stats, file);
     writablefile_repo_.push_back(stats);
