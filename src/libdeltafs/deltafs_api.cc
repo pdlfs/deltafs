@@ -806,9 +806,10 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
 
  public:
   explicit DirEnvWrapper(Env* base) : EnvWrapper(base) {
-    rate_ = GetNumFromEnv("DELTAFS_API_RATELIMIT");
-    ignore_sync_ = IsEnvSet("DELTAFS_API_IGNORESYNC");
-    drop_ = IsEnvSet("DELTAFS_API_DROPDATA");
+    rate_ = GetNumFromEnv("DELTAFS_TC_RATE");  // Traffic control
+    sync_on_close_ = IsEnvSet("DELTAFS_TC_SYNCONCLOSE");
+    ignore_sync_ = IsEnvSet("DELTAFS_TC_IGNORESYNC");
+    drop_ = IsEnvSet("DELTAFS_TC_DROPDATA");
   }
 
   template <typename T>
@@ -891,18 +892,19 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
 
   // Max write speed
   uint64_t rate_;  // Bytes per second
+  bool sync_on_close_;
   bool ignore_sync_;
   bool drop_;
 
   class RateLimitingWritableFile : public pdlfs::WritableFile {
    public:
-    RateLimitingWritableFile(Env* env, WritableFile* base, uint64_t rate,
-                             bool ignore_sync, bool drop)
-        : env_(env),
+    RateLimitingWritableFile(DirEnvWrapper* wrapper, WritableFile* base)
+        : maxbw_(wrapper->rate_),
+          sync_on_close_(wrapper->sync_on_close_),
+          ignore_sync_(wrapper->ignore_sync_),
+          drop_(wrapper->drop_),
           base_(base),
-          bps_(rate),
-          ignore_sync_(ignore_sync),
-          drop_(drop) {}
+          env_(wrapper) {}
 
     virtual ~RateLimitingWritableFile() {
       delete base_;  // Owned by us
@@ -910,15 +912,16 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
 
     virtual pdlfs::Status Append(const pdlfs::Slice& data) {
       pdlfs::Status status;
-      uint64_t start = env_->NowMicros();
-      uint64_t delay = data.size() * 1000 * 1000 / bps_;
-      if (base_ != NULL && !drop_) {
+      uint64_t io_start = 0;
+      if (maxbw_ != 0) io_start = env_->NowMicros();
+      if (!drop_ && base_ != NULL) {
         status = base_->Append(data);
       }
-      if (status.ok()) {
+      if (maxbw_ != 0 && status.ok()) {
+        uint64_t delay = data.size() * 1000 * 1000 / maxbw_;
         uint64_t now = env_->NowMicros();
-        if (delay > 10 && now - start < delay - 10) {
-          int sleep = static_cast<int>(delay + start - now - 10);
+        if (delay > 10 && now - io_start < delay - 10) {
+          int sleep = static_cast<int>(delay + io_start - now - 10);
           env_->SleepForMicroseconds(sleep);
         }
       }
@@ -926,33 +929,40 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
     }
 
     virtual pdlfs::Status Close() {
+      pdlfs::Status status;
       if (base_ != NULL) {
-        return base_->Close();
+        if (sync_on_close_) status = base_->Sync();
+        if (status.ok()) {
+          status = base_->Close();
+        }
       }
-      return status_;
+      return status;
     }
 
     virtual pdlfs::Status Flush() {
+      pdlfs::Status status;
       if (base_ != NULL) {
-        return base_->Flush();
+        status = base_->Flush();
       }
-      return status_;
+      return status;
     }
 
     virtual pdlfs::Status Sync() {
+      pdlfs::Status status;
       if (!ignore_sync_ && base_ != NULL) {
-        return base_->Sync();
+        status = base_->Sync();
       }
-      return status_;
+      return status;
     }
 
    private:
-    Env* env_;
-    pdlfs::Status status_;
-    WritableFile* base_;
-    uint64_t bps_;  // Bytes per second
-    bool ignore_sync_;
-    bool drop_;
+    // Constant after construction
+    const uint64_t maxbw_;  // Bytes per second.  Set 0 to disable.
+    const bool sync_on_close_;
+    const bool ignore_sync_;
+    const bool drop_;
+    WritableFile* const base_;  // May be NULL
+    Env* const env_;
   };
 };
 
@@ -992,9 +1002,7 @@ pdlfs::Status DirEnvWrapper::NewWritableFile(const char* f,
   pdlfs::Status s = target()->NewWritableFile(f, &file);
   if (s.ok()) {
     pdlfs::MutexLock ml(&mu_);
-    if (rate_ != 0)
-      file =
-          new RateLimitingWritableFile(this, file, rate_, ignore_sync_, drop_);
+    file = new RateLimitingWritableFile(this, file);
     pdlfs::WritableFileStats* stats = new pdlfs::WritableFileStats;
     *r = new pdlfs::MeasuredWritableFile(stats, file);
     writablefile_repo_.push_back(stats);
