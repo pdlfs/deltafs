@@ -807,6 +807,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
  public:
   explicit DirEnvWrapper(Env* base) : EnvWrapper(base) {
     rate_ = GetNumFromEnv("DELTAFS_API_RATELIMIT");
+    ignore_sync_ = IsEnvSet("DELTAFS_API_IGNORESYNC");
     drop_ = IsEnvSet("DELTAFS_API_DROPDATA");
   }
 
@@ -890,13 +891,18 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
 
   // Max write speed
   uint64_t rate_;  // Bytes per second
+  bool ignore_sync_;
   bool drop_;
 
   class RateLimitingWritableFile : public pdlfs::WritableFile {
    public:
     RateLimitingWritableFile(Env* env, WritableFile* base, uint64_t rate,
-                             bool drop)
-        : env_(env), base_(base), bps_(rate), drop_(drop) {}
+                             bool ignore_sync, bool drop)
+        : env_(env),
+          base_(base),
+          bps_(rate),
+          ignore_sync_(ignore_sync),
+          drop_(drop) {}
 
     virtual ~RateLimitingWritableFile() {
       delete base_;  // Owned by us
@@ -934,7 +940,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
     }
 
     virtual pdlfs::Status Sync() {
-      if (base_ != NULL) {
+      if (!ignore_sync_ && base_ != NULL) {
         return base_->Sync();
       }
       return status_;
@@ -945,6 +951,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
     pdlfs::Status status_;
     WritableFile* base_;
     uint64_t bps_;  // Bytes per second
+    bool ignore_sync_;
     bool drop_;
   };
 };
@@ -986,7 +993,8 @@ pdlfs::Status DirEnvWrapper::NewWritableFile(const char* f,
   if (s.ok()) {
     pdlfs::MutexLock ml(&mu_);
     if (rate_ != 0)
-      file = new RateLimitingWritableFile(this, file, rate_, drop_);
+      file =
+          new RateLimitingWritableFile(this, file, rate_, ignore_sync_, drop_);
     pdlfs::WritableFileStats* stats = new pdlfs::WritableFileStats;
     *r = new pdlfs::MeasuredWritableFile(stats, file);
     writablefile_repo_.push_back(stats);
