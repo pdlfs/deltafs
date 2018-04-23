@@ -269,6 +269,12 @@ LogSink::LogOptions::LogOptions()
       stats(NULL),
       env(Env::Default()) {}
 
+// LogSink
+//   BufferedFile
+//   MeasuredWritableFile
+//   RollingLogFile
+//   WritableFile (from env_)
+// Return OK on success, or a non-OK status on errors.
 Status LogSink::Open(const LogOptions& opts, const std::string& prefix,
                      LogSink** result) {
   *result = NULL;
@@ -284,16 +290,14 @@ Status LogSink::Open(const LogOptions& opts, const std::string& prefix,
   std::string filename = Lname(prefix, index, opts);
   WritableFile* base = NULL;
   Status status = env->NewWritableFile(filename.c_str(), &base);
-  if (status.ok()) {
-    assert(base != NULL);
-  } else {
+  if (!status.ok()) {
     return status;
   }
 
-  RollingLogFile* vf = NULL;
+  RollingLogFile* virf = NULL;
   if (opts.rotation != kNoRotation) {
-    vf = new RollingLogFile(base);
-    base = vf;
+    virf = new RollingLogFile(base);
+    base = virf;
   }
 
   WritableFile* file;
@@ -303,19 +307,19 @@ Status LogSink::Open(const LogOptions& opts, const std::string& prefix,
   } else {
     file = base;
   }
-  BufferedFile* wb = NULL;
+  BufferedFile* buf = NULL;
   if (opts.min_buf != 0) {
-    wb = new BufferedFile(file, opts.min_buf, opts.max_buf);
-    file = wb;
+    buf = new BufferedFile(file, opts.min_buf, opts.max_buf);
+    file = buf;
   } else {
-    // No write buffering?
+    // No write buffering?!
   }
 
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Writing into %s, buffer=%s", filename.c_str(),
           PrettySize(opts.max_buf).c_str());
 #endif
-  LogSink* sink = new LogSink(opts, prefix, wb, vf);
+  LogSink* sink = new LogSink(opts, prefix, buf, virf);
   sink->filename_ = filename;
   sink->file_ = file;
   sink->Ref();

@@ -398,6 +398,10 @@ class DirWriter {
   // Return OK on success, or a non-OK status on errors.
   Status Wait();
 
+  // Sync storage I/O.
+  // Return OK on success, or a non-OK status on errors.
+  Status Sync();
+
   // Force a compaction and finalize all log files.
   // No further write operation is allowed after this call.
   Status Finish();

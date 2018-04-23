@@ -798,6 +798,18 @@ Status DirWriter::Wait() {
   return r->finish_status_;
 }
 
+// Sync storage I/O.
+// Return OK on success, or a non-OK status on errors.
+Status DirWriter::Sync() {
+  Status status;
+  Rep* const r = rep_;
+  LogSink* const sink = r->data_;
+  sink->Lock();
+  status = sink->Lsync();
+  sink->Unlock();
+  return status;
+}
+
 IoStats DirWriter::GetIoStats() const {
   Rep* const r = rep_;
   MutexLock ml(&r->mutex_);
