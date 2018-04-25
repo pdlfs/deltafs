@@ -41,9 +41,7 @@ enum RotationType {
   kRotationExtCtrl = 0x01
 };
 
-// Accumulate a certain amount of data before writing
-typedef MinMaxBufferedWritableFile BufferedFile;
-
+// Store a sequential log in multiple pieces.
 class RollingLogFile;
 
 // Abstraction for writing data to storage.
@@ -89,13 +87,14 @@ class LogSink {
 
  private:
   LogSink(const LogOptions& opts, const std::string& p,  // Parent directory
-          BufferedFile* buf, RollingLogFile* vf)
+          SynchronizableFile* buf, RollingLogFile* vf)
       : opts_(opts),
         prefix_(p),
         buf_file_(buf),
         rlog_(vf),
         mu_(opts_.mu),
         env_(opts_.env),
+        buf_store_(NULL),
         prev_off_(0),
         off_(0),
         file_(NULL),  // Initialized by Open()
@@ -162,8 +161,8 @@ class LogSink {
 
   // Return the memory space for write buffering.
   std::string* buffer_store() {
-    if (buf_file_ != NULL) {
-      return buf_file_->buffer_store();
+    if (file_ != NULL) {
+      return buf_store_;  // NULL if write buffering is disabled
     } else {
       return NULL;
     }
@@ -191,17 +190,18 @@ class LogSink {
   const LogOptions opts_;
   const std::string prefix_;  // Parent directory name
   // NULL if write buffering is disabled
-  BufferedFile* const buf_file_;
+  SynchronizableFile* const buf_file_;  // Not valid after Finish()
   // NULL if log rotation is disabled
-  RollingLogFile* const rlog_;
+  RollingLogFile* const rlog_;  // Not Valid after Finish()
   port::Mutex* const mu_;
   Env* const env_;
 
   // State below is protected by mu_
+  std::string* buf_store_;  // NULL after Finish() is called
   Status finish_status_;
   uint64_t prev_off_;
   uint64_t off_;  // Logic write offset, monotonically increasing
-  // NULL if Finish() has been called
+  // NULL after Finish() is called
   WritableFile* file_;
   std::string filename_;  // Name of the current log file
   uint32_t refs_;

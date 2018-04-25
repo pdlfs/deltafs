@@ -245,6 +245,7 @@ Status LogSink::Finish() {
   // durability is not promised.
   Status status = file_->Close();
   delete file_;
+  buf_store_ = NULL;
   file_ = NULL;
   return status;
 }
@@ -307,9 +308,9 @@ Status LogSink::Open(const LogOptions& opts, const std::string& prefix,
   } else {
     file = base;
   }
-  BufferedFile* buf = NULL;
+  MinMaxBufferedWritableFile* buf = NULL;
   if (opts.min_buf != 0) {
-    buf = new BufferedFile(file, opts.min_buf, opts.max_buf);
+    buf = new MinMaxBufferedWritableFile(file, opts.min_buf, opts.max_buf);
     file = buf;
   } else {
     // No write buffering?!
@@ -320,6 +321,7 @@ Status LogSink::Open(const LogOptions& opts, const std::string& prefix,
           PrettySize(opts.max_buf).c_str());
 #endif
   LogSink* sink = new LogSink(opts, prefix, buf, virf);
+  sink->buf_store_ = (buf == NULL) ? NULL : buf->buffer_store();
   sink->filename_ = filename;
   sink->file_ = file;
   sink->Ref();
