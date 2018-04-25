@@ -402,13 +402,13 @@ Status DirWriter::Rep::InstallDirInfo(const std::string& footer) {
   return status;
 }
 
+// REQUIRES: mutex_ has been locked and no on-going compactions.
 Status DirWriter::Rep::Finalize() {
   mutex_.AssertHeld();
+  assert(!HasCompaction());
   const uint32_t num_epochs = idxers_[0]->num_epochs();
   for (uint32_t i = 1; i < num_parts_; i++)
     assert(num_epochs == idxers_[i]->num_epochs());
-  mutex_.Unlock();  // Unlock during i/o operations
-
   Footer footer = Mkfoot(options_);
   BlockHandle dummy_handle;
 
@@ -431,7 +431,7 @@ Status DirWriter::Rep::Finalize() {
   }
 
   if (status.ok()) {
-    for (size_t i = 0; i < num_parts_; i++) {
+    for (uint32_t i = 0; i < num_parts_; i++) {
       status = idxers_[i]->SyncAndClose();
       if (!status.ok()) {
         break;
@@ -446,7 +446,6 @@ Status DirWriter::Rep::Finalize() {
     }
   }
 
-  mutex_.Lock();
   return status;
 }
 
@@ -808,7 +807,9 @@ Status DirWriter::Sync() {
   status = r->WaitForCompaction();
   if (!status.ok()) return status;
   LogSink* const sink = r->data_;
+  sink->Lock();
   status = sink->Lsync();
+  sink->Unlock();
   if (status.ok()) {
     for (uint32_t part = 0; part < r->num_parts_; part++) {
       status = r->idxers_[part]->indx_->Lsync();

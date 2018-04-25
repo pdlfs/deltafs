@@ -132,7 +132,7 @@ class DirIndexer {
   Status Flush(const FlushOptions& options);
 
   // Sync and close all associated log sinks.
-  // DOES NOT REQUIRE MUTEX TO BE LOCKED (CALLED IN I/O CONTEXT ONLY)
+  // REQUIRES: *mu_ has been locked and no on-going compactions.
   Status SyncAndClose();
 
   void Ref() { refs_++; }

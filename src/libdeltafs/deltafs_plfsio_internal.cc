@@ -430,6 +430,8 @@ Status DirIndexer::bg_status() {
 // de-referenced by the last opener. Optionally, a caller may force data
 // sync and pre-closing all log files.
 Status DirIndexer::SyncAndClose() {
+  mu_->AssertHeld();
+  assert(!has_bg_compaction_);
   Status status;
   if (!opened_) return status;
   assert(data_ != NULL);
