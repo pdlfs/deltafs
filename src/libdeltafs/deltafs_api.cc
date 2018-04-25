@@ -99,6 +99,8 @@ static void SetErrno(const pdlfs::Status& s) {
     errno = EMFILE;
   } else if (s.IsAccessDenied()) {
     errno = EACCES;
+  } else if (s.IsAssertionFailed()) {
+    errno = EPERM;
   } else if (s.IsReadOnly()) {
     errno = EROFS;
   } else if (s.IsNotSupported()) {
@@ -106,7 +108,7 @@ static void SetErrno(const pdlfs::Status& s) {
   } else if (s.IsInvalidArgument()) {
     errno = EINVAL;
   } else if (s.IsDisconnected()) {
-    errno = EHOSTUNREACH;
+    errno = EPIPE;
   } else if (s.IsBufferFull()) {
     errno = ENOBUFS;
   } else if (s.IsRange()) {
