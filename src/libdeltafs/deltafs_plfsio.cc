@@ -803,10 +803,20 @@ Status DirWriter::Wait() {
 Status DirWriter::Sync() {
   Status status;
   Rep* const r = rep_;
+  MutexLock ml(&r->mutex_);
+  if (r->finished_) return r->finish_status_;
+  status = r->WaitForCompaction();
+  if (!status.ok()) return status;
   LogSink* const sink = r->data_;
-  sink->Lock();
   status = sink->Lsync();
-  sink->Unlock();
+  if (status.ok()) {
+    for (uint32_t part = 0; part < r->num_parts_; part++) {
+      status = r->idxers_[part]->indx_->Lsync();
+      if (!status.ok()) {
+        break;
+      }
+    }
+  }
   return status;
 }
 
