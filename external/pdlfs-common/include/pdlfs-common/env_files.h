@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -33,7 +33,7 @@ class SynchronizableFile : public WritableFile {
   virtual Status EmptyBuffer() = 0;
 };
 
-// Passively buffer a certain amount of data before eventually flushing data to
+// Always buffer a certain amount of data before eventually flushing data to
 // a given *base. Ignore all explicit Flush() calls, but EmptyBuffer(), Sync(),
 // and SyncBefore() calls are respected. May lose data for clients that only
 // use Flush() calls to ensure data durability. To avoid losing data, clients
@@ -121,9 +121,10 @@ class MinMaxBufferedWritableFile : public SynchronizableFile {
     assert(buf_size <= max_buf_size_);
     if (buf_size != 0) {
       status = base_->Append(buf_);
+      if (status.ok()) status = base_->Flush();
       if (status.ok()) {
         offset_ += buf_size;
-        buf_.clear();
+        buf_.resize(0);
       }
     }
     return status;
@@ -131,7 +132,7 @@ class MinMaxBufferedWritableFile : public SynchronizableFile {
 
  private:
   WritableFile* base_;
-  uint64_t offset_;  // Number of bytes flushed
+  uint64_t offset_;  // Number of bytes flushed out
   const size_t min_buf_size_;
   const size_t max_buf_size_;
   std::string buf_;
