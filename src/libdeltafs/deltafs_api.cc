@@ -931,7 +931,9 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
     virtual pdlfs::Status Close() {
       pdlfs::Status status;
       if (base_ != NULL) {
-        if (sync_on_close_) status = base_->Sync();
+        if (!drop_ && sync_on_close_) {
+          status = base_->Sync();
+        }
         if (status.ok()) {
           status = base_->Close();
         }
@@ -941,7 +943,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
 
     virtual pdlfs::Status Flush() {
       pdlfs::Status status;
-      if (base_ != NULL) {
+      if (!drop_ && base_ != NULL) {
         status = base_->Flush();
       }
       return status;
@@ -949,7 +951,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
 
     virtual pdlfs::Status Sync() {
       pdlfs::Status status;
-      if (!ignore_sync_ && base_ != NULL) {
+      if (!drop_ && !ignore_sync_ && base_ != NULL) {
         status = base_->Sync();
       }
       return status;
