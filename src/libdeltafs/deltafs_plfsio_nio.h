@@ -107,6 +107,7 @@ class LogSink {
                      LogSink** result);
 
   // Return the current logic write offset.
+  // May be called after Lclose().
   uint64_t Ltell() const {
     if (mu_ != NULL) mu_->AssertHeld();
     return off_;
@@ -124,7 +125,7 @@ class LogSink {
   // REQUIRES: Lclose() has not been called.
   Status Lwrite(const Slice& data) {
     if (file_ == NULL) {
-      return Status::AssertionFailed("Log already closed", filename_);
+      return Status::Disconnected("Log already closed", filename_);
     } else {
       if (mu_ != NULL) {
         mu_->AssertHeld();
@@ -144,13 +145,14 @@ class LogSink {
   // Force data to be written to storage.
   // Return OK on success, or a non-OK status on errors.
   // Data previously buffered will be forcefully flushed out.
+  // REQUIRES: Lclose() has not been called.
   Status Lsync() {
-    Status status;
-    if (file_ != NULL) {
+    if (file_ == NULL) {
+      return Status::Disconnected("Log already closed", filename_);
+    } else {
       if (mu_ != NULL) mu_->AssertHeld();
-      status = file_->Sync();
+      return file_->Sync();
     }
-    return status;
   }
 
   void Unlock() {
