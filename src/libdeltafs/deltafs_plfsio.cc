@@ -285,9 +285,9 @@ struct DirWriter::Rep {
   bool HasCompaction();
   Status ObtainCompactionStatus();
   Status WaitForCompaction();
-  Status TryFlush(bool ef = false, bool fi = false);
-  Status TryBatchWrites(BatchCursor* cursor);
-  Status TryAppend(const Slice& fid, const Slice& data);
+  Status TryFlush(Epoch*, bool ef = false, bool fi = false);
+  Status TryBatchWrites(Epoch*, BatchCursor* cursor);
+  Status TryAppend(Epoch*, const Slice& fid, const Slice& data);
   Status EnsureDataPadding(LogSink* sink, size_t footer_size);
   Status InstallDirInfo(const std::string& footer);
   Status Finalize();
@@ -302,12 +302,6 @@ struct DirWriter::Rep {
   uint32_t part_mask_;
   Status finish_status_;
   Epoch* epoch_;  // Current epoch
-  // Num of epoch flush requests, not necessarily the final epoch counts
-  int num_epoch_flushes_;
-  int num_flushes_;
-  // XXX: rather than using a global barrier, using a reference
-  // counted epoch object might slightly increase implementation
-  // concurrency, though largely not needed so far
   bool has_pending_flush_;
   bool finished_;  // If Finish() has been called
   WritableFileStats io_stats_;
@@ -325,8 +319,6 @@ DirWriter::Rep::Rep(const DirOptions& o, const std::string& d)
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
       epoch_(NULL),
-      num_epoch_flushes_(0),
-      num_flushes_(0),
       has_pending_flush_(false),
       finished_(false),
       compac_stats_(NULL),
@@ -492,12 +484,10 @@ Status DirWriter::Rep::WaitForCompaction() {
   return status;
 }
 
-Status DirWriter::Rep::TryBatchWrites(BatchCursor* cursor) {
+Status DirWriter::Rep::TryBatchWrites(Epoch* ep, BatchCursor* cursor) {
   mutex_.AssertHeld();
   assert(has_pending_flush_);
   assert(options_.non_blocking);
-  Epoch* const ep = epoch_;
-  assert(ep != NULL);
   Status status;
   std::vector<std::vector<uint32_t> > waiting_list(num_parts_);
   std::vector<std::vector<uint32_t> > queue(num_parts_);
@@ -573,11 +563,9 @@ Status DirWriter::Rep::TryBatchWrites(BatchCursor* cursor) {
 // later. Return immediately as soon as all partitions have a minor compaction
 // scheduled. Will not wait for all compactions to finish.
 // Return OK on success, or a non-OK status on errors.
-Status DirWriter::Rep::TryFlush(bool ef, bool fi) {
+Status DirWriter::Rep::TryFlush(Epoch* ep, bool ef, bool fi) {
   mutex_.AssertHeld();
   assert(has_pending_flush_);
-  Epoch* const ep = epoch_;
-  assert(ep != NULL);
   Status status;
   std::vector<DirIndexer*> remaining;
   for (size_t i = 0; i < num_parts_; i++) remaining.push_back(idxers_[i]);
@@ -632,18 +620,17 @@ Status DirWriter::Finish() {
     } else if (r->has_pending_flush_) {
       r->cv_.Wait();
     } else {
+      assert(r->epoch_ != NULL);
       r->has_pending_flush_ = true;
-      const bool epoch_flush = true;
-      const bool finalize = true;
-      status = r->TryFlush(epoch_flush, finalize);
-      if (status.ok()) r->num_epoch_flushes_++;
-      if (status.ok()) r->num_flushes_++;
+      status = r->TryFlush(r->epoch_, true /*epoch flush*/, true /*finalize*/);
       if (status.ok()) status = r->WaitForCompaction();
       if (status.ok()) status = r->Finalize();
       r->has_pending_flush_ = false;
       r->cv_.SignalAll();
       r->finish_status_ = status;
       r->finished_ = true;
+      r->epoch_->Unref();
+      r->epoch_ = NULL;
       break;
     }
   }
@@ -664,35 +651,36 @@ Status DirWriter::EpochFlush(int epoch) {
     if (r->finished_) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
-    } else if (r->has_pending_flush_) {
+    }
+
+    Epoch* const cur = r->epoch_;
+    assert(cur != NULL);
+    if (r->has_pending_flush_) {
       r->cv_.Wait();
-    } else if (epoch != -1 && epoch < r->num_epoch_flushes_) {
-      status = Status::AlreadyExists(Slice());
+    } else if (epoch != -1 && epoch < int(cur->seq_)) {
+      status = Status::AssertionFailed("Epoch already flushed");
       break;
-    } else if (epoch != -1 && epoch > r->num_epoch_flushes_) {
-      status = Status::NotFound(Slice());
+    } else if (epoch != -1 && epoch > int(cur->seq_)) {
+      status = Status::AssertionFailed("No such epoch");
       break;
     } else {
       r->has_pending_flush_ = true;
-      const bool epoch_flush = true;
-      // Schedule a minor compaction for epoch flush
-      // Does not wait for completion
-      status = r->TryFlush(epoch_flush);
-      if (status.ok()) r->num_epoch_flushes_++;
-      if (status.ok()) r->num_flushes_++;
+      status = r->TryFlush(cur, true /*epoch flush*/);
       r->has_pending_flush_ = false;
       r->cv_.SignalAll();
+      Epoch* nxt = new Epoch(1 + cur->seq_);
+      assert(r->epoch_ == cur);
+      r->epoch_ = nxt;
+      cur->Unref();
+      nxt->Ref();
       break;
     }
   }
 
   // TODO: Future work
-  //  #1. TryFlush() is not idempotent, so if an epoch flush gets an error in
-  //  the
-  //    middle, the epoch num in different directory partitions may differ
-  //  #2. Better to allow log rotation to happen asynchronously --- no
-  //    need to wait for compaction to finish
-  //  #3. change LogSink->Lrotate() to create log files lazily
+  //  #1. Better to allow log rotation to happen asynchronously
+  //    So no need to wait for compaction to finish
+  //  #2. change LogSink->Lrotate() to create log files lazily
   if (r->options_.epoch_log_rotation && status.ok()) {
     // If log rotation is requested, must wait
     // until compaction completes
@@ -721,15 +709,18 @@ Status DirWriter::Flush(int epoch) {
     if (r->finished_) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
-    } else if (r->has_pending_flush_) {
+    }
+
+    Epoch* const cur = r->epoch_;
+    assert(cur != NULL);
+    if (r->has_pending_flush_) {
       r->cv_.Wait();
-    } else if (epoch != -1 && epoch != r->num_epoch_flushes_) {
+    } else if (epoch != -1 && epoch != int(cur->seq_)) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {
       r->has_pending_flush_ = true;
-      status = r->TryFlush();
-      if (status.ok()) r->num_flushes_++;
+      status = r->TryFlush(cur);
       r->has_pending_flush_ = false;
       r->cv_.SignalAll();
       break;
@@ -746,15 +737,18 @@ Status DirWriter::Write(BatchCursor* cursor, int epoch) {
     if (r->finished_) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
-    } else if (r->has_pending_flush_) {
+    }
+
+    Epoch* const cur = r->epoch_;
+    assert(cur != NULL);
+    if (r->has_pending_flush_) {
       r->cv_.Wait();
-    } else if (epoch != -1 && epoch != r->num_epoch_flushes_) {
+    } else if (epoch != -1 && epoch != int(cur->seq_)) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {
-      // Batch writes may trigger one or more flushes
       r->has_pending_flush_ = true;
-      status = r->TryBatchWrites(cursor);
+      status = r->TryBatchWrites(cur, cursor);
       r->has_pending_flush_ = false;
       r->cv_.SignalAll();
       break;
@@ -771,15 +765,18 @@ Status DirWriter::Append(const Slice& fid, const Slice& data, int epoch) {
     if (r->finished_) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
-    } else if (r->has_pending_flush_) {
+    }
+
+    Epoch* const cur = r->epoch_;
+    assert(cur != NULL);
+    if (r->has_pending_flush_) {
       r->cv_.Wait();
-    } else if (epoch != -1 && epoch != r->num_epoch_flushes_) {
+    } else if (epoch != -1 && epoch != int(cur->seq_)) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else {
-      // Appends may also trigger flushes
       r->has_pending_flush_ = true;
-      status = r->TryAppend(fid, data);
+      status = r->TryAppend(cur, fid, data);
       r->has_pending_flush_ = false;
       r->cv_.SignalAll();
       break;
@@ -788,10 +785,9 @@ Status DirWriter::Append(const Slice& fid, const Slice& data, int epoch) {
   return status;
 }
 
-Status DirWriter::Rep::TryAppend(const Slice& fid, const Slice& data) {
+Status DirWriter::Rep::TryAppend(Epoch* ep, const Slice& fid,
+                                 const Slice& data) {
   mutex_.AssertHeld();
-  Epoch* const ep = epoch_;
-  assert(ep != NULL);
   Status status;
   const uint32_t hash = Hash(fid.data(), fid.size(), 0);
   const uint32_t part = hash & part_mask_;
