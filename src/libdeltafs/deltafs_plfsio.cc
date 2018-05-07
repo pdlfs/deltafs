@@ -301,6 +301,7 @@ struct DirWriter::Rep {
   uint32_t num_parts_;
   uint32_t part_mask_;
   Status finish_status_;
+  Epoch* epoch_;  // Current epoch
   // Num of epoch flush requests, not necessarily the final epoch counts
   int num_epoch_flushes_;
   int num_flushes_;
@@ -323,6 +324,7 @@ DirWriter::Rep::Rep(const DirOptions& o, const std::string& d)
       dirname_(d),
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
+      epoch_(NULL),
       num_epoch_flushes_(0),
       num_flushes_(0),
       has_pending_flush_(false),
@@ -330,7 +332,11 @@ DirWriter::Rep::Rep(const DirOptions& o, const std::string& d)
       compac_stats_(NULL),
       idxers_(NULL),
       data_(NULL),
-      env_(options_.env) {}
+      env_(options_.env) {
+  Epoch* const ep = new Epoch(0);
+  ep->Ref();
+  epoch_ = ep;
+}
 
 DirWriter::Rep::~Rep() {
   MutexLock l(&mutex_);
@@ -339,6 +345,7 @@ DirWriter::Rep::~Rep() {
       idxers_[i]->Unref();
     }
   }
+  if (epoch_ != NULL) epoch_->Unref();
   delete[] compac_stats_;
   delete[] idxers_;
   if (data_ != NULL) {
@@ -489,6 +496,8 @@ Status DirWriter::Rep::TryBatchWrites(BatchCursor* cursor) {
   mutex_.AssertHeld();
   assert(has_pending_flush_);
   assert(options_.non_blocking);
+  Epoch* const ep = epoch_;
+  assert(ep != NULL);
   Status status;
   std::vector<std::vector<uint32_t> > waiting_list(num_parts_);
   std::vector<std::vector<uint32_t> > queue(num_parts_);
@@ -499,7 +508,7 @@ Status DirWriter::Rep::TryBatchWrites(BatchCursor* cursor) {
     const uint32_t hash = Hash(fid.data(), fid.size(), 0);
     const uint32_t part = hash & part_mask_;
     assert(part < num_parts_);
-    status = idxers_[part]->Add(fid, cursor->data());
+    status = idxers_[part]->Add(ep, fid, cursor->data());
 
     if (status.IsBufferFull()) {
       // Try again later
@@ -530,7 +539,7 @@ Status DirWriter::Rep::TryBatchWrites(BatchCursor* cursor) {
         for (; it != queue[i].end(); ++it) {
           cursor->Seek(*it);
           if (cursor->Valid()) {
-            status = idxers_[i]->Add(cursor->fid(), cursor->data());
+            status = idxers_[i]->Add(ep, cursor->fid(), cursor->data());
           } else {
             status = cursor->status();
           }
@@ -567,6 +576,8 @@ Status DirWriter::Rep::TryBatchWrites(BatchCursor* cursor) {
 Status DirWriter::Rep::TryFlush(bool ef, bool fi) {
   mutex_.AssertHeld();
   assert(has_pending_flush_);
+  Epoch* const ep = epoch_;
+  assert(ep != NULL);
   Status status;
   std::vector<DirIndexer*> remaining;
   for (size_t i = 0; i < num_parts_; i++) remaining.push_back(idxers_[i]);
@@ -578,14 +589,14 @@ Status DirWriter::Rep::TryFlush(bool ef, bool fi) {
     for (size_t i = 0; i < remaining.size(); i++) {
       flush_options.dry_run =
           true;  // Avoid being blocked waiting for buffer space to reappear
-      status = remaining[i]->Flush(flush_options);
+      status = remaining[i]->Flush(flush_options, ep);
       flush_options.dry_run = false;
 
       if (status.IsBufferFull()) {
         waiting_list.push_back(remaining[i]);  // Try again later
         status = Status::OK();
       } else if (status.ok()) {
-        remaining[i]->Flush(flush_options);
+        remaining[i]->Flush(flush_options, ep);
       } else {
         break;
       }
@@ -779,11 +790,13 @@ Status DirWriter::Append(const Slice& fid, const Slice& data, int epoch) {
 
 Status DirWriter::Rep::TryAppend(const Slice& fid, const Slice& data) {
   mutex_.AssertHeld();
+  Epoch* const ep = epoch_;
+  assert(ep != NULL);
   Status status;
   const uint32_t hash = Hash(fid.data(), fid.size(), 0);
   const uint32_t part = hash & part_mask_;
   assert(part < num_parts_);
-  status = idxers_[part]->Add(fid, data);
+  status = idxers_[part]->Add(ep, fid, data);
   return status;
 }
 

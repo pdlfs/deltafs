@@ -21,6 +21,8 @@ namespace plfsio {
 
 class BatchCursor;
 class EventListener;
+class Compaction;
+class Epoch;
 
 struct IoStats {
   IoStats();

@@ -26,6 +26,84 @@ namespace pdlfs {
 namespace plfsio {
 
 class BloomBlock;
+class CompactionList;
+
+// Status for each epoch.
+class Epoch {
+ public:
+  explicit Epoch(uint32_t seq);
+  const uint32_t seq_;
+  void Ref() { refs_++; }
+  void Unref();
+
+ private:
+  ~Epoch();
+
+  int refs_;
+};
+
+// Status for each compaction (memtable flush).
+class Compaction {
+ public:
+  Epoch* const parent_;
+  bool is_forced_;
+  bool is_epoch_flush_;
+  bool is_final;
+  void Ref() { refs_++; }
+  void Unref();
+
+ private:
+  friend class CompactionList;
+  CompactionList* list_;
+  explicit Compaction(Epoch* parent = NULL);
+  ~Compaction();
+
+  Compaction* prev_;
+  Compaction* next_;
+
+  int refs_;
+};
+
+class CompactionList {
+ public:
+  bool empty() const { return head_.next_ == &head_; }
+
+  Compaction* oldest() const {
+    assert(!empty());
+    return head_.next_;
+  }
+
+  Compaction* newest() const {
+    assert(!empty());
+    return head_.prev_;
+  }
+
+  Compaction* New(Epoch* parent) {
+    assert(parent != NULL);
+    Compaction* c = new Compaction(parent);
+    c->list_ = this;
+    c->next_ = &head_;
+    c->prev_ = head_.prev_;
+    c->prev_->next_ = c;
+    c->next_->prev_ = c;
+    return c;
+  }
+
+ private:
+  void Delete(Compaction* c) {
+    assert(c != NULL);
+    assert(c != &head_);
+    assert(c->list_ == this);
+    assert(c->refs_ == 0);
+    c->prev_->next_ = c->next_;
+    c->next_->prev_ = c->prev_;
+    delete c;
+  }
+
+  friend class Compaction;
+  // Dummy head of doubly-linked list of flushes
+  Compaction head_;
+};
 
 // Non-thread-safe append-only in-memory table.
 class WriteBuffer {
@@ -109,7 +187,7 @@ class DirIndexer {
   bool has_bg_compaction();
   Status bg_status();  // Return latest compaction status
   // May trigger a new compaction
-  Status Add(const Slice& key, const Slice& value);
+  Status Add(Epoch* epoch, const Slice& key, const Slice& value);
 
   // Force a compaction and maybe wait for it
   struct FlushOptions {
@@ -129,7 +207,7 @@ class DirIndexer {
     // Default: false
     bool finalize;
   };
-  Status Flush(const FlushOptions& options);
+  Status Flush(const FlushOptions& options, Epoch* epoch);
 
   // Sync and close all associated log sinks.
   // REQUIRES: *mu_ has been locked and no on-going compactions.
@@ -162,7 +240,7 @@ class DirIndexer {
   DirCompactor* OpenBitmapCompactor(DirBuilder* bu);
   template <typename U>
   DirCompactor* OpenCompactor(DirBuilder* bu);
-  Status Prepare(bool force = false, bool epoch_flush = false,
+  Status Prepare(Epoch* epoch, bool force = false, bool epoch_flush = false,
                  bool finalize = false);
 
   // No copying allowed
@@ -192,9 +270,8 @@ class DirIndexer {
   Status bg_status_;
   WriteBuffer* mem_buf_;
   WriteBuffer* imm_buf_;
-  bool imm_buf_is_forced_;
-  bool imm_buf_is_epoch_flush_;
-  bool imm_buf_is_final_;
+  CompactionList compaction_list_;
+  Compaction* imm_compac_;
   WriteBuffer buf0_;
   WriteBuffer buf1_;
   DirCompactor* compactor_;

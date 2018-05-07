@@ -24,6 +24,48 @@ extern const char* GetLengthPrefixedSlice(const char* p, const char* limit,
                                           Slice* result);
 namespace plfsio {
 
+void Epoch::Unref() {
+  assert(refs_ > 0);
+  refs_--;
+  if (refs_ == 0) {
+    delete this;
+  }
+}
+
+Epoch::Epoch(uint32_t seq) : seq_(seq), refs_(0) {}
+
+Epoch::~Epoch() {}
+
+// Removal of the last reference will cause the compaction object
+// to be removed from its list and to be deleted.
+void Compaction::Unref() {
+  assert(refs_ > 0);
+  refs_--;
+  if (refs_ == 0 && list_ != NULL) {
+    list_->Delete(this);
+  }
+}
+
+Compaction::Compaction(Epoch* parent)
+    : parent_(parent),
+      is_forced_(false),
+      is_epoch_flush_(false),
+      is_final(false),
+      list_(NULL),
+      prev_(this),
+      next_(this),
+      refs_(0) {
+  if (parent_ != NULL) {
+    parent_->Ref();
+  }
+}
+
+Compaction::~Compaction() {
+  if (parent_ != NULL) {
+    parent_->Unref();
+  }
+}
+
 // Return current time in microseconds.
 static inline uint64_t GetCurrentTimeMicros() {
   return Env::Default()->NowMicros();
@@ -293,9 +335,7 @@ DirIndexer::DirIndexer(const DirOptions& options, size_t part, port::Mutex* mu,
       has_bg_compaction_(false),
       mem_buf_(NULL),
       imm_buf_(NULL),
-      imm_buf_is_forced_(false),
-      imm_buf_is_epoch_flush_(false),
-      imm_buf_is_final_(false),
+      imm_compac_(NULL),
       buf0_(options),
       buf1_(options),
       compactor_(NULL),
@@ -343,6 +383,8 @@ DirIndexer::~DirIndexer() {
   while (has_bg_compaction_) {
     bg_cv_->Wait();
   }
+  if (!compaction_list_.empty())
+    Warn(__LOG_ARGS__, "Deleting dir with active compactions");
   if (data_ != NULL) data_->Unref();
   if (indx_ != NULL) indx_->Unref();
   delete compactor_;
@@ -444,20 +486,20 @@ Status DirIndexer::SyncAndClose() {
 }
 
 // If dry_run has been set, simply perform status checks and no compaction
-// jobs will be scheduled or waited for. Return immediately, and return OK if
-// compaction may be scheduled immediately without waiting, or return a special
-// status if compaction cannot be scheduled immediately due to lack of buffer
-// space, or directly return a status that indicates an I/O error.
-// Otherwise, **wait** until a compaction is scheduled unless
-// options_.non_blocking is set. After a compaction has been scheduled,
-// **wait** until it finishes unless no_wait has been set.
-Status DirIndexer::Flush(const FlushOptions& flush_options) {
+// jobs will be scheduled or waited for. In such case, return OK if compaction
+// can be scheduled immediately without waiting, a special status if compaction
+// cannot be scheduled immediately, or an error status in case of an I/O error.
+// Otherwise (if dry_run is not set), wait until a compaction is scheduled
+// unless options_.non_blocking is set. After a compaction has been scheduled,
+// wait until it finishes unless no_wait has been set.
+// REQUIRES: Open() has been called.
+Status DirIndexer::Flush(const FlushOptions& flush_options, Epoch* epoch) {
   mu_->AssertHeld();
   assert(opened_);
   // Wait for buffer space
   while (imm_buf_ != NULL) {
     if (flush_options.dry_run || options_.non_blocking) {
-      return Status::BufferFull(Slice());
+      return Status::BufferFull(Slice());  // XXX: change to TryAgain
     } else {
       bg_cv_->Wait();
     }
@@ -470,7 +512,8 @@ Status DirIndexer::Flush(const FlushOptions& flush_options) {
     num_flush_requested_++;
     const uint32_t thres = num_flush_requested_;
     const bool force = true;
-    status = Prepare(force, flush_options.epoch_flush, flush_options.finalize);
+    status = Prepare(epoch, force, flush_options.epoch_flush,
+                     flush_options.finalize);
     if (status.ok()) {
       if (!flush_options.no_wait) {
         while (num_flush_completed_ < thres) {
@@ -483,14 +526,14 @@ Status DirIndexer::Flush(const FlushOptions& flush_options) {
   return status;
 }
 
-Status DirIndexer::Add(const Slice& key, const Slice& value) {
+Status DirIndexer::Add(Epoch* epoch, const Slice& key, const Slice& value) {
   mu_->AssertHeld();
   assert(opened_);
-  Status status = Prepare();
+  Status status = Prepare(epoch);
   while (status.ok()) {
     // Implementation may reject a key-value insertion
     if (!mem_buf_->Add(key, value)) {
-      status = Prepare();
+      status = Prepare(epoch);
     } else {
       break;
     }
@@ -498,8 +541,7 @@ Status DirIndexer::Add(const Slice& key, const Slice& value) {
   return status;
 }
 
-Status DirIndexer::Prepare(bool force /* force minor memtable flush */,
-                           bool epoch_flush /* force epoch flush */,
+Status DirIndexer::Prepare(Epoch* epoch, bool force, bool epoch_flush,
                            bool finalize) {
   mu_->AssertHeld();
   Status status;
@@ -523,12 +565,16 @@ Status DirIndexer::Prepare(bool force /* force minor memtable flush */,
       // Attempt to switch to a new write buffer
       assert(imm_buf_ == NULL);
       imm_buf_ = mem_buf_;
-      if (force) imm_buf_is_forced_ = true;
+      Compaction* c = compaction_list_.New(epoch);
+      if (force) c->is_forced_ = true;
       force = false;
-      if (epoch_flush) imm_buf_is_epoch_flush_ = true;
+      if (epoch_flush) c->is_epoch_flush_ = true;
       epoch_flush = false;
-      if (finalize) imm_buf_is_final_ = true;
+      if (finalize) c->is_final = true;
       finalize = false;
+      assert(imm_compac_ == NULL);
+      imm_compac_ = c;
+      c->Ref();
       WriteBuffer* const current_buf = mem_buf_;
       MaybeScheduleCompaction();
       if (current_buf == &buf0_) {
@@ -579,11 +625,11 @@ void DirIndexer::DoCompaction() {
   mu_->AssertHeld();
   assert(has_bg_compaction_);
   assert(imm_buf_ != NULL);
+  assert(imm_compac_ != NULL);
   CompactMemtable();
+  imm_compac_->Unref();
+  imm_compac_ = NULL;
   imm_buf_->Reset();
-  imm_buf_is_forced_ = false;
-  imm_buf_is_epoch_flush_ = false;
-  imm_buf_is_final_ = false;
   imm_buf_ = NULL;
   has_bg_compaction_ = false;
   MaybeScheduleCompaction();
@@ -594,10 +640,14 @@ void DirIndexer::CompactMemtable() {
   mu_->AssertHeld();
   WriteBuffer* const buffer = imm_buf_;
   assert(buffer != NULL);
-  const bool is_final = imm_buf_is_final_;
-  const bool is_epoch_flush = imm_buf_is_epoch_flush_;
-  const bool is_forced = imm_buf_is_forced_;
-  DirCompactor* c = compactor_;
+  Compaction* const c = imm_compac_;
+  assert(c != NULL);
+  const bool is_final = c->is_final;
+  const bool is_epoch_flush = c->is_epoch_flush_;
+  const bool is_forced = c->is_forced_;
+  Epoch* const ep = c->parent_;
+  assert(ep != NULL);
+  DirCompactor* dir = compactor_;
   mu_->Unlock();
   const uint64_t start = GetCurrentTimeMicros();
   if (options_.listener != NULL) {
@@ -621,8 +671,8 @@ void DirIndexer::CompactMemtable() {
     skip_sort = true;  // Forced by user
   }
   buffer->Finish(skip_sort);
-  c->Compact(buffer);
-  if (c->ok()) {
+  dir->Compact(buffer);
+  if (dir->ok()) {
 #if VERBOSE >= 3
 #ifndef NDEBUG
     Verbose(__LOG_ARGS__, 3, "\t+ D: %s, I: %s, F: %s",
@@ -635,10 +685,10 @@ void DirIndexer::CompactMemtable() {
 #endif
 #endif  // VERBOSE
     if (is_epoch_flush) {
-      c->MakeEpoch();
+      dir->MakeEpoch();
     }
     if (is_final) {
-      c->Finish();
+      dir->Finish();
     }
   }
 
@@ -656,7 +706,7 @@ void DirIndexer::CompactMemtable() {
           static_cast<int>(end - start));
 #endif
 
-  Status status = c->status();
+  Status status = dir->status();
   mu_->Lock();
   bg_status_ = status;
   if (is_forced) {
