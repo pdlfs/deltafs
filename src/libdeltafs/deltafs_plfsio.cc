@@ -583,7 +583,11 @@ Status DirWriter::Rep::TryBatchWrites(Epoch* ep, BatchCursor* cursor) {
 // Return OK on success, or a non-OK status on errors.
 Status DirWriter::Rep::TryFlush(Epoch* ep, bool ef, bool fi) {
   mutex_.AssertHeld();
-  assert(ep->num_ongoing_ops_ != 0);
+  if (ef || fi) {
+    assert(ep->committing_ && ep->num_ongoing_ops_ == 0);
+  } else {
+    assert(ep->num_ongoing_ops_ != 0);
+  }
   Status status;
   std::vector<DirIndexer*> remaining;
   for (size_t i = 0; i < num_parts_; i++) remaining.push_back(idxers_[i]);
