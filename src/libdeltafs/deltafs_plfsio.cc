@@ -285,6 +285,7 @@ struct DirWriter::Rep {
   bool HasCompaction();
   Status ObtainCompactionStatus();
   Status WaitForCompaction();
+  Status MaybeRotateLogs(Epoch*);
   Status TryFlush(Epoch*, bool ef = false, bool fi = false);
   Status TryBatchWrites(Epoch*, BatchCursor* cursor);
   Status TryAppend(Epoch*, const Slice& fid, const Slice& data);
@@ -359,6 +360,26 @@ Status DirWriter::Rep::EnsureDataPadding(LogSink* sink, size_t footer_size) {
     // No need to pad
   }
   sink->Unlock();
+  return status;
+}
+
+Status DirWriter::Rep::MaybeRotateLogs(Epoch* ep) {
+  Status status;
+  mutex_.AssertHeld();
+  if (!options_.epoch_log_rotation) {
+    return status;
+  }
+  // TODO: Rotate logs without waiting for compactions
+  status = WaitForCompaction();
+  if (status.ok()) {
+    mutex_.Unlock();  // Unlock when rotating logs
+    data_->Lock();
+    // Prepare for the next epoch
+    status = data_->Lrotate(1 + ep->seq_);
+    data_->Unlock();
+    mutex_.Lock();
+  }
+
   return status;
 }
 
@@ -666,6 +687,8 @@ Status DirWriter::EpochFlush(int epoch) {
     } else {
       r->has_pending_flush_ = true;
       status = r->TryFlush(cur, true /*epoch flush*/);
+      if (status.ok())
+        status = r->MaybeRotateLogs(cur);  // May temporarily unlock
       r->has_pending_flush_ = false;
       r->cv_.SignalAll();
       Epoch* nxt = new Epoch(1 + cur->seq_);
@@ -676,23 +699,6 @@ Status DirWriter::EpochFlush(int epoch) {
       break;
     }
   }
-
-  // TODO: Future work
-  //  #1. Better to allow log rotation to happen asynchronously
-  //    So no need to wait for compaction to finish
-  //  #2. change LogSink->Lrotate() to create log files lazily
-  if (r->options_.epoch_log_rotation && status.ok()) {
-    // If log rotation is requested, must wait
-    // until compaction completes
-    status = r->WaitForCompaction();
-    if (status.ok()) {
-      r->data_->Lock();
-      // Prepare for the next epoch
-      status = r->data_->Lrotate(epoch + 1);
-      r->data_->Unlock();
-    }
-  }
-
   return status;
 }
 
