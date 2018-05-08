@@ -32,7 +32,8 @@ void Epoch::Unref() {
   }
 }
 
-Epoch::Epoch(uint32_t seq) : seq_(seq), refs_(0) {}
+Epoch::Epoch(uint32_t seq, port::Mutex* mu)
+    : seq_(seq), cv_(mu), num_ongoing_ops_(0), committing_(false), refs_(0) {}
 
 Epoch::~Epoch() {}
 

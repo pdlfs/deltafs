@@ -302,8 +302,7 @@ struct DirWriter::Rep {
   uint32_t num_parts_;
   uint32_t part_mask_;
   Status finish_status_;
-  Epoch* epoch_;  // Current epoch
-  bool has_pending_flush_;
+  Epoch* epoch_;   // Current epoch
   bool finished_;  // If Finish() has been called
   WritableFileStats io_stats_;
   const DirOutputStats** compac_stats_;
@@ -320,15 +319,13 @@ DirWriter::Rep::Rep(const DirOptions& o, const std::string& d)
       num_parts_(0),
       part_mask_(~static_cast<uint32_t>(0)),
       epoch_(NULL),
-      has_pending_flush_(false),
       finished_(false),
       compac_stats_(NULL),
       idxers_(NULL),
       data_(NULL),
       env_(options_.env) {
-  Epoch* const ep = new Epoch(0);
-  ep->Ref();
-  epoch_ = ep;
+  epoch_ = new Epoch(0, &mutex_);
+  epoch_->Ref();
 }
 
 DirWriter::Rep::~Rep() {
@@ -507,8 +504,8 @@ Status DirWriter::Rep::WaitForCompaction() {
 
 Status DirWriter::Rep::TryBatchWrites(Epoch* ep, BatchCursor* cursor) {
   mutex_.AssertHeld();
-  assert(has_pending_flush_);
-  assert(options_.non_blocking);
+  assert(ep->num_ongoing_ops_ != 0);
+  assert(options_.non_blocking);  // TODO: why?
   Status status;
   std::vector<std::vector<uint32_t> > waiting_list(num_parts_);
   std::vector<std::vector<uint32_t> > queue(num_parts_);
@@ -586,7 +583,7 @@ Status DirWriter::Rep::TryBatchWrites(Epoch* ep, BatchCursor* cursor) {
 // Return OK on success, or a non-OK status on errors.
 Status DirWriter::Rep::TryFlush(Epoch* ep, bool ef, bool fi) {
   mutex_.AssertHeld();
-  assert(has_pending_flush_);
+  assert(ep->num_ongoing_ops_ != 0);
   Status status;
   std::vector<DirIndexer*> remaining;
   for (size_t i = 0; i < num_parts_; i++) remaining.push_back(idxers_[i]);
@@ -636,22 +633,26 @@ Status DirWriter::Finish() {
   MutexLock ml(&r->mutex_);
   while (true) {
     if (r->finished_) {
-      status = r->finish_status_;  // Return the cached result
+      status = r->finish_status_;  // Return the stored result
       break;
-    } else if (r->has_pending_flush_) {
+    }
+    Epoch* const cur = r->epoch_;
+    assert(cur != NULL);
+    if (cur->committing_) {
       r->cv_.Wait();
     } else {
-      assert(r->epoch_ != NULL);
-      r->has_pending_flush_ = true;
+      cur->committing_ = true;
+      while (cur->num_ongoing_ops_ != 0) {
+        cur->cv_.Wait();
+      }
       status = r->TryFlush(r->epoch_, true /*epoch flush*/, true /*finalize*/);
       if (status.ok()) status = r->WaitForCompaction();
       if (status.ok()) status = r->Finalize();
-      r->has_pending_flush_ = false;
-      r->cv_.SignalAll();
       r->finish_status_ = status;
       r->finished_ = true;
-      r->epoch_->Unref();
       r->epoch_ = NULL;
+      r->cv_.SignalAll();
+      cur->Unref();
       break;
     }
   }
@@ -673,27 +674,31 @@ Status DirWriter::EpochFlush(int epoch) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
     }
-
     Epoch* const cur = r->epoch_;
     assert(cur != NULL);
-    if (r->has_pending_flush_) {
+    if (epoch == -1 && cur->committing_) {
       r->cv_.Wait();
-    } else if (epoch != -1 && epoch < int(cur->seq_)) {
-      status = Status::AssertionFailed("Epoch already flushed");
+      continue;
+    }
+    if (epoch == -1) epoch = int(cur->seq_);
+    if (epoch != int(cur->seq_)) {
+      status = Status::AssertionFailed("Bad epoch num");
       break;
-    } else if (epoch != -1 && epoch > int(cur->seq_)) {
-      status = Status::AssertionFailed("No such epoch");
+    } else if (cur->committing_) {
+      status = Status::AssertionFailed("Epoch is being flushed");
       break;
     } else {
-      r->has_pending_flush_ = true;
+      cur->committing_ = true;  // No more writing
+      while (cur->num_ongoing_ops_ != 0) {
+        cur->cv_.Wait();
+      }
       status = r->TryFlush(cur, true /*epoch flush*/);
       if (status.ok())
         status = r->MaybeRotateLogs(cur);  // May temporarily unlock
-      r->has_pending_flush_ = false;
-      r->cv_.SignalAll();
-      Epoch* nxt = new Epoch(1 + cur->seq_);
+      Epoch* nxt = new Epoch(1 + cur->seq_, &r->mutex_);
       assert(r->epoch_ == cur);
       r->epoch_ = nxt;
+      r->cv_.SignalAll();
       cur->Unref();
       nxt->Ref();
       break;
@@ -716,19 +721,27 @@ Status DirWriter::Flush(int epoch) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
     }
-
     Epoch* const cur = r->epoch_;
     assert(cur != NULL);
-    if (r->has_pending_flush_) {
+    if (epoch == -1 && cur->committing_) {
       r->cv_.Wait();
-    } else if (epoch != -1 && epoch != int(cur->seq_)) {
+      continue;
+    }
+    if (epoch == -1) epoch = int(cur->seq_);
+    if (epoch != int(cur->seq_)) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
+    } else if (cur->committing_) {
+      status = Status::AssertionFailed("Epoch is being flushed");
+      break;
     } else {
-      r->has_pending_flush_ = true;
+      cur->num_ongoing_ops_++;
       status = r->TryFlush(cur);
-      r->has_pending_flush_ = false;
-      r->cv_.SignalAll();
+      assert(cur->num_ongoing_ops_ != 0);
+      cur->num_ongoing_ops_--;
+      if (cur->committing_ && cur->num_ongoing_ops_ == 0) {
+        cur->cv_.SignalAll();
+      }
       break;
     }
   }
@@ -744,19 +757,27 @@ Status DirWriter::Write(BatchCursor* cursor, int epoch) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
     }
-
     Epoch* const cur = r->epoch_;
     assert(cur != NULL);
-    if (r->has_pending_flush_) {
+    if (epoch == -1 && cur->committing_) {
       r->cv_.Wait();
-    } else if (epoch != -1 && epoch != int(cur->seq_)) {
+      continue;
+    }
+    if (epoch == -1) epoch = int(cur->seq_);
+    if (epoch != int(cur->seq_)) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
+    } else if (cur->committing_) {
+      status = Status::AssertionFailed("Epoch is being flushed");
+      break;
     } else {
-      r->has_pending_flush_ = true;
+      cur->num_ongoing_ops_++;
       status = r->TryBatchWrites(cur, cursor);
-      r->has_pending_flush_ = false;
-      r->cv_.SignalAll();
+      assert(cur->num_ongoing_ops_ != 0);
+      cur->num_ongoing_ops_--;
+      if (cur->committing_ && cur->num_ongoing_ops_ == 0) {
+        cur->cv_.SignalAll();
+      }
       break;
     }
   }
@@ -772,19 +793,27 @@ Status DirWriter::Append(const Slice& fid, const Slice& data, int epoch) {
       status = Status::AssertionFailed("Plfsdir already finished");
       break;
     }
-
     Epoch* const cur = r->epoch_;
     assert(cur != NULL);
-    if (r->has_pending_flush_) {
+    if (epoch == -1 && cur->committing_) {
       r->cv_.Wait();
-    } else if (epoch != -1 && epoch != int(cur->seq_)) {
+      continue;
+    }
+    if (epoch == -1) epoch = int(cur->seq_);
+    if (epoch != int(cur->seq_)) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
+    } else if (cur->committing_) {
+      status = Status::AssertionFailed("Epoch is being flushed");
+      break;
     } else {
-      r->has_pending_flush_ = true;
+      cur->num_ongoing_ops_++;
       status = r->TryAppend(cur, fid, data);
-      r->has_pending_flush_ = false;
-      r->cv_.SignalAll();
+      assert(cur->num_ongoing_ops_ != 0);
+      cur->num_ongoing_ops_--;
+      if (cur->committing_ && cur->num_ongoing_ops_ == 0) {
+        cur->cv_.SignalAll();
+      }
       break;
     }
   }

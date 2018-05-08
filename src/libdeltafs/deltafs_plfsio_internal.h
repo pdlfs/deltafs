@@ -31,8 +31,12 @@ class CompactionList;
 // Status for each epoch.
 class Epoch {
  public:
-  explicit Epoch(uint32_t seq);
+  Epoch(uint32_t seq, port::Mutex*);
   const uint32_t seq_;
+  port::CondVar cv_;
+  // Num of active Add(), Write(), or Flush() operations
+  uint32_t num_ongoing_ops_;
+  bool committing_;  // No more writes
   void Ref() { refs_++; }
   void Unref();
 
