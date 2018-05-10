@@ -288,7 +288,7 @@ struct DirWriter::Rep {
   Status MaybeRotateLogs(Epoch*);
   Status TryFlush(Epoch*, bool ef = false, bool fi = false);
   Status TryBatchWrites(Epoch*, BatchCursor* cursor);
-  Status TryAppend(Epoch*, const Slice& fid, const Slice& data);
+  Status TryAdd(Epoch*, const Slice& fid, const Slice& data);
   Status EnsureDataPadding(LogSink* sink, size_t footer_size);
   Status InstallDirInfo(const std::string& footer);
   Status Finalize();
@@ -779,7 +779,7 @@ Status DirWriter::Write(BatchCursor* cursor, int epoch) {
   return status;
 }
 
-Status DirWriter::Append(const Slice& fid, const Slice& data, int epoch) {
+Status DirWriter::Add(const Slice& fid, const Slice& data, int epoch) {
   Status status;
   Rep* const r = rep_;
   MutexLock ml(&r->mutex_);
@@ -800,7 +800,7 @@ Status DirWriter::Append(const Slice& fid, const Slice& data, int epoch) {
       break;
     } else {
       cur->num_ongoing_ops_++;
-      status = r->TryAppend(cur, fid, data);
+      status = r->TryAdd(cur, fid, data);
       assert(cur->num_ongoing_ops_ != 0);
       cur->num_ongoing_ops_--;
       if (cur->committing_ && cur->num_ongoing_ops_ == 0) {
@@ -812,8 +812,7 @@ Status DirWriter::Append(const Slice& fid, const Slice& data, int epoch) {
   return status;
 }
 
-Status DirWriter::Rep::TryAppend(Epoch* ep, const Slice& fid,
-                                 const Slice& data) {
+Status DirWriter::Rep::TryAdd(Epoch* ep, const Slice& fid, const Slice& data) {
   mutex_.AssertHeld();
   Status status;
   const uint32_t hash = Hash(fid.data(), fid.size(), 0);

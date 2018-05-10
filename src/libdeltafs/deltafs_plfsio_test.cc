@@ -154,7 +154,7 @@ class PlfsIoTest {
 
   void Append(const Slice& key, const Slice& value) {
     if (writer_ == NULL) OpenWriter();
-    ASSERT_OK(writer_->Append(key, value, epoch_));
+    ASSERT_OK(writer_->Add(key, value, epoch_));
   }
 
   struct SaverState {
@@ -954,7 +954,7 @@ class PlfsIoBench {
           break;
         }
       } else {
-        s = writer_->Append(batch.fid(), batch.data(), 0);
+        s = writer_->Add(batch.fid(), batch.data(), 0);
         if (s.ok()) {
           i++;
           batch.Next();

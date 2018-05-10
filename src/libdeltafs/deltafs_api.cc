@@ -1491,7 +1491,7 @@ ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
   } else {
     pdlfs::Slice k(__key, __keylen), v(__value, __sz);
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
-      s = __dir->writer->Append(k, v, __epoch);
+      s = __dir->writer->Add(k, v, __epoch);
     } else {
       s = DbPut(__dir, k, v);
     }
@@ -1527,7 +1527,7 @@ ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
     const char* data = static_cast<const char*>(__buf);
     pdlfs::Slice v(data, __sz);
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
-      s = __dir->writer->Append(k, v, __epoch);
+      s = __dir->writer->Add(k, v, __epoch);
     } else {
       s = DbPut(__dir, k, v);
     }

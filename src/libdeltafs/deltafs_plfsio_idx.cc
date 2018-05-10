@@ -34,9 +34,9 @@ DirOutputStats::DirOutputStats()
 DirBuilder::DirBuilder(const DirOptions& options, DirOutputStats* stats)
     : options_(options),
       compac_stats_(stats),
-      num_kvrecs_(0),  // Within the current epoch
-      num_tables_(0),  // Within the current epoch
-      num_epochs_(0) {}
+      num_entries_(0),  // Within the current epoch
+      num_tabls_(0),    // Within the current epoch
+      num_eps_(0) {}
 
 DirBuilder::~DirBuilder() {}
 
@@ -277,9 +277,9 @@ Iterator* ArrayBlock::NewIterator(const Comparator* comparator) {
 }
 
 template <typename T>
-FastDirBuilder<T>::FastDirBuilder(const DirOptions& options,
-                                  DirOutputStats* stats, LogSink* data,
-                                  LogSink* indx)
+SeqDirBuilder<T>::SeqDirBuilder(const DirOptions& options,
+                                DirOutputStats* stats, LogSink* data,
+                                LogSink* indx)
     : DirBuilder(options, stats),
       num_uncommitted_indx_(0),
       num_uncommitted_data_(0),
@@ -323,7 +323,7 @@ FastDirBuilder<T>::FastDirBuilder(const DirOptions& options,
 }
 
 template <typename T>
-FastDirBuilder<T>::~FastDirBuilder() {
+SeqDirBuilder<T>::~SeqDirBuilder() {
   indx_sink_->Unref();
   data_sink_->Unref();
   delete indx_writter_;
@@ -331,13 +331,18 @@ FastDirBuilder<T>::~FastDirBuilder() {
 }
 
 template <typename T>
-void FastDirBuilder<T>::MakeEpoch() {
+void SeqDirBuilder<T>::FinishEpoch(uint32_t epoch) {
   assert(!finished_);  // Finish() has not been called
-  EndTable(Slice(), static_cast<ChunkType>(0));
-  if (!ok()) {
-    return;  // Abort
-  } else if (num_tables_ == 0) {
-    return;  // Empty epoch
+  // Skip epochs already finished
+  if (epoch < num_eps_) return;
+  EndTable(Slice(), static_cast<ChunkType>(0) /*Invalid*/);
+  if (!ok()) return;
+  if (num_tabls_ == 0) {  // Empty epoch
+    // Epoch "num_eps_" (the current epoch) is empty.
+    // Epochs from "num_eps_ + 1" to "epoch" have no data and are handled as
+    // empty epochs as well.
+    num_eps_ = epoch + 1;
+    return;
   }
   EpochStone stone;
 
@@ -358,18 +363,18 @@ void FastDirBuilder<T>::MakeEpoch() {
   epok_block_.Reset();
   last_epok_info_.set_index_offset(epok_block_handle.offset());
   last_epok_info_.set_index_size(epok_block_handle.size());
-  last_epok_info_.set_num_tables(num_tables_);
-  last_epok_info_.set_num_ents(num_kvrecs_);
+  last_epok_info_.set_num_tables(num_tabls_);
+  last_epok_info_.set_num_ents(num_entries_);
   assert(!pending_root_entry_);
   pending_root_entry_ = true;
 
   std::string handle_encoding;
   last_epok_info_.EncodeTo(&handle_encoding);
-  root_block_.Add(EpochKey(num_epochs_), handle_encoding);
+  root_block_.Add(EpochKey(num_eps_), handle_encoding);
   pending_root_entry_ = false;
 
   stone.set_handle(epok_block_handle);
-  stone.set_id(num_epochs_);
+  stone.set_id(num_eps_);
   std::string epoch_stone;
   stone.EncodeTo(&epoch_stone);
   status_ = indx_writter_->SealEpoch(epoch_stone);
@@ -381,19 +386,19 @@ void FastDirBuilder<T>::MakeEpoch() {
   pending_data_flush_ = data_offset_;
 
   if (ok()) {
+    num_eps_ = epoch + 1;
 #ifndef NDEBUG
     // Keys are only required to be unique within an epoch
     keys_.clear();
 #endif
-    num_kvrecs_ = 0;
-    num_tables_ = 0;
-    num_epochs_++;
+    num_entries_ = 0;
+    num_tabls_ = 0;
   }
 }
 
 template <typename T>
-void FastDirBuilder<T>::EndTable(const Slice& filter_contents,
-                                 ChunkType filter_type) {
+void SeqDirBuilder<T>::EndTable(const Slice& filter_contents,
+                                ChunkType filter_type) {
   assert(!finished_);  // Finish() has not been called
 
   EndBlock();
@@ -458,18 +463,18 @@ void FastDirBuilder<T>::EndTable(const Slice& filter_contents,
   last_tabl_info_.set_largest_key(largest_key_);
   std::string handle_encoding;
   last_tabl_info_.EncodeTo(&handle_encoding);
-  epok_block_.Add(EpochTableKey(num_epochs_, num_tables_), handle_encoding);
+  epok_block_.Add(EpochTableKey(num_eps_, num_tabls_), handle_encoding);
   pending_meta_entry_ = false;
 
   compac_stats_->total_num_tables_++;
-  num_tables_++;  // Num of tables within an epoch
+  num_tabls_++;  // Num of tables within an epoch
   smallest_key_.clear();
   largest_key_.clear();
   last_key_.clear();
 }
 
 template <typename T>
-void FastDirBuilder<T>::Commit() {
+void SeqDirBuilder<T>::Commit() {
   assert(!finished_);  // Finish() has not been called
   // Skip empty commit
   if (data_block_->buffer_store()->empty()) return;
@@ -532,7 +537,7 @@ void FastDirBuilder<T>::Commit() {
 }
 
 template <typename T>
-void FastDirBuilder<T>::EndBlock() {
+void SeqDirBuilder<T>::EndBlock() {
   assert(!finished_);                // Finish() has not been called
   if (pending_restart_) return;      // Empty block
   if (data_block_->empty()) return;  // Empty block
@@ -576,7 +581,7 @@ void FastDirBuilder<T>::EndBlock() {
 }
 
 template <typename T>
-void FastDirBuilder<T>::Add(const Slice& key, const Slice& value) {
+void SeqDirBuilder<T>::Add(const Slice& key, const Slice& value) {
   assert(!finished_);       // Finish() has not been called
   assert(key.size() != 0);  // Keys cannot be empty
   if (!ok()) return;        // Abort
@@ -645,7 +650,7 @@ void FastDirBuilder<T>::Add(const Slice& key, const Slice& value) {
 
   data_block_->Add(key, value);
   compac_stats_->total_num_keys_++;
-  num_kvrecs_++;  // Num key-value entries within an epoch
+  num_entries_++;  // Num key-value entries within an epoch
   if (IsKeyUnOrdered(options_.mode)) {
     return;  // Force one block per table
   }
@@ -662,9 +667,11 @@ void FastDirBuilder<T>::Add(const Slice& key, const Slice& value) {
 }
 
 template <typename T>
-void FastDirBuilder<T>::Finish() {
+void SeqDirBuilder<T>::Finish() {
   assert(!finished_);  // Finish() has not been called
-  MakeEpoch();
+  EndTable(Slice(), static_cast<ChunkType>(0) /*Invalid*/);
+  // Only establish a new epoch if we have pending epoch contents
+  if (ok() && num_tabls_ != 0) FinishEpoch(num_eps_);
   finished_ = true;
   if (!ok()) {
     return;
@@ -691,13 +698,13 @@ void FastDirBuilder<T>::Finish() {
   compac_stats_->meta_index_size += root_block_size;
 
   footer.set_epoch_index_handle(root_block_handle);
-  footer.set_num_epochs(num_epochs_);
+  footer.set_num_epochs(num_eps_);
   footer.EncodeTo(&footer_buf);
   status_ = indx_writter_->Finish(footer_buf);
 }
 
 template <typename T>
-size_t FastDirBuilder<T>::memory_usage() const {
+size_t SeqDirBuilder<T>::memory_usage() const {
   size_t result = data_block_->memory_usage();
   result += root_block_.memory_usage();
   result += epok_block_.memory_usage();
@@ -712,11 +719,11 @@ DirBuilder* DirBuilder::Open(const DirOptions& options, DirOutputStats* stats,
                              LogSink* data, LogSink* indx) {
   if (!options.leveldb_compatible) {
     if (options.fixed_kv_length) {
-      return new FastDirBuilder<ArrayBlockBuilder>(options, stats, data, indx);
+      return new SeqDirBuilder<ArrayBlockBuilder>(options, stats, data, indx);
     }
   }
 
-  return new FastDirBuilder<>(options, stats, data, indx);
+  return new SeqDirBuilder<>(options, stats, data, indx);
 }
 
 namespace {

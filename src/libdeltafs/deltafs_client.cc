@@ -739,7 +739,7 @@ Status Client::Pwrite(int fd, const Slice& data, uint64_t off) {
     if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
       plfsio::DirWriter* writer = ToWritablePlfsFile(file->fh)->parent->writer;
       assert(writer != NULL);
-      s = writer->Append(fentry.nhash, data);
+      s = writer->Add(fentry.nhash, data);
     } else {
       s = fio_->Pwrite(fentry, file->fh, data, off);
     }
@@ -769,7 +769,7 @@ Status Client::Write(int fd, const Slice& data) {
     if (DELTAFS_DIR_IS_PLFS_STYLE(fentry.file_mode())) {
       plfsio::DirWriter* writer = ToWritablePlfsFile(file->fh)->parent->writer;
       assert(writer != NULL);
-      s = writer->Append(fentry.nhash, data);
+      s = writer->Add(fentry.nhash, data);
     } else {
       s = fio_->Write(fentry, file->fh, data);
     }

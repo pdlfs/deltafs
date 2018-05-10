@@ -100,7 +100,7 @@ class DirBuilder {
 
   // Force the start of a new epoch.
   // REQUIRES: Finish() has not been called.
-  virtual void MakeEpoch() = 0;
+  virtual void FinishEpoch(uint32_t epoch) = 0;
 
   // Finalize directory contents.
   // No further writes.
@@ -117,9 +117,11 @@ class DirBuilder {
 
   bool ok() const { return status_.ok(); }
 
-  uint32_t num_kvrecs_;  // Number of records inserted within the current epoch
-  uint32_t num_tables_;  // Number of tables generated within the current epoch
-  uint32_t num_epochs_;  // Total number of epochs generated
+  uint32_t num_entries_;  // Number of entries inserted within the current epoch
+  uint32_t num_tabls_;    // Number of tables generated within the current epoch
+
+  // Total number of epochs generated
+  uint32_t num_eps_;
 
  private:
   // No copying allowed
@@ -131,13 +133,17 @@ class SortedStringBlockBuilder;
 class ArrayBlockBuilder;
 class LogWriter;
 
-// Write sorted directory contents into a pair of log files.
+// Write directory contents into an index log and a data log object. Directory
+// contents are divided into epochs. Epoch id starts with 0, and increments
+// sequentially. Data written into the directory is put into the current epoch
+// until FinishEpoch() is called, which finalizes the current epoch and
+// starts a new epoch. New data is then written into this new epoch.
 template <typename T = SortedStringBlockBuilder>
-class FastDirBuilder : public DirBuilder {
+class SeqDirBuilder : public DirBuilder {
  public:
-  FastDirBuilder(const DirOptions& options, DirOutputStats* stats,
-                 LogSink* data, LogSink* indx);
-  virtual ~FastDirBuilder();
+  SeqDirBuilder(const DirOptions& options, DirOutputStats* stats, LogSink* data,
+                LogSink* indx);
+  virtual ~SeqDirBuilder();
 
   virtual void Add(const Slice& key, const Slice& value);
 
@@ -147,7 +153,7 @@ class FastDirBuilder : public DirBuilder {
 
   // Force the start of a new epoch.
   // REQUIRES: Finish() has not been called.
-  virtual void MakeEpoch();
+  virtual void FinishEpoch(uint32_t epoch);
 
   // Finalize table contents.
   // No further writes.

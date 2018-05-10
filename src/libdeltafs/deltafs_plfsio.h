@@ -384,7 +384,7 @@ class DirWriter {
   // Append a piece of data to a specific file under the directory.
   // Set epoch to -1 to disable epoch validation.
   // REQUIRES: Finish() has not been called.
-  Status Append(const Slice& fid, const Slice& data, int epoch = -1);
+  Status Add(const Slice &fid, const Slice &data, int epoch = -1);
 
   // Force a memtable compaction.
   // Set epoch to -1 to disable epoch validation.

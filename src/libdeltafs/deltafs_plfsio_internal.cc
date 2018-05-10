@@ -240,8 +240,8 @@ DirCompactor::DirCompactor(const DirOptions& options, DirBuilder* bu)
 
 DirCompactor::~DirCompactor() { delete bu_; }
 
-Status DirCompactor::MakeEpoch() {
-  bu_->MakeEpoch();
+Status DirCompactor::FinishEpoch(uint32_t epoch) {
+  bu_->FinishEpoch(epoch);
   return bu_->status_;
 }
 
@@ -259,7 +259,7 @@ class FilteredDirCompactor : public DirCompactor {
 
   virtual void Compact(WriteBuffer* buf);
 
-  virtual Status MakeEpoch();
+  virtual Status FinishEpoch(uint32_t epoch);
 
   virtual Status Finish();
 
@@ -275,8 +275,8 @@ FilteredDirCompactor<T, U>::~FilteredDirCompactor() {
 }
 
 template <typename T, typename U>
-Status FilteredDirCompactor<T, U>::MakeEpoch() {
-  return DirCompactor::MakeEpoch();
+Status FilteredDirCompactor<T, U>::FinishEpoch(uint32_t epoch) {
+  return DirCompactor::FinishEpoch(epoch);
 }
 
 template <typename T, typename U>
@@ -448,10 +448,10 @@ Status DirIndexer::Open(LogSink* data, LogSink* indx) {
   // here we want to statically bind to one specific dir
   // builder type with one specific block format.
   if (!options_.leveldb_compatible && options_.fixed_kv_length)
-    compactor_ = OpenCompactor<FastDirBuilder<ArrayBlockBuilder> >(bu);
+    compactor_ = OpenCompactor<SeqDirBuilder<ArrayBlockBuilder> >(bu);
 
   if (compactor_ == NULL)  // Use the default block format
-    compactor_ = OpenCompactor<FastDirBuilder<> >(bu);
+    compactor_ = OpenCompactor<SeqDirBuilder<> >(bu);
   // No storage I/O so always OK.
   return Status::OK();
 }
@@ -686,7 +686,7 @@ void DirIndexer::CompactMemtable() {
 #endif
 #endif  // VERBOSE
     if (is_epoch_flush) {
-      dir->MakeEpoch();
+      dir->FinishEpoch(ep->seq_);
     }
     if (is_final) {
       dir->Finish();

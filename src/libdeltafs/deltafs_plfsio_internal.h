@@ -43,6 +43,10 @@ class Epoch {
  private:
   ~Epoch();
 
+  // No copying allowed
+  void operator=(const Epoch&);
+  Epoch(const Epoch&);
+
   int refs_;
 };
 
@@ -154,7 +158,7 @@ class DirCompactor {
 
   virtual void Compact(WriteBuffer* buf) = 0;
 
-  virtual Status MakeEpoch() = 0;
+  virtual Status FinishEpoch(uint32_t epoch) = 0;
 
   virtual Status Finish() = 0;
 
@@ -165,7 +169,7 @@ class DirCompactor {
   typedef WriteBuffer::Iter IterType;
   bool ok() const { return bu_->ok(); }
   Status status() const { return bu_->status_; }
-  uint32_t num_epochs() const { return bu_->num_epochs_; }
+  uint32_t num_epochs() const { return bu_->num_eps_; }
   const DirOptions& options_;
   DirBuilder* bu_;
 
