@@ -681,11 +681,8 @@ Status DirWriter::EpochFlush(int epoch) {
     Epoch* const cur = r->epoch_;
     assert(cur != NULL);
     if (epoch == -1 && cur->committing_) {
-      r->cv_.Wait();
-      continue;
-    }
-    if (epoch == -1) epoch = int(cur->seq_);
-    if (epoch != int(cur->seq_)) {
+      r->cv_.Wait();  // Miss the boat. Gotta wait
+    } else if (epoch != -1 && epoch != int(cur->seq_)) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else if (cur->committing_) {
@@ -699,7 +696,7 @@ Status DirWriter::EpochFlush(int epoch) {
       status = r->TryFlush(cur, true /*epoch flush*/);
       if (status.ok())
         status = r->MaybeRotateLogs(cur);  // May temporarily unlock
-      Epoch* nxt = new Epoch(1 + cur->seq_, &r->mutex_);
+      Epoch* const nxt = new Epoch(1 + cur->seq_, &r->mutex_);
       assert(r->epoch_ == cur);
       r->epoch_ = nxt;
       r->cv_.SignalAll();
@@ -729,10 +726,7 @@ Status DirWriter::Flush(int epoch) {
     assert(cur != NULL);
     if (epoch == -1 && cur->committing_) {
       r->cv_.Wait();
-      continue;
-    }
-    if (epoch == -1) epoch = int(cur->seq_);
-    if (epoch != int(cur->seq_)) {
+    } else if (epoch != -1 && epoch != int(cur->seq_)) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else if (cur->committing_) {
@@ -765,10 +759,7 @@ Status DirWriter::Write(BatchCursor* cursor, int epoch) {
     assert(cur != NULL);
     if (epoch == -1 && cur->committing_) {
       r->cv_.Wait();
-      continue;
-    }
-    if (epoch == -1) epoch = int(cur->seq_);
-    if (epoch != int(cur->seq_)) {
+    } else if (epoch != -1 && epoch != int(cur->seq_)) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else if (cur->committing_) {
@@ -801,10 +792,7 @@ Status DirWriter::Append(const Slice& fid, const Slice& data, int epoch) {
     assert(cur != NULL);
     if (epoch == -1 && cur->committing_) {
       r->cv_.Wait();
-      continue;
-    }
-    if (epoch == -1) epoch = int(cur->seq_);
-    if (epoch != int(cur->seq_)) {
+    } else if (epoch != -1 && epoch != int(cur->seq_)) {
       status = Status::AssertionFailed("Bad epoch num");
       break;
     } else if (cur->committing_) {
