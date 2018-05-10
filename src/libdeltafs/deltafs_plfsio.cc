@@ -423,9 +423,9 @@ Status DirWriter::Rep::InstallDirInfo(const std::string& footer) {
 Status DirWriter::Rep::Finalize() {
   mutex_.AssertHeld();
   assert(!HasCompaction());
-  const uint32_t num_epochs = idxers_[0]->num_epochs();
-  for (uint32_t i = 1; i < num_parts_; i++)
-    assert(num_epochs == idxers_[i]->num_epochs());
+  uint32_t num_epochs = ~static_cast<uint32_t>(0);
+  for (uint32_t i = 0; i < num_parts_; i++)
+    num_epochs = std::min(num_epochs, idxers_[i]->num_epochs());
   Footer footer = Mkfoot(options_);
   BlockHandle dummy_handle;
 
@@ -649,7 +649,7 @@ Status DirWriter::Finish() {
       while (cur->num_ongoing_ops_ != 0) {
         cur->cv_.Wait();
       }
-      status = r->TryFlush(r->epoch_, true /*epoch flush*/, true /*finalize*/);
+      status = r->TryFlush(cur, true /*epoch flush*/, true /*finalize*/);
       if (status.ok()) status = r->WaitForCompaction();
       if (status.ok()) status = r->Finalize();
       r->finish_status_ = status;

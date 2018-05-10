@@ -104,7 +104,7 @@ class DirBuilder {
 
   // Finalize directory contents.
   // No further writes.
-  virtual void Finish() = 0;
+  virtual void Finish(uint32_t epoch) = 0;
 
   // Report memory usage.
   virtual size_t memory_usage() const = 0;
@@ -153,11 +153,11 @@ class SeqDirBuilder : public DirBuilder {
 
   // Force the start of a new epoch.
   // REQUIRES: Finish() has not been called.
-  virtual void FinishEpoch(uint32_t epoch);
+  virtual void FinishEpoch(uint32_t ep_seq);
 
   // Finalize table contents.
   // No further writes.
-  virtual void Finish();
+  virtual void Finish(uint32_t ep_seq);
 
   // Report memory usage.
   virtual size_t memory_usage() const;

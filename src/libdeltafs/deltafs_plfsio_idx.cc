@@ -331,17 +331,17 @@ SeqDirBuilder<T>::~SeqDirBuilder() {
 }
 
 template <typename T>
-void SeqDirBuilder<T>::FinishEpoch(uint32_t epoch) {
+void SeqDirBuilder<T>::FinishEpoch(uint32_t ep_seq) {
   assert(!finished_);  // Finish() has not been called
   // Skip epochs already finished
-  if (epoch < num_eps_) return;
+  if (ep_seq < num_eps_) return;
   EndTable(Slice(), static_cast<ChunkType>(0) /*Invalid*/);
   if (!ok()) return;
   if (num_tabls_ == 0) {  // Empty epoch
     // Epoch "num_eps_" (the current epoch) is empty.
     // Epochs from "num_eps_ + 1" to "epoch" have no data and are handled as
     // empty epochs as well.
-    num_eps_ = epoch + 1;
+    num_eps_ = ep_seq + 1;
     return;
   }
   EpochStone stone;
@@ -386,7 +386,7 @@ void SeqDirBuilder<T>::FinishEpoch(uint32_t epoch) {
   pending_data_flush_ = data_offset_;
 
   if (ok()) {
-    num_eps_ = epoch + 1;
+    num_eps_ = ep_seq + 1;
 #ifndef NDEBUG
     // Keys are only required to be unique within an epoch
     keys_.clear();
@@ -667,11 +667,12 @@ void SeqDirBuilder<T>::Add(const Slice& key, const Slice& value) {
 }
 
 template <typename T>
-void SeqDirBuilder<T>::Finish() {
+void SeqDirBuilder<T>::Finish(uint32_t ep_seq) {
   assert(!finished_);  // Finish() has not been called
+  if (ep_seq < num_eps_) ep_seq = num_eps_;
   EndTable(Slice(), static_cast<ChunkType>(0) /*Invalid*/);
   // Only establish a new epoch if we have pending epoch contents
-  if (ok() && num_tabls_ != 0) FinishEpoch(num_eps_);
+  if (ok() && num_tabls_ != 0) FinishEpoch(ep_seq);
   finished_ = true;
   if (!ok()) {
     return;

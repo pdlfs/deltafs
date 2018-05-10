@@ -240,13 +240,13 @@ DirCompactor::DirCompactor(const DirOptions& options, DirBuilder* bu)
 
 DirCompactor::~DirCompactor() { delete bu_; }
 
-Status DirCompactor::FinishEpoch(uint32_t epoch) {
-  bu_->FinishEpoch(epoch);
+Status DirCompactor::FinishEpoch(uint32_t ep_seq) {
+  bu_->FinishEpoch(ep_seq);
   return bu_->status_;
 }
 
-Status DirCompactor::Finish() {
-  bu_->Finish();
+Status DirCompactor::Finish(uint32_t ep_seq) {
+  bu_->Finish(ep_seq);
   return bu_->status_;
 }
 
@@ -259,9 +259,9 @@ class FilteredDirCompactor : public DirCompactor {
 
   virtual void Compact(WriteBuffer* buf);
 
-  virtual Status FinishEpoch(uint32_t epoch);
+  virtual Status FinishEpoch(uint32_t ep_seq);
 
-  virtual Status Finish();
+  virtual Status Finish(uint32_t ep_seq);
 
   virtual size_t memory_usage() const;
 
@@ -275,13 +275,13 @@ FilteredDirCompactor<T, U>::~FilteredDirCompactor() {
 }
 
 template <typename T, typename U>
-Status FilteredDirCompactor<T, U>::FinishEpoch(uint32_t epoch) {
-  return DirCompactor::FinishEpoch(epoch);
+Status FilteredDirCompactor<T, U>::FinishEpoch(uint32_t ep_seq) {
+  return DirCompactor::FinishEpoch(ep_seq);
 }
 
 template <typename T, typename U>
-Status FilteredDirCompactor<T, U>::Finish() {
-  return DirCompactor::Finish();
+Status FilteredDirCompactor<T, U>::Finish(uint32_t ep_seq) {
+  return DirCompactor::Finish(ep_seq);
 }
 
 template <typename T, typename U>
@@ -685,11 +685,10 @@ void DirIndexer::CompactMemtable() {
                 .c_str());
 #endif
 #endif  // VERBOSE
-    if (is_epoch_flush) {
+    if (is_epoch_flush && is_final) {
+      dir->Finish(ep->seq_);  // Will auto-finish the current epoch
+    } else if (is_epoch_flush) {
       dir->FinishEpoch(ep->seq_);
-    }
-    if (is_final) {
-      dir->Finish();
     }
   }
 
