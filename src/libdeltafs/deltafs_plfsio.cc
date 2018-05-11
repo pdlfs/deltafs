@@ -423,16 +423,16 @@ Status DirWriter::Rep::InstallDirInfo(const std::string& footer) {
 Status DirWriter::Rep::Finalize() {
   mutex_.AssertHeld();
   assert(!HasCompaction());
-  uint32_t num_epochs = ~static_cast<uint32_t>(0);
+  uint32_t max_epochs = 0;
   for (uint32_t i = 0; i < num_parts_; i++)
-    num_epochs = std::min(num_epochs, idxers_[i]->num_epochs());
+    max_epochs = std::max(max_epochs, idxers_[i]->num_epochs());
   Footer footer = Mkfoot(options_);
   BlockHandle dummy_handle;
 
   dummy_handle.set_offset(0);
   dummy_handle.set_size(0);
   footer.set_epoch_index_handle(dummy_handle);
-  footer.set_num_epochs(num_epochs);
+  footer.set_num_epochs(max_epochs);
 
   Status status;
   std::string ftdata;

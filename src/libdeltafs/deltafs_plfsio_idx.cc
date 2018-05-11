@@ -338,9 +338,7 @@ void SeqDirBuilder<T>::FinishEpoch(uint32_t ep_seq) {
   EndTable(Slice(), static_cast<ChunkType>(0) /*Invalid*/);
   if (!ok()) return;
   if (num_tabls_ == 0) {  // Empty epoch
-    // Epoch "num_eps_" (the current epoch) is empty.
-    // Epochs from "num_eps_ + 1" to "epoch" have no data and are handled as
-    // empty epochs as well.
+    // Empty epochs are skipped. But we need to remember their existence.
     num_eps_ = ep_seq + 1;
     return;
   }
@@ -386,7 +384,7 @@ void SeqDirBuilder<T>::FinishEpoch(uint32_t ep_seq) {
   pending_data_flush_ = data_offset_;
 
   if (ok()) {
-    num_eps_ = ep_seq + 1;
+    num_eps_ = ep_seq + 1;  // Flush up-to the requested epoch seq
 #ifndef NDEBUG
     // Keys are only required to be unique within an epoch
     keys_.clear();

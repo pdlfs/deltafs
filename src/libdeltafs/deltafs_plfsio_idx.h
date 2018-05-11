@@ -100,11 +100,11 @@ class DirBuilder {
 
   // Force the start of a new epoch.
   // REQUIRES: Finish() has not been called.
-  virtual void FinishEpoch(uint32_t epoch) = 0;
+  virtual void FinishEpoch(uint32_t ep_seq) = 0;
 
   // Finalize directory contents.
   // No further writes.
-  virtual void Finish(uint32_t epoch) = 0;
+  virtual void Finish(uint32_t ep_seq) = 0;
 
   // Report memory usage.
   virtual size_t memory_usage() const = 0;

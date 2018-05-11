@@ -1450,9 +1450,9 @@ Status Dir::Count(const CountOptions& opts, size_t* result) {
   *result = 0;
 
   Iterator* rt_iter = NewRtIterator(rt_);
-  if (num_epoches_ != 0) {
+  if (num_eps_ != 0) {
     uint32_t epoch = opts.epoch_start;
-    uint32_t epoch_end = std::min(num_epoches_, opts.epoch_end);
+    uint32_t epoch_end = std::min(num_eps_, opts.epoch_end);
     for (; epoch < epoch_end; epoch++) {
       epoch_key = EpochKey(epoch);
       // Try reusing current iterator position if possible
@@ -1508,9 +1508,9 @@ Status Dir::Scan(const ScanOptions& opts, ScanStats* stats) {
   }
   ctx.usr_cb = opts.usr_cb;
   ctx.arg_cb = opts.arg_cb;
-  if (num_epoches_ != 0) {
+  if (num_eps_ != 0) {
     uint32_t epoch = opts.epoch_start;
-    uint32_t epoch_end = std::min(num_epoches_, opts.epoch_end);
+    uint32_t epoch_end = std::min(num_eps_, opts.epoch_end);
     for (; epoch < epoch_end; epoch++) {
       ctx.num_open_lists++;
       BGListItem item;
@@ -1576,9 +1576,9 @@ Status Dir::Read(const ReadOptions& opts, const Slice& key, std::string* dst,
     ctx.rt_iter = NULL;
   }
   ctx.dst = dst;
-  if (num_epoches_ != 0) {
+  if (num_eps_ != 0) {
     uint32_t epoch = opts.epoch_start;
-    uint32_t epoch_end = std::min(num_epoches_, opts.epoch_end);
+    uint32_t epoch_end = std::min(num_eps_, opts.epoch_end);
     for (; epoch < epoch_end; epoch++) {
       ctx.num_open_reads++;
       BGGetItem item;
@@ -1654,7 +1654,7 @@ Dir::CountOptions::CountOptions()
 
 Dir::Dir(const DirOptions& options, port::Mutex* mu, port::CondVar* bg_cv)
     : options_(options),
-      num_epoches_(0),
+      num_eps_(0),
       data_(NULL),
       indx_(NULL),
       mu_(mu),
@@ -1688,7 +1688,6 @@ static inline bool UnMatch(U a, V b) {
 // fetched from the storage. Return OK if verification passes.
 static Status VerifyOptions(const DirOptions& options, const Footer& footer) {
   if (UnMatch(options.lg_parts, footer.lg_parts()) ||
-      UnMatch(options.num_epochs, footer.num_epochs()) ||
       UnMatch(options.key_size, footer.key_size()) ||
       UnMatch(options.value_size, footer.value_size()) ||
       UnMatch(options.fixed_kv_length, footer.fixed_kv_length()) ||
@@ -1735,10 +1734,11 @@ Status Dir::Open(LogSource* indx) {
     return status;
   }
 
-  num_epoches_ = footer.num_epochs();
-  if (num_epoches_ != options_.num_epochs)
-    Warn(__LOG_ARGS__, "Num epochs does not match dir footer: %u != %u",
-         options_.num_epochs, num_epoches_);
+  num_eps_ = footer.num_epochs();
+  // A user may want to access a prefix of all available epochs
+  if (options_.num_epochs != -1 && options_.num_epochs < int(num_eps_)) {
+    num_eps_ = static_cast<uint32_t>(options_.num_epochs);
+  }
   rt_ = new Block(contents);
   indx_ = indx;
   indx_->Ref();

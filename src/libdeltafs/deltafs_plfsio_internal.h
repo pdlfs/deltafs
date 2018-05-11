@@ -515,7 +515,7 @@ class Dir {
   struct STLLessThan;
   // Constant after construction
   const DirOptions& options_;
-  uint32_t num_epoches_;
+  uint32_t num_eps_;
   LogSource* data_;
   LogSource* indx_;
 
