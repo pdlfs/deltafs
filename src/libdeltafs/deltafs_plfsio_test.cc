@@ -338,7 +338,31 @@ TEST(PlfsIoTest, UnorderedWithArrayBlockFmt) {
   ASSERT_EQ(Count(3), 0);
 }
 
-TEST(PlfsIoTest, Snappy) {
+TEST(PlfsIoTest, Snappy1) {
+  options_.compression = kSnappyCompression;
+  options_.force_compression = true;
+  Append("k1", "v1");
+  Append("k2", "v2");
+  MakeEpoch();
+  Append("k1", "v3");
+  Append("k2", "v4");
+  MakeEpoch();
+  Append("k1", "v5");
+  Append("k2", "v6");
+  MakeEpoch();
+  ASSERT_EQ(Read("k1"), "v1v3v5");
+  ASSERT_TRUE(Read("k1.1").empty());
+  ASSERT_EQ(Read("k2"), "v2v4v6");
+  ASSERT_EQ(Scan(0), "v1v2");
+  ASSERT_EQ(Scan(1), "v3v4");
+  ASSERT_EQ(Scan(2), "v5v6");
+  ASSERT_EQ(Count(0), 2);
+  ASSERT_EQ(Count(1), 2);
+  ASSERT_EQ(Count(2), 2);
+  ASSERT_EQ(Count(3), 0);
+}
+
+TEST(PlfsIoTest, Snappy2) {
   options_.index_compression = kSnappyCompression;
   options_.force_compression = true;
   Append("k1", "v1");
