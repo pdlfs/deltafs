@@ -88,7 +88,7 @@ void AbstractBlockBuilder::Reset() {
   finished_ = false;
 }
 
-Slice AbstractBlockBuilder::Finish(CompressionType compression) {
+Slice AbstractBlockBuilder::Finish(CompressionType compression, bool force) {
   assert(!finished_);
   finished_ = true;
   Slice contents = buffer_;
@@ -97,13 +97,14 @@ Slice AbstractBlockBuilder::Finish(CompressionType compression) {
     return contents;
   }
 
+  const size_t sz = contents.size();
   std::string compressed;
   switch (compression) {
     case kNoCompression:
       break;
     case kSnappyCompression:
-      if (!port::Snappy_Compress(contents.data(), contents.size(),
-                                 &compressed)) {
+      if (!port::Snappy_Compress(contents.data(), sz, &compressed) ||
+          (compressed.size() >= (sz - sz / 8u) && !force)) {
         compression = kNoCompression;
         compressed.clear();
       }

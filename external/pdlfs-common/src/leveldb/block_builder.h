@@ -48,7 +48,8 @@ class AbstractBlockBuilder {
   // Finish building the block and return a slice that refers to the
   // block contents.  The returned slice will remain valid for the
   // lifetime of this builder or until Reset() or Finalize() is called.
-  Slice Finish(CompressionType compression = kNoCompression);
+  Slice Finish(CompressionType compression = kNoCompression,
+               bool force_compression = false);
 
   // Reserve a certain amount of buffer space.
   void Reserve(size_t size) { buffer_.reserve(buffer_start_ + size); }
