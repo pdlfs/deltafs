@@ -140,15 +140,17 @@ size_t BlockBuilder::CurrentSizeEstimate() const {
   }
 }
 
-Slice BlockBuilder::Finish() {
+Slice BlockBuilder::Finish(CompressionType compression,
+                           bool force_compression) {
   assert(!finished_);
   // Append restart array
   for (size_t i = 0; i < restarts_.size(); i++) {
     PutFixed32(&buffer_, restarts_[i]);
   }
   uint32_t num_restarts = static_cast<uint32_t>(restarts_.size());
-  PutFixed32(&buffer_, num_restarts);  // Remember the array size
-  return AbstractBlockBuilder::Finish();
+  // Remember the array size
+  PutFixed32(&buffer_, num_restarts);
+  return AbstractBlockBuilder::Finish(compression, force_compression);
 }
 
 Slice AbstractBlockBuilder::Finalize(bool crc32c, uint32_t padding_target,

@@ -30,7 +30,7 @@ class AbstractBlockBuilder {
 
   // Append zeros to the underlying buffer destination.
   // Must be called after Finish() and before the next Reset().
-  // Added padding cannot be cleared by future Reset()s.
+  // Added padding is not cleared by future Reset()s.
   void Pad(size_t n);
 
   // Specify a new buffer destination to switch with the one currently used by
@@ -39,7 +39,7 @@ class AbstractBlockBuilder {
   // NULL, the current buffer destination will be used so new block contents
   // will be appended after existing contents.
   // Must be called after Finish() and before the next Reset().
-  // Existing contents in *buffer cannot be cleared by future Reset()s.
+  // Existing contents in *buffer are not cleared by future Reset()s.
   void ResetBuffer(std::string* buffer);
 
   // Reset block contents.
@@ -107,7 +107,8 @@ class BlockBuilder : public AbstractBlockBuilder {
   // Finish building the block and return a slice that refers to the
   // block contents.  The returned slice will remain valid for the
   // lifetime of this builder or until Reset() or Finalize() is called.
-  Slice Finish();
+  Slice Finish(CompressionType compression = kNoCompression,
+               bool force_compression = false);
 
   // Returns an estimate of the current (uncompressed) size of the block
   // we are building.
