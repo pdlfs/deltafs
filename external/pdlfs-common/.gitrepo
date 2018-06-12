@@ -7,5 +7,5 @@
 	remote = git@github.com:pdlfs/pdlfs-common.git
 	branch = master
 	commit = a86b63e68b7c2f50257334134a98d8496ab8cb44
-	parent = f9b5c71b4cd5d526029580df477d5818863ba6fd
+	parent = abad0c6f5b55fb7977d8b5bdbd237d3d0be84f26
 	cmdver = 0.3.1
