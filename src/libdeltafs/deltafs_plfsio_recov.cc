@@ -25,7 +25,7 @@ Status LogWriter::Write(ChunkType chunk_type, const Slice& block_contents,
                         BlockHandle* handle) {
   Status status;
   Slice raw_contents;
-  CompressionType compre_type = options_.compression;
+  CompressionType compre_type = options_.index_compression;
   switch (compre_type) {
     case kNoCompression:
       raw_contents = block_contents;

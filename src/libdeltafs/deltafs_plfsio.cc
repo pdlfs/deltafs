@@ -59,6 +59,7 @@ DirOptions::DirOptions()
       paranoid_checks(false),
       ignore_filters(false),
       compression(kNoCompression),
+      index_compression(kNoCompression),
       force_compression(false),
       verify_checksums(false),
       skip_checksums(false),
@@ -1219,6 +1220,8 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
           int(options.non_blocking) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.compression -> %s",
           options.compression == kSnappyCompression ? "Snappy" : "None");
+  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.index_compression -> %s",
+          options.index_compression == kSnappyCompression ? "Snappy" : "None");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.force_compression -> %s",
           int(options.force_compression) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.skip_checksums -> %s",

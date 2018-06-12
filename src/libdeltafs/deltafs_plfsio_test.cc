@@ -339,7 +339,7 @@ TEST(PlfsIoTest, UnorderedWithArrayBlockFmt) {
 }
 
 TEST(PlfsIoTest, Snappy) {
-  options_.compression = kSnappyCompression;
+  options_.index_compression = kSnappyCompression;
   options_.force_compression = true;
   Append("k1", "v1");
   Append("k2", "v2");
@@ -701,7 +701,7 @@ class PlfsIoBench {
     options_.non_blocking = batched_insertion_ != 0;
     options_.leveldb_compatible = GetOption("LEVELDB_FMT", true) != 0;
     options_.fixed_kv_length = GetOption("FIXED_KV", true) != 0;
-    options_.compression =
+    options_.index_compression =
         GetOption("SNAPPY", false) ? kSnappyCompression : kNoCompression;
     options_.force_compression = true;
     options_.total_memtable_budget =
@@ -1078,7 +1078,7 @@ class PlfsIoBench {
       fprintf(stderr, "      Batched Insertion: No\n");
     }
     fprintf(stderr, "    Indexes Compression: %s\n",
-            options_.compression == kSnappyCompression ? "Yes" : "No");
+            options_.index_compression == kSnappyCompression ? "Yes" : "No");
     fprintf(stderr, "            Blk Padding: %s\n",
             options_.block_padding ? "Yes" : "No");
     fprintf(stderr, "                 TB Fmt: %s\n",

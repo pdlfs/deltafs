@@ -248,10 +248,13 @@ struct DirOptions {
   // Default: false
   bool ignore_filters;
 
-  // Compression type to be applied to index blocks.
-  // Data blocks are never compressed.
+  // Compression type to be applied to data blocks.
   // Default: kNoCompression
   CompressionType compression;
+
+  // Compression type to be applied to index blocks.
+  // Default: kNoCompression
+  CompressionType index_compression;
 
   // True if compressed data is written out even if compression rate is low.
   // Default: false
@@ -384,7 +387,7 @@ class DirWriter {
   // Append a piece of data to a specific file under the directory.
   // Set epoch to -1 to disable epoch validation.
   // REQUIRES: Finish() has not been called.
-  Status Add(const Slice &fid, const Slice &data, int epoch = -1);
+  Status Add(const Slice& fid, const Slice& data, int epoch = -1);
 
   // Force a memtable compaction.
   // Set epoch to -1 to disable epoch validation.
