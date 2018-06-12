@@ -72,7 +72,8 @@ class ArrayBlockBuilder : public AbstractBlockBuilder {
 
   // Finish building the block and return a slice that refers to the block
   // contents.
-  Slice Finish();
+  Slice Finish(CompressionType compression = kNoCompression,
+               bool force_compression = false);
 
   // Return an estimate of the size of the block we are building.
   size_t CurrentSizeEstimate() const;
@@ -89,12 +90,13 @@ void ArrayBlockBuilder::Add(const Slice& key, const Slice& value) {
   buffer_.append(value.data(), value_size_);
 }
 
-Slice ArrayBlockBuilder::Finish() {
+Slice ArrayBlockBuilder::Finish(CompressionType compression,
+                                bool force_compression) {
   assert(!finished_);
   // Remember key value sizes for later retrieval
   PutFixed32(&buffer_, value_size_);
   PutFixed32(&buffer_, key_size_);
-  return AbstractBlockBuilder::Finish();
+  return AbstractBlockBuilder::Finish(compression, force_compression);
 }
 
 size_t ArrayBlockBuilder::CurrentSizeEstimate() const {
@@ -545,7 +547,8 @@ void SeqDirBuilder<T>::EndBlock() {
   //   block handle   block contents  block trailer  block padding
   //                | <---------- final block contents ----------> |
   //                          (LevelDb compatible layout)
-  Slice block_contents = data_block_->Finish();
+  Slice block_contents =
+      data_block_->Finish(options_.compression, options_.force_compression);
   const size_t block_size = block_contents.size();
   Slice final_block_contents;  // With the trailer and any inserted padding
   if (options_.block_padding) {
