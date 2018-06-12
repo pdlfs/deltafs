@@ -13,6 +13,7 @@
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/crc32c.h"
+#include "pdlfs-common/port.h"
 
 #include <assert.h>
 #include <algorithm>
@@ -43,7 +44,10 @@
 namespace pdlfs {
 
 AbstractBlockBuilder::AbstractBlockBuilder(const Comparator* cmp)
-    : cmp_(cmp), buffer_start_(0), finished_(false) {}
+    : cmp_(cmp),
+      buffer_start_(0),
+      compression_(kNoCompression),
+      finished_(false) {}
 
 // By default, we assume keys are inserted in strict binary order.
 // This is consistent with LevelDb's semantics.
@@ -84,12 +88,37 @@ void AbstractBlockBuilder::Reset() {
   finished_ = false;
 }
 
-Slice AbstractBlockBuilder::Finish() {
+Slice AbstractBlockBuilder::Finish(CompressionType compression) {
   assert(!finished_);
   finished_ = true;
-  Slice result = buffer_;
-  result.remove_prefix(buffer_start_);
-  return result;
+  Slice contents = buffer_;
+  contents.remove_prefix(buffer_start_);
+  if (compression == kNoCompression) {
+    return contents;
+  }
+
+  std::string compressed;
+  switch (compression) {
+    case kNoCompression:
+      break;
+    case kSnappyCompression:
+      if (!port::Snappy_Compress(contents.data(), contents.size(),
+                                 &compressed)) {
+        compression = kNoCompression;
+        compressed.clear();
+      }
+      break;
+  }
+
+  if (!compressed.empty()) {
+    compression_ = compression;
+    buffer_.resize(buffer_start_);
+    buffer_.append(compressed);
+    contents = buffer_;
+    contents.remove_prefix(buffer_start_);
+  }
+
+  return contents;
 }
 
 void BlockBuilder::Reset() {
@@ -127,7 +156,7 @@ Slice AbstractBlockBuilder::Finalize(bool crc32c, uint32_t padding_target,
   Slice contents = buffer_;  // Contents without the trailer and padding
   contents.remove_prefix(buffer_start_);
   char trailer[kBlockTrailerSize];
-  trailer[0] = kNoCompression;
+  trailer[0] = compression_;
   if (crc32c) {
     uint32_t crc = crc32c::Value(contents.data(), contents.size());
     crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type

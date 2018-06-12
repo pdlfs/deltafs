@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "pdlfs-common/leveldb/compression_type.h"
 #include "pdlfs-common/slice.h"
 
 #include <stdint.h>
@@ -29,7 +30,7 @@ class AbstractBlockBuilder {
 
   // Append zeros to the underlying buffer destination.
   // Must be called after Finish() and before the next Reset().
-  // Added padding cannot be Reset().
+  // Added padding cannot be cleared by future Reset()s.
   void Pad(size_t n);
 
   // Specify a new buffer destination to switch with the one currently used by
@@ -38,6 +39,7 @@ class AbstractBlockBuilder {
   // NULL, the current buffer destination will be used so new block contents
   // will be appended after existing contents.
   // Must be called after Finish() and before the next Reset().
+  // Existing contents in *buffer cannot be cleared by future Reset()s.
   void ResetBuffer(std::string* buffer);
 
   // Reset block contents.
@@ -46,7 +48,7 @@ class AbstractBlockBuilder {
   // Finish building the block and return a slice that refers to the
   // block contents.  The returned slice will remain valid for the
   // lifetime of this builder or until Reset() or Finalize() is called.
-  Slice Finish();
+  Slice Finish(CompressionType compression = kNoCompression);
 
   // Reserve a certain amount of buffer space.
   void Reserve(size_t size) { buffer_.reserve(buffer_start_ + size); }
@@ -77,7 +79,8 @@ class AbstractBlockBuilder {
   const Comparator* cmp_;  // NULL if keys are not inserted in-order
   std::string buffer_;     // Destination buffer
   size_t buffer_start_;    // Start offset of the buffer space
-  bool finished_;          // Has Finish() been called?
+  CompressionType compression_;
+  bool finished_;  // Has Finish() been called?
 
  private:
   // No copying allowed
