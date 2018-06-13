@@ -155,13 +155,9 @@ class DirCompactor {
  public:
   DirCompactor(const DirOptions& options, DirBuilder* bu);
   virtual ~DirCompactor();
-
   virtual void Compact(WriteBuffer* buf) = 0;
-
   virtual Status FinishEpoch(uint32_t ep_seq) = 0;
-
   virtual Status Finish(uint32_t ep_seq) = 0;
-
   virtual size_t memory_usage() const = 0;
 
  protected:

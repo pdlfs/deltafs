@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -95,6 +95,7 @@ class LogSink {
         mu_(opts_.mu),
         env_(opts_.env),
         buf_store_(NULL),
+        buf_memory_usage_(0),
         prev_off_(0),
         off_(0),
         file_(NULL),  // Initialized by Open()
@@ -162,11 +163,11 @@ class LogSink {
   }
 
   // Return the memory space for write buffering.
-  std::string* buffer_store() {
+  size_t memory_usage() {
     if (file_ != NULL) {
-      return buf_store_;  // NULL if write buffering is disabled
+      return (buf_store_ != NULL ? buf_store_->capacity() : 0);
     } else {
-      return NULL;
+      return buf_memory_usage_;
     }
   }
 
@@ -186,7 +187,8 @@ class LogSink {
   // No copying allowed
   void operator=(const LogSink& s);
   LogSink(const LogSink&);
-  Status Finish();  // Internally used by Lclose()
+  // Invoked by Lclose() and the class destructor
+  Status Finish();
 
   // Constant after construction
   const LogOptions opts_;
@@ -200,6 +202,7 @@ class LogSink {
 
   // State below is protected by mu_
   std::string* buf_store_;  // NULL after Finish() is called
+  size_t buf_memory_usage_;
   Status finish_status_;
   uint64_t prev_off_;
   uint64_t off_;  // Logic write offset, monotonically increasing

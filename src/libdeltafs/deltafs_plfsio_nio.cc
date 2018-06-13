@@ -241,12 +241,15 @@ Status LogSink::Lclose(bool sync) {
 // must be called before Finish().
 Status LogSink::Finish() {
   assert(file_ != NULL);
-  // Delayed writes are likely sent to storage. Data
-  // durability is not promised.
-  Status status = file_->Close();
-  delete file_;
-  buf_store_ = NULL;
+  WritableFile* const file = file_;
   file_ = NULL;
+  // Delayed writes are likely flushed out of the application process's memory.
+  // Data durability is not guaranteed unless Lsync() or
+  // Lclose(sync=true) has been called.
+  Status status = file->Close();
+  buf_memory_usage_ = buf_store_->capacity();
+  buf_store_ = NULL;
+  delete file;
   return status;
 }
 

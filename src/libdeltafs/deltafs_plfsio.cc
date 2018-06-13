@@ -934,9 +934,9 @@ uint64_t DirWriter::TEST_total_memory_usage() const {
   Rep* const r = rep_;
   MutexLock ml(&r->mutex_);
   uint64_t result = 0;
-  result += r->data_->buffer_store()->capacity();
+  result += r->data_->memory_usage();
   for (size_t i = 0; i < r->num_parts_; i++)
-    result += r->idxers_[i]->indx_->buffer_store()->capacity();
+    result += r->idxers_[i]->indx_->memory_usage();
   for (size_t i = 0; i < r->num_parts_; i++)
     result += r->idxers_[i]->memory_usage();
   return result;
