@@ -725,6 +725,8 @@ class PlfsIoBench {
     options_.non_blocking = batched_insertion_ != 0;
     options_.leveldb_compatible = GetOption("LEVELDB_FMT", true) != 0;
     options_.fixed_kv_length = GetOption("FIXED_KV", true) != 0;
+    options_.compression =
+        GetOption("SNAPPY", false) ? kSnappyCompression : kNoCompression;
     options_.index_compression =
         GetOption("SNAPPY", false) ? kSnappyCompression : kNoCompression;
     options_.force_compression = true;
