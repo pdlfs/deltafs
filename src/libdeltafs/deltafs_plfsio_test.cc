@@ -1103,7 +1103,7 @@ class PlfsIoBench {
     } else {
       fprintf(stderr, "      Batched Insertion: No\n");
     }
-    fprintf(stderr, "    Indexes Compression: %s\n",
+    fprintf(stderr, "     Snappy Compression: %s\n",
             options_.index_compression == kSnappyCompression ? "Yes" : "No");
     fprintf(stderr, "            Blk Padding: %s\n",
             options_.block_padding ? "Yes" : "No");
@@ -1167,16 +1167,21 @@ class PlfsIoBench {
     fprintf(stderr, "        Total User Data: %.3f MiB (K+V)\n",
             1.0 * user_bytes / ki / ki);
     fprintf(stderr,
-            "     Aggregated TB Data: %.3f MiB (+%.2f%% due to blk encoding)\n",
+            "     Aggregated TB Data: %.3f MiB (%+.2f%% due to blk encoding "
+            "and possible compression)\n",
             1.0 * writer_->TEST_raw_data_contents() / ki / ki,
             1.0 * writer_->TEST_raw_data_contents() / user_bytes * 100 - 100);
     fprintf(stderr,
-            "         Final Dir Data: %.3f MiB (+%.2f%% due to blk encoding "
-            "and padding)\n",
+            "         Final Dir Data: %.3f MiB (%+.2f%% due to blk encoding, "
+            "checksums, and possible compression and padding)\n",
             1.0 * stats.data_bytes / ki / ki,
             1.0 * stats.data_bytes / user_bytes * 100 - 100);
-    fprintf(stderr, "Total Blk Encoding Cost: %.3f (bits per key)\n",
-            8.0 * (stats.data_bytes - user_bytes) / double(mfiles_ << 20));
+    if (stats.data_bytes >= user_bytes) {
+      fprintf(stderr, "Total Blk Encoding Cost: %.3f (bits per key)\n",
+              8.0 * (stats.data_bytes - user_bytes) / double(mfiles_ << 20));
+    } else {
+      fprintf(stderr, "Total Blk Encoding Cost: N/A\n");
+    }
     fprintf(stderr, "           Avg I/O Size: %.3f MiB\n",
             1.0 * stats.data_bytes / stats.data_ops / ki / ki);
     if (owns_env) {
