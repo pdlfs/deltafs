@@ -1431,7 +1431,7 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
 }
 
 int DirError(deltafs_plfsdir_t* dir, const pdlfs::Status& s) {
-  if (dir->printer != NULL) {
+  if (dir != NULL && dir->printer != NULL) {
     dir->printer(s.ToString().c_str(), dir->printer_arg);
   }
   SetErrno(s);
