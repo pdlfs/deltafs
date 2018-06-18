@@ -1874,6 +1874,24 @@ ssize_t deltafs_plfsdir_count(deltafs_plfsdir_t* __dir, int __epoch) {
   }
 }
 
+int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir, const char* __name) {
+  pdlfs::Status s;
+
+  if (__dir == NULL) {
+    s = BadArgs();
+  } else if (__dir->opened) {
+    s = BadArgs();
+  } else {
+    s = pdlfs::plfsio::DestroyDir(__name, *__dir->io_options);
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
 int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
   if (__dir == NULL) return 0;
 

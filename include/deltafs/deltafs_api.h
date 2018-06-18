@@ -135,6 +135,7 @@ int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
                                     void* __printer_arg);
 /* Return the total number of configured memtable partitions. */
 int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir);
+int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir, const char* __name);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name);
 /* Put a piece of data into a given key.
    Return -1 on errors, or num bytes written. */
