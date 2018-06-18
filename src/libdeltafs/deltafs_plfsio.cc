@@ -74,7 +74,9 @@ DirOptions::DirOptions()
       is_env_pfs(true),
       rank(0) {}
 
-static bool ParseBool(const Slice& key, const Slice& value, bool* result) {
+namespace {
+
+bool ParseBool(const Slice& key, const Slice& value, bool* result) {
   if (!ParsePrettyBool(value, result)) {
     Warn(__LOG_ARGS__, "Unknown dir option: %s=%s, option ignored", key.c_str(),
          value.c_str());
@@ -84,8 +86,7 @@ static bool ParseBool(const Slice& key, const Slice& value, bool* result) {
   }
 }
 
-static bool ParseInteger(const Slice& key, const Slice& value,
-                         uint64_t* result) {
+bool ParseInteger(const Slice& key, const Slice& value, uint64_t* result) {
   if (!ParsePrettyNumber(value, result)) {
     Warn(__LOG_ARGS__, "Unknown dir option: %s=%s, option ignored", key.c_str(),
          value.c_str());
@@ -95,8 +96,8 @@ static bool ParseInteger(const Slice& key, const Slice& value,
   }
 }
 
-static bool ParseBitmapFormat(const Slice& key, const Slice& value,
-                              BitmapFormat* result) {
+bool ParseBitmapFormat(const Slice& key, const Slice& value,
+                       BitmapFormat* result) {
   if (value == "uncompressed") {
     *result = kFmtUncompressed;
     return true;
@@ -125,8 +126,7 @@ static bool ParseBitmapFormat(const Slice& key, const Slice& value,
   }
 }
 
-static bool ParseFilterType(const Slice& key, const Slice& value,
-                            FilterType* result) {
+bool ParseFilterType(const Slice& key, const Slice& value, FilterType* result) {
   if (value.starts_with("bloom")) {
     *result = kFtBloomFilter;
     return true;
@@ -139,6 +139,23 @@ static bool ParseFilterType(const Slice& key, const Slice& value,
     return false;
   }
 }
+
+bool ParseCompressionType(const Slice& key, const Slice& value,
+                          CompressionType* result) {
+  if (value.starts_with("snappy")) {
+    *result = kSnappyCompression;
+    return true;
+  } else if (value.starts_with("no")) {
+    *result = kNoCompression;
+    return true;
+  } else {
+    Warn(__LOG_ARGS__, "Unknown compression type: %s=%s, option ignored",
+         key.c_str(), value.c_str());
+    return false;
+  }
+}
+
+}  // namespace
 
 DirOptions ParseDirOptions(const char* input) {
   DirOptions result;
@@ -153,6 +170,7 @@ DirOptions ParseDirOptions(const char* input) {
     }
     FilterType filter_type;
     BitmapFormat bm_fmt;
+    CompressionType compression_type;
     Slice conf_key = conf_pair[0];
     Slice conf_value = conf_pair[1];
     uint64_t num;
@@ -260,6 +278,14 @@ DirOptions ParseDirOptions(const char* input) {
     } else if (conf_key == "bm_key_bits") {
       if (ParseInteger(conf_key, conf_value, &num)) {
         result.bm_key_bits = num;
+      }
+    } else if (conf_key == "compression") {
+      if (ParseCompressionType(conf_key, conf_value, &compression_type)) {
+        result.compression = compression_type;
+      }
+    } else if (conf_key == "index_compression") {
+      if (ParseCompressionType(conf_key, conf_value, &compression_type)) {
+        result.index_compression = compression_type;
       }
     } else if (conf_key == "value_size") {
       if (ParseInteger(conf_key, conf_value, &num)) {
