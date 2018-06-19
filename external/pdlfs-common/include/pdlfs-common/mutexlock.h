@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2011 The LevelDB Authors.
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2018 Carnegie Mellon University.
  *
  * All rights reserved.
  *
@@ -13,6 +13,29 @@
 #include "pdlfs-common/port.h"
 
 namespace pdlfs {
+
+// Represents everything that can be locked for synchronization.
+class Lockable {
+ public:
+  Lockable() {}
+  virtual void Lock() = 0;
+  virtual void Unlock() = 0;
+  virtual ~Lockable() {}
+
+ private:
+  // No copying allowed
+  Lockable(const Lockable&);
+  void operator=(const Lockable&);
+};
+
+// A lock that does nothing.
+class DummyLock : public Lockable {
+ public:
+  DummyLock() {}
+  virtual void Lock() {}  // Does nothing.
+  virtual void Unlock() {}
+  virtual ~DummyLock() {}
+};
 
 // Helper class that locks a mutex on construction and
 // unlocks the mutex when the destructor of the MutexLock

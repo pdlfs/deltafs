@@ -806,9 +806,15 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
     return false;
   }
 
+  pdlfs::Lockable* CreateLockByGoal(bool serial_writes) {
+    if (serial_writes) return new WriteLock(&mu_);
+    return new pdlfs::DummyLock;
+  }
+
  public:
   explicit DirEnvWrapper(Env* base) : EnvWrapper(base) {
     rate_ = GetNumFromEnv("DELTAFS_TC_RATE");  // Traffic control
+    lock_ = CreateLockByGoal(IsEnvSet("DELTAFS_TC_SERIALWRITES"));
     sync_on_close_ = IsEnvSet("DELTAFS_TC_SYNCONCLOSE");
     ignore_sync_ = IsEnvSet("DELTAFS_TC_IGNORESYNC");
     drop_ = IsEnvSet("DELTAFS_TC_DROPDATA");
@@ -826,6 +832,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
     CleanUpRepo(&sequentialfile_repo_);
     CleanUpRepo(&randomaccessfile_repo_);
     CleanUpRepo(&writablefile_repo_);
+    delete lock_;
   }
 
   virtual pdlfs::Status NewSequentialFile(const char* f,
@@ -887,16 +894,44 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
   std::vector<pdlfs::RandomAccessFileStats*> randomaccessfile_repo_;
   std::vector<pdlfs::WritableFileStats*> writablefile_repo_;
   mutable pdlfs::port::Mutex mu_;
+  pdlfs::Lockable* lock_;
 
   // No copying allowed
   void operator=(const DirEnvWrapper& wrapper);
   DirEnvWrapper(const DirEnvWrapper&);
 
-  // Max write speed
-  uint64_t rate_;  // Bytes per second
+  // The following parameters are set from env
+  uint64_t rate_;  // Max write speed in bytes per second
   bool sync_on_close_;
   bool ignore_sync_;
   bool drop_;
+
+  // This ensures that at most one thread may write at a single time.
+  class WriteLock : public pdlfs::Lockable {
+   public:
+    explicit WriteLock(pdlfs::port::Mutex* mu)
+        : mu_(mu), cv_(mu), busy_(false) {}
+    virtual ~WriteLock() {}
+
+    virtual void Lock() {
+      pdlfs::MutexLock l(mu_);
+      while (busy_) cv_.Wait();
+      busy_ = true;
+    }
+
+    virtual void Unlock() {
+      pdlfs::MutexLock l(mu_);
+      busy_ = false;
+      cv_.SignalAll();
+    }
+
+   private:
+    pdlfs::port::Mutex* mu_;
+    pdlfs::port::CondVar cv_;
+
+    // Protected by mu_
+    bool busy_;
+  };
 
   class TrafficControlledWritableFile : public pdlfs::WritableFile {
    public:
@@ -905,6 +940,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
           sync_on_close_(wrapper->sync_on_close_),
           ignore_sync_(wrapper->ignore_sync_),
           drop_(wrapper->drop_),
+          lock_(wrapper->lock_),
           base_(base),
           env_(wrapper) {}
 
@@ -915,8 +951,9 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
     virtual pdlfs::Status Append(const pdlfs::Slice& data) {
       pdlfs::Status status;
       uint64_t io_start = 0;
+      lock_->Lock();
       if (maxbw_ != 0) io_start = env_->NowMicros();
-      if (!drop_ && base_ != NULL) {
+      if (!drop_ && base_ != NULL) {  // Write data to the real destination
         status = base_->Append(data);
       }
       if (maxbw_ != 0 && status.ok()) {
@@ -927,6 +964,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
           env_->SleepForMicroseconds(sleep);
         }
       }
+      lock_->Unlock();
       return status;
     }
 
@@ -965,6 +1003,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
     const bool sync_on_close_;
     const bool ignore_sync_;
     const bool drop_;
+    pdlfs::Lockable* const lock_;
     WritableFile* const base_;  // May be NULL
     Env* const env_;
   };
