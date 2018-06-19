@@ -1645,29 +1645,6 @@ int deltafs_plfsdir_flush(deltafs_plfsdir_t* __dir, int __epoch) {
   }
 }
 
-ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
-                                  size_t __sz) {
-  pdlfs::Status s;
-
-  if (!IsDirOpened(__dir)) {
-    s = BadArgs();
-  } else if (__dir->mode != O_WRONLY) {
-    s = BadArgs();
-  } else if (!__dir->enable_side_io) {
-    s = BadArgs();
-  } else {
-    const char* data = static_cast<const char*>(__buf);
-    pdlfs::Slice v(data, __sz);
-    s = __dir->io_writer->Append(v);
-  }
-
-  if (!s.ok()) {
-    return DirError(__dir, s);
-  } else {
-    return __sz;
-  }
-}
-
 int deltafs_plfsdir_wait(deltafs_plfsdir_t* __dir) {
   pdlfs::Status s;
 
@@ -1705,10 +1682,72 @@ int deltafs_plfsdir_sync(deltafs_plfsdir_t* __dir) {
     }
   }
 
-  if (s.ok()) {
-    if (__dir->enable_side_io) {
-      s = __dir->io_writer->Sync();
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
+                                  size_t __sz) {
+  pdlfs::Status s;
+
+  if (!IsDirOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else if (!__dir->enable_side_io) {
+    s = BadArgs();
+  } else {
+    const char* data = static_cast<const char*>(__buf);
+    pdlfs::Slice v(data, __sz);
+    s = __dir->io_writer->Append(v);
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return __sz;
+  }
+}
+
+int deltafs_plfsdir_io_flush(deltafs_plfsdir_t* __dir) {
+  pdlfs::Status s;
+
+  if (!IsDirOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else if (!__dir->enable_side_io) {
+    s = BadArgs();
+  } else {
+    s = __dir->io_writer->Flush();
+    // Flush() may be ignored by a buffered writable file.
+    if (s.ok() && __dir->io_buf != NULL) {
+      s = __dir->io_buf->EmptyBuffer();
     }
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+int deltafs_plfsdir_io_sync(deltafs_plfsdir_t* __dir) {
+  pdlfs::Status s;
+
+  if (!IsDirOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else if (!__dir->enable_side_io) {
+    s = BadArgs();
+  } else {
+    pdlfs::WritableFile* f = __dir->io_writer;
+    s = f->Sync();
   }
 
   if (!s.ok()) {

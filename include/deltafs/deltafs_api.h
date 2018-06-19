@@ -139,6 +139,8 @@ int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir, const char* __name);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name);
 ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
                                   size_t __sz);
+int deltafs_plfsdir_io_flush(deltafs_plfsdir_t* __dir);
+int deltafs_plfsdir_io_sync(deltafs_plfsdir_t* __dir);
 /* Put a piece of data into a given key.
    Return -1 on errors, or num bytes written. */
 ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
@@ -183,7 +185,7 @@ long long deltafs_plfsdir_get_integer_property(deltafs_plfsdir_t* __dir,
                                                const char* __key);
 int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch);
 int deltafs_plfsdir_flush(deltafs_plfsdir_t* __dir, int __epoch);
-int deltafs_plfsdir_sync(deltafs_plfsdir_t* __dir); /* Sync data to storage */
+int deltafs_plfsdir_sync(deltafs_plfsdir_t* __dir);
 /* Wait for on-going memtable compactions to finish */
 int deltafs_plfsdir_wait(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir);
