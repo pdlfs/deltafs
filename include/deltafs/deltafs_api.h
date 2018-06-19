@@ -141,6 +141,8 @@ ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
                                   size_t __sz);
 int deltafs_plfsdir_io_flush(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_io_sync(deltafs_plfsdir_t* __dir);
+ssize_t deltafs_plfsdir_io_pread(deltafs_plfsdir_t* __dir, void* __buf,
+                                 size_t __sz, off_t __off);
 /* Put a piece of data into a given key.
    Return -1 on errors, or num bytes written. */
 ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,

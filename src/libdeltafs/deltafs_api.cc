@@ -2009,6 +2009,36 @@ ssize_t deltafs_plfsdir_count(deltafs_plfsdir_t* __dir, int __epoch) {
   }
 }
 
+ssize_t deltafs_plfsdir_io_pread(deltafs_plfsdir_t* __dir, void* __buf,
+                                 size_t __sz, off_t __off) {
+  pdlfs::Status s;
+  pdlfs::Slice result;
+  ssize_t n = 0;
+
+  if (!IsDirOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_RDONLY) {
+    s = BadArgs();
+  } else if (!__dir->enable_side_io) {
+    s = BadArgs();
+  } else {
+    char* scratch = static_cast<char*>(__buf);
+    s = __dir->io_reader->Read(__off, __sz, &result, scratch);
+    if (s.ok()) {
+      n = result.size();
+      if (n != 0 && result.data() != scratch) {
+        memcpy(__buf, result.data(), n);
+      }
+    }
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return n;
+  }
+}
+
 int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir, const char* __name) {
   pdlfs::Status s;
 
