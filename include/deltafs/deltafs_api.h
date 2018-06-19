@@ -137,6 +137,8 @@ int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
 int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir, const char* __name);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name);
+ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
+                                  size_t __sz);
 /* Put a piece of data into a given key.
    Return -1 on errors, or num bytes written. */
 ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
