@@ -1243,6 +1243,30 @@ int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir,
   }
 }
 
+int deltafs_plfsdir_enable_side_io(deltafs_plfsdir_t* __dir, int __flag) {
+  if (__dir != NULL && !__dir->opened) {
+    const bool side_io = static_cast<bool>(__flag);
+    __dir->enable_side_io = side_io;
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
+int deltafs_plfsdir_set_side_io_buf_size(deltafs_plfsdir_t* __dir,
+                                         size_t __sz) {
+  if (__dir != NULL && !__dir->opened) {
+    if (__sz < 4096) {
+      __sz = 4096;
+    }
+    __dir->side_io_buf_size = __sz;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
 int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
   if (__dir != NULL) {
     int lg_parts = __dir->io_options->lg_parts;

@@ -41,6 +41,8 @@ class PlfsDirTest {
     deltafs_plfsdir_set_unordered(wdir_, 0);
     deltafs_plfsdir_force_leveldb_fmt(wdir_, 0);
     deltafs_plfsdir_set_fixed_kv(wdir_, 0);
+    deltafs_plfsdir_set_side_io_buf_size(wdir_, 4096);
+    deltafs_plfsdir_enable_side_io(wdir_, 1);
     deltafs_plfsdir_destroy(wdir_, dirname_.c_str());
     int r = deltafs_plfsdir_open(wdir_, dirname_.c_str());
     ASSERT_TRUE(r == 0);
@@ -57,6 +59,7 @@ class PlfsDirTest {
     rdir_ =
         deltafs_plfsdir_create_handle("", O_RDONLY, DELTAFS_PLFSDIR_DEFAULT);
     ASSERT_TRUE(rdir_ != NULL);
+    deltafs_plfsdir_enable_side_io(rdir_, 1);
     int r = deltafs_plfsdir_open(rdir_, dirname_.c_str());
     ASSERT_TRUE(r == 0);
   }
@@ -68,9 +71,17 @@ class PlfsDirTest {
     ASSERT_TRUE(r == v.size());
   }
 
+  void IoWrite(const Slice& d) {
+    if (wdir_ == NULL) OpenWriter();
+    ssize_t r = deltafs_plfsdir_io_append(wdir_, d.data(), d.size());
+    ASSERT_TRUE(r == d.size());
+  }
+
   void FinishEpoch() {
     if (wdir_ == NULL) OpenWriter();
     int r = deltafs_plfsdir_epoch_flush(wdir_, epoch_);
+    ASSERT_TRUE(r == 0);
+    r = deltafs_plfsdir_io_flush(wdir_);
     ASSERT_TRUE(r == 0);
     epoch_++;
   }
@@ -83,6 +94,17 @@ class PlfsDirTest {
         deltafs_plfsdir_get(rdir_, k.data(), k.size(), -1, &sz, NULL, NULL);
     ASSERT_TRUE(result != NULL);
     std::string tmp = Slice(result, sz).ToString();
+    free(result);
+    return tmp;
+  }
+
+  std::string IoRead(uint64_t off, size_t sz) {
+    if (wdir_ != NULL) Finish();
+    if (rdir_ == NULL) OpenReader();
+    char* result = static_cast<char*>(malloc(sz));
+    ssize_t r = deltafs_plfsdir_io_pread(rdir_, result, sz, off);
+    ASSERT_TRUE(r >= 0);
+    std::string tmp = Slice(result, r).ToString();
     free(result);
     return tmp;
   }
@@ -102,12 +124,19 @@ TEST(PlfsDirTest, Empty) {
 
 TEST(PlfsDirTest, SingleEpoch) {
   Put("k1", "v1");
+  IoWrite("a");
   Put("k2", "v2");
+  IoWrite("b");
   Put("k3", "v3");
+  IoWrite("c");
   Put("k4", "v4");
+  IoWrite("x");
   Put("k5", "v5");
+  IoWrite("y");
   Put("k6", "v6");
+  IoWrite("z");
   FinishEpoch();
+  ASSERT_EQ(IoRead(0, 6), "abcxyz");
   ASSERT_EQ(Get("k1"), "v1");
   ASSERT_EQ(Get("k2"), "v2");
   ASSERT_EQ(Get("k3"), "v3");
