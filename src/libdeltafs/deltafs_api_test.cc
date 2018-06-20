@@ -239,13 +239,16 @@ class PlfsDirBench {
           fprintf(stderr, "\r%.2f%%", 100.0 * k / num_files);
         }
         uint64_t h = xxhash64(&k, sizeof(k), 0);
-        EncodeFixed64(tmp1, h);
-        uint32_t a = h % comm_sz;
-        EncodeFixed32(tmp2, a);
-        uint64_t f = xxhash64(&h, sizeof(h), 0);
-        uint64_t b = i * comm_sz + f % comm_sz;
-        b *= entity_size_;
-        EncodeFixed64(tmp2 + 4, b);
+        uint32_t f = xxhash32(&h, sizeof(h), 301);
+        uint32_t a = f % comm_sz;
+        EncodeFixed32(tmp1, a);
+        EncodeFixed32(tmp1 + 4, f);
+        uint32_t g = xxhash32(&h, sizeof(h), 103);
+        uint32_t b = g % comm_sz;
+        EncodeFixed32(tmp2, b);
+        uint64_t c = i * comm_sz + h % comm_sz;
+        c *= entity_size_;
+        EncodeFixed64(tmp2 + 4, c);
         ssize_t rr = deltafs_plfsdir_put(dir_, tmp1, sizeof(tmp1), 0, tmp2,
                                          sizeof(tmp2));
         ASSERT_TRUE(rr == sizeof(tmp2));
@@ -278,6 +281,10 @@ class PlfsDirBench {
             sdb / ki / ki, sfb / ki / ki, sib / ki / ki);
     integer usr = GETPROP(dir_, "total_user_data");
     fprintf(stderr, "   Total User Data: %.2f MiB\n", usr / ki / ki);
+    fprintf(stderr, "        Total Keys: %.2f MiB\n",
+            8.0 / 20.0 * usr / ki / ki);
+    fprintf(stderr, "             Value: 12 Bytes\n");
+    fprintf(stderr, "               Key: 8 Bytes\n");
 #undef GETPROP
   }
 
