@@ -1261,6 +1261,7 @@ int deltafs_plfsdir_set_side_io_buf_size(deltafs_plfsdir_t* __dir,
       __sz = 4096;
     }
     __dir->side_io_buf_size = __sz;
+    return 0;
   } else {
     SetErrno(BadArgs());
     return -1;
