@@ -163,7 +163,7 @@ class PlfsDirBench {
     if (GetOptions("COMPRESSION", 1)) dirconfs_.push_back("compression=snappy");
     if (GetOptions("FORCE_COMPRESSION", 1))
       dirconfs_.push_back("force_compression=true");
-    if (GetOptions("INDEX_COMPRESSION", 1))
+    if (GetOptions("INDEX_COMPRESSION", 0))
       dirconfs_.push_back("index_compression=snappy");
   }
 
@@ -175,10 +175,10 @@ class PlfsDirBench {
 
   void GetBlkOptions() {
     dirconfs_.push_back("block_padding=false");
-    dirconfs_.push_back("block_size=4KiB");
+    dirconfs_.push_back("block_size=32KiB");
     dirconfs_.push_back("leveldb_compatible=false");
     dirconfs_.push_back("fixed_kv=true");
-    dirconfs_.push_back("value_size=16");
+    dirconfs_.push_back("value_size=12");
     dirconfs_.push_back("key_size=8");
   }
 
@@ -205,8 +205,10 @@ class PlfsDirBench {
     GetBlkOptions();
     GetIoOptions();
 
-    mfiles_ = 1;
-    kranks_ = 1;
+    entity_size_ = 1;
+    unordered_ = 0;
+    mfiles_ = 4;
+    kranks_ = 2;
   }
 
   ~PlfsDirBench() {
@@ -221,11 +223,12 @@ class PlfsDirBench {
     dir_ = deltafs_plfsdir_create_handle(c, O_WRONLY, DELTAFS_PLFSDIR_DEFAULT);
     ASSERT_TRUE(dir_ != NULL);
     deltafs_plfsdir_enable_side_io(dir_, 1);
+    deltafs_plfsdir_set_unordered(dir_, unordered_);
     deltafs_plfsdir_destroy(dir_, dirname_.c_str());
     int r = deltafs_plfsdir_open(dir_, dirname_.c_str());
     ASSERT_TRUE(r == 0);
     char tmp1[8];
-    char tmp2[16];
+    char tmp2[12];
     uint32_t num_files = mfiles_ << 20;
     uint32_t comm_sz = kranks_ << 10;
     uint32_t k = 0;
@@ -237,12 +240,12 @@ class PlfsDirBench {
         }
         uint64_t h = xxhash64(&k, sizeof(k), 0);
         EncodeFixed64(tmp1, h);
-        uint64_t a = h % comm_sz;
-        EncodeFixed64(tmp2, a);
+        uint32_t a = h % comm_sz;
+        EncodeFixed32(tmp2, a);
         uint64_t f = xxhash64(&h, sizeof(h), 0);
         uint64_t b = i * comm_sz + f % comm_sz;
-       // b *= 40;
-        EncodeFixed64(tmp2 + 8, b);
+        b *= entity_size_;
+        EncodeFixed64(tmp2 + 4, b);
         ssize_t rr = deltafs_plfsdir_put(dir_, tmp1, sizeof(tmp1), 0, tmp2,
                                          sizeof(tmp2));
         ASSERT_TRUE(rr == sizeof(tmp2));
@@ -262,24 +265,25 @@ class PlfsDirBench {
   }
 
   void PrintStats() {
-    typedef long long prop;
+    typedef long long integer;
 #define GETPROP(h, k) deltafs_plfsdir_get_integer_property(h, k)
     const double k = 1000.0, ki = 1024.0;
     fprintf(stderr, "----------------------------------------\n");
-    prop tbw = GETPROP(dir_, "io.total_bytes_written");
+    integer tbw = GETPROP(dir_, "io.total_bytes_written");
     fprintf(stderr, " Total Dir Storage: %.2f MiB\n", tbw / ki / ki);
-    prop sdb = GETPROP(dir_, "sstable_data_bytes");
-    fprintf(stderr, "          Table Da: %.2f MiB\n", sdb / ki / ki);
-    prop sfb = GETPROP(dir_, "sstable_filter_bytes");
-    fprintf(stderr, "          Table Fi: %.2f MiB\n", sfb / ki / ki);
-    prop sib = GETPROP(dir_, "sstable_index_bytes");
-    fprintf(stderr, "          Table In: %.2f MiB\n", sib / ki / ki);
-    prop usr = GETPROP(dir_, "total_user_data");
+    integer sdb = GETPROP(dir_, "sstable_data_bytes");
+    integer sfb = GETPROP(dir_, "sstable_filter_bytes");
+    integer sib = GETPROP(dir_, "sstable_index_bytes");
+    fprintf(stderr, "         Breakdown: %.2f/%.2f/%.2f MiB (D/F/I)\n",
+            sdb / ki / ki, sfb / ki / ki, sib / ki / ki);
+    integer usr = GETPROP(dir_, "total_user_data");
     fprintf(stderr, "   Total User Data: %.2f MiB\n", usr / ki / ki);
 #undef GETPROP
   }
 
  private:
+  int unordered_;
+  size_t entity_size_;
   deltafs_plfsdir_t* dir_;
   std::vector<std::string> dirconfs_;
   std::string dirname_;
