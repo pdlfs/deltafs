@@ -159,6 +159,36 @@ class PlfsDirBench {
     }
   }
 
+  void GetCompressionOptions() {
+    if (GetOptions("COMPRESSION", 1)) dirconfs_.push_back("compression=snappy");
+    if (GetOptions("FORCE_COMPRESSION", 1))
+      dirconfs_.push_back("force_compression=true");
+    if (GetOptions("INDEX_COMPRESSION", 1))
+      dirconfs_.push_back("index_compression=snappy");
+  }
+
+  void GetMemTableOptions() {
+    dirconfs_.push_back("total_memtable_budget=24MiB");
+    dirconfs_.push_back("compaction_buffer=2MiB");
+    dirconfs_.push_back("lg_parts=2");
+  }
+
+  void GetBlkOptions() {
+    dirconfs_.push_back("block_padding=false");
+    dirconfs_.push_back("block_size=4KiB");
+    dirconfs_.push_back("leveldb_compatible=false");
+    dirconfs_.push_back("fixed_kv=true");
+    dirconfs_.push_back("value_size=16");
+    dirconfs_.push_back("key_size=8");
+  }
+
+  void GetIoOptions() {
+    dirconfs_.push_back("min_index_buffer=2MiB");
+    dirconfs_.push_back("index_buffer=2MiB");
+    dirconfs_.push_back("min_data_buffer=3MiB");
+    dirconfs_.push_back("data_buffer=4MiB");
+  }
+
   std::string AssembleDirConf() {
     std::string conf("rank=0");
     std::vector<std::string>::iterator it;
@@ -170,11 +200,10 @@ class PlfsDirBench {
 
  public:
   PlfsDirBench() : dirname_(test::TmpDir() + "/plfsdir_test_benchmark") {
-    if (GetOptions("COMPRESSION", 0)) dirconfs_.push_back("compression=snappy");
-    if (GetOptions("FORCE_COMPRESSION", 0))
-      dirconfs_.push_back("force_compression=true");
-    if (GetOptions("INDEX_COMPRESSION", 0))
-      dirconfs_.push_back("index_compression=snappy");
+    GetCompressionOptions();
+    GetMemTableOptions();
+    GetBlkOptions();
+    GetIoOptions();
 
     mfiles_ = 1;
     kranks_ = 1;
@@ -212,7 +241,7 @@ class PlfsDirBench {
         EncodeFixed64(tmp2, a);
         uint64_t f = xxhash64(&h, sizeof(h), 0);
         uint64_t b = i * comm_sz + f % comm_sz;
-        b *= 40;
+       // b *= 40;
         EncodeFixed64(tmp2 + 8, b);
         ssize_t rr = deltafs_plfsdir_put(dir_, tmp1, sizeof(tmp1), 0, tmp2,
                                          sizeof(tmp2));
@@ -233,13 +262,21 @@ class PlfsDirBench {
   }
 
   void PrintStats() {
+    typedef long long prop;
+#define GETPROP(h, k) deltafs_plfsdir_get_integer_property(h, k)
     const double k = 1000.0, ki = 1024.0;
-    long long total_bytes =
-        deltafs_plfsdir_get_integer_property(dir_, "io.total_bytes_written");
     fprintf(stderr, "----------------------------------------\n");
-    fprintf(stderr, "      Total Key Data: %.2f MiB\n",
-            (mfiles_ << 20) * 8 / ki / ki);
-    fprintf(stderr, " Total Bytes Written: %.2f MiB\n", total_bytes / ki / ki);
+    prop tbw = GETPROP(dir_, "io.total_bytes_written");
+    fprintf(stderr, " Total Dir Storage: %.2f MiB\n", tbw / ki / ki);
+    prop sdb = GETPROP(dir_, "sstable_data_bytes");
+    fprintf(stderr, "          Table Da: %.2f MiB\n", sdb / ki / ki);
+    prop sfb = GETPROP(dir_, "sstable_filter_bytes");
+    fprintf(stderr, "          Table Fi: %.2f MiB\n", sfb / ki / ki);
+    prop sib = GETPROP(dir_, "sstable_index_bytes");
+    fprintf(stderr, "          Table In: %.2f MiB\n", sib / ki / ki);
+    prop usr = GETPROP(dir_, "total_user_data");
+    fprintf(stderr, "   Total User Data: %.2f MiB\n", usr / ki / ki);
+#undef GETPROP
   }
 
  private:

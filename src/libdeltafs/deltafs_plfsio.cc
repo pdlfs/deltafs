@@ -235,6 +235,10 @@ DirOptions ParseDirOptions(const char* input) {
       if (ParseBool(conf_key, conf_value, &flag)) {
         result.skip_checksums = flag;
       }
+    } else if (conf_key == "skip_sort") {
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.skip_sort = flag;
+      }
     } else if (conf_key == "parallel_reads") {
       if (ParseBool(conf_key, conf_value, &flag)) {
         result.parallel_reads = flag;
