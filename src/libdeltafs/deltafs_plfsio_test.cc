@@ -1533,7 +1533,7 @@ class PlfsQuBench : protected PlfsIoBench {
 #include <glog/logging.h>
 #endif
 
-static inline void BM_Usage() {
+static void BM_Usage() {
   fprintf(stderr, "Use --bench=io or --bench=qu to select a benchmark.\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "== workload confs\n");
@@ -1575,11 +1575,11 @@ static inline void BM_Usage() {
   fprintf(stderr, "\n");
 }
 
-static void BM_LogAndApply(const char* bench) {
-  if (strcmp(bench, "io") == 0) {
+static void BM_LogAndApply(const char* bm) {
+  if (strcmp(bm, "io") == 0) {
     pdlfs::plfsio::PlfsIoBench bench;
     bench.LogAndApply();
-  } else if (strcmp(bench, "qu") == 0) {
+  } else if (strcmp(bm, "qu") == 0) {
     pdlfs::plfsio::PlfsQuBench bench;
     bench.LogAndApply();
   } else {

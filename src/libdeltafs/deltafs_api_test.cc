@@ -8,10 +8,13 @@
  */
 
 #include "deltafs/deltafs_api.h"
+#include "pdlfs-common/coding.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
+#include "pdlfs-common/xxhash.h"
 
 #include <fcntl.h>
+#include <stdio.h>
 
 #include <string>
 #include <vector>
@@ -35,8 +38,8 @@ class PlfsDirTest {
   }
 
   void OpenWriter() {
-    wdir_ =
-        deltafs_plfsdir_create_handle("", O_WRONLY, DELTAFS_PLFSDIR_DEFAULT);
+    const char* c = dirconf_.c_str();
+    wdir_ = deltafs_plfsdir_create_handle(c, O_WRONLY, DELTAFS_PLFSDIR_DEFAULT);
     ASSERT_TRUE(wdir_ != NULL);
     deltafs_plfsdir_set_unordered(wdir_, 0);
     deltafs_plfsdir_force_leveldb_fmt(wdir_, 0);
@@ -56,8 +59,8 @@ class PlfsDirTest {
   }
 
   void OpenReader() {
-    rdir_ =
-        deltafs_plfsdir_create_handle("", O_RDONLY, DELTAFS_PLFSDIR_DEFAULT);
+    const char* c = dirconf_.c_str();
+    rdir_ = deltafs_plfsdir_create_handle(c, O_RDONLY, DELTAFS_PLFSDIR_DEFAULT);
     ASSERT_TRUE(rdir_ != NULL);
     deltafs_plfsdir_enable_side_io(rdir_, 1);
     int r = deltafs_plfsdir_open(rdir_, dirname_.c_str());
@@ -110,6 +113,7 @@ class PlfsDirTest {
   }
 
   std::string dirname_;
+  std::string dirconf_;
   std::vector<std::string> options_;
   deltafs_plfsdir_t* wdir_;
   deltafs_plfsdir_t* rdir_;
@@ -145,7 +149,150 @@ TEST(PlfsDirTest, SingleEpoch) {
   ASSERT_EQ(Get("k6"), "v6");
 }
 
+class PlfsDirBench {
+  static int GetOptions(const char* key, int defval) {
+    const char* env = getenv(key);
+    if (!env || !env[0]) {
+      return defval;
+    } else {
+      return atoi(env);
+    }
+  }
+
+  std::string AssembleDirConf() {
+    std::string conf("rank=0");
+    std::vector<std::string>::iterator it;
+    for (it = dirconfs_.begin(); it != dirconfs_.end(); ++it) {
+      conf.append("&" + *it);
+    }
+    return conf;
+  }
+
+ public:
+  PlfsDirBench() : dirname_(test::TmpDir() + "/plfsdir_test_benchmark") {
+    if (GetOptions("COMPRESSION", 0)) dirconfs_.push_back("compression=snappy");
+    if (GetOptions("FORCE_COMPRESSION", 0))
+      dirconfs_.push_back("force_compression=true");
+    if (GetOptions("INDEX_COMPRESSION", 0))
+      dirconfs_.push_back("index_compression=snappy");
+
+    mfiles_ = 1;
+    kranks_ = 1;
+  }
+
+  ~PlfsDirBench() {
+    if (dir_ != NULL) {
+      deltafs_plfsdir_free_handle(dir_);
+    }
+  }
+
+  void LogAndApply() {
+    std::string conf = AssembleDirConf();
+    const char* c = conf.c_str();
+    dir_ = deltafs_plfsdir_create_handle(c, O_WRONLY, DELTAFS_PLFSDIR_DEFAULT);
+    ASSERT_TRUE(dir_ != NULL);
+    deltafs_plfsdir_enable_side_io(dir_, 1);
+    deltafs_plfsdir_destroy(dir_, dirname_.c_str());
+    int r = deltafs_plfsdir_open(dir_, dirname_.c_str());
+    ASSERT_TRUE(r == 0);
+    char tmp1[8];
+    char tmp2[16];
+    uint32_t num_files = mfiles_ << 20;
+    uint32_t comm_sz = kranks_ << 10;
+    uint32_t k = 0;
+    fprintf(stderr, "Inserting data...\n");
+    for (uint32_t i = 0; i < num_files / comm_sz; i++) {
+      for (uint32_t j = 0; j < comm_sz; j++) {
+        if ((k & 0x7FFFFu) == 0) {
+          fprintf(stderr, "\r%.2f%%", 100.0 * k / num_files);
+        }
+        uint64_t h = xxhash64(&k, sizeof(k), 0);
+        EncodeFixed64(tmp1, h);
+        uint64_t a = h % comm_sz;
+        EncodeFixed64(tmp2, a);
+        uint64_t f = xxhash64(&h, sizeof(h), 0);
+        uint64_t b = i * comm_sz + f % comm_sz;
+        b *= 40;
+        EncodeFixed64(tmp2 + 8, b);
+        ssize_t rr = deltafs_plfsdir_put(dir_, tmp1, sizeof(tmp1), 0, tmp2,
+                                         sizeof(tmp2));
+        ASSERT_TRUE(rr == sizeof(tmp2));
+        k++;
+      }
+    }
+    fprintf(stderr, "\r100.00%%");
+    fprintf(stderr, "\n");
+
+    r = deltafs_plfsdir_epoch_flush(dir_, 0);
+    ASSERT_TRUE(r == 0);
+    r = deltafs_plfsdir_finish(dir_);
+    ASSERT_TRUE(r == 0);
+
+    fprintf(stderr, "Done!\n");
+    PrintStats();
+  }
+
+  void PrintStats() {
+    const double k = 1000.0, ki = 1024.0;
+    long long total_bytes =
+        deltafs_plfsdir_get_integer_property(dir_, "io.total_bytes_written");
+    fprintf(stderr, "----------------------------------------\n");
+    fprintf(stderr, "      Total Key Data: %.2f MiB\n",
+            (mfiles_ << 20) * 8 / ki / ki);
+    fprintf(stderr, " Total Bytes Written: %.2f MiB\n", total_bytes / ki / ki);
+  }
+
+ private:
+  deltafs_plfsdir_t* dir_;
+  std::vector<std::string> dirconfs_;
+  std::string dirname_;
+  int mfiles_;
+  int kranks_;
+};
+
 }  // namespace pdlfs
+
+#if defined(PDLFS_GFLAGS)
+#include <gflags/gflags.h>
+#endif
+#if defined(PDLFS_GLOG)
+#include <glog/logging.h>
+#endif
+
+static void BM_Usage() {
+  fprintf(stderr, "Use --bench=dir to launch tests.\n");
+  fprintf(stderr, "\n");
+}
+
+static void BM_LogAndApply(const char* bm) {
+  if (strcmp(bm, "dir") == 0) {
+    pdlfs::PlfsDirBench bench;
+    bench.LogAndApply();
+  } else {
+    BM_Usage();
+  }
+}
+
+static void BM_Main(int* argc, char*** argv) {
+#if defined(PDLFS_GFLAGS)
+  google::ParseCommandLineFlags(argc, argv, true);
+#endif
+#if defined(PDLFS_GLOG)
+  google::InitGoogleLogging((*argv)[0]);
+  google::InstallFailureSignalHandler();
+#endif
+  pdlfs::Slice bm_arg;
+  if (*argc > 1) {
+    bm_arg = pdlfs::Slice((*argv)[*argc - 1]);
+  } else {
+    BM_Usage();
+  }
+  if (bm_arg.starts_with("--bench=")) {
+    BM_LogAndApply(bm_arg.c_str() + 8);
+  } else {
+    BM_Usage();
+  }
+}
 
 int main(int argc, char* argv[]) {
   pdlfs::Slice token;
@@ -155,6 +302,7 @@ int main(int argc, char* argv[]) {
   if (!token.starts_with("--bench")) {
     return pdlfs::test::RunAllTests(&argc, &argv);
   } else {
+    BM_Main(&argc, &argv);
     return 0;
   }
 }

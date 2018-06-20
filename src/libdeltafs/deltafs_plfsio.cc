@@ -287,6 +287,10 @@ DirOptions ParseDirOptions(const char* input) {
       if (ParseCompressionType(conf_key, conf_value, &compression_type)) {
         result.index_compression = compression_type;
       }
+    } else if (conf_key == "force_compression") {
+      if (ParseBool(conf_key, conf_value, &flag)) {
+        result.force_compression = flag;
+      }
     } else if (conf_key == "value_size") {
       if (ParseInteger(conf_key, conf_value, &num)) {
         result.value_size = num;
