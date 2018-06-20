@@ -167,6 +167,11 @@ class PlfsDirBench {
       dirconfs_.push_back("index_compression=snappy");
   }
 
+  void GetFilterOptions() {
+    dirconfs_.push_back("bf_bits_per_key=12");
+    dirconfs_.push_back("filter=bloom");
+  }
+
   void GetMemTableOptions() {
     dirconfs_.push_back("total_memtable_budget=24MiB");
     dirconfs_.push_back("compaction_buffer=2MiB");
@@ -201,14 +206,15 @@ class PlfsDirBench {
  public:
   PlfsDirBench() : dirname_(test::TmpDir() + "/plfsdir_test_benchmark") {
     GetCompressionOptions();
+    GetFilterOptions();
     GetMemTableOptions();
     GetBlkOptions();
     GetIoOptions();
 
-    entity_size_ = 1;
+    value_size_ = 40;
     unordered_ = 0;
-    mfiles_ = 4;
-    kranks_ = 2;
+    mfiles_ = 1;
+    kranks_ = 1;
   }
 
   ~PlfsDirBench() {
@@ -247,7 +253,7 @@ class PlfsDirBench {
         uint32_t b = g % comm_sz;
         EncodeFixed32(tmp2, b);
         uint64_t c = i * comm_sz + h % comm_sz;
-        c *= entity_size_;
+        // c *= value_size_;
         EncodeFixed64(tmp2 + 4, c);
         ssize_t rr = deltafs_plfsdir_put(dir_, tmp1, sizeof(tmp1), 0, tmp2,
                                          sizeof(tmp2));
@@ -270,27 +276,41 @@ class PlfsDirBench {
   void PrintStats() {
     typedef long long integer;
 #define GETPROP(h, k) deltafs_plfsdir_get_integer_property(h, k)
-    const double k = 1000.0, ki = 1024.0;
+    const double ki = 1024.0;
+    const int num_files = mfiles_ << 20;
+    const int side_storage = value_size_ * num_files;
+    const int entry_size = 8 + value_size_;
     fprintf(stderr, "----------------------------------------\n");
+    fprintf(stderr, "   Total User Data: %.2f MiB (%.2f MiB keys)\n",
+            entry_size * num_files / ki / ki, 8 * num_files / ki / ki);
     integer tbw = GETPROP(dir_, "io.total_bytes_written");
-    fprintf(stderr, " Total Dir Storage: %.2f MiB\n", tbw / ki / ki);
+    fprintf(stderr,
+            " Total Dir Storage: %.2f MiB (%.2f MiB main + %.2f MiB side "
+            "storage)\n",
+            (tbw + side_storage) / ki / ki, tbw / ki / ki,
+            side_storage / ki / ki);
     integer sdb = GETPROP(dir_, "sstable_data_bytes");
     integer sfb = GETPROP(dir_, "sstable_filter_bytes");
     integer sib = GETPROP(dir_, "sstable_index_bytes");
-    fprintf(stderr, "         Breakdown: %.2f/%.2f/%.2f MiB (D/F/I)\n",
+    fprintf(stderr, "         Breakdown: D=%.2f MiB, F=%.2f MiB, I=%.2f MiB\n",
             sdb / ki / ki, sfb / ki / ki, sib / ki / ki);
-    integer usr = GETPROP(dir_, "total_user_data");
-    fprintf(stderr, "   Total User Data: %.2f MiB\n", usr / ki / ki);
-    fprintf(stderr, "        Total Keys: %.2f MiB\n",
-            8.0 / 20.0 * usr / ki / ki);
-    fprintf(stderr, "             Value: 12 Bytes\n");
+    fprintf(stderr,
+            "  Overhead Per Key: D=%.2f Bytes, F=%.2f Bytes, I=%.2f Bytes\n",
+            1.0 * sdb / num_files - 8, 1.0 * sfb / num_files,
+            1.0 * sib / num_files);
+    fprintf(stderr, "              Cost: D=%.2f%%, F=%.2f%%, I=%.2f%%\n",
+            100.0 * (1.0 * sdb / num_files - 8) / entry_size,
+            100.0 * sfb / num_files / entry_size,
+            100.0 * sib / num_files / entry_size);
+
+    fprintf(stderr, "             Value: %d Bytes\n", value_size_);
     fprintf(stderr, "               Key: 8 Bytes\n");
 #undef GETPROP
   }
 
  private:
   int unordered_;
-  size_t entity_size_;
+  int value_size_;
   deltafs_plfsdir_t* dir_;
   std::vector<std::string> dirconfs_;
   std::string dirname_;
