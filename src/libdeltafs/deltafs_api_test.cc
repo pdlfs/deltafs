@@ -8,6 +8,9 @@
  */
 
 #include "deltafs/deltafs_api.h"
+#include "deltafs_plfsio.h"
+#include "deltafs_plfsio_filter.h"
+
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
@@ -149,7 +152,7 @@ TEST(PlfsDirTest, SingleEpoch) {
   ASSERT_EQ(Get("k6"), "v6");
 }
 
-class PlfsDirBench {
+class PlfsWiscBench {
   static int GetOptions(const char* key, int defval) {
     const char* env = getenv(key);
     if (!env || !env[0]) {
@@ -204,7 +207,7 @@ class PlfsDirBench {
   }
 
  public:
-  PlfsDirBench() : dirname_(test::TmpDir() + "/plfsdir_test_benchmark") {
+  PlfsWiscBench() : dirname_(test::TmpDir() + "/plfsdir_test_benchmark") {
     GetCompressionOptions();
     GetFilterOptions();
     GetMemTableOptions();
@@ -217,7 +220,7 @@ class PlfsDirBench {
     kranks_ = 1;
   }
 
-  ~PlfsDirBench() {
+  ~PlfsWiscBench() {
     if (dir_ != NULL) {
       deltafs_plfsdir_free_handle(dir_);
     }
@@ -295,10 +298,10 @@ class PlfsDirBench {
     fprintf(stderr, "         Breakdown: D=%.2f MiB, F=%.2f MiB, I=%.2f MiB\n",
             sdb / ki / ki, sfb / ki / ki, sib / ki / ki);
     fprintf(stderr,
-            "  Overhead Per Key: D=%.2f Bytes, F=%.2f Bytes, I=%.2f Bytes\n",
+            "           Per Key: D+=%.2f Bytes, F=%.2f Bytes, I=%.2f Bytes\n",
             1.0 * sdb / num_files - 8, 1.0 * sfb / num_files,
             1.0 * sib / num_files);
-    fprintf(stderr, "              Cost: D=%.2f%%, F=%.2f%%, I=%.2f%%\n",
+    fprintf(stderr, "              Cost: D+=%.2f%%, F=%.2f%%, I=%.2f%%\n",
             100.0 * (1.0 * sdb / num_files - 8) / entry_size,
             100.0 * sfb / num_files / entry_size,
             100.0 * sib / num_files / entry_size);
@@ -318,6 +321,63 @@ class PlfsDirBench {
   int kranks_;
 };
 
+class PlfsBfBench {
+ public:
+  PlfsBfBench() {
+    options_.bf_bits_per_key = 20;
+    mkeys_ = 16;
+  }
+
+  ~PlfsBfBench() {
+    if (bf_ != NULL) {
+      delete bf_;
+    }
+  }
+
+  void LogAndApply() {
+    bf_ = new plfsio::BloomBlock(options_, 0);
+    ASSERT_TRUE(bf_ != NULL);
+    uint32_t num_keys = mkeys_ << 20;
+    uint32_t comm_sz = kranks_ << 10;
+    bf_->Reset(num_keys);
+    char tmp[12];
+    fprintf(stderr, "Populating the bloom filter...\n");
+    for (uint32_t k = 0; k < num_keys; k++) {
+      if ((k & 0x7FFFFu) == 0) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * k / num_keys);
+      }
+      uint64_t h = xxhash64(&k, sizeof(k), 0);
+      uint32_t f = xxhash32(&h, sizeof(h), 301);
+      uint32_t a = f % comm_sz;
+      EncodeFixed32(tmp, a);
+      EncodeFixed32(tmp + 4, f);
+      uint32_t g = xxhash32(&h, sizeof(h), 103);
+      uint32_t b = g % comm_sz;
+      EncodeFixed32(tmp + 8, b);
+      bf_->AddKey(Slice(tmp, sizeof(tmp)));
+    }
+    fprintf(stderr, "\r100.00%%");
+    fprintf(stderr, "\n");
+
+    ft_ = bf_->Finish();
+    ASSERT_TRUE(!ft_.empty());
+
+    fprintf(stderr, "Done!\n");
+    Query();
+  }
+
+  void Query() {
+    // TODO
+  }
+
+ private:
+  Slice ft_;
+  plfsio::DirOptions options_;
+  plfsio::BloomBlock* bf_;
+  int kranks_;
+  int mkeys_;
+};
+
 }  // namespace pdlfs
 
 #if defined(PDLFS_GFLAGS)
@@ -328,13 +388,16 @@ class PlfsDirBench {
 #endif
 
 static void BM_Usage() {
-  fprintf(stderr, "Use --bench=dir to launch tests.\n");
+  fprintf(stderr, "Use --bench=wisc or --bench=bf to launch tests.\n");
   fprintf(stderr, "\n");
 }
 
 static void BM_LogAndApply(const char* bm) {
-  if (strcmp(bm, "dir") == 0) {
-    pdlfs::PlfsDirBench bench;
+  if (strcmp(bm, "wisc") == 0) {
+    pdlfs::PlfsWiscBench bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "bf") == 0) {
+    pdlfs::PlfsBfBench bench;
     bench.LogAndApply();
   } else {
     BM_Usage();
