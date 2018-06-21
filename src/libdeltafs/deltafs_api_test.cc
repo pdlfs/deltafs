@@ -321,11 +321,58 @@ class PlfsWiscBench {
   int kranks_;
 };
 
+namespace {
+template <uint32_t N = 10>
+class Histo {
+ public:
+  Histo() { Clear(); }
+
+  void Add(uint32_t a) {
+    sum_ += a;
+    max_ = std::max(max_, a);
+    if (a > N - 1) {
+      a = N - 1;
+    }
+    rep_[a]++;
+    num_++;
+  }
+
+  double CDF(uint32_t a) {
+    if (num_ == 0) return 0;
+    double subtotal = 0;
+    for (uint32_t i = 0; i <= a && i < N; i++) {
+      subtotal += rep_[i];
+    }
+    return subtotal / num_;
+  }
+
+  double Average() const {
+    if (num_ == 0) return 0;
+    return sum_ / num_;
+  }
+
+  void Clear() {
+    memset(rep_, 0, sizeof(rep_));
+    max_ = 0;
+    num_ = 0;
+    sum_ = 0;
+  }
+
+  uint32_t max_;
+  uint32_t num_;  // Total number of samples
+  // Num of times we get i results (0 <= i <= N-1)
+  uint32_t rep_[N];
+  double sum_;
+};
+
+}  // namespace
+
 class PlfsBfBench {
  public:
   PlfsBfBench() {
     options_.bf_bits_per_key = 20;
-    mkeys_ = 16;
+    kranks_ = 1;
+    mkeys_ = 1;
   }
 
   ~PlfsBfBench() {
@@ -335,7 +382,7 @@ class PlfsBfBench {
   }
 
   void LogAndApply() {
-    bf_ = new plfsio::BloomBlock(options_, 0);
+    bf_ = new plfsio::BloomBlock(options_, 0);  // Do not reserve memory
     ASSERT_TRUE(bf_ != NULL);
     uint32_t num_keys = mkeys_ << 20;
     uint32_t comm_sz = kranks_ << 10;
@@ -367,11 +414,49 @@ class PlfsBfBench {
   }
 
   void Query() {
-    // TODO
+    uint32_t num_keys = mkeys_ << 20;
+    uint32_t comm_sz = kranks_ << 10;
+    char tmp[12];
+    fprintf(stderr, "Querying...\n");
+    for (uint32_t k = 0; k < num_keys; k++) {
+      if ((k & 0x7FFFu) == 0) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * k / num_keys);
+      }
+      uint64_t h = xxhash64(&k, sizeof(k), 0);
+      uint32_t f = xxhash32(&h, sizeof(h), 301);
+      uint32_t a = f % comm_sz;
+      EncodeFixed32(tmp, a);
+      EncodeFixed32(tmp + 4, f);
+      uint32_t n = 0;
+      for (uint32_t r = 0; r < comm_sz; r++) {
+        EncodeFixed32(tmp + 8, r);
+        if (plfsio::BloomKeyMayMatch(Slice(tmp, sizeof(tmp)), ft_)) {
+          n++;
+        }
+      }
+      histo_.Add(n);
+    }
+    fprintf(stderr, "\r100.00%%");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Done!\n");
+
+    Report();
+  }
+
+  void Report() {
+    fprintf(stderr, "----------------------------------------\n");
+    fprintf(stderr, "               Num Keys: %d M\n", mkeys_);
+    fprintf(stderr, "  Avg Positives Per Key: %.3f, MAX=%d\n", histo_.Average(),
+            int(histo_.max_));
+    fprintf(stderr, "        CDF 1 Positives: %.6f\n", histo_.CDF(1));
+    for (uint32_t i = 2; i <= 128; i *= 2) {
+      fprintf(stderr, "       %4u Positives: %.6f\n", i, histo_.CDF(i));
+    }
   }
 
  private:
-  Slice ft_;
+  Slice ft_;  // Point to filter data once finished
+  Histo<128> histo_;
   plfsio::DirOptions options_;
   plfsio::BloomBlock* bf_;
   int kranks_;
