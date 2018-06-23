@@ -368,10 +368,21 @@ class Histo {
 }  // namespace
 
 class PlfsBfBench {
+  static int GetOptions(const char* key, int defval) {
+    const char* env = getenv(key);
+    if (!env || !env[0]) {
+      return defval;
+    } else {
+      return atoi(env);
+    }
+  }
+
  public:
   PlfsBfBench() {
     options_.bf_bits_per_key = 20;
-    kranks_ = 1;
+    bits_per_key_ = GetOptions("BITS_PER_KEY", 20);
+    kranks_ = GetOptions("NUM_RANKS", 1);
+    qstep_ = GetOptions("QUERY_STEP", 1);
     mkeys_ = 1;
   }
 
@@ -418,7 +429,7 @@ class PlfsBfBench {
     uint32_t comm_sz = kranks_ << 10;
     char tmp[12];
     fprintf(stderr, "Querying...\n");
-    for (uint32_t k = 0; k < num_keys; k++) {
+    for (uint32_t k = 0; k < num_keys; k += qstep_) {
       if ((k & 0x7FFFu) == 0) {
         fprintf(stderr, "\r%.2f%%", 100.0 * k / num_keys);
       }
@@ -445,12 +456,16 @@ class PlfsBfBench {
 
   void Report() {
     fprintf(stderr, "----------------------------------------\n");
-    fprintf(stderr, "               Num Keys: %d M\n", mkeys_);
-    fprintf(stderr, "  Avg Positives Per Key: %.3f, MAX=%d\n", histo_.Average(),
+    fprintf(stderr, "           Num Keys: %d M\n", mkeys_);
+    fprintf(stderr, "              Ranks: %d K\n", kranks_);
+    fprintf(stderr, "                 BF: %d bits per key\n", bits_per_key_);
+    fprintf(stderr, "   Avg Hits Per Key: %.3f, MAX=%d\n", histo_.Average(),
             int(histo_.max_));
-    fprintf(stderr, "        CDF 1 Positives: %.6f\n", histo_.CDF(1));
-    for (uint32_t i = 2; i <= 128; i *= 2) {
-      fprintf(stderr, "       %4u Positives: %.6f\n", i, histo_.CDF(i));
+    fprintf(stderr, "         CDF 1 Hits: %.2f%%\n", histo_.CDF(1) * 100);
+    for (uint32_t i = 2; i <= 128; i++) {
+      double d = histo_.CDF(i);
+      if (d > 0.01 && d < 0.99)
+        fprintf(stderr, "          %4u Hits: %.2f%%\n", i, d * 100);
     }
   }
 
@@ -459,8 +474,10 @@ class PlfsBfBench {
   Histo<128> histo_;
   plfsio::DirOptions options_;
   plfsio::BloomBlock* bf_;
+  int bits_per_key_;
   int kranks_;
   int mkeys_;
+  int qstep_;
 };
 
 }  // namespace pdlfs
