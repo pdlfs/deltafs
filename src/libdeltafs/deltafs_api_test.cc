@@ -379,8 +379,7 @@ class PlfsBfBench {
 
  public:
   PlfsBfBench() {
-    options_.bf_bits_per_key = 20;
-    bits_per_key_ = GetOptions("BITS_PER_KEY", 20);
+    options_.bf_bits_per_key = GetOptions("BF_BITS_PER_KEY", 20);
     kranks_ = GetOptions("NUM_RANKS", 1);
     qstep_ = GetOptions("QUERY_STEP", 1);
     mkeys_ = 1;
@@ -458,9 +457,9 @@ class PlfsBfBench {
     fprintf(stderr, "----------------------------------------\n");
     fprintf(stderr, "           Num Keys: %d M\n", mkeys_);
     fprintf(stderr, "              Ranks: %d K\n", kranks_);
-    fprintf(stderr, "                 BF: %d bits per key\n", bits_per_key_);
-    fprintf(stderr, "   Avg Hits Per Key: %.3f, MAX=%d\n", histo_.Average(),
-            int(histo_.max_));
+    fprintf(stderr, "        Num Queries: %d\n", int(histo_.num_));
+    fprintf(stderr, "   Avg Hits Per Key: %.3f, MAX=%d (BF bits=%d)\n",
+            histo_.Average(), int(histo_.max_), int(options_.bf_bits_per_key));
     fprintf(stderr, "         CDF 1 Hits: %.2f%%\n", histo_.CDF(1) * 100);
     for (uint32_t i = 2; i <= 128; i++) {
       double d = histo_.CDF(i);
@@ -474,7 +473,6 @@ class PlfsBfBench {
   Histo<128> histo_;
   plfsio::DirOptions options_;
   plfsio::BloomBlock* bf_;
-  int bits_per_key_;
   int kranks_;
   int mkeys_;
   int qstep_;
