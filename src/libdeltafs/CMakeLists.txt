@@ -22,7 +22,8 @@ set (deltafs-srcs deltafs_api.cc deltafs_client.cc deltafs_conf.cc
      mds_srv.cc snap_stor.cc)
 
 set (deltafs-tests deltafs_api_test.cc deltafs_plfsio_test
-     deltafs_plfsio_filter_test.cc mds_api_test.cc mds_srv_test.cc)
+     deltafs_plfsio_cuckoo_test.cc deltafs_plfsio_filter_test.cc
+     mds_api_test.cc mds_srv_test.cc)
 
 # configure/load in standard modules we plan to use
 include (CMakePackageConfigHelpers)

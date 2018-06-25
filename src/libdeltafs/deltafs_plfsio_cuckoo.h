@@ -45,7 +45,6 @@ inline size_t CuckooAlt(size_t i, uint32_t f) {  // MurmurHash2
 struct DirOptions;
 
 // Return false iff the target key does not exist in the given filter.
-template <size_t bits_pey_key>
 extern bool CuckooKeyMayMatch(const Slice& key, const Slice& input);
 
 // A simple cuckoo hash filter implementation.

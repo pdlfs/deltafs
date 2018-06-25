@@ -47,7 +47,7 @@ class CuckooReader {
 
  private:
   template <size_t>
-  friend bool CuckooKeyMayMatch(const Slice& k, const Slice& s);
+  friend class CuckooKeyTester;
   typedef CuckooBucket<bits_per_item> BucketType;
   static const int kBytesPerBucket = sizeof(BucketType);
   static const int kItemsPerBucket = 4;
@@ -191,7 +191,41 @@ size_t CuckooBlock<bits_per_key>::num_buckets() const {
   return rep_->num_buckets_;
 }
 
-template <size_t bits_per_key = 16>
+template <size_t bits_per_key>
+class CuckooKeyTester {
+ public:
+  bool operator()(const Slice& key, const Slice& input) {
+    const size_t len = input.size();
+    assert(len >= 8);
+
+    const char* tail = input.data() + input.size();
+    size_t bits = DecodeFixed32(tail - 4);
+    assert(bits == bits_per_key);
+
+    size_t num_bucket = DecodeFixed32(tail - 8);
+    uint32_t fp = CuckooFingerprint(key, bits_per_key);
+    uint32_t hash = CuckooHash(key);
+
+    CuckooReader<bits_per_key> reader(Slice(input.data(), input.size() - 8));
+    size_t i1 = hash % num_bucket;
+    size_t i2 = CuckooAlt(i1, fp) % num_bucket;
+
+    for (size_t j = 0; j < reader.kItemsPerBucket; j++) {
+      if (reader.Read(i1, j) == fp || reader.Read(i2, j) == fp) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+};
+
+template class CuckooBlock<32>;
+template class CuckooBlock<24>;
+template class CuckooBlock<20>;
+template class CuckooBlock<16>;
+template class CuckooBlock<10>;
+
 bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
   const size_t len = input.size();
   if (len < 8) {
@@ -200,29 +234,20 @@ bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
 
   const char* tail = input.data() + input.size();
   size_t bits = DecodeFixed32(tail - 4);
-  if (bits != bits_per_key) {
-    return true;
-  }
-
-  size_t num_bucket = DecodeFixed32(tail - 8);
-  uint32_t fp = CuckooFingerprint(key, bits_per_key);
-  uint32_t hash = CuckooHash(key);
-
-  CuckooReader<bits_per_key> reader(Slice(input.data(), input.size() - 8));
-  size_t i1 = hash % num_bucket;
-  size_t i2 = CuckooAlt(i1, fp) % num_bucket;
-
-  for (size_t j = 0; j < reader.kItemsPerBucket; j++) {
-    if (reader.Read(i1, j) == fp || reader.Read(i2, j) == fp) {
+  switch (int(bits)) {
+#define CASE(n) \
+  case n:       \
+    return CuckooKeyTester<n>()(key, input)
+    CASE(32);
+    CASE(24);
+    CASE(20);
+    CASE(16);
+    CASE(10);
+#undef CASE
+    default:
       return true;
-    }
   }
-
-  return false;
 }
-
-template bool CuckooKeyMayMatch<8>(const Slice& k, const Slice& s);
-template class CuckooBlock<8>;
 
 }  // namespace plfsio
 }  // namespace pdlfs
