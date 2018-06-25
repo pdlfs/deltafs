@@ -152,6 +152,18 @@ struct DirOptions {
   // Default: 24 bits
   size_t bm_key_bits;
 
+  // Random seed for a cuckoo hash filter
+  // Default: 301
+  uint32_t cuckoo_seed;
+
+  // Max cuckoo movements allowed
+  // Default: 500
+  int cuckoo_max_moves;
+
+  // Target table occupation rate
+  // Default 0.95
+  double cuckoo_frac;
+
   // Approximate size of user data packed per data block.
   // Note that block is used both as the packaging format and as the logical I/O
   // unit for reading and writing the underlying data log objects.

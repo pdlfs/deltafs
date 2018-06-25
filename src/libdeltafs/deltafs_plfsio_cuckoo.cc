@@ -8,6 +8,7 @@
  */
 
 #include "deltafs_plfsio_cuckoo.h"
+#include "deltafs_plfsio.h"
 
 #include <math.h>
 
@@ -30,12 +31,13 @@ class CuckooReader {
 
   uint32_t Read(size_t i, size_t j) const {
     if (i >= input_.size() / kBytesPerBucket) return 0;
-    BucketType* const p = static_cast<BucketType*>(input_.data());
+    const char* c = input_.data();
+    const BucketType* const b = reinterpret_cast<const BucketType*>(c);
     j = j % kItemsPerBucket;
-    if (j == 0) return p[i].x0;
-    if (j == 1) return p[i].x1;
-    if (j == 2) return p[i].x2;
-    if (j == 3) return p[i].x3;
+    if (j == 0) return b[i].x0;
+    if (j == 1) return b[i].x1;
+    if (j == 2) return b[i].x2;
+    if (j == 3) return b[i].x3;
     return 0;
   }
 
@@ -51,7 +53,8 @@ class CuckooReader {
 template <size_t bits_per_item = 16>
 class CuckooTable {
  public:
-  CuckooTable(const DirOptions& options) : num_buckets_(0), frac_(0.95) {}
+  CuckooTable(const DirOptions& options)
+      : num_buckets_(0), frac_(options.cuckoo_frac) {}
 
   void Reset(uint32_t num_keys) {
     space_.resize(0);
@@ -62,22 +65,24 @@ class CuckooTable {
 
   void Write(size_t i, size_t j, uint32_t x) {
     assert(i < num_buckets_);
-    BucketType* const p = static_cast<BucketType*>(space_.data());
+    char* c = const_cast<char*>(space_.data());
+    BucketType* const b = reinterpret_cast<BucketType*>(c);
     j = j % kItemsPerBucket;
-    if (j == 0) p[i].x0 = x;
-    if (j == 1) p[i].x1 = x;
-    if (j == 2) p[i].x2 = x;
-    if (j == 3) p[i].x3 = x;
+    if (j == 0) b[i].x0 = x;
+    if (j == 1) b[i].x1 = x;
+    if (j == 2) b[i].x2 = x;
+    if (j == 3) b[i].x3 = x;
   }
 
-  uint32_t Read(size_t i, size_t j) {
+  uint32_t Read(size_t i, size_t j) const {
     assert(i < num_buckets_);
-    BucketType* const p = static_cast<BucketType*>(space_.data());
+    const char* c = space_.data();
+    const BucketType* const b = reinterpret_cast<const BucketType*>(c);
     j = j % kItemsPerBucket;
-    if (j == 0) return p[i].x0;
-    if (j == 1) return p[i].x1;
-    if (j == 2) return p[i].x2;
-    if (j == 3) return p[i].x3;
+    if (j == 0) return b[i].x0;
+    if (j == 1) return b[i].x1;
+    if (j == 2) return b[i].x2;
+    if (j == 3) return b[i].x3;
     return 0;
   }
 
@@ -99,7 +104,9 @@ class CuckooTable {
 template <size_t bits_per_key>
 CuckooBlock<bits_per_key>::CuckooBlock(const DirOptions& options,
                                        size_t bytes_to_reserve)
-    : max_cuckoo_moves_(500), finished_(false), rnd_(301) {
+    : max_cuckoo_moves_(options.cuckoo_max_moves),
+      finished_(false),
+      rnd_(options.cuckoo_seed) {
   rep_ = new Rep(options);
   if (bytes_to_reserve != 0) {
     rep_->space_.reserve(bytes_to_reserve + 8);
@@ -181,6 +188,9 @@ bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
 
   return false;
 }
+
+template bool CuckooKeyMayMatch<8>(const Slice& k, const Slice& s);
+template class CuckooBlock<8>;
 
 }  // namespace plfsio
 }  // namespace pdlfs
