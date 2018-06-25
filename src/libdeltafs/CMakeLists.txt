@@ -15,8 +15,8 @@
 # main directory sources and tests
 set (deltafs-srcs deltafs_api.cc deltafs_client.cc deltafs_conf.cc
      deltafs_mds.cc deltafs_plfsio.cc deltafs_plfsio_internal.cc
-     deltafs_plfsio_idx.cc deltafs_plfsio_filter.cc deltafs_plfsio_format.cc
-     deltafs_plfsio_batch.cc deltafs_plfsio_recov.cc
+     deltafs_plfsio_cuckoo.cc deltafs_plfsio_idx.cc deltafs_plfsio_filter.cc
+     deltafs_plfsio_format.cc deltafs_plfsio_batch.cc deltafs_plfsio_recov.cc
      deltafs_plfsio_nio.cc deltafs_plfsio_events.cc
      deltafs_envs.cc mds.cc mds_api.cc mds_cli.cc mds_factory.cc
      mds_srv.cc snap_stor.cc)

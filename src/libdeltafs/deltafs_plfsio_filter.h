@@ -58,7 +58,6 @@ class BloomBlock {
   Slice Finish();
 
   // Return the underlying buffer space.
-  std::string* buffer_store() { return &space_; }
   size_t memory_usage() const { return space_.capacity(); }
   static int chunk_type();  // Return the corresponding chunk type
 
