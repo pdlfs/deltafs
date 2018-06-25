@@ -17,7 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <vector>
+#include <set>
 
 namespace pdlfs {
 namespace plfsio {
@@ -65,8 +65,11 @@ class CuckooBlock {
   // Finalize the block data and return its contents.
   Slice Finish();
 
+  size_t bytes_per_bucket() const;
+  size_t num_buckets() const;
+
  private:
-  std::vector<uint32_t> victims_;
+  std::set<uint32_t> victims_;
   int max_cuckoo_moves_;
   bool finished_;  // If Finish() has been called
   Random rnd_;
