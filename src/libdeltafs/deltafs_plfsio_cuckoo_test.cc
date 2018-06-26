@@ -83,16 +83,14 @@ TEST(CuckooTest, NumBuckets) {
 TEST(CuckooTest, AltIndex) {
   for (uint32_t num_keys = (1u << 10); num_keys <= (1u << 20); num_keys *= 2) {
     Reset(num_keys);
-    size_t num_buckets = 512;
     uint32_t k = 0;
     for (; k < num_keys; k++) {
       uint32_t fp = KeyFringerprint(k);
       uint32_t hash = KeyHash(k);
-      size_t i1 = hash % num_buckets;
-      size_t i2 = CuckooAlt(i1, fp) % num_buckets;
-      size_t i3 = CuckooAlt(i2, fp) % num_buckets;
-      ASSERT_TRUE(i1 == i3) << "(key/fp/hash/i1/i2/i3:" << k << fp << hash << i1
-                            << i2 << i3 << ")";
+      size_t i1 = hash % NumBuckets();
+      size_t i2 = CuckooAlt(i1, fp) % NumBuckets();
+      size_t i3 = CuckooAlt(i2, fp) % NumBuckets();
+      ASSERT_TRUE(i1 == i3);
     }
     fprintf(stderr, "%4u Ki keys: OK\n", (num_keys >> 10));
   }
