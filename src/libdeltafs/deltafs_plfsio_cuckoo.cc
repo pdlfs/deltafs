@@ -211,7 +211,9 @@ class CuckooKeyTester {
     size_t i2 = CuckooAlt(i1, fp) % num_bucket;
 
     for (size_t j = 0; j < reader.kItemsPerBucket; j++) {
-      if (reader.Read(i1, j) == fp || reader.Read(i2, j) == fp) {
+      if (reader.Read(i1, j) == fp) {
+        return true;
+      } else if (reader.Read(i2, j) == fp) {
         return true;
       }
     }

@@ -383,23 +383,24 @@ class PlfsFtBench {
   PlfsFtBench() {
     options_.cuckoo_frac = 0.95;
     options_.bf_bits_per_key = GetOptions("BF_BITS_PER_KEY", 20);
+    compression_ = GetOptions("SNAPPY", 0);
+    kkeys_ = GetOptions("NUM_KEYS", 128);
+    qstep_ = GetOptions("QUERY_STEP", kkeys_);
     kranks_ = GetOptions("NUM_RANKS", 1);
-    qstep_ = GetOptions("QUERY_STEP", 1);
-    mkeys_ = 1;
   }
 
   ~PlfsFtBench() {
-    if (bf_ != NULL) {
-      delete bf_;
+    if (ft_ != NULL) {
+      delete ft_;
     }
   }
 
   void LogAndApply() {
-    bf_ = new FilterType(options_, 0);  // Do not reserve memory
-    ASSERT_TRUE(bf_ != NULL);
-    uint32_t num_keys = mkeys_ << 20;
+    ft_ = new FilterType(options_, 0);  // Do not reserve memory
+    ASSERT_TRUE(ft_ != NULL);
+    const uint32_t num_keys = kkeys_ << 10;
     uint32_t comm_sz = kranks_ << 10;
-    bf_->Reset(num_keys);
+    ft_->Reset(num_keys);
     char tmp[12];
     fprintf(stderr, "Populating the bloom filter...\n");
     for (uint32_t k = 0; k < num_keys; k++) {
@@ -414,25 +415,31 @@ class PlfsFtBench {
       uint32_t g = xxhash32(&h, sizeof(h), 103);
       uint32_t b = g % comm_sz;
       EncodeFixed32(tmp + 8, b);
-      bf_->AddKey(Slice(tmp, sizeof(tmp)));
+      ft_->AddKey(Slice(tmp, sizeof(tmp)));
     }
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
 
-    ft_ = bf_->Finish();
-    ASSERT_TRUE(!ft_.empty());
+    ftdata_ = ft_->Finish();
+    ASSERT_TRUE(!ftdata_.empty());
+    if (compression_) {
+      if (!port::Snappy_Compress(ftdata_.data(), ftdata_.size(),
+                                 &compressed_)) {
+        compressed_.clear();
+      }
+    }
 
     fprintf(stderr, "Done!\n");
     Query();
   }
 
   void Query() {
-    uint32_t num_keys = mkeys_ << 20;
+    const uint32_t num_keys = kkeys_ << 10;
     uint32_t comm_sz = kranks_ << 10;
     char tmp[12];
     fprintf(stderr, "Querying...\n");
     for (uint32_t k = 0; k < num_keys; k += qstep_) {
-      if ((k & 0x7FFFu) == 0) {
+      if ((k & 0x7FFu) == 0) {
         fprintf(stderr, "\r%.2f%%", 100.0 * k / num_keys);
       }
       uint64_t h = xxhash64(&k, sizeof(k), 0);
@@ -443,7 +450,7 @@ class PlfsFtBench {
       uint32_t n = 0;
       for (uint32_t r = 0; r < comm_sz; r++) {
         EncodeFixed32(tmp + 8, r);
-        if (filter_tester(Slice(tmp, sizeof(tmp)), ft_)) {
+        if (filter_tester(Slice(tmp, sizeof(tmp)), ftdata_)) {
           n++;
         }
       }
@@ -458,26 +465,33 @@ class PlfsFtBench {
 
   void Report() {
     fprintf(stderr, "----------------------------------------\n");
-    fprintf(stderr, "           Num Keys: %d M\n", mkeys_);
-    fprintf(stderr, "              Ranks: %d K\n", kranks_);
-    fprintf(stderr, "        Num Queries: %d\n", int(histo_.num_));
-    fprintf(stderr, "   Avg Hits Per Key: %.3f, MAX=%d (BF bits=%d)\n",
-            histo_.Average(), int(histo_.max_), int(options_.bf_bits_per_key));
-    fprintf(stderr, "         CDF 1 Hits: %.2f%%\n", histo_.CDF(1) * 100);
+    fprintf(stderr, "            Num Keys: %d K (%d victims)\n", kkeys_,
+            int(ft_->num_victims()));
+    fprintf(stderr, "               Ranks: %d K\n", kranks_);
+    fprintf(stderr, "Filter Bytes Per Key: %.3f (%.3f after compression)\n",
+            1.0 * ftdata_.size() / (kkeys_ << 10),
+            1.0 * (compressed_.empty() ? ftdata_.size() : compressed_.size()) /
+                (kkeys_ << 10));
+    fprintf(stderr, "         Num Queries: %d\n", int(histo_.num_));
+    fprintf(stderr, "    Avg Hits Per Key: %.3f (MAX=%d)\n", histo_.Average(),
+            int(histo_.max_));
+    fprintf(stderr, "          CDF 1 Hits: %5.2f%%\n", histo_.CDF(1) * 100);
     for (uint32_t i = 2; i <= 128; i++) {
       double d = histo_.CDF(i);
       if (d > 0.01 && d < 0.99)
-        fprintf(stderr, "          %4u Hits: %.2f%%\n", i, d * 100);
+        fprintf(stderr, "           %4u Hits: %5.2f%%\n", i, d * 100);
     }
   }
 
  private:
-  Slice ft_;  // Point to filter data once finished
+  Slice ftdata_;  // Point to filter data once finished
   Histo<128> histo_;
   plfsio::DirOptions options_;
-  FilterType* bf_;
+  std::string compressed_;
+  FilterType* ft_;
+  int compression_;
   int kranks_;
-  int mkeys_;
+  int kkeys_;
   int qstep_;
 };
 

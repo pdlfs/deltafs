@@ -64,6 +64,7 @@ class CuckooBlock {
   // Finalize the block data and return its contents.
   Slice Finish();
 
+  size_t num_victims() const { return victims_.size(); }
   size_t bytes_per_bucket() const;
   size_t num_buckets() const;
 

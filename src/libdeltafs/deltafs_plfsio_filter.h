@@ -60,6 +60,7 @@ class BloomBlock {
   // Return the underlying buffer space.
   size_t memory_usage() const { return space_.capacity(); }
   static int chunk_type();  // Return the corresponding chunk type
+  size_t num_victims() const { return 0; }
 
  private:
   // No copying allowed
