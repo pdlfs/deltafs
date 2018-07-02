@@ -9,6 +9,7 @@
 
 #include "deltafs/deltafs_api.h"
 #include "deltafs_plfsio.h"
+#include "deltafs_plfsio_cuckoo.h"
 #include "deltafs_plfsio_filter.h"
 
 #include "pdlfs-common/coding.h"
@@ -367,32 +368,34 @@ class Histo {
 
 }  // namespace
 
-class PlfsBfBench {
-  static int GetOptions(const char* key, int defval) {
+template <typename FilterType, plfsio::FilterTester filter_tester>
+class PlfsFtBench {
+  static int GetOptions(const char* key, int def) {
     const char* env = getenv(key);
-    if (!env || !env[0]) {
-      return defval;
-    } else {
+    if (env && env[0]) {
       return atoi(env);
+    } else {
+      return def;
     }
   }
 
  public:
-  PlfsBfBench() {
+  PlfsFtBench() {
+    options_.cuckoo_frac = 0.95;
     options_.bf_bits_per_key = GetOptions("BF_BITS_PER_KEY", 20);
     kranks_ = GetOptions("NUM_RANKS", 1);
     qstep_ = GetOptions("QUERY_STEP", 1);
     mkeys_ = 1;
   }
 
-  ~PlfsBfBench() {
+  ~PlfsFtBench() {
     if (bf_ != NULL) {
       delete bf_;
     }
   }
 
   void LogAndApply() {
-    bf_ = new plfsio::BloomBlock(options_, 0);  // Do not reserve memory
+    bf_ = new FilterType(options_, 0);  // Do not reserve memory
     ASSERT_TRUE(bf_ != NULL);
     uint32_t num_keys = mkeys_ << 20;
     uint32_t comm_sz = kranks_ << 10;
@@ -440,7 +443,7 @@ class PlfsBfBench {
       uint32_t n = 0;
       for (uint32_t r = 0; r < comm_sz; r++) {
         EncodeFixed32(tmp + 8, r);
-        if (plfsio::BloomKeyMayMatch(Slice(tmp, sizeof(tmp)), ft_)) {
+        if (filter_tester(Slice(tmp, sizeof(tmp)), ft_)) {
           n++;
         }
       }
@@ -472,7 +475,7 @@ class PlfsBfBench {
   Slice ft_;  // Point to filter data once finished
   Histo<128> histo_;
   plfsio::DirOptions options_;
-  plfsio::BloomBlock* bf_;
+  FilterType* bf_;
   int kranks_;
   int mkeys_;
   int qstep_;
@@ -488,16 +491,21 @@ class PlfsBfBench {
 #endif
 
 static void BM_Usage() {
-  fprintf(stderr, "Use --bench=wisc or --bench=bf to launch tests.\n");
+  fprintf(stderr, "Use --bench=[wisc, bf, or cf] to launch tests.\n");
   fprintf(stderr, "\n");
 }
 
 static void BM_LogAndApply(const char* bm) {
+#define BENCH(x, y) \
+  pdlfs::PlfsFtBench<pdlfs::plfsio::x##y, pdlfs::plfsio::x##KeyMayMatch>
   if (strcmp(bm, "wisc") == 0) {
     pdlfs::PlfsWiscBench bench;
     bench.LogAndApply();
   } else if (strcmp(bm, "bf") == 0) {
-    pdlfs::PlfsBfBench bench;
+    BENCH(Bloom, Block) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf") == 0) {
+    BENCH(Cuckoo, Block<16>) bench;
     bench.LogAndApply();
   } else {
     BM_Usage();
