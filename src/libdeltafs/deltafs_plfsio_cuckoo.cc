@@ -195,13 +195,12 @@ template <size_t bits_per_key>
 class CuckooKeyTester {
  public:
   bool operator()(const Slice& key, const Slice& input) {
-    const size_t len = input.size();
-    assert(len >= 8);
-
-    const char* tail = input.data() + input.size();
+    const char* const tail = input.data() + input.size();
+#ifndef NDEBUG
+    assert(input.size() >= 8);
     size_t bits = DecodeFixed32(tail - 4);
     assert(bits == bits_per_key);
-
+#endif
     size_t num_bucket = DecodeFixed32(tail - 8);
     uint32_t fp = CuckooFingerprint(key, bits_per_key);
     uint32_t hash = CuckooHash(key);
