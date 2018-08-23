@@ -18,12 +18,19 @@
 namespace pdlfs {
 namespace plfsio {
 
+// Shared options object from which we obtain the write buffer size, and the
+// thread pool for executing background compactions.
 struct DirOptions;
 
 // Directly write data into a directory.
 // That is, data is written to a log file without any indexing.
 class DirDirect {
  public:
+  // BUG: deadlock when the write size is greater than the write buffer size.
+  // This is because the current version of the code will flush buffer if the
+  // buffer is not large enough to accept the incoming write. If the write size
+  // itself is larger than the buffer size, the current code is going to flush
+  // buffer and never stop. Is this a problem? Likely not.
   DirDirect(const DirOptions& options, WritableFile* dst);
   ~DirDirect();
 

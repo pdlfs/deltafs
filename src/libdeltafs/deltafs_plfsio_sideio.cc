@@ -38,6 +38,8 @@ DirDirect::DirDirect(const DirOptions& options, WritableFile* dst)
   mem_buf_ = &buf0_;
 }
 
+// Wait until compaction is done if there's one scheduled.
+// Won't flush memory or schedule new compactions.
 DirDirect::~DirDirect() {
   MutexLock ml(&mu_);
   while (has_bg_compaction_) {
