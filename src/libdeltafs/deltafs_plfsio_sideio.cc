@@ -17,7 +17,7 @@
 namespace pdlfs {
 namespace plfsio {
 
-DirDirect::DirDirect(const DirOptions& options, WritableFile* dst)
+DirectWriter::DirectWriter(const DirOptions& options, WritableFile* dst)
     : options_(options),
       dst_(dst),  // Not owned by us
       bg_cv_(&mu_),
@@ -40,7 +40,7 @@ DirDirect::DirDirect(const DirOptions& options, WritableFile* dst)
 
 // Wait until compaction is done if there's one scheduled.
 // Won't flush memory or schedule new compactions.
-DirDirect::~DirDirect() {
+DirectWriter::~DirectWriter() {
   MutexLock ml(&mu_);
   while (has_bg_compaction_) {
     bg_cv_.Wait();
@@ -49,7 +49,7 @@ DirDirect::~DirDirect() {
 
 // Insert data into the directory.
 // Return OK on success, or a non-OK status on errors.
-Status DirDirect::Write(const Slice& slice) {
+Status DirectWriter::Write(const Slice& slice) {
   MutexLock ml(&mu_);
   Status status = Prepare(slice);
   if (status.ok()) {
@@ -62,7 +62,7 @@ Status DirDirect::Write(const Slice& slice) {
 // This is achieved by first forcing a compaction, waiting for it, and then
 // sync'ing the underlying storage file.
 // Return OK on success, or a non-OK status on errors.
-Status DirDirect::Sync() {
+Status DirectWriter::Sync() {
   MutexLock ml(&mu_);
   Status status = Prepare(Slice(), true /* force */);
   if (status.ok()) status = WaitForCompaction();
@@ -73,7 +73,7 @@ Status DirDirect::Sync() {
 // Wait until compaction done.
 // That is, no compaction is scheduled when this function returns.
 // Return OK on success, or a non-OK status on errors.
-Status DirDirect::Wait() {
+Status DirectWriter::Wait() {
   MutexLock ml(&mu_);
   return WaitForCompaction();
 }
@@ -81,7 +81,7 @@ Status DirDirect::Wait() {
 // Wait for one or more on-going compactions to complete.
 // Return OK on success, or a non-OK status on errors.
 // REQUIRES: mu_ has been locked.
-Status DirDirect::WaitForCompaction() {
+Status DirectWriter::WaitForCompaction() {
   mu_.AssertHeld();
   while (bg_status_.ok() && has_bg_compaction_) {
     bg_cv_.Wait();
@@ -90,7 +90,7 @@ Status DirDirect::WaitForCompaction() {
 }
 
 // Force a compaction.
-Status DirDirect::Flush(const FlushOptions& flush_options) {
+Status DirectWriter::Flush(const FlushOptions& flush_options) {
   MutexLock ml(&mu_);
   // Wait for buffer space
   while (imm_buf_ != NULL) {
@@ -117,7 +117,7 @@ Status DirDirect::Flush(const FlushOptions& flush_options) {
 }
 
 // REQUIRES: mu_ has been locked.
-Status DirDirect::Prepare(const Slice& data, bool force) {
+Status DirectWriter::Prepare(const Slice& data, bool force) {
   mu_.AssertHeld();
   Status status;
   assert(mem_buf_ != NULL);
@@ -149,7 +149,7 @@ Status DirDirect::Prepare(const Slice& data, bool force) {
 }
 
 // REQUIRES: mu_ has been locked.
-void DirDirect::MaybeScheduleCompaction() {
+void DirectWriter::MaybeScheduleCompaction() {
   mu_.AssertHeld();
 
   // Do not schedule more if we are in error status
@@ -171,22 +171,22 @@ void DirDirect::MaybeScheduleCompaction() {
   if (imm_buf_->empty()) {
     DoCompaction();  // Buffer is empty
   } else if (options_.compaction_pool != NULL) {
-    options_.compaction_pool->Schedule(DirDirect::BGWork, this);
+    options_.compaction_pool->Schedule(DirectWriter::BGWork, this);
   } else if (options_.allow_env_threads) {
-    Env::Default()->Schedule(DirDirect::BGWork, this);
+    Env::Default()->Schedule(DirectWriter::BGWork, this);
   } else {
     DoCompaction();
   }
 }
 
-void DirDirect::BGWork(void* arg) {
-  DirDirect* const ins = reinterpret_cast<DirDirect*>(arg);
+void DirectWriter::BGWork(void* arg) {
+  DirectWriter* const ins = reinterpret_cast<DirectWriter*>(arg);
   MutexLock ml(&ins->mu_);
   ins->DoCompaction();
 }
 
 // REQUIRES: mu_ has been locked.
-void DirDirect::DoCompaction() {
+void DirectWriter::DoCompaction() {
   mu_.AssertHeld();
   assert(has_bg_compaction_);
   assert(imm_buf_ != NULL);
@@ -206,6 +206,14 @@ void DirDirect::DoCompaction() {
   is_compaction_forced_ = false;
   MaybeScheduleCompaction();
   bg_cv_.SignalAll();
+}
+
+DirectReader::DirectReader(const DirOptions& options, RandomAccessFile* src)
+    : options_(options), src_(src) {}
+// Directly read data from the source.
+Status DirectReader::Read(uint64_t off, size_t n, Slice* result,
+                          char* scratch) const {
+  return src_->Read(off, n, result, scratch);
 }
 
 }  // namespace plfsio
