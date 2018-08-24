@@ -537,6 +537,19 @@ Status DirWriter::Rep::WaitForCompaction() {
   return status;
 }
 
+// Insert data into a directory partition. May be blocked due to potential lack
+// of buffer space. Return OK on success, or a non-OK status on errors.
+Status DirWriter::Rep::TryAdd(Epoch* ep, const Slice& fid, const Slice& data) {
+  mutex_.AssertHeld();
+  assert(ep->num_ongoing_ops_ != 0);
+  Status status;
+  const uint32_t hash = Hash(fid.data(), fid.size(), 0);
+  const uint32_t part = hash & part_mask_;
+  assert(part < num_parts_);
+  status = idxers_[part]->Add(ep, fid, data);
+  return status;
+}
+
 // Attempt to schedule a minor compaction on all directory partitions
 // simultaneously. If a compaction cannot be scheduled immediately due to a lack
 // of buffer space, it will be added to a waiting list so it can be reattempted
@@ -738,16 +751,6 @@ Status DirWriter::Add(const Slice& fid, const Slice& data, int epoch) {
       break;
     }
   }
-  return status;
-}
-
-Status DirWriter::Rep::TryAdd(Epoch* ep, const Slice& fid, const Slice& data) {
-  mutex_.AssertHeld();
-  Status status;
-  const uint32_t hash = Hash(fid.data(), fid.size(), 0);
-  const uint32_t part = hash & part_mask_;
-  assert(part < num_parts_);
-  status = idxers_[part]->Add(ep, fid, data);
   return status;
 }
 
