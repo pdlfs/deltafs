@@ -17,21 +17,20 @@
 namespace pdlfs {
 namespace plfsio {
 
-DirectWriter::DirectWriter(const DirOptions& options, WritableFile* dst)
+DirectWriter::DirectWriter(const DirOptions& options, WritableFile* dst,
+                           size_t buf_size)
     : options_(options),
       dst_(dst),  // Not owned by us
       bg_cv_(&mu_),
-      buf_threshold_(0),
-      buf_reserv_(0),
+      buf_threshold_(buf_size),
+      buf_reserv_(buf_size),
       num_flush_requested_(0),
       num_flush_completed_(0),
+      finished_(false),
       is_compaction_forced_(false),
       has_bg_compaction_(false),
       mem_buf_(NULL),
       imm_buf_(NULL) {
-  buf_threshold_ = options_.data_buffer;
-  buf_reserv_ = buf_threshold_;
-
   buf0_.reserve(buf_reserv_);
   buf1_.reserve(buf_reserv_);
 
@@ -49,52 +48,77 @@ DirectWriter::~DirectWriter() {
 
 // Insert data into the directory.
 // Return OK on success, or a non-OK status on errors.
-Status DirectWriter::Write(const Slice& slice) {
+// REQUIRES: Finish() has not been called.
+Status DirectWriter::Append(const Slice& slice) {
   MutexLock ml(&mu_);
-  Status status = Prepare(slice);
+  Status status;
+  if (finished_)
+    status = Status::AssertionFailed("Already finished");
+  else
+    status = Prepare(slice);
   if (status.ok()) {
     mem_buf_->append(slice.data(), slice.size());
   }
   return status;
 }
 
-// Sync data so data is written to storage.
-// This is achieved by first forcing a compaction, waiting for it, and then
-// sync'ing the underlying storage file.
+// Finalize the writes. Will sync data to storage.
 // Return OK on success, or a non-OK status on errors.
-Status DirectWriter::Sync() {
+Status DirectWriter::Finish() {
   MutexLock ml(&mu_);
-  Status status = Prepare(Slice(), true /* force */);
-  if (status.ok()) status = WaitForCompaction();
-  if (status.ok()) status = dst_->Sync();
-  return status;
+  if (finished_) return bg_status_;
+  if (bg_status_.ok()) Prepare(Slice(), true /* force */);
+  if (bg_status_.ok()) WaitForCompaction();
+  if (bg_status_.ok()) bg_status_ = dst_->Sync();
+  if (bg_status_.ok()) dst_->Close();
+  finished_ = true;
+  return bg_status_;
 }
 
-// Wait until compaction done.
+// Sync data so data is persisted to storage. Will wait until all on-going
+// compactions are completed before performing the sync operation.
+// Return OK on success, or a non-OK status on errors.
+Status DirectWriter::Sync(const SyncOptions& sync_options) {
+  MutexLock ml(&mu_);
+  if (finished_) return bg_status_;
+  if (sync_options.do_flush && bg_status_.ok())
+    Prepare(Slice(), true /* force */);
+  if (bg_status_.ok()) WaitForCompaction();
+  if (bg_status_.ok()) bg_status_ = dst_->Sync();
+  return bg_status_;
+}
+
+// Wait until compaction is done.
 // That is, no compaction is scheduled when this function returns.
 // Return OK on success, or a non-OK status on errors.
 Status DirectWriter::Wait() {
   MutexLock ml(&mu_);
-  return WaitForCompaction();
-}
-
-// Wait for one or more on-going compactions to complete.
-// Return OK on success, or a non-OK status on errors.
-// REQUIRES: mu_ has been locked.
-Status DirectWriter::WaitForCompaction() {
-  mu_.AssertHeld();
-  while (bg_status_.ok() && has_bg_compaction_) {
-    bg_cv_.Wait();
-  }
+  if (finished_) return bg_status_;
+  WaitForCompaction();
   return bg_status_;
 }
 
+// Wait for one or more on-going compactions to complete.
+// REQUIRES: mu_ has been locked.
+void DirectWriter::WaitForCompaction() {
+  mu_.AssertHeld();
+  assert(!finished_);  // Finish() has not been called
+  while (bg_status_.ok() && has_bg_compaction_) {
+    bg_cv_.Wait();
+  }
+}
+
 // Force a compaction.
+// REQUIRES: Finish() has not been called.
 Status DirectWriter::Flush(const FlushOptions& flush_options) {
   MutexLock ml(&mu_);
-  // Wait for buffer space
-  while (imm_buf_ != NULL) {
-    bg_cv_.Wait();
+  if (finished_)
+    return Status::AssertionFailed("Already finished");
+  else {
+    // Wait for buffer space
+    while (imm_buf_ != NULL) {
+      bg_cv_.Wait();
+    }
   }
 
   Status status;
@@ -119,6 +143,7 @@ Status DirectWriter::Flush(const FlushOptions& flush_options) {
 // REQUIRES: mu_ has been locked.
 Status DirectWriter::Prepare(const Slice& data, bool force) {
   mu_.AssertHeld();
+  assert(!finished_);  // Finish() has not been called
   Status status;
   assert(mem_buf_ != NULL);
   while (true) {
@@ -209,7 +234,8 @@ void DirectWriter::DoCompaction() {
 }
 
 DirectReader::DirectReader(const DirOptions& options, RandomAccessFile* src)
-    : options_(options), src_(src) {}
+    : options_(options), src_(src) {  // src_ is not owned by us
+}
 // Directly read data from the source.
 Status DirectReader::Read(uint64_t off, size_t n, Slice* result,
                           char* scratch) const {
