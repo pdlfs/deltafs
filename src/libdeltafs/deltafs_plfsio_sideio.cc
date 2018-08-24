@@ -62,16 +62,16 @@ Status DirectWriter::Append(const Slice& slice) {
   return status;
 }
 
-// Finalize the writes. Will sync data to storage.
+// Finalize the writes and sync data to storage.
 // Return OK on success, or a non-OK status on errors.
 Status DirectWriter::Finish() {
   MutexLock ml(&mu_);
   if (finished_) return bg_status_;
+  finished_ = true;
   if (bg_status_.ok()) Prepare(Slice(), true /* force */);
   if (bg_status_.ok()) WaitForCompaction();
   if (bg_status_.ok()) bg_status_ = dst_->Sync();
   if (bg_status_.ok()) dst_->Close();
-  finished_ = true;
   return bg_status_;
 }
 

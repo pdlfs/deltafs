@@ -126,7 +126,6 @@ int deltafs_plfsdir_set_thread_pool(deltafs_plfsdir_t* __dir,
 int deltafs_plfsdir_set_rank(deltafs_plfsdir_t* __dir, int __rank);
 int deltafs_plfsdir_force_leveldb_fmt(deltafs_plfsdir_t* __dir, int __flag);
 int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir, int __flag);
-int deltafs_plfsdir_enable_side_io(deltafs_plfsdir_t* __dir, int __flag);
 int deltafs_plfsdir_set_fixed_kv(deltafs_plfsdir_t* __dir, int __flag);
 int deltafs_plfsdir_set_non_blocking(deltafs_plfsdir_t* __dir, int __flag);
 int deltafs_plfsdir_set_side_io_buf_size(deltafs_plfsdir_t* __dir, size_t __sz);
@@ -139,10 +138,13 @@ int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
 int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir, const char* __name);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name);
+int deltafs_plfsdir_io_open(deltafs_plfsdir_t* __dir, const char* __name);
 ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
                                   size_t __sz);
 int deltafs_plfsdir_io_flush(deltafs_plfsdir_t* __dir);
+int deltafs_plfsdir_io_wait(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_io_sync(deltafs_plfsdir_t* __dir);
+int deltafs_plfsdir_io_finish(deltafs_plfsdir_t* __dir);
 ssize_t deltafs_plfsdir_io_pread(deltafs_plfsdir_t* __dir, void* __buf,
                                  size_t __sz, off_t __off);
 /* Put a piece of data into a given key.

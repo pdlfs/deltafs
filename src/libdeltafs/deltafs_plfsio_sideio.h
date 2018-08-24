@@ -61,7 +61,8 @@ class DirectWriter {
   // compaction is not sync'ed. Return immediately if Finish() has been called.
   // Return OK on success, or a non-OK status on errors.
   struct SyncOptions {
-    // Force a buffer flush.
+    SyncOptions() : do_flush(false) {}
+    // Force a write buffer flush.
     // Default: false
     bool do_flush;
   };
@@ -69,8 +70,8 @@ class DirectWriter {
 
   // Finalize the writes because all writes are done.
   // All data in write buffer is scheduled for compaction and is sync'ed to
-  // storage. Return OK on success, or a non-OK status on errors.
-  // No more writes after this call.
+  // storage after the compaction. Return OK on success, or a non-OK status on
+  // errors. No more write operations after this call.
   Status Finish();
 
  private:

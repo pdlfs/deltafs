@@ -13,6 +13,7 @@
 #include "deltafs_client.h"
 #include "deltafs_envs.h"
 #include "deltafs_plfsio.h"
+#include "deltafs_plfsio_sideio.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/dbfiles.h"
@@ -645,19 +646,16 @@ int deltafs_version_patch() { return DELTAFS_VERSION_PATCH; }
 // Light-weight plfsdir api
 // -------------------------
 namespace {
-
-// Dir options
-typedef pdlfs::plfsio::DirOptions DirOptions;
 #define PLFSIO_HASH_USE_SPOOKY  // Any prefix of a hash is still a hash
+#define IMPORT(x) typedef pdlfs::plfsio::x x
+IMPORT(DirOptions);
+IMPORT(DirWriter);
+IMPORT(DirReader);
+IMPORT(DirMode);
 
-// Dir writer
-typedef pdlfs::plfsio::DirWriter DirWriter;
-// Dir Reader
-typedef pdlfs::plfsio::DirReader DirReader;
-
-// Dir mode
-typedef pdlfs::plfsio::DirMode DirMode;
-
+IMPORT(DirectWriter);
+IMPORT(DirectReader);
+#undef IMPORT
 // Default dir mode
 inline DirMode DefaultDirMode() {  // Assuming unique keys
   return pdlfs::plfsio::kDmUniqueKey;
@@ -1078,10 +1076,11 @@ struct deltafs_plfsdir {
   bool db_drain_compactions;
   uint32_t db_epoch;
   pdlfs::DB* db;
-  pdlfs::SynchronizableFile* io_buf;
-  pdlfs::WritableFile* io_writer;
+  pdlfs::WritableFile* io_dst;
+  DirectWriter* io_writer;
   DirWriter* writer;
-  pdlfs::RandomAccessFile* io_reader;
+  pdlfs::RandomAccessFile* io_src;
+  DirectReader* io_reader;
   DirReader* reader;
   bool unordered;  // If the unordered mode should be used
   // If the multi-map mode should be used
@@ -1089,7 +1088,7 @@ struct deltafs_plfsdir {
   bool is_env_pfs;
   bool opened;  // If deltafs_plfsdir_open() has been called
   bool enable_io_measurement;
-  bool enable_side_io;
+  bool io_opened;  // If side io has been opened
   size_t side_io_buf_size;
   DirOptions* io_options;
   deltafs_printer_t printer;  // Error printer
@@ -1104,7 +1103,7 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
                                                  int __io_engine) {
   __mode = __mode & O_ACCMODE;
   if (__mode == O_RDONLY || __mode == O_WRONLY) {
-    deltafs_plfsdir_t* dir =
+    deltafs_plfsdir_t* const dir =
         static_cast<deltafs_plfsdir_t*>(malloc(sizeof(deltafs_plfsdir_t)));
     memset(dir, 0, sizeof(deltafs_plfsdir_t));
     dir->io_engine = __io_engine;
@@ -1249,17 +1248,6 @@ int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir,
   if (__dir != NULL && !__dir->opened) {
     const bool measure_io = static_cast<bool>(__flag);
     __dir->enable_io_measurement = measure_io;
-    return 0;
-  } else {
-    SetErrno(BadArgs());
-    return -1;
-  }
-}
-
-int deltafs_plfsdir_enable_side_io(deltafs_plfsdir_t* __dir, int __flag) {
-  if (__dir != NULL && !__dir->opened) {
-    const bool side_io = static_cast<bool>(__flag);
-    __dir->enable_side_io = side_io;
     return 0;
   } else {
     SetErrno(BadArgs());
@@ -1455,6 +1443,10 @@ pdlfs::Status DbGet(deltafs_plfsdir_t* dir, const pdlfs::Slice& key,
   return s;
 }
 
+//            | MultiMap?   Unique?
+// ------------------------------------------
+// Unordered? |  M/M+Un     Uni+Un
+//   Ordered? |   M/M   This's the default
 void FinalizeDirMode(deltafs_plfsdir_t* dir) {
   if (dir->multi && dir->unordered) {
     DirMode multimap_unordered = pdlfs::plfsio::kDmMultiMapUnordered;
@@ -1474,6 +1466,9 @@ void FinalizeDirMode(deltafs_plfsdir_t* dir) {
   }
 }
 
+// Open as a regular plfsdir. Does not handle side I/O.
+// If side I/O is enabled, side I/O must be opened separately.
+// Return OK on success, or a non-OK status on errors.
 pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   // To obtain detailed error status, an error printer
   // must be set by the caller
@@ -1519,47 +1514,32 @@ std::string SideName(const std::string& parent, int rank) {
   return parent + "/" + tmp;
 }
 
+// Open a side I/O channel for the given plfsdir.
+// Return OK on success, or a non-OK status on errors.
 pdlfs::Status OpenSideIo(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;
-  int rank = dir->io_options->rank;
-  std::string fname = SideName(name, rank);
   pdlfs::Env* const env = dir->io_options->env;
-  size_t buf_size = dir->side_io_buf_size;
+  const int r = dir->io_options->rank;
 
   if (dir->mode == O_WRONLY) {
     pdlfs::WritableFile* io_file;
-    s = env->NewWritableFile(fname.c_str(), &io_file);
+    s = env->NewWritableFile(SideName(name, r).c_str(), &io_file);
     if (s.ok()) {
-      if (buf_size != 0) {
-        dir->io_buf =
-            new pdlfs::MinMaxBufferedWritableFile(io_file, buf_size, buf_size);
-        dir->io_writer = dir->io_buf;
-      } else {
-        dir->io_writer = io_file;
-      }
+      dir->io_writer =
+          new DirectWriter(*dir->io_options, io_file, dir->side_io_buf_size);
+      dir->io_dst = io_file;
     }
   } else if (dir->mode == O_RDONLY) {
     pdlfs::RandomAccessFile* io_file;
-    s = env->NewRandomAccessFile(fname.c_str(), &io_file);
+    s = env->NewRandomAccessFile(SideName(name, r).c_str(), &io_file);
     if (s.ok()) {
-      dir->io_reader = io_file;
+      dir->io_reader = new DirectReader(*dir->io_options, io_file);
+      dir->io_src = io_file;
     }
   } else {
     s = BadArgs();
   }
 
-  return s;
-}
-
-pdlfs::Status FinishSideIo(deltafs_plfsdir_t* dir) {
-  pdlfs::Status s;
-  // Sync() may be disabled by an underlying env,
-  // so we do Flush() before Sync().
-  // Flush() may be ignored by a buffered writable file.
-  // In this case, Sync() will do Flush() implicitly.
-  s = dir->io_writer->Flush();
-  if (s.ok()) s = dir->io_writer->Sync();
-  if (s.ok()) dir->io_writer->Close();
   return s;
 }
 
@@ -1569,6 +1549,14 @@ int DirError(deltafs_plfsdir_t* dir, const pdlfs::Status& s) {
   }
   SetErrno(s);
   return -1;
+}
+
+bool IsSideIoOpened(deltafs_plfsdir_t* dir) {
+  if (dir != NULL) {
+    return dir->io_opened;
+  } else {
+    return false;
+  }
 }
 
 bool IsDirOpened(deltafs_plfsdir_t* dir) {
@@ -1597,11 +1585,6 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
     }
   }
 
-  if (s.ok()) {
-    if (__dir->enable_side_io) {
-      s = OpenSideIo(__dir, __name);
-    }
-  }
   if (s.ok()) {
     __dir->opened = true;
   }
@@ -1766,15 +1749,57 @@ int deltafs_plfsdir_sync(deltafs_plfsdir_t* __dir) {
   }
 }
 
-ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
-                                  size_t __sz) {
+int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
   pdlfs::Status s;
 
   if (!IsDirOpened(__dir)) {
     s = BadArgs();
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
-  } else if (!__dir->enable_side_io) {
+  } else {
+    if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
+      s = __dir->writer->Finish();
+    } else {
+      s = DbFin(__dir);
+    }
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+int deltafs_plfsdir_io_open(deltafs_plfsdir_t* __dir, const char* __name) {
+  pdlfs::Status s;
+
+  if (__dir == NULL || __dir->io_opened) {
+    s = BadArgs();
+  } else if (__name == NULL || __name[0] == 0) {
+    s = BadArgs();
+  } else {
+    s = OpenSideIo(__dir, __name);
+  }
+
+  if (s.ok()) {
+    __dir->io_opened = true;
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
+                                  size_t __sz) {
+  pdlfs::Status s;
+
+  if (!IsSideIoOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
     const char* data = static_cast<const char*>(__buf);
@@ -1792,18 +1817,30 @@ ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
 int deltafs_plfsdir_io_flush(deltafs_plfsdir_t* __dir) {
   pdlfs::Status s;
 
-  if (!IsDirOpened(__dir)) {
+  if (!IsSideIoOpened(__dir)) {
     s = BadArgs();
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
-  } else if (!__dir->enable_side_io) {
+  } else {
+    s = __dir->io_writer->Flush(DirectWriter::FlushOptions());
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+int deltafs_plfsdir_io_wait(deltafs_plfsdir_t* __dir) {
+  pdlfs::Status s;
+
+  if (!IsSideIoOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
-    s = __dir->io_writer->Flush();
-    // Flush() may be ignored by a buffered writable file.
-    if (s.ok() && __dir->io_buf != NULL) {
-      s = __dir->io_buf->EmptyBuffer();
-    }
+    s = __dir->io_writer->Wait();
   }
 
   if (!s.ok()) {
@@ -1816,15 +1853,12 @@ int deltafs_plfsdir_io_flush(deltafs_plfsdir_t* __dir) {
 int deltafs_plfsdir_io_sync(deltafs_plfsdir_t* __dir) {
   pdlfs::Status s;
 
-  if (!IsDirOpened(__dir)) {
+  if (!IsSideIoOpened(__dir)) {
     s = BadArgs();
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
-  } else if (!__dir->enable_side_io) {
-    s = BadArgs();
   } else {
-    pdlfs::WritableFile* f = __dir->io_writer;
-    s = f->Sync();
+    s = __dir->io_writer->Sync(DirectWriter::SyncOptions());
   }
 
   if (!s.ok()) {
@@ -1834,25 +1868,15 @@ int deltafs_plfsdir_io_sync(deltafs_plfsdir_t* __dir) {
   }
 }
 
-int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
+int deltafs_plfsdir_io_finish(deltafs_plfsdir_t* __dir) {
   pdlfs::Status s;
 
-  if (!IsDirOpened(__dir)) {
+  if (!IsSideIoOpened(__dir)) {
     s = BadArgs();
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
-    if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
-      s = __dir->writer->Finish();
-    } else {
-      s = DbFin(__dir);
-    }
-  }
-
-  if (s.ok()) {
-    if (__dir->enable_side_io) {
-      s = FinishSideIo(__dir);
-    }
+    s = __dir->io_writer->Finish();
   }
 
   if (!s.ok()) {
@@ -2092,11 +2116,9 @@ ssize_t deltafs_plfsdir_io_pread(deltafs_plfsdir_t* __dir, void* __buf,
   pdlfs::Slice result;
   ssize_t n = 0;
 
-  if (!IsDirOpened(__dir)) {
+  if (!IsSideIoOpened(__dir)) {
     s = BadArgs();
   } else if (__dir->mode != O_RDONLY) {
-    s = BadArgs();
-  } else if (!__dir->enable_side_io) {
     s = BadArgs();
   } else {
     char* scratch = static_cast<char*>(__buf);
@@ -2143,8 +2165,11 @@ int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
   delete __dir->db_filter;
   delete __dir->io_options;
   delete __dir->io_writer;
+  delete __dir->io_dst;
   delete __dir->io_reader;
+  delete __dir->io_src;
   delete __dir->io_env;
+
   free(__dir);
 
   return 0;
