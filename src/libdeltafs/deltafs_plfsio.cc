@@ -577,7 +577,7 @@ Status DirWriter::Rep::TryFlush(Epoch* ep, bool ef, bool fi) {
       status = remaining[i]->Flush(flush_options, ep);
       flush_options.dry_run = false;
 
-      if (status.IsBufferFull()) {
+      if (status.IsTryAgain()) {
         waiting_list.push_back(remaining[i]);  // Try again later
         status = Status::OK();
       } else if (status.ok()) {

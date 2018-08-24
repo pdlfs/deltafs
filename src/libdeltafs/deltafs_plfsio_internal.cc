@@ -496,7 +496,7 @@ Status DirIndexer::Flush(const FlushOptions& flush_options, Epoch* epoch) {
   // Wait for buffer space
   while (imm_buf_ != NULL) {
     if (flush_options.dry_run) {
-      return Status::BufferFull(Slice());  // XXX: change to TryAgain
+      return Status::TryAgain(Slice());
     } else {
       bg_cv_->Wait();
     }
