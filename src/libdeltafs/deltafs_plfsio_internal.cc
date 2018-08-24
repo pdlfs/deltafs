@@ -393,32 +393,37 @@ DirIndexer::~DirIndexer() {
 
 template <typename U>
 DirCompactor* DirIndexer::OpenBitmapCompactor(DirBuilder* bu) {
-#define BMP_COMPACTOR(T, opts, bu, ft_bytes) \
-  new FilteredDirCompactor<T, U>(opts, bu, new T(opts, ft_bytes))
-  if (options_.bm_fmt == kFmtRoaring) {
-    typedef BitmapBlock<RoaringFormat> R;
-    return BMP_COMPACTOR(R, options_, bu, ft_bytes_);
-  } else if (options_.bm_fmt == kFmtFastVarintPlus) {
-    typedef BitmapBlock<FastVbPlusFormat> FVP;
-    return BMP_COMPACTOR(FVP, options_, bu, ft_bytes_);
-  } else if (options_.bm_fmt == kFmtVarintPlus) {
-    typedef BitmapBlock<VbPlusFormat> VP;
-    return BMP_COMPACTOR(VP, options_, bu, ft_bytes_);
-  } else if (options_.bm_fmt == kFmtVarint) {
-    typedef BitmapBlock<VbFormat> V;
-    return BMP_COMPACTOR(V, options_, bu, ft_bytes_);
-  } else if (options_.bm_fmt == kFmtFastPfDelta) {
-    typedef BitmapBlock<FastPfDeltaFormat> FPFD;
-    return BMP_COMPACTOR(FPFD, options_, bu, ft_bytes_);
-  } else if (options_.bm_fmt == kFmtPfDelta) {
-    typedef BitmapBlock<PfDeltaFormat> PFD;
-    return BMP_COMPACTOR(PFD, options_, bu, ft_bytes_);
-  } else {  // Default format: kUncompressedBitmap
-    typedef BitmapBlock<UncompressedFormat> B;
-    return BMP_COMPACTOR(B, options_, bu, ft_bytes_);
+#define T1 FilteredDirCompactor
+#define T2 BitmapBlock
+#define OPEN0(T, a1, a2, a3) new T1<T2<T>, U>(a1, a2, new T2<T>(a1, a3))
+#define OPEN1(T) OPEN0(T, options_, bu, ft_bytes_)
+  switch (options_.bm_fmt) {
+    case kFmtRoaring:
+      return OPEN1(RoaringFormat);
+      break;
+    case kFmtFastVarintPlus:
+      return OPEN1(FastVbPlusFormat);
+      break;
+    case kFmtVarintPlus:
+      return OPEN1(VbPlusFormat);
+      break;
+    case kFmtVarint:
+      return OPEN1(VbFormat);
+      break;
+    case kFmtFastPfDelta:
+      return OPEN1(FastPfDeltaFormat);
+      break;
+    case kFmtPfDelta:
+      return OPEN1(PfDeltaFormat);
+      break;
+    default:
+      return OPEN1(UncompressedFormat);
+      break;
   }
-
-#undef BMP_COMPACTOR
+#undef OPEN1
+#undef OPEN0
+#undef T2
+#undef T1
 }
 
 template <typename U>
