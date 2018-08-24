@@ -270,6 +270,7 @@ class PosixWritableFile : public WritableFile {
   }
 
   virtual Status Append(const Slice& buf) {
+    if (buf.empty()) return Status::OK();
     ssize_t nw = write(fd_, buf.data(), buf.size());
     if (nw != buf.size()) {
       return IOError(filename_, errno);
