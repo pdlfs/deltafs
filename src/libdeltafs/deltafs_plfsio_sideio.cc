@@ -67,11 +67,12 @@ Status DirectWriter::Append(const Slice& slice) {
 Status DirectWriter::Finish() {
   MutexLock ml(&mu_);
   if (finished_) return bg_status_;
-  finished_ = true;
   if (bg_status_.ok()) Prepare(Slice(), true /* force */);
   if (bg_status_.ok()) WaitForCompaction();
   if (bg_status_.ok()) bg_status_ = dst_->Sync();
   if (bg_status_.ok()) dst_->Close();
+
+  finished_ = true;
   return bg_status_;
 }
 
@@ -159,6 +160,7 @@ Status DirectWriter::Prepare(const Slice& data, bool force) {
       // Attempt to switch to a new write buffer
       assert(imm_buf_ == NULL);
       is_compaction_forced_ = force;
+      force = false;
       imm_buf_ = mem_buf_;
       MaybeScheduleCompaction();
       std::string* const current_buf = mem_buf_;

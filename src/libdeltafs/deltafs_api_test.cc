@@ -49,15 +49,14 @@ class PlfsDirTest {
     deltafs_plfsdir_force_leveldb_fmt(wdir_, 0);
     deltafs_plfsdir_set_fixed_kv(wdir_, 0);
     deltafs_plfsdir_set_side_io_buf_size(wdir_, 4096);
-    deltafs_plfsdir_enable_side_io(wdir_, 1);
     deltafs_plfsdir_destroy(wdir_, dirname_.c_str());
-    int r = deltafs_plfsdir_open(wdir_, dirname_.c_str());
-    ASSERT_TRUE(r == 0);
+    ASSERT_TRUE(deltafs_plfsdir_open(wdir_, dirname_.c_str()) == 0);
+    ASSERT_TRUE(deltafs_plfsdir_io_open(wdir_, dirname_.c_str()) == 0);
   }
 
   void Finish() {
-    int r = deltafs_plfsdir_finish(wdir_);
-    ASSERT_TRUE(r == 0);
+    ASSERT_TRUE(deltafs_plfsdir_io_finish(wdir_) == 0);
+    ASSERT_TRUE(deltafs_plfsdir_finish(wdir_) == 0);
     deltafs_plfsdir_free_handle(wdir_);
     wdir_ = NULL;
   }
@@ -66,9 +65,8 @@ class PlfsDirTest {
     const char* c = dirconf_.c_str();
     rdir_ = deltafs_plfsdir_create_handle(c, O_RDONLY, DELTAFS_PLFSDIR_DEFAULT);
     ASSERT_TRUE(rdir_ != NULL);
-    deltafs_plfsdir_enable_side_io(rdir_, 1);
-    int r = deltafs_plfsdir_open(rdir_, dirname_.c_str());
-    ASSERT_TRUE(r == 0);
+    ASSERT_TRUE(deltafs_plfsdir_open(rdir_, dirname_.c_str()) == 0);
+    ASSERT_TRUE(deltafs_plfsdir_io_open(rdir_, dirname_.c_str()) == 0);
   }
 
   void Put(const Slice& k, const Slice& v) {
@@ -232,11 +230,10 @@ class PlfsWiscBench {
     const char* c = conf.c_str();
     dir_ = deltafs_plfsdir_create_handle(c, O_WRONLY, DELTAFS_PLFSDIR_DEFAULT);
     ASSERT_TRUE(dir_ != NULL);
-    deltafs_plfsdir_enable_side_io(dir_, 1);
     deltafs_plfsdir_set_unordered(dir_, unordered_);
     deltafs_plfsdir_destroy(dir_, dirname_.c_str());
-    int r = deltafs_plfsdir_open(dir_, dirname_.c_str());
-    ASSERT_TRUE(r == 0);
+    ASSERT_TRUE(deltafs_plfsdir_open(dir_, dirname_.c_str()) == 0);
+    ASSERT_TRUE(deltafs_plfsdir_io_open(dir_, dirname_.c_str()) == 0);
     char tmp1[8];
     char tmp2[12];
     uint32_t num_files = mfiles_ << 20;
@@ -268,7 +265,9 @@ class PlfsWiscBench {
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
 
-    r = deltafs_plfsdir_epoch_flush(dir_, 0);
+    int r = deltafs_plfsdir_epoch_flush(dir_, 0);
+    ASSERT_TRUE(r == 0);
+    r = deltafs_plfsdir_io_finish(dir_);
     ASSERT_TRUE(r == 0);
     r = deltafs_plfsdir_finish(dir_);
     ASSERT_TRUE(r == 0);

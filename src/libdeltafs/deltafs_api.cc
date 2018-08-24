@@ -1516,8 +1516,10 @@ std::string SideName(const std::string& parent, int rank) {
 
 // Open a side I/O channel for the given plfsdir.
 // Return OK on success, or a non-OK status on errors.
+// REQUIRES: deltafs_plfsdir_open(__dir, __name) must has been called.
 pdlfs::Status OpenSideIo(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;
+  assert(dir->opened);  // So dir->io_options->env contains the right Env
   pdlfs::Env* const env = dir->io_options->env;
   const int r = dir->io_options->rank;
 
@@ -1775,6 +1777,8 @@ int deltafs_plfsdir_io_open(deltafs_plfsdir_t* __dir, const char* __name) {
   pdlfs::Status s;
 
   if (__dir == NULL || __dir->io_opened) {
+    s = BadArgs();
+  } else if (!__dir->opened) {
     s = BadArgs();
   } else if (__name == NULL || __name[0] == 0) {
     s = BadArgs();
