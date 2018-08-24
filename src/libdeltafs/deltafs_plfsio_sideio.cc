@@ -90,8 +90,9 @@ Status DirectWriter::Sync(const SyncOptions& sync_options) {
 }
 
 // Wait until compaction is done.
-// That is, no compaction is scheduled when this function returns.
 // Return OK on success, or a non-OK status on errors.
+// INVARIANT: no compaction has been scheduled at the moment this function
+// returns.
 Status DirectWriter::Wait() {
   MutexLock ml(&mu_);
   if (finished_) return bg_status_;
@@ -196,7 +197,9 @@ void DirectWriter::MaybeScheduleCompaction() {
   has_bg_compaction_ = true;
 
   if (imm_buf_->empty()) {
-    DoCompaction();  // Buffer is empty
+    // Buffer is empty so compaction should be quick. As such we directly
+    // execute the compaction in the current thread
+    DoCompaction();  // No context switch
   } else if (options_.compaction_pool != NULL) {
     options_.compaction_pool->Schedule(DirectWriter::BGWork, this);
   } else if (options_.allow_env_threads) {
@@ -220,6 +223,7 @@ void DirectWriter::DoCompaction() {
   assert(dst_ != NULL);
   mu_.Unlock();  // Unlock during I/O operations
   Status status = dst_->Append(*imm_buf_);
+  // Compaction does not sync data to storage. Sync() does.
   if (status.ok()) {
     status = dst_->Flush();
   }
