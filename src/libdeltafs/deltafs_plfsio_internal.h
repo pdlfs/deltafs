@@ -240,9 +240,13 @@ class DirIndexer {
   friend class DirWriter;
   ~DirIndexer();
 
-  template <typename U>
+  // NOTE: DirBuilder::Add() is a virtual function and is going to be repeated
+  // called during each compaction. To avoid making many dynamic virtual
+  // function calls, we have this typename U so all DirBuilder::Add() calls will
+  // be statically linked to type U. This makes the code a bit more efficient.
+  template <typename U /* extends DirBuilder */>
   DirCompactor* OpenBitmapCompactor(DirBuilder* bu);
-  template <typename U>
+  template <typename U /* extends DirBuilder */>
   DirCompactor* OpenCompactor(DirBuilder* bu);
   Status Prepare(Epoch* epoch, bool force = false, bool epoch_flush = false,
                  bool finalize = false);
