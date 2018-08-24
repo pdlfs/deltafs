@@ -486,20 +486,16 @@ Status DirIndexer::SyncAndClose() {
   return status;
 }
 
-// If dry_run has been set, simply perform status checks and no compaction
-// jobs will be scheduled or waited for. In such case, return OK if compaction
-// can be scheduled immediately without waiting, a special status if compaction
-// cannot be scheduled immediately, or an error status in case of an I/O error.
-// Otherwise (if dry_run is not set), wait until a compaction is scheduled
-// unless options_.non_blocking is set. After a compaction has been scheduled,
-// wait until it finishes unless no_wait has been set.
-// REQUIRES: Open() has been called.
+// If flush_options.dry_run is set, simply check status and return.
+// Otherwise try scheduling a compaction.
+// After a compaction is scheduled, wait until it finishes unless no_wait has
+// been set. REQUIRES: Open() has been called.
 Status DirIndexer::Flush(const FlushOptions& flush_options, Epoch* epoch) {
   mu_->AssertHeld();
   assert(opened_);
   // Wait for buffer space
   while (imm_buf_ != NULL) {
-    if (flush_options.dry_run || options_.non_blocking) {
+    if (flush_options.dry_run) {
       return Status::BufferFull(Slice());  // XXX: change to TryAgain
     } else {
       bg_cv_->Wait();
@@ -511,13 +507,13 @@ Status DirIndexer::Flush(const FlushOptions& flush_options, Epoch* epoch) {
     status = bg_status_;  // Status check only
   } else {
     num_flush_requested_++;
-    const uint32_t thres = num_flush_requested_;
+    const uint32_t my = num_flush_requested_;
     const bool force = true;
     status = Prepare(epoch, force, flush_options.epoch_flush,
                      flush_options.finalize);
     if (status.ok()) {
       if (!flush_options.no_wait) {
-        while (num_flush_completed_ < thres) {
+        while (num_flush_completed_ < my) {
           bg_cv_->Wait();
         }
       }
@@ -556,12 +552,7 @@ Status DirIndexer::Prepare(Epoch* epoch, bool force, bool epoch_flush,
       // There is room in current write buffer
       break;
     } else if (imm_buf_ != NULL) {
-      if (options_.non_blocking) {
-        status = Status::BufferFull(Slice());
-        break;
-      } else {
-        bg_cv_->Wait();
-      }
+      bg_cv_->Wait();
     } else {
       // Attempt to switch to a new write buffer
       assert(imm_buf_ == NULL);

@@ -1232,17 +1232,6 @@ int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
   }
 }
 
-int deltafs_plfsdir_set_non_blocking(deltafs_plfsdir_t* __dir, int __flag) {
-  if (__dir != NULL && !__dir->opened) {
-    const bool non_blocking = static_cast<bool>(__flag);
-    __dir->io_options->non_blocking = non_blocking;
-    return 0;
-  } else {
-    SetErrno(BadArgs());
-    return -1;
-  }
-}
-
 int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir,
                                           int __flag) {
   if (__dir != NULL && !__dir->opened) {

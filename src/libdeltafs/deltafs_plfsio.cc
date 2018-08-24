@@ -58,7 +58,6 @@ DirOptions::DirOptions()
       reader_pool(NULL),
       read_size(8 << 20),
       parallel_reads(false),
-      non_blocking(false),
       paranoid_checks(false),
       ignore_filters(false),
       compression(kNoCompression),
@@ -543,7 +542,6 @@ Status DirWriter::Rep::WaitForCompaction() {
 Status DirWriter::Rep::TryBatchWrites(Epoch* ep, BatchCursor* cursor) {
   mutex_.AssertHeld();
   assert(ep->num_ongoing_ops_ != 0);
-  assert(options_.non_blocking);  // TODO: why?
   Status status;
   std::vector<std::vector<uint32_t> > waiting_list(num_parts_);
   std::vector<std::vector<uint32_t> > queue(num_parts_);
@@ -1253,8 +1251,6 @@ Status DirWriter::Open(const DirOptions& _opts, const std::string& dirname,
           options.compaction_pool != NULL
               ? options.compaction_pool->ToDebugString().c_str()
               : "None");
-  Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.non_blocking -> %s",
-          int(options.non_blocking) ? "Yes" : "No");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.compression -> %s",
           options.compression == kSnappyCompression ? "Snappy" : "None");
   Verbose(__LOG_ARGS__, 2, "Dfs.plfsdir.index_compression -> %s",

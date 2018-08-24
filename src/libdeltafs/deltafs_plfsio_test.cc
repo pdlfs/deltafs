@@ -722,7 +722,6 @@ class PlfsIoBench {
     }
     options_.lg_parts = GetOption("LG_PARTS", 2);
     options_.skip_sort = ordered_keys_ != 0;
-    options_.non_blocking = batched_insertion_ != 0;
     options_.leveldb_compatible = GetOption("LEVELDB_FMT", true) != 0;
     options_.fixed_kv_length = GetOption("FIXED_KV", true) != 0;
     options_.compression =

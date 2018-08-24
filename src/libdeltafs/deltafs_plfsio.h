@@ -244,15 +244,7 @@ struct DirOptions {
   // Default: false
   bool parallel_reads;
 
-  // True if write operations should be performed in a non-blocking manner,
-  // in which case a special status is returned instead of blocking the
-  // writer to wait for buffer space.
-  // Default: false
-  bool non_blocking;
-
-  // If true, the implementation will do aggressive checking of the
-  // data it is processing and will stop early if it detects any
-  // errors.
+  // Perform aggressive checking of the data so we stop early on errors.
   // Default: false
   bool paranoid_checks;
 
