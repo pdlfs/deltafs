@@ -478,9 +478,7 @@ Status LogSource::Open(const LogOptions& opts, const std::string& prefix,
 
 static DirOptions SanitizeDirOptions(const DirOptions& opts) {
   DirOptions result = opts;
-  if (result.env == NULL) {
-    result.env = Env::Default();
-  }
+  if (!result.env) result.env = Env::Default();
   return result;
 }
 
@@ -491,10 +489,13 @@ static Status Delete(const char* filename, Env* env) {
   return env->DeleteFile(filename);
 }
 
+// Purge an existing directory. All directory data is removed.
+// Designed to be called by a single process. This process removes all files in
+// the directory. Return OK on success, or a non-OK status on errors.
 Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
   Status status;
   DirOptions options = SanitizeDirOptions(opts);
-  std::vector<std::string> garbage;  // Log files pending deletion
+  std::vector<std::string> garbage;  // Directory files pending deletion
   garbage.push_back(DirInfoFileName(prefix));
   Env* const env = options.env;
   if (options.is_env_pfs) {
@@ -520,13 +521,17 @@ Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
             }
 
           } else if (names[i][0] == 'L') {
-            garbage.push_back(entry);  // Regular log file
+            garbage.push_back(entry);  // LSM data and index log files
+          } else if (names[i][0] == 'D') {
+            garbage.push_back(entry);  // Direct data files
           } else {
             // Skip
           }
         }
       }
     }
+  } else {
+    // TODO
   }
 
   // Bulk file deletes
