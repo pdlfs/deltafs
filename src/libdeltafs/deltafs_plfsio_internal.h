@@ -196,11 +196,11 @@ class DirIndexer {
   // Force a compaction and maybe wait for it
   struct FlushOptions {
     explicit FlushOptions(bool ef = false, bool fi = false)
-        : no_wait(true), dry_run(false), epoch_flush(ef), finalize(fi) {}
+        : wait(false), dry_run(false), epoch_flush(ef), finalize(fi) {}
 
-    // Do not wait for compaction to finish
-    // Default: true
-    bool no_wait;
+    // Wait for the compaction to finish
+    // Default: false
+    bool wait;
     // Status checks only
     // Default: false
     bool dry_run;

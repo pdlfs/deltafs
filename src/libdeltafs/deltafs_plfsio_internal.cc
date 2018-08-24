@@ -486,10 +486,10 @@ Status DirIndexer::SyncAndClose() {
   return status;
 }
 
-// If flush_options.dry_run is set, simply check status and return.
+// If flush_options.dry_run is set, simply check status and return immediately.
 // Otherwise try scheduling a compaction.
-// After a compaction is scheduled, wait until it finishes unless no_wait has
-// been set. REQUIRES: Open() has been called.
+// After a compaction is scheduled, will wait until it finishes when
+// flush_options.wait has been set. REQUIRES: Open() has been called.
 Status DirIndexer::Flush(const FlushOptions& flush_options, Epoch* epoch) {
   mu_->AssertHeld();
   assert(opened_);
@@ -512,7 +512,7 @@ Status DirIndexer::Flush(const FlushOptions& flush_options, Epoch* epoch) {
     status = Prepare(epoch, force, flush_options.epoch_flush,
                      flush_options.finalize);
     if (status.ok()) {
-      if (!flush_options.no_wait) {
+      if (flush_options.wait) {
         while (num_flush_completed_ < my) {
           bg_cv_->Wait();
         }
