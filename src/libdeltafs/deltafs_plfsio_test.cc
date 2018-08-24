@@ -700,8 +700,6 @@ class PlfsIoBench {
 
   PlfsIoBench() : home_(test::TmpDir() + "/plfsio_test_benchmark") {
     mbps_ = GetOption("LINK_SPEED", 6);  // per LANL's configuration
-    batched_insertion_ = GetOption("BATCHED_INSERTION", false);
-    batch_size_ = GetOption("BATCH_SIZE", 4) << 10;  // Files per batch
     ordered_keys_ = GetOption("ORDERED_KEYS", false);
     mfiles_ = GetOption("NUM_FILES", 16);  // 16 million per epoch
 
@@ -817,7 +815,7 @@ class PlfsIoBench {
     }
   }
 
-  class BigBatch : public BatchCursor {
+  class BigBatch {
    public:
     BigBatch(const DirOptions& options, const std::vector<uint32_t>& keys,
              int base_offset, int size)
@@ -840,8 +838,6 @@ class PlfsIoBench {
       }
     }
 
-    virtual ~BigBatch() {}
-
     void Reset(int base_offset, int size) {
       base_offset_ = static_cast<uint32_t>(base_offset);
       size_ = static_cast<uint32_t>(size);
@@ -850,20 +846,19 @@ class PlfsIoBench {
       offset_ = size_;
     }
 
-    virtual Status status() const { return status_; }
-    virtual bool Valid() const { return offset_ < size_; }
-    virtual uint32_t offset() const { return offset_; }
-    virtual Slice fid() const { return Slice(key_, key_size_); }
-    virtual Slice data() const { return dummy_val_; }
+    bool Valid() const { return offset_ < size_; }
+    uint32_t offset() const { return offset_; }
+    Slice fid() const { return Slice(key_, key_size_); }
+    Slice data() const { return dummy_val_; }
 
-    virtual void Seek(uint32_t offset) {
+    void Seek(uint32_t offset) {
       offset_ = offset;
       if (Valid()) {
         MakeKey();
       }
     }
 
-    virtual void Next() {
+    void Next() {
       offset_++;
       if (Valid()) {
         MakeKey();
@@ -961,31 +956,18 @@ class PlfsIoBench {
     fprintf(stderr, "Inserting data...\n");
     int i = 0;
     const int num_files = (mfiles_ << 20);
-    const int final_batch_size = batched_insertion_ ? batch_size_ : num_files;
-    BigBatch batch(options_, keys_, i, final_batch_size);
-    batch.Seek(0);
+    BigBatch batch(options_, keys_, i, num_files);
     while (i < num_files) {
       // Report progress
       if ((i & 0x7FFFF) == 0) {
         fprintf(stderr, "\r%.2f%%", 100.0 * i / num_files);
       }
-      if (batched_insertion_) {
-        s = writer_->Write(&batch, 0);
-        if (s.ok()) {
-          i += batch_size_;
-          batch.Reset(i, batch_size_);
-          batch.Seek(0);
-        } else {
-          break;
-        }
+      s = writer_->Add(batch.fid(), batch.data(), 0);
+      if (s.ok()) {
+        batch.Next();
+        i++;
       } else {
-        s = writer_->Add(batch.fid(), batch.data(), 0);
-        if (s.ok()) {
-          i++;
-          batch.Next();
-        } else {
-          break;
-        }
+        break;
       }
     }
     ASSERT_OK(s) << "Cannot write";
@@ -1097,11 +1079,6 @@ class PlfsIoBench {
     fprintf(stderr,
             "             Input Keys: pre-generated=%s, pre-sorted=%s\n",
             keys_.empty() ? "No" : "Yes", ordered_keys_ ? "Yes" : "No");
-    if (batched_insertion_) {
-      fprintf(stderr, "      Batched Insertion: %d K\n", int(batch_size_ / ki));
-    } else {
-      fprintf(stderr, "      Batched Insertion: No\n");
-    }
     fprintf(stderr, "     Snappy Compression: %s\n",
             options_.index_compression == kSnappyCompression ? "Yes" : "No");
     fprintf(stderr, "            Blk Padding: %s\n",
@@ -1207,8 +1184,6 @@ class PlfsIoBench {
   }
 
   int mbps_;  // Link speed to emulate (in MBps)
-  int batch_size_;
-  int batched_insertion_;
   int ordered_keys_;
   int mfiles_;        // Number of files to insert (in Millions)
   int num_threads_;   // Number of bg compaction threads
@@ -1569,8 +1544,6 @@ static void BM_Usage() {
   fprintf(stderr, "== adv. options\n");
   fprintf(stderr, "FORCE_FIFO\n");
   fprintf(stderr, "FALSE_KEYS\n");
-  fprintf(stderr, "BATCH_INSERTION\n");
-  fprintf(stderr, "BATCH_SIZE\n");
   fprintf(stderr, "\n");
 }
 

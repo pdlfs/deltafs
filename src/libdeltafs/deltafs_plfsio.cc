@@ -8,7 +8,6 @@
  */
 
 #include "deltafs_plfsio.h"
-#include "deltafs_plfsio_batch.h"
 #include "deltafs_plfsio_filter.h"
 #include "deltafs_plfsio_internal.h"
 
@@ -324,7 +323,6 @@ struct DirWriter::Rep {
   Status WaitForCompaction();
   Status MaybeRotateLogs(Epoch*);
   Status TryFlush(Epoch*, bool ef = false, bool fi = false);
-  Status TryBatchWrites(Epoch*, BatchCursor* cursor);
   Status TryAdd(Epoch*, const Slice& fid, const Slice& data);
   Status EnsureDataPadding(LogSink* sink, size_t footer_size);
   Status InstallDirInfo(const std::string& footer);
@@ -539,78 +537,6 @@ Status DirWriter::Rep::WaitForCompaction() {
   return status;
 }
 
-Status DirWriter::Rep::TryBatchWrites(Epoch* ep, BatchCursor* cursor) {
-  mutex_.AssertHeld();
-  assert(ep->num_ongoing_ops_ != 0);
-  Status status;
-  std::vector<std::vector<uint32_t> > waiting_list(num_parts_);
-  std::vector<std::vector<uint32_t> > queue(num_parts_);
-  bool has_more = false;  // If the entire batch is done
-  cursor->Seek(0);
-  for (; cursor->Valid(); cursor->Next()) {
-    Slice fid = cursor->fid();
-    const uint32_t hash = Hash(fid.data(), fid.size(), 0);
-    const uint32_t part = hash & part_mask_;
-    assert(part < num_parts_);
-    status = idxers_[part]->Add(ep, fid, cursor->data());
-
-    if (status.IsBufferFull()) {
-      // Try again later
-      waiting_list[part].push_back(cursor->offset());
-      status = Status::OK();
-      has_more = true;
-    } else if (!status.ok()) {
-      break;
-    } else {
-      // OK
-    }
-  }
-
-  while (status.ok()) {
-    if (has_more) {
-      has_more = false;
-      bg_cv_.Wait();
-    } else {
-      break;
-    }
-    for (size_t i = 0; i < num_parts_; i++) {
-      waiting_list[i].swap(queue[i]);
-      waiting_list[i].clear();
-    }
-    for (size_t i = 0; i < num_parts_; i++) {
-      if (!queue[i].empty()) {
-        std::vector<uint32_t>::iterator it = queue[i].begin();
-        for (; it != queue[i].end(); ++it) {
-          cursor->Seek(*it);
-          if (cursor->Valid()) {
-            status = idxers_[i]->Add(ep, cursor->fid(), cursor->data());
-          } else {
-            status = cursor->status();
-          }
-
-          if (status.IsBufferFull()) {
-            // Try again later
-            waiting_list[i].assign(it, queue[i].end());
-            status = Status::OK();
-            has_more = true;
-            break;
-          } else if (!status.ok()) {
-            break;
-          } else {
-            // OK
-          }
-        }
-
-        if (!status.ok()) {
-          break;
-        }
-      }
-    }
-  }
-
-  return status;
-}
-
 // Attempt to schedule a minor compaction on all directory partitions
 // simultaneously. If a compaction cannot be scheduled immediately due to a lack
 // of buffer space, it will be added to a waiting list so it can be reattempted
@@ -771,39 +697,6 @@ Status DirWriter::Flush(int epoch) {
     } else {
       cur->num_ongoing_ops_++;
       status = r->TryFlush(cur);
-      assert(cur->num_ongoing_ops_ != 0);
-      cur->num_ongoing_ops_--;
-      if (cur->committing_ && cur->num_ongoing_ops_ == 0) {
-        cur->cv_.SignalAll();
-      }
-      break;
-    }
-  }
-  return status;
-}
-
-Status DirWriter::Write(BatchCursor* cursor, int epoch) {
-  Status status;
-  Rep* const r = rep_;
-  MutexLock ml(&r->mutex_);
-  while (true) {
-    if (r->finished_) {
-      status = Status::AssertionFailed("Plfsdir already finished");
-      break;
-    }
-    Epoch* const cur = r->epoch_;
-    assert(cur != NULL);
-    if (epoch == -1 && cur->committing_) {
-      r->cv_.Wait();
-    } else if (epoch != -1 && epoch != int(cur->seq_)) {
-      status = Status::AssertionFailed("Bad epoch num");
-      break;
-    } else if (cur->committing_) {
-      status = Status::AssertionFailed("Epoch is being flushed");
-      break;
-    } else {
-      cur->num_ongoing_ops_++;
-      status = r->TryBatchWrites(cur, cursor);
       assert(cur->num_ongoing_ops_ != 0);
       cur->num_ongoing_ops_--;
       if (cur->committing_ && cur->num_ongoing_ops_ == 0) {

@@ -19,8 +19,8 @@ set (deltafs-srcs deltafs_api.cc deltafs_client.cc deltafs_conf.cc
 
 set (deltafs-plfsio-srcs deltafs_plfsio.cc deltafs_plfsio_internal.cc
         deltafs_plfsio_cuckoo.cc deltafs_plfsio_idx.cc deltafs_plfsio_filter.cc
-        deltafs_plfsio_format.cc deltafs_plfsio_batch.cc deltafs_plfsio_recov.cc
-        deltafs_plfsio_nio.cc deltafs_plfsio_sideio.cc deltafs_plfsio_events.cc)
+        deltafs_plfsio_format.cc deltafs_plfsio_recov.cc deltafs_plfsio_nio.cc
+        deltafs_plfsio_sideio.cc deltafs_plfsio_events.cc)
 
 set (deltafs-tests deltafs_api_test.cc deltafs_plfsio_test
      deltafs_plfsio_cuckoo_test.cc deltafs_plfsio_filter_test.cc

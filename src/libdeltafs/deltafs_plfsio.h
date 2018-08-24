@@ -19,7 +19,6 @@
 namespace pdlfs {
 namespace plfsio {
 
-class BatchCursor;
 class EventListener;
 class Compaction;
 class Epoch;
@@ -383,10 +382,6 @@ class DirWriter {
   // Return OK on success, or a non-OK status on errors.
   static Status Open(const DirOptions& options, const std::string& dirname,
                      DirWriter** result);
-
-  // Perform a batch of file appends in a single operation.
-  // REQUIRES: Finish() has not been called.
-  Status Write(BatchCursor* cursor, int epoch = -1);
 
   // Append a piece of data to a specific file under the directory.
   // Set epoch to -1 to disable epoch validation.
