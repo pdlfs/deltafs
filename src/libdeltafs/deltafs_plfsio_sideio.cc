@@ -96,7 +96,7 @@ Status DirectWriter::Sync(const SyncOptions& sync_options) {
 Status DirectWriter::Wait() {
   MutexLock ml(&mu_);
   if (finished_) return bg_status_;
-  WaitForCompaction();
+  if (bg_status_.ok()) WaitForCompaction();
   return bg_status_;
 }
 
