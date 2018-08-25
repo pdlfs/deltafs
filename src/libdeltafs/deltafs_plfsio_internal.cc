@@ -395,8 +395,11 @@ template <typename U>
 DirCompactor* DirIndexer::OpenBitmapCompactor(DirBuilder* bu) {
 #define T1 FilteredDirCompactor
 #define T2 BitmapBlock
-#define OPEN0(T, a1, a2, a3) new T1<T2<T>, U>(a1, a2, new T2<T>(a1, a3))
-#define OPEN1(T) OPEN0(T, options_, bu, ft_bytes_)
+#define OPEN0(T, a1, a2, a3) new T1<T, U>(a1, a2, new T(a1, a3))
+#define OPEN1(F) OPEN0(T2<F>, options_, bu, ft_bytes_)
+#ifndef NDEBUG
+  assert(dynamic_cast<U*>(bu));
+#endif
   switch (options_.bm_fmt) {
     case kFmtRoaring:
       return OPEN1(RoaringFormat);
@@ -428,15 +431,28 @@ DirCompactor* DirIndexer::OpenBitmapCompactor(DirBuilder* bu) {
 
 template <typename U>
 DirCompactor* DirIndexer::OpenCompactor(DirBuilder* bu) {
-  if (options_.filter == kFtBloomFilter) {
-    BloomBlock* bf = NULL;
-    if (options_.bf_bits_per_key != 0) bf = new BloomBlock(options_, ft_bytes_);
-    return new FilteredDirCompactor<BloomBlock, U>(options_, bu, bf);
-  } else if (options_.filter == kFtBitmap) {
-    return OpenBitmapCompactor<U>(bu);
+#define T1 FilteredDirCompactor
+#define T2 BloomBlock
+#define T3 EmptyFilterBlock
+#define OPEN0(T, t, a1, a2) new T1<T, U>(a1, a2, t)
+#define OPEN1(T, t) OPEN0(T, t, options_, bu)
+#ifndef NDEBUG
+  assert(dynamic_cast<U*>(bu));
+#endif
+  switch (options_.filter) {
+    case kFtBitmap:
+      return OpenBitmapCompactor<U>(bu);
+      break;
+    case kFtBloomFilter: {
+      T2* bf = NULL;
+      if (options_.bf_bits_per_key != 0) bf = new T2(options_, ft_bytes_);
+      return OPEN1(T2, bf);
+      break;
+    }
+    default:
+      return OPEN1(T3, NULL);
+      break;
   }
-
-  return new FilteredDirCompactor<EmptyFilterBlock, U>(options_, bu, NULL);
 }
 
 Status DirIndexer::Open(LogSink* data, LogSink* indx) {
