@@ -184,7 +184,6 @@ class DirIndexer {
              port::CondVar* cv);
 
   Status Open(LogSink* data, LogSink* indx);
-
   size_t memory_usage() const;  // Report actual memory usage
 
   // REQUIRES: mutex_ has been locked
@@ -236,6 +235,8 @@ class DirIndexer {
 
   size_t estimated_sstable_size() const { return tb_bytes_; }
   size_t planned_filter_size() const { return ft_bytes_; }
+
+  void Bind(LogSink* data, LogSink* indx);
 
   friend class DirWriter;
   ~DirIndexer();

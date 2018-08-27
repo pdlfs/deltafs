@@ -391,7 +391,7 @@ DirIndexer::~DirIndexer() {
   delete compactor_;
 }
 
-template <typename U>
+template <typename U /* extends DirBuilder */>
 DirCompactor* DirIndexer::OpenBitmapCompactor(DirBuilder* bu) {
 #define T1 FilteredDirCompactor
 #define T2 BitmapBlock
@@ -429,7 +429,7 @@ DirCompactor* DirIndexer::OpenBitmapCompactor(DirBuilder* bu) {
 #undef T1
 }
 
-template <typename U>
+template <typename U /* extends DirBuilder */>
 DirCompactor* DirIndexer::OpenCompactor(DirBuilder* bu) {
 #define T1 FilteredDirCompactor
 #define T2 BloomBlock
@@ -453,18 +453,31 @@ DirCompactor* DirIndexer::OpenCompactor(DirBuilder* bu) {
       return OPEN1(T3, NULL);
       break;
   }
+#undef OPEN1
+#undef OPEN0
+#undef T3
+#undef T2
+#undef T1
+}
+
+inline void DirIndexer::Bind(LogSink* data, LogSink* indx) {
+  assert(data_ == NULL);
+  data_ = data;
+  data_->Ref();
+
+  assert(indx_ == NULL);
+  indx_ = indx;
+  indx_->Ref();
 }
 
 Status DirIndexer::Open(LogSink* data, LogSink* indx) {
-  // Open() has not been called before
-  assert(!opened_);
+  assert(!opened_);  // Open() has not been called before
   opened_ = true;
-  data_ = data;
-  data_->Ref();
-  indx_ = indx;
-  indx_->Ref();
 
-  DirBuilder* const bu = DirBuilder::Open(options_, &compac_stats_, data, indx);
+  Bind(data, indx);
+
+  DirBuilder* bu = DirBuilder::Open(options_, &compac_stats_, data_, indx_);
+
   // To reduce runtime overhead (e.g. c++ virtual function calls)
   // here we want to statically bind to one specific dir
   // builder type with one specific block format.
@@ -473,7 +486,7 @@ Status DirIndexer::Open(LogSink* data, LogSink* indx) {
 
   if (compactor_ == NULL)  // Use the default block format
     compactor_ = OpenCompactor<SeqDirBuilder<> >(bu);
-  // No storage I/O so always OK.
+  // No external I/O so always OK.
   return Status::OK();
 }
 
