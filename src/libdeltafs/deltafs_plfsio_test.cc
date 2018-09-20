@@ -826,7 +826,7 @@ class PlfsIoBench {
           rnd_insertion_(!options_.skip_sort),
           base_offset_(static_cast<uint32_t>(base_offset)),  // Base location
           size_(static_cast<uint32_t>(size)),                // Batch size
-          offset_(size_) {  // Current cursor location
+          offset_(size_) {  // Initialized to be invalid
       ASSERT_TRUE(key_size_ <= sizeof(key_));
       // Initialize the buffer space for keys
       memset(key_, 0, sizeof(key_));
@@ -953,10 +953,10 @@ class PlfsIoBench {
 #endif
     const uint64_t start = env_->NowMicros();
     fprintf(stderr, "Inserting data...\n");
-    int i = 0;
     const int num_files = (mfiles_ << 20);
-    BigBatch batch(options_, keys_, i, num_files);
-    while (i < num_files) {
+    BigBatch batch(options_, keys_, 0, num_files);
+    batch.Seek(0);
+    for (int i = 0; i < num_files; i++) {
       // Report progress
       if ((i & 0x7FFFF) == 0) {
         fprintf(stderr, "\r%.2f%%", 100.0 * i / num_files);
@@ -964,7 +964,6 @@ class PlfsIoBench {
       s = writer_->Add(batch.fid(), batch.data(), 0);
       if (s.ok()) {
         batch.Next();
-        i++;
       } else {
         break;
       }
@@ -1147,8 +1146,8 @@ class PlfsIoBench {
             1.0 * writer_->TEST_raw_data_contents() / ki / ki,
             1.0 * writer_->TEST_raw_data_contents() / user_bytes * 100 - 100);
     fprintf(stderr,
-            "         Final Dir Data: %.3f MiB (%+.2f%% due to blk encoding, "
-            "checksums, and possible compression and padding)\n",
+            "         Final Dir Data: %.3f MiB (%+.2f%% due to performing the "
+            "above plus padding and checksums)\n",
             1.0 * stats.data_bytes / ki / ki,
             1.0 * stats.data_bytes / user_bytes * 100 - 100);
     if (stats.data_bytes >= user_bytes) {
@@ -1573,7 +1572,7 @@ static void BM_Main(int* argc, char*** argv) {
     BM_Usage();
   }
   if (bench_name.starts_with("--bench=")) {
-    BM_LogAndApply(bench_name.c_str() + 8);
+    BM_LogAndApply(bench_name.data() + strlen("--bench="));
   } else {
     BM_Usage();
   }
