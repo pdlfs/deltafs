@@ -32,6 +32,11 @@
 #include <map>
 #include <set>
 #include <vector>
+#if __cplusplus >= 201103
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
 
 namespace pdlfs {
 namespace plfsio {
@@ -471,34 +476,69 @@ TEST(PlfsIoTest, MultiMap) {
 
 namespace {
 
+class WriteLock {
+ public:
+  WriteLock() : cv_(&mu_), on_(false) {}
+
+  void Acquire() {
+    MutexLock ml(&mu_);
+    while (on_) cv_.Wait();
+    on_ = true;
+  }
+
+  void Release() {
+    MutexLock ml(&mu_);
+    on_ = false;
+    cv_.SignalAll();
+  }
+
+ private:
+  port::Mutex mu_;
+  port::CondVar cv_;
+  bool on_;
+};
+
 class EmulatedWritableFile : public WritableFileWrapper {
  public:
-  explicit EmulatedWritableFile(uint64_t bytes_ps, Histogram* hist = NULL,
+  explicit EmulatedWritableFile(uint64_t bytes_ps, WriteLock* wl = NULL,
+                                Histogram* hist = NULL,
                                 EventListener* lis = NULL)
-      : lis_(lis), prev_write_micros_(0), hist_(hist), bytes_ps_(bytes_ps) {}
+      : lis_(lis),
+        prev_write_micros_(0),
+        hist_(hist),
+        wl_(wl),
+        bytes_ps_(bytes_ps) {}
   virtual ~EmulatedWritableFile() {}
 
-  virtual Status Append(const Slice& data) {
+  void EmulateWrite(const Slice& data) {
+    const uint64_t now_micros = Env::Default()->NowMicros();
+    if (hist_ != NULL && prev_write_micros_ != 0) {
+      hist_->Add(now_micros - prev_write_micros_);
+    }
+    prev_write_micros_ = now_micros;
+    if (lis_ != NULL) {
+      IoEvent event;
+      event.type = kIoStart;
+      event.micros = now_micros;
+      lis_->OnEvent(event.type, &event);
+    }
+    const int micros_to_delay =
+        static_cast<int>(1000 * 1000 * data.size() / bytes_ps_);
+    Env::Default()->SleepForMicroseconds(micros_to_delay);
+    if (lis_ != NULL) {
+      IoEvent event;
+      event.type = kIoEnd;
+      event.micros = Env::Default()->NowMicros();
+      lis_->OnEvent(event.type, &event);
+    }
+  }
+
+  virtual Status Append(const Slice& data) OVERRIDE {
     if (!data.empty()) {
-      const uint64_t now_micros = Env::Default()->NowMicros();
-      if (hist_ != NULL && prev_write_micros_ != 0) {
-        hist_->Add(now_micros - prev_write_micros_);
-      }
-      prev_write_micros_ = now_micros;
-      if (lis_ != NULL) {
-        IoEvent event;
-        event.micros = now_micros;
-        event.type = kIoStart;
-        lis_->OnEvent(kIoStart, &event);
-      }
-      const int micros_to_delay =
-          static_cast<int>(1000 * 1000 * data.size() / bytes_ps_);
-      Env::Default()->SleepForMicroseconds(micros_to_delay);
-      if (lis_ != NULL) {
-        IoEvent event;
-        event.micros = Env::Default()->NowMicros();
-        event.type = kIoEnd;
-        lis_->OnEvent(kIoEnd, &event);
+      if (wl_ != NULL) wl_->Acquire();
+      EmulateWrite(data);
+      if (wl_ != NULL) {
+        wl_->Release();
       }
     }
     return status_;
@@ -508,6 +548,7 @@ class EmulatedWritableFile : public WritableFileWrapper {
   EventListener* lis_;
   uint64_t prev_write_micros_;  // Timestamp of the previous write
   Histogram* hist_;             // Mean time between writes
+  WriteLock* wl_;
 
   uint64_t bytes_ps_;  // Bytes per second
   Status status_;
@@ -525,14 +566,14 @@ class EmulatedEnv : public EnvWrapper {
     }
   }
 
-  virtual Status NewWritableFile(const char* f, WritableFile** r) {
+  virtual Status NewWritableFile(const char* f, WritableFile** r) OVERRIDE {
     Slice fname(f);
     if (fname.ends_with(".dat")) {
       Histogram* hist = new Histogram;
       hists_.insert(std::make_pair(fname.ToString(), hist));
-      *r = new EmulatedWritableFile(bytes_ps_, hist, lis_);
+      *r = new EmulatedWritableFile(bytes_ps_, &wl_, hist, lis_);
     } else {
-      *r = new EmulatedWritableFile(bytes_ps_);
+      *r = new EmulatedWritableFile(bytes_ps_, &wl_);
     }
     return Status::OK();
   }
@@ -555,6 +596,7 @@ class EmulatedEnv : public EnvWrapper {
   typedef HistMap::iterator HistIter;
 
   HistMap hists_;
+  WriteLock wl_;
 };
 
 }  // anonymous namespace
