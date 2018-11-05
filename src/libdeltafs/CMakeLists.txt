@@ -17,21 +17,21 @@ set (deltafs-srcs deltafs_api.cc deltafs_client.cc deltafs_conf.cc
         deltafs_mds.cc deltafs_envs.cc mds.cc mds_api.cc
         mds_cli.cc mds_factory.cc mds_srv.cc snap_stor.cc)
 
-set (deltafs-plfsio-srcs plfsio/deltafs_plfsio.cc
-        plfsio/deltafs_plfsio_internal.cc
-        plfsio/deltafs_plfsio_cuckoo.cc
-        plfsio/deltafs_plfsio_idx.cc
-        plfsio/deltafs_plfsio_filter.cc
-        plfsio/deltafs_plfsio_format.cc
-        plfsio/deltafs_plfsio_recov.cc
-        plfsio/deltafs_plfsio_nio.cc
-        plfsio/deltafs_plfsio_sideio.cc
-        plfsio/deltafs_plfsio_events.cc)
+set (deltafs-plfsio-srcs plfsio/v1/deltafs_plfsio.cc
+        plfsio/v1/deltafs_plfsio_internal.cc
+        plfsio/v1/deltafs_plfsio_cuckoo.cc
+        plfsio/v1/deltafs_plfsio_idx.cc
+        plfsio/v1/deltafs_plfsio_filter.cc
+        plfsio/v1/deltafs_plfsio_format.cc
+        plfsio/v1/deltafs_plfsio_recov.cc
+        plfsio/v1/deltafs_plfsio_nio.cc
+        plfsio/v1/deltafs_plfsio_sideio.cc
+        plfsio/v1/deltafs_plfsio_events.cc)
 
 set (deltafs-tests deltafs_api_test.cc
-        plfsio/deltafs_plfsio_test
-        plfsio/deltafs_plfsio_cuckoo_test.cc
-        plfsio/deltafs_plfsio_filter_test.cc
+        plfsio/v1/deltafs_plfsio_cuckoo_test.cc
+        plfsio/v1/deltafs_plfsio_filter_test.cc
+        plfsio/v1/deltafs_plfsio_test
         mds_api_test.cc
         mds_srv_test.cc)
 
