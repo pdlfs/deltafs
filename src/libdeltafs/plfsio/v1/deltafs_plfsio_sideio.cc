@@ -8,7 +8,7 @@
  */
 
 #include "deltafs_plfsio_sideio.h"
-#include "deltafs_plfsio.h"
+#include "deltafs_plfsio_types.h"
 
 #include "pdlfs-common/mutexlock.h"
 

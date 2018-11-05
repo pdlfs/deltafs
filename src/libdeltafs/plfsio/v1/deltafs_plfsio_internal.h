@@ -9,11 +9,11 @@
 
 #pragma once
 
-#include "deltafs_plfsio.h"
 #include "deltafs_plfsio_format.h"
 #include "deltafs_plfsio_idx.h"
 #include "deltafs_plfsio_nio.h"
 #include "deltafs_plfsio_recov.h"
+#include "deltafs_plfsio_types.h"
 
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/port.h"

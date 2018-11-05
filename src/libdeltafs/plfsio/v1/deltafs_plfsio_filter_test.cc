@@ -8,7 +8,7 @@
  */
 
 #include "deltafs_plfsio_filter.h"
-#include "deltafs_plfsio.h"
+#include "deltafs_plfsio_types.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/histogram.h"

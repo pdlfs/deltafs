@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "deltafs_plfsio.h"
+#include "deltafs_plfsio_types.h"
 
 #include "../../external/pdlfs-common/src/leveldb/block.h"
 #include "../../external/pdlfs-common/src/leveldb/block_builder.h"

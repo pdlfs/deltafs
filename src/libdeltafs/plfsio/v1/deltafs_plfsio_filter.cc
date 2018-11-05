@@ -9,8 +9,7 @@
 
 #include "deltafs_plfsio_filter.h"
 #include "deltafs_plfsio_format.h"
-
-#include "deltafs_plfsio.h"  // For DirOptions
+#include "deltafs_plfsio_types.h"
 
 #include "pdlfs-common/logging.h"
 

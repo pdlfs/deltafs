@@ -8,7 +8,7 @@
  */
 
 #include "deltafs_plfsio_cuckoo.h"
-#include "deltafs_plfsio.h"
+#include "deltafs_plfsio_types.h"
 
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
