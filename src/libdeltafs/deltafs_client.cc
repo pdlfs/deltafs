@@ -15,7 +15,7 @@
 
 #include "deltafs_client.h"
 #include "deltafs_conf_loader.h"
-#include "deltafs_plfsio.h"
+#include "plfsio/deltafs_plfsio.h"
 #include "pdlfs-common/blkdb.h"
 #include "pdlfs-common/env_lazy.h"
 #include "pdlfs-common/mutexlock.h"

@@ -12,8 +12,8 @@
 
 #include "deltafs_client.h"
 #include "deltafs_envs.h"
-#include "deltafs_plfsio.h"
-#include "deltafs_plfsio_sideio.h"
+#include "plfsio/deltafs_plfsio.h"
+#include "plfsio/deltafs_plfsio_sideio.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/dbfiles.h"

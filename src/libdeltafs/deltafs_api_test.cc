@@ -8,9 +8,10 @@
  */
 
 #include "deltafs/deltafs_api.h"
-#include "deltafs_plfsio.h"
-#include "deltafs_plfsio_cuckoo.h"
-#include "deltafs_plfsio_filter.h"
+
+#include "plfsio/deltafs_plfsio.h"
+#include "plfsio/deltafs_plfsio_cuckoo.h"
+#include "plfsio/deltafs_plfsio_filter.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/testharness.h"

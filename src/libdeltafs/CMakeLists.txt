@@ -17,14 +17,23 @@ set (deltafs-srcs deltafs_api.cc deltafs_client.cc deltafs_conf.cc
         deltafs_mds.cc deltafs_envs.cc mds.cc mds_api.cc
         mds_cli.cc mds_factory.cc mds_srv.cc snap_stor.cc)
 
-set (deltafs-plfsio-srcs deltafs_plfsio.cc deltafs_plfsio_internal.cc
-        deltafs_plfsio_cuckoo.cc deltafs_plfsio_idx.cc deltafs_plfsio_filter.cc
-        deltafs_plfsio_format.cc deltafs_plfsio_recov.cc deltafs_plfsio_nio.cc
-        deltafs_plfsio_sideio.cc deltafs_plfsio_events.cc)
+set (deltafs-plfsio-srcs plfsio/deltafs_plfsio.cc
+        plfsio/deltafs_plfsio_internal.cc
+        plfsio/deltafs_plfsio_cuckoo.cc
+        plfsio/deltafs_plfsio_idx.cc
+        plfsio/deltafs_plfsio_filter.cc
+        plfsio/deltafs_plfsio_format.cc
+        plfsio/deltafs_plfsio_recov.cc
+        plfsio/deltafs_plfsio_nio.cc
+        plfsio/deltafs_plfsio_sideio.cc
+        plfsio/deltafs_plfsio_events.cc)
 
-set (deltafs-tests deltafs_api_test.cc deltafs_plfsio_test
-     deltafs_plfsio_cuckoo_test.cc deltafs_plfsio_filter_test.cc
-     mds_api_test.cc mds_srv_test.cc)
+set (deltafs-tests deltafs_api_test.cc
+        plfsio/deltafs_plfsio_test
+        plfsio/deltafs_plfsio_cuckoo_test.cc
+        plfsio/deltafs_plfsio_filter_test.cc
+        mds_api_test.cc
+        mds_srv_test.cc)
 
 # configure/load in standard modules we plan to use
 include (CMakePackageConfigHelpers)
