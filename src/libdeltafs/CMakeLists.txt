@@ -17,7 +17,9 @@ set (deltafs-srcs deltafs_api.cc deltafs_client.cc deltafs_conf.cc
         deltafs_mds.cc deltafs_envs.cc mds.cc mds_api.cc
         mds_cli.cc mds_factory.cc mds_srv.cc snap_stor.cc)
 
-set (deltafs-plfsio-srcs plfsio/v1/deltafs_plfsio_types.cc
+set (deltafs-plfsio-srcs plfsio/deltafs_plfsio.cc
+        plfsio/v1/deltafs_plfsio_v1.cc
+        plfsio/v1/deltafs_plfsio_types.cc
         plfsio/v1/deltafs_plfsio_internal.cc
         plfsio/v1/deltafs_plfsio_cuckoo.cc
         plfsio/v1/deltafs_plfsio_idx.cc

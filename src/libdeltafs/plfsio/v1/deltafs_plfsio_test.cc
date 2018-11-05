@@ -10,6 +10,7 @@
 #include "deltafs_plfsio_events.h"
 #include "deltafs_plfsio_filter.h"
 #include "deltafs_plfsio_internal.h"
+#include "deltafs_plfsio_v1.h"
 
 #include "pdlfs-common/histogram.h"
 #include "pdlfs-common/mutexlock.h"
