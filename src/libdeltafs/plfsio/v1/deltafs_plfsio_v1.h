@@ -20,7 +20,7 @@ class DirWriter {
   ~DirWriter();
 
   // Report the I/O stats for logging the data and the indexes.
-  IoStats GetIoStats() const;
+  IoStats TEST_iostats() const;
 
   // Return the estimated size of each SSTable.
   // The actual memory, and storage, used by each sst may differ.
@@ -162,7 +162,7 @@ class DirReader {
   virtual Status Scan(const ScanOp& op, ScanSaver, void*) = 0;
 
   // Return the aggregated I/O stats accumulated so far.
-  virtual IoStats GetIoStats() const = 0;
+  virtual IoStats TEST_iostats() const = 0;
 
  private:
   // No copying allowed

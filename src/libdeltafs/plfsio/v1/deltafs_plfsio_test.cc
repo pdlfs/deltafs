@@ -1096,7 +1096,7 @@ class PlfsIoBench {
     fprintf(stderr, "     Total Memory Usage: %.3f MiB\n",
             total_memory_usage / ki / ki);
     fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
-    const IoStats stats = writer_->GetIoStats();
+    const IoStats stats = writer_->TEST_iostats();
 #ifdef PDLFS_PLATFORM_POSIX
     struct rusage usage;
     int r1 = getrusage(RUSAGE_SELF, &usage);
@@ -1480,7 +1480,7 @@ class PlfsQuBench : protected PlfsIoBench {
       if (!s.ok()) {
         break;
       }
-      const IoStats stats = reader_->GetIoStats();
+      const IoStats stats = reader_->TEST_iostats();
       seeks_.Add(stats.data_ops - accumulated_seeks);
       accumulated_seeks = stats.data_ops;
       num_reads_++;
@@ -1521,7 +1521,7 @@ class PlfsQuBench : protected PlfsIoBench {
     fprintf(stderr, "                7 Seeks: %.6f\n", seeks_.CDF(7));
     fprintf(stderr, "                8 Seeks: %.6f\n", seeks_.CDF(8));
     fprintf(stderr, "               9+ Seeks: %.6f\n", seeks_.CDF(9));
-    const IoStats stats = reader_->GetIoStats();
+    const IoStats stats = reader_->TEST_iostats();
     fprintf(stderr, "  Total Indexes Fetched: %.3f MB\n",
             1.0 * stats.index_bytes / ki / ki);
     fprintf(stderr, "     Total Data Fetched: %.3f GB\n",

@@ -499,7 +499,7 @@ Status DirWriter::Sync() {
   return status;
 }
 
-IoStats DirWriter::GetIoStats() const {
+IoStats DirWriter::TEST_iostats() const {
   Rep* const r = rep_;
   MutexLock ml(&r->mutex_);
   IoStats result;
@@ -901,7 +901,7 @@ class DirReaderImpl : public DirReader {
   virtual Status Read(const ReadOp& op, const Slice& fid, std::string* dst);
   virtual Status Scan(const ScanOp& op, ScanSaver, void*);
 
-  virtual IoStats GetIoStats() const;
+  virtual IoStats TEST_iostats() const;
 
  private:
   Status OpenDir(size_t part);
@@ -1105,7 +1105,7 @@ Status DirReaderImpl::Read(const ReadOp& op, const Slice& fid,
   return status;
 }
 
-IoStats DirReaderImpl::GetIoStats() const {
+IoStats DirReaderImpl::TEST_iostats() const {
   MutexLock ml(&mutex_);
   IoStats result;
   for (size_t i = 0; i < num_parts_; i++) {
