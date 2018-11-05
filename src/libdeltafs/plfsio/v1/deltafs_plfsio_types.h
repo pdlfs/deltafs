@@ -9,8 +9,8 @@
 
 #pragma once
 
+#include "pdlfs-common/compression_type.h"
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/port.h"
 
 #include <stddef.h>

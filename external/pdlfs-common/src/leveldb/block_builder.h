@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "pdlfs-common/leveldb/compression_type.h"
+#include "pdlfs-common/compression_type.h"
 #include "pdlfs-common/slice.h"
 
 #include <stdint.h>

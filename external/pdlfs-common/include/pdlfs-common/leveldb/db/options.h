@@ -12,7 +12,7 @@
 
 #include <stddef.h>
 
-#include "pdlfs-common/leveldb/compression_type.h"
+#include "pdlfs-common/compression_type.h"
 #include "pdlfs-common/leveldb/db/dbformat.h"
 
 namespace pdlfs {
