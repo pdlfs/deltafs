@@ -8,7 +8,7 @@
  */
 
 #include "deltafs_plfsio_recov.h"
-#include "deltafs_plfsio_nio.h"
+#include "deltafs_plfsio_io.h"
 
 namespace pdlfs {
 namespace plfsio {

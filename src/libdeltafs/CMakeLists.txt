@@ -22,11 +22,11 @@ set (deltafs-plfsio-srcs plfsio/deltafs_plfsio.cc
         plfsio/v1/deltafs_plfsio_types.cc
         plfsio/v1/deltafs_plfsio_internal.cc
         plfsio/v1/deltafs_plfsio_cuckoo.cc
-        plfsio/v1/deltafs_plfsio_idx.cc
+        plfsio/v1/deltafs_plfsio_builder.cc
         plfsio/v1/deltafs_plfsio_filter.cc
         plfsio/v1/deltafs_plfsio_format.cc
         plfsio/v1/deltafs_plfsio_recov.cc
-        plfsio/v1/deltafs_plfsio_nio.cc
+        plfsio/v1/deltafs_plfsio_io.cc
         plfsio/v1/deltafs_plfsio_sideio.cc
         plfsio/v1/deltafs_plfsio_events.cc)
 
