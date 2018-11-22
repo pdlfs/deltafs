@@ -15,19 +15,17 @@ namespace pdlfs {
 namespace plfsio {
 namespace v2 {
 
-class DirWriter {
- public:
-  ~DirWriter();
+class WriteBuffer {};
 
-  Status Add(const Slice& fid, const Slice& data, std::string* loc);
+class DirLogger {
+ public:
+  DirLogger();
+
+  Status Add(const Slice& key, const Slice& value);
 
  private:
-  struct Rep;
-
-  void operator=(const DirWriter& dw);
-  DirWriter(const DirWriter&);
-
-  Rep* rep_;
+  void operator=(const DirLogger& dl);
+  DirLogger(const DirLogger&);
 };
 
 }  // namespace v2
