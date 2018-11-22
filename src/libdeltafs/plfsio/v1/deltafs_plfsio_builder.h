@@ -45,6 +45,70 @@ static inline bool IsKeyUnOrdered(DirMode mode) {
   return (mode & 0x10) == 0x10;
 }
 
+// A versatile block builder that uses the LevelDB's SST block format.
+// In this format, keys will be prefix-compressed. Both keys and values can have
+// variable length. Each block can be seen as a sorted search tree.
+class SortedStringBlockBuilder : public BlockBuilder {
+ public:
+  explicit SortedStringBlockBuilder(const DirOptions& options)
+      : BlockBuilder(16, BytewiseComparator()) {
+    if (IsKeyUnOrdered(options.mode)) {
+      cmp_ = NULL;
+    }
+  }
+};
+
+// A simple block builder that stores data in write order.
+// In this format, key-value pairs are stored as-is. Both keys and values are
+// fixed sized. Each block can be seen as a simple array.
+class ArrayBlockBuilder : public AbstractBlockBuilder {
+ public:
+  explicit ArrayBlockBuilder(const DirOptions& options)
+      : AbstractBlockBuilder(BytewiseComparator()),
+        value_size_(options.value_size),
+        key_size_(options.key_size) {
+    if (IsKeyUnOrdered(options.mode)) {
+      cmp_ = NULL;
+    }
+  }
+
+  // REQUIRES: Finish() has not been called since the previous Reset().
+  void Add(const Slice& key, const Slice& value);
+
+  // Finish building the block and return a slice that refers to the block
+  // contents.
+  Slice Finish(CompressionType compression = kNoCompression,
+               bool force_compression = false);
+
+  // Return an estimate of the size of the block we are building.
+  size_t CurrentSizeEstimate() const;
+
+ private:
+  size_t value_size_;
+  size_t key_size_;
+};
+
+// Read block contents built by ArrayBlockBuilder.
+class ArrayBlock {
+ public:
+  // Initialize an array block using a user specified contents.
+  explicit ArrayBlock(const BlockContents& contents);
+
+  ~ArrayBlock();
+
+  Iterator* NewIterator(const Comparator* comparator);
+
+ private:
+  const char* data_;
+  size_t size_;
+  bool owned_;  // If data_[] is owned by us
+  uint32_t value_size_;
+  uint32_t key_size_;
+  uint32_t limit_;  // Limit of valid contents
+
+  class Iter;
+};
+
 // Open an iterator on top of a given data block. The returned the iterator
 // should be deleted when no longer needed.
 extern Iterator* OpenDirBlock  // Use options to determine block formats
