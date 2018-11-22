@@ -91,8 +91,7 @@ class ArrayBlockBuilder : public AbstractBlockBuilder {
 // Read block contents built by ArrayBlockBuilder.
 class ArrayBlock {
  public:
-  // Initialize an array block using a user specified contents.
-  explicit ArrayBlock(const BlockContents& contents);
+  explicit ArrayBlock(const BlockContents&);  // Open block contents for read
 
   ~ArrayBlock();
 
