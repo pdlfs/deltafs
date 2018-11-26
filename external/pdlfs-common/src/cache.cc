@@ -31,14 +31,14 @@ class ShardedLRUCache : public Cache {
   enum { kNumShards = 1 << kNumShardBits };
 
   typedef LRUEntry<> E;
-  LRUCache<E> shard_[kNumShards];
+  LRUCache<E> sh_[kNumShards];
   port::Mutex mu_[kNumShards];
 
  public:
   explicit ShardedLRUCache(size_t capacity) : id_(0) {
     const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
     for (int s = 0; s < kNumShards; s++) {
-      shard_[s].SetCapacity(per_shard);
+      sh_[s].SetCapacity(per_shard);
     }
   }
 
@@ -49,7 +49,7 @@ class ShardedLRUCache : public Cache {
     const uint32_t hash = hashval(key);
     const uint32_t s = sha(hash);
     MutexLock l(&mu_[s]);
-    E* e = shard_[s].Insert(key, hash, value, charge, deleter);
+    E* e = sh_[s].Insert(key, hash, value, charge, deleter);
     return reinterpret_cast<Handle*>(e);
   }
 
@@ -57,7 +57,7 @@ class ShardedLRUCache : public Cache {
     const uint32_t hash = hashval(key);
     const uint32_t s = sha(hash);
     MutexLock l(&mu_[s]);
-    E* e = shard_[s].Lookup(key, hash);
+    E* e = sh_[s].Lookup(key, hash);
     return reinterpret_cast<Handle*>(e);
   }
 
@@ -65,14 +65,14 @@ class ShardedLRUCache : public Cache {
     E* e = reinterpret_cast<E*>(handle);
     const uint32_t s = sha(e->hash);
     MutexLock l(&mu_[s]);
-    shard_[s].Release(e);
+    sh_[s].Release(e);
   }
 
   virtual void Erase(const Slice& key) {
     const uint32_t hash = hashval(key);
     const uint32_t s = sha(hash);
     MutexLock l(&mu_[s]);
-    shard_[s].Erase(key, hash);
+    sh_[s].Erase(key, hash);
   }
 
   virtual void* Value(Handle* handle) {
