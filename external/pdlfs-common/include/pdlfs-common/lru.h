@@ -146,7 +146,7 @@ class LRUCache {
   }
 
   E* Lookup(const Slice& key, uint32_t hash) {
-    E* e = table_.Lookup(key, hash);
+    E* e = *table_.FindPointer(key, hash);
     if (e != NULL) {
       e->refs++;
       LRU_Remove(e);
@@ -186,7 +186,7 @@ class LRUCache {
 
   // Check entry existence without effecting its LRU order.
   bool Exists(const Slice& key, uint32_t hash) const {
-    return table_.Lookup(key, hash) != NULL;
+    return *table_.FindPointer(key, hash) != NULL;
   }
 
   void Release(E* entry) {

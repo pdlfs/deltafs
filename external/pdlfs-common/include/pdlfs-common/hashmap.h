@@ -55,15 +55,20 @@ class HashTable {
 
   ~HashTable() { delete[] list_; }
 
-  E* Lookup(const Slice& key, uint32_t hash) const {
-    return *FindPointer(key, hash);
+  // Return a pointer to slot that points to an entry that matches the key and
+  // hash.  If there is no such entry, return a pointer to the trailing slot
+  // in the corresponding linked list.
+  E** FindPointer(const Slice& key, uint32_t hash) const {
+    E** ptr = &list_[hash & (length_ - 1)];
+    while (*ptr != NULL && ((*ptr)->hash != hash || key != (*ptr)->key())) {
+      ptr = &(*ptr)->next_hash;
+    }
+    return ptr;
   }
 
-  // Insert a new entry into the hash table.  If an entry with the same key and
-  // hash exists, it will be removed from the table and returned.
-  // Return NULL otherwise.
-  E* Insert(E* e) {
-    E** ptr = FindPointer(e->key(), e->hash);
+  // Insert entry to a given slot.  If the slot points to an existing entry, the
+  // entry is removed and returned to the caller. Otherwise, NULL is returned.
+  E* Inject(E* e, E** ptr) {
     E* old = *ptr;
     e->next_hash = (old == NULL ? NULL : old->next_hash);
     *ptr = e;
@@ -75,6 +80,14 @@ class HashTable {
       }
     }
     return old;
+  }
+
+  // Add a new entry to the hash table.  If an entry with the same key and
+  // hash exists, it will be removed and returned to the caller.
+  // Otherwise, NULL is returned.
+  E* Insert(E* e) {
+    E** const ptr = FindPointer(e->key(), e->hash);
+    return Inject(e, ptr);
   }
 
   // Return the removed entry if one exists, NULL otherwise.
@@ -100,17 +113,6 @@ class HashTable {
   // No copying allowed
   void operator=(const HashTable& hashtable);
   HashTable(const HashTable&);
-
-  // Return a pointer to slot that points to an entry that matches the key and
-  // hash.  If there is no such entry, return a pointer to the trailing slot
-  // in the corresponding linked list.
-  E** FindPointer(const Slice& key, uint32_t hash) const {
-    E** ptr = &list_[hash & (length_ - 1)];
-    while (*ptr != NULL && ((*ptr)->hash != hash || key != (*ptr)->key())) {
-      ptr = &(*ptr)->next_hash;
-    }
-    return ptr;
-  }
 
   void Resize() {
     uint32_t new_length = 4;
@@ -203,7 +205,7 @@ class HashMap {
   }
 
   T* Lookup(const Slice& key) const {
-    E* e = table_.Lookup(key, hashval(key));
+    E* e = *table_.FindPointer(key, hashval(key));
     if (e != NULL) {
       return e->value;
     } else {
@@ -231,7 +233,7 @@ class HashMap {
   }
 
   bool Contains(const Slice& key) const {
-    return table_.Lookup(key, hashval(key)) != NULL;
+    return *table_.FindPointer(key, hashval(key)) != NULL;
   }
 
   T* Erase(const Slice& key) {
