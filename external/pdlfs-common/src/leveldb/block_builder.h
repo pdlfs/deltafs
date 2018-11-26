@@ -28,8 +28,8 @@ class AbstractBlockBuilder {
   // block.
   explicit AbstractBlockBuilder(const Comparator* cmp);
 
-  // Append zeros to the underlying buffer destination.
-  // Must be called after Finish() and before the next Reset().
+  // Append padding to the underlying buffer destination.
+  // Padding must be inserted before block contents are inserted.
   // Added padding is not cleared by future Reset()s.
   void Pad(size_t n);
 
