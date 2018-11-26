@@ -1,5 +1,3 @@
-#include "pdlfs-common/cache.h"
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2017 Carnegie Mellon University.
@@ -10,6 +8,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/cache.h"
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/mutexlock.h"
 
@@ -17,22 +16,23 @@ namespace pdlfs {
 
 Cache::~Cache() {}
 
-static const int kNumShardBits = 4;
-static const int kNumShards = 1 << kNumShardBits;
-
 class ShardedLRUCache : public Cache {
  private:
-  typedef LRUEntry<> E;
-  LRUCache<E> shard_[kNumShards];
-  port::Mutex mu_[kNumShards];
   port::Mutex id_mu_;
   uint64_t id_;  // The last allocated id number
 
-  static inline uint32_t HashSlice(const Slice& s) {
-    return Hash(s.data(), s.size(), 0);
+  static inline uint32_t hashslice(const Slice& in) {
+    return Hash(in.data(), in.size(), 0);
   }
 
-  static uint32_t Shard(uint32_t hash) { return hash >> (32 - kNumShardBits); }
+  static uint32_t sha(uint32_t hash) { return hash >> (32 - kNumShardBits); }
+
+  enum { kNumShardBits = 4 };
+  enum { kNumShards = 1 << kNumShardBits };
+
+  typedef LRUEntry<> E;
+  LRUCache<E> shard_[kNumShards];
+  port::Mutex mu_[kNumShards];
 
  public:
   explicit ShardedLRUCache(size_t capacity) : id_(0) {
@@ -46,16 +46,16 @@ class ShardedLRUCache : public Cache {
 
   virtual Handle* Insert(const Slice& key, void* value, size_t charge,
                          void (*deleter)(const Slice& key, void* value)) {
-    const uint32_t hash = HashSlice(key);
-    const uint32_t s = Shard(hash);
+    const uint32_t hash = hashslice(key);
+    const uint32_t s = sha(hash);
     MutexLock l(&mu_[s]);
     E* e = shard_[s].Insert(key, hash, value, charge, deleter);
     return reinterpret_cast<Handle*>(e);
   }
 
   virtual Handle* Lookup(const Slice& key) {
-    const uint32_t hash = HashSlice(key);
-    const uint32_t s = Shard(hash);
+    const uint32_t hash = hashslice(key);
+    const uint32_t s = sha(hash);
     MutexLock l(&mu_[s]);
     E* e = shard_[s].Lookup(key, hash);
     return reinterpret_cast<Handle*>(e);
@@ -63,14 +63,14 @@ class ShardedLRUCache : public Cache {
 
   virtual void Release(Handle* handle) {
     E* e = reinterpret_cast<E*>(handle);
-    const uint32_t s = Shard(e->hash);
+    const uint32_t s = sha(e->hash);
     MutexLock l(&mu_[s]);
     shard_[s].Release(e);
   }
 
   virtual void Erase(const Slice& key) {
-    const uint32_t hash = HashSlice(key);
-    const uint32_t s = Shard(hash);
+    const uint32_t hash = hashslice(key);
+    const uint32_t s = sha(hash);
     MutexLock l(&mu_[s]);
     shard_[s].Erase(key, hash);
   }

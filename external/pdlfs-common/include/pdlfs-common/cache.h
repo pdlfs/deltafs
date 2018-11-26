@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2017 Carnegie Mellon University.
@@ -10,10 +8,12 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <stddef.h>
-#include <stdint.h>
+#pragma once
 
 #include "pdlfs-common/slice.h"
+
+#include <stddef.h>
+#include <stdint.h>
 
 namespace pdlfs {
 
@@ -89,8 +89,8 @@ class Cache {
 
  private:
   // No copying allowed
+  void operator=(const Cache& cache);
   Cache(const Cache&);
-  void operator=(const Cache&);
 };
 
 }  // namespace pdlfs
