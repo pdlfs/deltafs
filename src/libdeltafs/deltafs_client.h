@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2015-2017 Carnegie Mellon University.
  *
@@ -8,9 +6,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+#pragma once
 
 #include "pdlfs-common/fio.h"
-#include "pdlfs-common/map.h"
+#include "pdlfs-common/hashmap.h"
 
 #include "deltafs_format.h"
 #include "mds_cli.h"

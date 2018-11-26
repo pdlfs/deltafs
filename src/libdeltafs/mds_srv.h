@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2015-2017 Carnegie Mellon University.
  *
@@ -9,11 +7,13 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#pragma once
+
 #include "mds_api.h"
 
 #include "pdlfs-common/dcntl.h"
+#include "pdlfs-common/hashmap.h"
 #include "pdlfs-common/lease.h"
-#include "pdlfs-common/map.h"
 #include "pdlfs-common/port.h"
 
 namespace pdlfs {

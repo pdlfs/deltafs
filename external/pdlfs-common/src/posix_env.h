@@ -11,7 +11,7 @@
 #pragma once
 
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/map.h"
+#include "pdlfs-common/hashmap.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 
