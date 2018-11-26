@@ -239,7 +239,7 @@ class HashMap {
     E* e = table_.Remove(key, hashval(key));
     if (e != NULL) {
       Remove(e);
-      value = static_cast<T*>(e->value);
+      value = e->value;
       free(e);
     }
     return value;
