@@ -21,7 +21,7 @@ class ShardedLRUCache : public Cache {
   port::Mutex id_mu_;
   uint64_t id_;  // The last allocated id number
 
-  static inline uint32_t hashslice(const Slice& in) {
+  static inline uint32_t hashval(const Slice& in) {
     return Hash(in.data(), in.size(), 0);
   }
 
@@ -46,7 +46,7 @@ class ShardedLRUCache : public Cache {
 
   virtual Handle* Insert(const Slice& key, void* value, size_t charge,
                          void (*deleter)(const Slice& key, void* value)) {
-    const uint32_t hash = hashslice(key);
+    const uint32_t hash = hashval(key);
     const uint32_t s = sha(hash);
     MutexLock l(&mu_[s]);
     E* e = shard_[s].Insert(key, hash, value, charge, deleter);
@@ -54,7 +54,7 @@ class ShardedLRUCache : public Cache {
   }
 
   virtual Handle* Lookup(const Slice& key) {
-    const uint32_t hash = hashslice(key);
+    const uint32_t hash = hashval(key);
     const uint32_t s = sha(hash);
     MutexLock l(&mu_[s]);
     E* e = shard_[s].Lookup(key, hash);
@@ -69,7 +69,7 @@ class ShardedLRUCache : public Cache {
   }
 
   virtual void Erase(const Slice& key) {
-    const uint32_t hash = hashslice(key);
+    const uint32_t hash = hashval(key);
     const uint32_t s = sha(hash);
     MutexLock l(&mu_[s]);
     shard_[s].Erase(key, hash);
