@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2015-2017 Carnegie Mellon University.
@@ -10,18 +8,20 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
+#pragma once
 
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/slice.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+
 namespace pdlfs {
 
 // Each entry is a variable length heap-allocated structure that points
-// to a user allocated data object. Entries are typically organized in a
-// circular doubly linked list by a high-level collection structure.
+// to a user allocated hashable data object. Entries are typically organized in
+// a circular doubly linked list by a high-level collection structure.
 template <typename T = void>
 struct HashEntry {
   T* value;
@@ -138,31 +138,21 @@ class HashTable {
   }
 };
 
-// All values stored in the table are weak referenced and are owned
-// by external entities. Removing values from the table or deleting
-// the table itself will not release the memory of those values.
-// This data structure requires external synchronization when
-// accessed by multiple threads.
+// All values stored in the table are weak referenced and are owned by external
+// entities. Removing values from the table or deleting the table itself will
+// not release the memory of those values. This data structure requires external
+// synchronization when accessed by multiple threads.
 template <typename T = void>
 class HashMap {
-  typedef HashEntry<T> E;
-
- public:
-  class Visitor {
-   public:
-    virtual ~Visitor() {}
-    virtual void visit(const Slice& k, T* v) = 0;
-  };
-
  private:
-  // Dummy head of list.
-  // list_.prev is the last entry, list_.next is the first entry.
+  typedef HashEntry<T> E;
+  // Dummy head of list: list_.prev is the last entry,
+  // list_.next is the first entry.
   E list_;
 
   HashTable<E> table_;
 
-  // No copying allowed
-  void operator=(const HashMap&);
+  void operator=(const HashMap& hashmap);  // No copying allowed
   HashMap(const HashMap&);
 
   void Remove(E* e) {
@@ -177,8 +167,8 @@ class HashMap {
     e->next->prev = e;
   }
 
-  static uint32_t HashSlice(const Slice& s) {
-    return Hash(s.data(), s.size(), 0);
+  static uint32_t hashval(const Slice& in) {
+    return Hash(in.data(), in.size(), 0);
   }
 
  public:
@@ -200,6 +190,11 @@ class HashMap {
     return (list_.next == &list_) && (list_.prev == &list_);
   }
 
+  class Visitor {
+   public:
+    virtual void visit(const Slice& k, T* v) = 0;
+    virtual ~Visitor() {}
+  };
   void VisitAll(Visitor* v) const {
     for (E* e = list_.next; e != &list_; e = e->next) {
       v->visit(e->key(), e->value);
@@ -207,9 +202,9 @@ class HashMap {
   }
 
   T* Lookup(const Slice& key) const {
-    E* e = table_.Lookup(key, HashSlice(key));
+    E* e = table_.Lookup(key, hashval(key));
     if (e != NULL) {
-      return static_cast<T*>(e->value);
+      return e->value;
     } else {
       return NULL;
     }
@@ -220,7 +215,7 @@ class HashMap {
     E* e = static_cast<E*>(malloc(base - 1 + key.size()));
     e->value = value;
     e->key_length = key.size();
-    e->hash = HashSlice(key);
+    e->hash = hashval(key);
     memcpy(e->key_data, key.data(), key.size());
     Append(e);
 
@@ -228,15 +223,19 @@ class HashMap {
     E* old = table_.Insert(e);
     if (old != NULL) {
       Remove(old);
-      old_value = static_cast<T*>(old->value);
+      old_value = old->value;
       free(old);
     }
     return old_value;
   }
 
+  bool Contains(const Slice& key) const {
+    return table_.Lookup(key, hashval(key)) != NULL;
+  }
+
   T* Erase(const Slice& key) {
     T* value = NULL;
-    E* e = table_.Remove(key, HashSlice(key));
+    E* e = table_.Remove(key, hashval(key));
     if (e != NULL) {
       Remove(e);
       value = static_cast<T*>(e->value);
@@ -244,47 +243,24 @@ class HashMap {
     }
     return value;
   }
-
-  bool Contains(const Slice& key) const {
-    return table_.Lookup(key, HashSlice(key)) != NULL;
-  }
 };
 
 // This data structure requires external synchronization when accessed by
 // multiple threads.
 class HashSet {
-  typedef HashMap<> Map;
-
  public:
-  class Visitor {
-   public:
-    virtual ~Visitor() {}
-    virtual void visit(const Slice& k) = 0;
-  };
-
- private:
-  Map map_;
-
-  // No copying allowed
-  void operator=(const HashSet&);
-  HashSet(const HashSet&);
-
- public:
-  // Initialize an empty set.
-  HashSet() {}
-
   void Erase(const Slice& key) { map_.Erase(key); }
-
+  void Insert(const Slice& key) { map_.Insert(key, NULL); }
+  bool Contains(const Slice& key) { return map_.Contains(key); }
   bool Empty() const { return map_.Empty(); }
 
-  void Insert(const Slice& key) {
-    map_.Insert(key, NULL);  // Use NULL as a dummy value.
-  }
-
-  bool Contains(const Slice& key) { return map_.Contains(key); }
-
+  class Visitor {
+   public:
+    virtual void visit(const Slice& k) = 0;
+    virtual ~Visitor() {}
+  };
   void VisitAll(Visitor* v) const {
-    struct Adaptor : public Map::Visitor {
+    struct Adaptor : public HashMap<>::Visitor {
       HashSet::Visitor* v;
       virtual void visit(const Slice& key, void* value) {
         assert(value == NULL);
@@ -296,6 +272,15 @@ class HashSet {
     ada.v = v;
     map_.VisitAll(&ada);
   }
+
+  HashSet() {}
+
+ private:
+  // No copying allowed
+  void operator=(const HashSet& hashset);
+  HashSet(const HashSet&);
+
+  HashMap<> map_;
 };
 
 }  // namespace pdlfs
