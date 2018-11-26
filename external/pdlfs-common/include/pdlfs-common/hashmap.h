@@ -20,8 +20,8 @@
 namespace pdlfs {
 
 // Each entry is a variable length heap-allocated structure that points
-// to a user allocated hashable data object. Entries are typically organized in
-// a circular doubly linked list by a high-level collection structure.
+// to a user allocated hashable data object. This entry is simultaneously used
+// by a hash table and a logical linked link to form a linked hash map.
 template <typename T = void>
 struct HashEntry {
   T* value;
@@ -59,6 +59,9 @@ class HashTable {
     return *FindPointer(key, hash);
   }
 
+  // Insert a new entry into the hash table.  If an entry with the same key and
+  // hash exists, it will be removed from the table and returned.
+  // Return NULL otherwise.
   E* Insert(E* e) {
     E** ptr = FindPointer(e->key(), e->hash);
     E* old = *ptr;
@@ -67,14 +70,14 @@ class HashTable {
     if (old == NULL) {
       ++elems_;
       if (elems_ > length_) {
-        // Since each cache entry is fairly large, we aim for a small
-        // average linked list length (<= 1).
+        // We aim for a small average linked list length (<= 1).
         Resize();
       }
     }
     return old;
   }
 
+  // Return the removed entry if one exists, NULL otherwise.
   E* Remove(const Slice& key, uint32_t hash) {
     E** ptr = FindPointer(key, hash);
     E* e = *ptr;
@@ -91,18 +94,16 @@ class HashTable {
   // The table consists of an array of buckets where each bucket is
   // a linked list of cache entries that hash into the bucket.
   uint32_t length_;
-  uint32_t elems_;
+  uint32_t elems_;  // Total number of elements
   E** list_;
 
   // No copying allowed
-  void operator=(const HashTable&);
+  void operator=(const HashTable& hashtable);
   HashTable(const HashTable&);
 
-  /**
-   * Return a pointer to slot that points to a cache entry that
-   * matches key/hash.  If there is no such cache entry, return a
-   * pointer to the trailing slot in the corresponding linked list.
-   */
+  // Return a pointer to slot that points to an entry that matches the key and
+  // hash.  If there is no such entry, return a pointer to the trailing slot
+  // in the corresponding linked list.
   E** FindPointer(const Slice& key, uint32_t hash) const {
     E** ptr = &list_[hash & (length_ - 1)];
     while (*ptr != NULL && ((*ptr)->hash != hash || key != (*ptr)->key())) {
