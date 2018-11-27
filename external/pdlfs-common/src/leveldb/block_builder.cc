@@ -73,12 +73,12 @@ BlockBuilder::BlockBuilder(int restart_interval, const Comparator* cmp)
   }
 }
 
-void AbstractBlockBuilder::ResetBuffer(std::string* buffer) {
+void AbstractBlockBuilder::TEST_SwitchBuffer(std::string* buffer) {
   if (buffer != NULL && buffer != &buffer_) buffer->swap(buffer_);
   buffer_start_ = buffer_.size();
 }
 
-void AbstractBlockBuilder::Pad(size_t n) {
+void AbstractBlockBuilder::TEST_Pad(size_t n) {
   buffer_.resize(buffer_.size() + n, 0);
   buffer_start_ = buffer_.size();
 }
