@@ -30,18 +30,19 @@ class AbstractBlockBuilder {
 
   // Insert padding to the builder's underlying buffer destination. Padding must
   // be inserted when there is no outstanding block contents in the buffer.
-  // Block contents is considered outstanding if it is added but not yet
-  // finished. Added padding is not cleared by future resets.
+  // Block contents is considered outstanding until Finish() is called. Added
+  // padding is not cleared by future resets.
   void TEST_Pad(size_t n);
 
   // Specify a new buffer target to switch with the one currently used by the
   // builder. This allows the builder to append data to an external memory
   // allocation and potentially avoids an extra copy of data.  If buffer is
   // NULL, the current buffer will be reused so new block contents will be
-  // appended right after existing contents. Switch must be done when there is
-  // no outstanding block contents in the buffer. Block contents is considered
-  // outstanding if it is added but not yet finished. Existing contents in
-  // *buffer is not cleared by future resets.
+  // appended right after existing contents. To achieve this, call
+  // TEST_SwitchBuffer() right after Finish() and before the next Reset().
+  // Switch must be done when there is no outstanding block contents in the
+  // buffer. Block contents is considered outstanding until Finish() is called.
+  // Existing contents in *buffer is not cleared by future resets.
   void TEST_SwitchBuffer(std::string* buffer);
 
   // Reset block contents.
