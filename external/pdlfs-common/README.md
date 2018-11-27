@@ -4,7 +4,7 @@
 
 # Building
 
-We use cmake and suggest you to do an out-of-source build. To install cmake and other build tools on Ubuntu 16.04+ LTS:
+We use cmake and suggest you to do an out-of-source build.  To install cmake and other build tools on Ubuntu 16.04+ LTS:
 
 ```
 sudo apt-get update
