@@ -401,6 +401,7 @@ class PlfsFtBench {
     kkeys_ = GetOptions("NUM_KEYS", 128);
     qstep_ = GetOptions("QUERY_STEP", kkeys_);
     compression_ = GetOptions("SNAPPY", 0);
+    dump_ = GetOptions("DUMP", 0);
   }
 
   ~PlfsFtBench() {
@@ -450,7 +451,7 @@ class PlfsFtBench {
 
   void Query() {
     const uint32_t num_keys = kkeys_ << 10;
-    uint32_t comm_sz = kranks_ << 10;
+    uint32_t num_ranks = kranks_ << 10;
     char tmp[12];
     fprintf(stderr, "Querying...\n");
     for (uint32_t k = 0; k < num_keys; k += qstep_) {
@@ -460,7 +461,7 @@ class PlfsFtBench {
       uint64_t h = xxhash64(&k, sizeof(k), 0);
       EncodeFixed64(tmp, h);
       uint32_t n = 0;
-      for (uint32_t r = 0; r < comm_sz; r++) {
+      for (uint32_t r = 0; r < num_ranks; r++) {
         EncodeFixed32(tmp + 8, r);
         if (KeyMatMatch(Slice(tmp, sizeof(tmp)), ftdata_)) {
           n++;
@@ -475,7 +476,8 @@ class PlfsFtBench {
     Report();
   }
 
-  void Report() {
+  int Report() {
+    if (dump_) return Dump();
     fprintf(stderr, "----------------------------------------\n");
     fprintf(stderr, "            Num Keys: %d K (%d victims)\n", kkeys_,
             int(ft_->num_victims()));
@@ -495,6 +497,11 @@ class PlfsFtBench {
         fprintf(stderr, "           %4u Hits: %5.2f%% (%u)\n", i, d * 100,
                 histo_.Get(i));
     }
+    return 0;
+  }
+
+  int Dump() {  // TODO
+    return 0;
   }
 
  private:
@@ -504,6 +511,7 @@ class PlfsFtBench {
   plfsio::DirOptions options_;
   std::string compressed_;
   FilterType* ft_;
+  int dump_;
   int compression_;
   int qstep_;   // So only a subset of keys are queried: [0, max_key, step]
   int kranks_;  // Total number of ranks in Thousands to emulate
