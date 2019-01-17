@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015-2018 Carnegie Mellon University.
- *
+ * Copyright (c) 2015-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
@@ -338,13 +338,26 @@ class Histo {
     num_++;
   }
 
-  double CDF(uint32_t a) {
-    if (num_ == 0) return 0;
+  uint32_t Get(uint32_t a) const {
+    if (a < N) return rep_[a];
+    return 0;
+  }
+
+  double Subtotal(uint32_t a) const {
     double subtotal = 0;
-    for (uint32_t i = 0; i <= a && i < N; i++) {
-      subtotal += rep_[i];
+    for (uint32_t i = 0; i < N; i++) {
+      if (i <= a) {
+        subtotal += rep_[i];
+      } else {
+        break;
+      }
     }
-    return subtotal / num_;
+    return subtotal;
+  }
+
+  double CDF(uint32_t a) const {
+    if (num_ == 0) return 0;
+    return Subtotal(a) / num_;
   }
 
   double Average() const {
@@ -361,14 +374,15 @@ class Histo {
 
   uint32_t max_;
   uint32_t num_;  // Total number of samples
-  // Num of times we get i results (0 <= i <= N-1)
+  // The number of times we get i results (0 <= i <= N-1)
   uint32_t rep_[N];
   double sum_;
 };
 
 }  // namespace
 
-template <typename FilterType, plfsio::FilterTester filter_tester>
+template <typename FilterType, plfsio::FilterTester filter_tester,
+          int N = 10240>
 class PlfsFtBench {
   static int GetOptions(const char* key, int def) {
     const char* env = getenv(key);
@@ -383,10 +397,10 @@ class PlfsFtBench {
   PlfsFtBench() {
     options_.cuckoo_frac = 0.95;
     options_.bf_bits_per_key = GetOptions("BF_BITS_PER_KEY", 20);
-    compression_ = GetOptions("SNAPPY", 0);
+    kranks_ = GetOptions("NUM_RANKS", 1);
     kkeys_ = GetOptions("NUM_KEYS", 128);
     qstep_ = GetOptions("QUERY_STEP", kkeys_);
-    kranks_ = GetOptions("NUM_RANKS", 1);
+    compression_ = GetOptions("SNAPPY", 0);
   }
 
   ~PlfsFtBench() {
@@ -396,25 +410,22 @@ class PlfsFtBench {
   }
 
   void LogAndApply() {
-    ft_ = new FilterType(options_, 0);  // Do not reserve memory
+    ft_ = new FilterType(options_, 0);  // Do not reserve memory for the filter
     ASSERT_TRUE(ft_ != NULL);
     const uint32_t num_keys = kkeys_ << 10;
-    uint32_t comm_sz = kranks_ << 10;
+    uint32_t num_ranks = kranks_ << 10;
     ft_->Reset(num_keys);
     char tmp[12];
-    fprintf(stderr, "Populating the bloom filter...\n");
+    fprintf(stderr, "Populating filter data...\n");
     for (uint32_t k = 0; k < num_keys; k++) {
       if ((k & 0x7FFFFu) == 0) {
         fprintf(stderr, "\r%.2f%%", 100.0 * k / num_keys);
       }
       uint64_t h = xxhash64(&k, sizeof(k), 0);
-      uint32_t f = xxhash32(&h, sizeof(h), 301);
-      uint32_t a = f % comm_sz;
-      EncodeFixed32(tmp, a);
-      EncodeFixed32(tmp + 4, f);
-      uint32_t g = xxhash32(&h, sizeof(h), 103);
-      uint32_t b = g % comm_sz;
-      EncodeFixed32(tmp + 8, b);
+      EncodeFixed64(tmp, h);
+      uint32_t x = xxhash32(&h, sizeof(h), 301);
+      uint32_t r = x % num_ranks;
+      EncodeFixed32(tmp + 8, r);
       ft_->AddKey(Slice(tmp, sizeof(tmp)));
     }
     fprintf(stderr, "\r100.00%%");
@@ -433,6 +444,10 @@ class PlfsFtBench {
     Query();
   }
 
+  static inline bool KeyMatMatch(Slice key, Slice filter_data) {
+    return filter_tester(key, filter_data);
+  }
+
   void Query() {
     const uint32_t num_keys = kkeys_ << 10;
     uint32_t comm_sz = kranks_ << 10;
@@ -443,14 +458,11 @@ class PlfsFtBench {
         fprintf(stderr, "\r%.2f%%", 100.0 * k / num_keys);
       }
       uint64_t h = xxhash64(&k, sizeof(k), 0);
-      uint32_t f = xxhash32(&h, sizeof(h), 301);
-      uint32_t a = f % comm_sz;
-      EncodeFixed32(tmp, a);
-      EncodeFixed32(tmp + 4, f);
+      EncodeFixed64(tmp, h);
       uint32_t n = 0;
       for (uint32_t r = 0; r < comm_sz; r++) {
         EncodeFixed32(tmp + 8, r);
-        if (filter_tester(Slice(tmp, sizeof(tmp)), ftdata_)) {
+        if (KeyMatMatch(Slice(tmp, sizeof(tmp)), ftdata_)) {
           n++;
         }
       }
@@ -475,24 +487,28 @@ class PlfsFtBench {
     fprintf(stderr, "         Num Queries: %d\n", int(histo_.num_));
     fprintf(stderr, "    Avg Hits Per Key: %.3f (MAX=%d)\n", histo_.Average(),
             int(histo_.max_));
-    fprintf(stderr, "          CDF 1 Hits: %5.2f%%\n", histo_.CDF(1) * 100);
-    for (uint32_t i = 2; i <= 128; i++) {
+    fprintf(stderr, "          CDF 1 Hits: %5.2f%% (%u)\n", histo_.CDF(1) * 100,
+            histo_.Get(1));
+    for (uint32_t i = 2; i <= N; i++) {
       double d = histo_.CDF(i);
-      if (d > 0.01 && d < 0.99)
-        fprintf(stderr, "           %4u Hits: %5.2f%%\n", i, d * 100);
+      if (d > 0.0001 && d < 0.9999)
+        fprintf(stderr, "           %4u Hits: %5.2f%% (%u)\n", i, d * 100,
+                histo_.Get(i));
     }
   }
 
  private:
-  Slice ftdata_;  // Point to filter data once finished
-  Histo<128> histo_;
+  // Point to filter data once finished
+  Slice ftdata_;
+  Histo<N> histo_;
   plfsio::DirOptions options_;
   std::string compressed_;
   FilterType* ft_;
   int compression_;
-  int kranks_;
+  int qstep_;   // So only a subset of keys are queried: [0, max_key, step]
+  int kranks_;  // Total number of ranks in Thousands to emulate
+  // Total number of keys (per rank) in Thousands
   int kkeys_;
-  int qstep_;
 };
 
 }  // namespace pdlfs
