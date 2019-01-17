@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <assert.h>
 
 namespace pdlfs {
