@@ -384,13 +384,19 @@ class Histo {
 template <typename FilterType, plfsio::FilterTester filter_tester,
           int N = 10240>
 class PlfsFtBench {
-  static int GetOptions(const char* key, int def) {
+  static int FromEnv(const char* key, int def) {
     const char* env = getenv(key);
     if (env && env[0]) {
       return atoi(env);
     } else {
       return def;
     }
+  }
+
+  static inline int GetOptions(const char* key, int def) {
+    int opt = FromEnv(key, def);
+    fprintf(stderr, "%s=%d\n", key, opt);
+    return opt;
   }
 
  public:
