@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015-2018 Carnegie Mellon University.
- *
+ * Copyright (c) 2015-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
@@ -109,6 +109,9 @@ typedef struct deltafs_plfsdir deltafs_plfsdir_t;
 #define DELTAFS_PLFSDIR_LEVELDB 1
 #define DELTAFS_PLFSDIR_LEVELDB_L0ONLY 3
 #define DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF 7
+/* Write data as plain data blocks
+   Some feature may become unavailable */
+#define DELTAFS_PLFSDIR_PLAINDB 2
 /* Returns NULL on errors. A heap-allocated plfsdir handle otherwise.
    The returned object should be deleted via deltafs_plfsdir_free_handle(). */
 deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,

@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015-2018 Carnegie Mellon University.
- *
+ * Copyright (c) 2015-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
@@ -1274,20 +1274,27 @@ int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
 }  // extern C
 
 namespace {
-struct ScanState {
-  int (*saver)(void*, const char* key, size_t keylen, const char* d,
-               size_t dlen);
-  void* arg;
-};
 
-int ScanSaver(void* arg, const pdlfs::Slice& k, const pdlfs::Slice& v) {
-  ScanState* s = reinterpret_cast<ScanState*>(arg);
-  return s->saver(s->arg, k.data(), k.size(), v.data(), v.size());
+std::string PdbName(const std::string& parent, int rank) {
+  char tmp[20];
+  snprintf(tmp, sizeof(tmp), "Pdb-%08x", rank);
+  return parent + "/" + tmp;
+}
+
+pdlfs::Status OpenAsPdb(deltafs_plfsdir_t* dir, const std::string& parent) {
+  pdlfs::Status s;
+  int rank = dir->io_options->rank;
+  pdlfs::Env* env = dir->env;
+  std::string dbname = PdbName(parent, rank);
+
+  // TODO
+
+  return s;
 }
 
 std::string LevelDbName(const std::string& parent, int rank) {
   char tmp[20];
-  snprintf(tmp, sizeof(tmp), "db-%08x", rank);
+  snprintf(tmp, sizeof(tmp), "Ldb-%08x", rank);
   return parent + "/" + tmp;
 }
 
@@ -1573,8 +1580,12 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
   } else {
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
       s = OpenDir(__dir, __name);
-    } else {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF ||
+               __dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY ||
+               __dir->io_engine == DELTAFS_PLFSDIR_LEVELDB) {
       s = OpenAsLevelDb(__dir, __name);
+    } else {
+      s = OpenAsPdb(__dir, __name);
     }
   }
 
@@ -2046,6 +2057,21 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
     return result;
   }
 }
+
+namespace {
+
+struct ScanState {
+  int (*saver)(void*, const char* key, size_t keylen, const char* d,
+               size_t dlen);
+  void* arg;
+};
+
+int ScanSaver(void* arg, const pdlfs::Slice& k, const pdlfs::Slice& v) {
+  ScanState* s = reinterpret_cast<ScanState*>(arg);
+  return s->saver(s->arg, k.data(), k.size(), v.data(), v.size());
+}
+
+}  // namespace
 
 ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
                              int (*saver)(void* arg, const char* __key,
