@@ -145,7 +145,7 @@ Status DoubleBuffering::Add(const Slice& k, const Slice& v) {
   else {
     status = Prepare(false /* force */, k, v);
     if (status.ok()) {  // Subclass performs the actual data insertion
-      AddToBuffer(k, v);
+      AddToBuffer(mem_buf_, k, v);
     }
   }
 

@@ -9,7 +9,9 @@
 
 #pragma once
 
-#include "deltafs_plfsio_v1.h"
+#include "pdlfs-common/env.h"
+#include "pdlfs-common/port.h"
+#include "pdlfs-common/status.h"
 
 namespace pdlfs {
 namespace plfsio {
@@ -47,6 +49,10 @@ class DoubleBuffering {
   // status on errors. No more write operations after this call.
   Status Finish();
 
+ private:  // No copying allowed
+  DoubleBuffering(const DoubleBuffering& buf);
+  void operator=(const DoubleBuffering&);
+
  protected:
   DoubleBuffering(port::Mutex*, port::CondVar*, void* buf0, void* buf1);
 
@@ -54,10 +60,10 @@ class DoubleBuffering {
   Status Compact(void* buf) { return bg_status_; }
   Status SyncBackend(bool close = false) { return bg_status_; }
   void ScheduleCompaction() { DoCompaction(); }
-  void AddToBuffer(const Slice& k, const Slice& v) {}
+  void AddToBuffer(void*, const Slice&, const Slice&) {}
   void Clear(void* buf) {}
-  bool IsEmpty(void* buf) { return false; }
-  bool HasRoom(void* buf, const Slice& k, const Slice& v) {
+  bool IsEmpty(const void* buf) { return false; }
+  bool HasRoom(const void* buf, const Slice& k, const Slice& v) {
     return (k.empty() && v.empty());
   }
 
