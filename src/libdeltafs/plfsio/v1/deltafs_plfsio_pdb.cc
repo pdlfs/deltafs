@@ -41,6 +41,8 @@ Status BufferedBlockWriter::Compact(void* buf) {
   mu_.AssertHeld();
   assert(dst_);
   BlockBuf* const bb = static_cast<BlockBuf*>(buf);
+  // Skip empty buffers
+  if (bb->empty()) return Status::OK();
   mu_.Unlock();  // Unlock during I/O operations
   Status status = dst_->Append(bb->Finish());
   // Does not sync data to storage.

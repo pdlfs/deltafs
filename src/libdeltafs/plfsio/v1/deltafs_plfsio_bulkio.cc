@@ -40,6 +40,8 @@ Status DirectWriter::Compact(void* buf) {
   mu_.AssertHeld();
   assert(dst_);
   std::string* const s = static_cast<std::string*>(buf);
+  // Skip empty buffers
+  if (s->empty()) return Status::OK();
   mu_.Unlock();  // Unlock during I/O operations
   Status status = dst_->Append(*s);
   // Does not sync data to storage.
