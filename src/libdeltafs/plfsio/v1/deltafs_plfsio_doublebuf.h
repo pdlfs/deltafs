@@ -85,7 +85,7 @@ class DoubleBuffering {
   void* buf1_;
 };
 
-#define THIS static_cast<T*>(this)
+#define __this static_cast<T*>(this)
 
 // Finalize all writes and sync all remaining data to storage.
 // Return OK on success, or a non-OK status on errors.
@@ -101,7 +101,7 @@ Status DoubleBuffering::Finish() {
     }
   }
 
-  bg_status_ = THIS->SyncBackend(true /* close */);
+  bg_status_ = __this->SyncBackend(true /* close */);
   finished_ = true;
   return bg_status_;
 }
@@ -122,7 +122,7 @@ Status DoubleBuffering::Sync(bool force_flush) {
     }
   }
 
-  bg_status_ = THIS->SyncBackend();
+  bg_status_ = __this->SyncBackend();
   return bg_status_;
 }
 
@@ -150,7 +150,7 @@ Status DoubleBuffering::Flush(bool wait) {
     return Status::AssertionFailed("Already finished");
   else {
     // Wait for buffer space
-    while (imm_buf_ != NULL) {
+    while (imm_buf_) {
       bg_cv_->Wait();
     }
   }
@@ -186,7 +186,7 @@ Status DoubleBuffering::Add(const Slice& k, const Slice& v) {
   else {
     status = Prepare<T>(false /* force */, k, v);
     if (status.ok()) {  // Subclass performs the actual data insertion
-      THIS->AddToBuffer(mem_buf_, k, v);
+      __this->AddToBuffer(mem_buf_, k, v);
     }
   }
 
@@ -204,7 +204,7 @@ Status DoubleBuffering::Prepare(bool force, const Slice& k, const Slice& v) {
     if (!bg_status_.ok()) {
       status = bg_status_;
       break;
-    } else if (!force && THIS->HasRoom(mem_buf_, k, v)) {
+    } else if (!force && __this->HasRoom(mem_buf_, k, v)) {
       // There is room in current write buffer
       break;
     } else if (imm_buf_) {
@@ -249,12 +249,12 @@ void DoubleBuffering::MaybeScheduleCompaction() {
   // Schedule it
   has_bg_compaction_ = true;
 
-  if (THIS->IsEmpty(imm_buf_)) {
+  if (__this->IsEmpty(imm_buf_)) {
     // Buffer is empty so compaction should be quick. As such we directly
     // execute the compaction in the current thread
     DoCompaction<T>();  // No context switch
   } else {
-    THIS->ScheduleCompaction();
+    __this->ScheduleCompaction();
   }
 }
 
@@ -264,19 +264,19 @@ void DoubleBuffering::DoCompaction() {
   mu_->AssertHeld();
   assert(has_bg_compaction_);
   assert(imm_buf_);
-  Status status = THIS->Compact(imm_buf_);
+  Status status = __this->Compact(imm_buf_);
   num_flush_completed_ += is_compaction_forced_;
   is_compaction_forced_ = false;
   assert(bg_status_.ok());
   bg_status_ = status;
-  THIS->Clear(imm_buf_);
+  __this->Clear(imm_buf_);
   imm_buf_ = NULL;
   has_bg_compaction_ = false;
   MaybeScheduleCompaction<T>();
   bg_cv_->SignalAll();
 }
 
-#undef THIS
+#undef __this
 
 }  // namespace plfsio
 }  // namespace pdlfs
