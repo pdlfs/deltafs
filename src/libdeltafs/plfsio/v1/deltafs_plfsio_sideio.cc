@@ -31,6 +31,14 @@ DirectWriter::DirectWriter(const DirOptions& options, WritableFile* dst,
   mem_buf_ = &str0_;
 }
 
+// Wait for all outstanding compactions to clear.
+DirectWriter::~DirectWriter() {
+  MutexLock ml(&mu_);
+  while (has_bg_compaction_) {
+    bg_cv_.Wait();
+  }
+}
+
 // REQUIRES: mu_ has been LOCKED.
 Status DirectWriter::Compact(void* buf) {
   mu_.AssertHeld();
@@ -69,14 +77,14 @@ void DirectWriter::ScheduleCompaction() {
   } else if (options_.allow_env_threads) {
     Env::Default()->Schedule(DirectWriter::BGWork, this);
   } else {
-    DoCompaction();
+    DoCompaction<DirectWriter>();
   }
 }
 
 void DirectWriter::BGWork(void* arg) {
   DirectWriter* const ins = reinterpret_cast<DirectWriter*>(arg);
   MutexLock ml(&ins->mu_);
-  ins->DoCompaction();
+  ins->DoCompaction<DirectWriter>();
 }
 
 DirectReader::DirectReader(const DirOptions& options, RandomAccessFile* src)

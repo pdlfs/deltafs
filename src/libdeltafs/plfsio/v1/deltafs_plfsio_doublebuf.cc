@@ -8,6 +8,7 @@
  */
 
 #include "deltafs_plfsio_doublebuf.h"
+#include "deltafs_plfsio_sideio.h"
 
 #include "pdlfs-common/mutexlock.h"
 
@@ -16,6 +17,7 @@
 
 namespace pdlfs {
 namespace plfsio {
+#define THIS(T) static_cast<T*>(this)
 
 DoubleBuffering::DoubleBuffering(port::Mutex* mu, port::CondVar* cv, void* buf0,
                                  void* buf1)
@@ -31,29 +33,21 @@ DoubleBuffering::DoubleBuffering(port::Mutex* mu, port::CondVar* cv, void* buf0,
       buf0_(buf0),
       buf1_(buf1) {}
 
-// Wait until compaction is done if there is one scheduled. Data remaining in
-// the buffer will not be flushed and will be lost.
-DoubleBuffering::~DoubleBuffering() {
-  MutexLock ml(mu_);
-  while (has_bg_compaction_) {
-    bg_cv_->Wait();
-  }
-}
-
 // Finalize all writes and sync all remaining data to storage.
 // Return OK on success, or a non-OK status on errors.
+template <typename T>
 Status DoubleBuffering::Finish() {
   MutexLock ml(mu_);
   if (finished_)
     return bg_status_;
   else {
-    Status status = Prepare();
+    Status status = Prepare<T>();
     if (status.ok()) {
-      WaitForCompaction();
+      WaitForCompaction<T>();
     }
   }
 
-  bg_status_ = SyncBackend(true /* close */);
+  bg_status_ = THIS(T)->SyncBackend(true /* close */);
   finished_ = true;
   return bg_status_;
 }
@@ -62,30 +56,32 @@ Status DoubleBuffering::Finish() {
 // compactions are completed before performing the sync operation.
 // Return OK on success, or a non-OK status on errors.
 // REQUIRES: Finish() has not been called.
+template <typename T>
 Status DoubleBuffering::Sync(bool force_flush) {
   MutexLock ml(mu_);
   if (finished_)
     return Status::AssertionFailed("Already finished");
   else {
-    Status status = Prepare(force_flush);
+    Status status = Prepare<T>(force_flush);
     if (status.ok()) {
-      WaitForCompaction();
+      WaitForCompaction<T>();
     }
   }
 
-  bg_status_ = SyncBackend();
+  bg_status_ = THIS(T)->SyncBackend();
   return bg_status_;
 }
 
 // Wait until all outstanding compactions to clear. INVARIANT: no
 // compaction has been scheduled at the moment this function returns.
 // Return OK on success, or a non-OK status on errors.
+template <typename T>
 Status DoubleBuffering::Wait() {
   MutexLock ml(mu_);
   if (finished_)
     return Status::AssertionFailed("Already finished");
   else {
-    WaitForCompaction();
+    WaitForCompaction<T>();
   }
 
   return bg_status_;
@@ -94,6 +90,7 @@ Status DoubleBuffering::Wait() {
 // Wait for one or more outstanding compactions to clear.
 // REQUIRES: Finish() has not been called.
 // REQUIRES: mu_ has been locked.
+template <typename T>
 void DoubleBuffering::WaitForCompaction() {
   mu_->AssertHeld();
   assert(!finished_);  // Finish() has not been called
@@ -104,6 +101,7 @@ void DoubleBuffering::WaitForCompaction() {
 
 // Force a buffer flush.
 // REQUIRES: Finish() has not been called.
+template <typename T>
 Status DoubleBuffering::Flush(bool wait) {
   MutexLock ml(mu_);
   if (finished_)
@@ -121,7 +119,7 @@ Status DoubleBuffering::Flush(bool wait) {
   } else {
     num_flush_requested_++;
     const uint32_t my = num_flush_requested_;
-    status = Prepare();
+    status = Prepare<T>();
     if (status.ok()) {
       if (wait) {
         while (num_flush_completed_ < my) {
@@ -137,15 +135,16 @@ Status DoubleBuffering::Flush(bool wait) {
 // Insert data into the buffer.
 // Return OK on success, or a non-OK status on errors.
 // REQUIRES: Finish() has not been called.
+template <typename T>
 Status DoubleBuffering::Add(const Slice& k, const Slice& v) {
   MutexLock ml(mu_);
   Status status;
   if (finished_)
     status = Status::AssertionFailed("Already finished");
   else {
-    status = Prepare(false /* force */, k, v);
+    status = Prepare<T>(false /* force */, k, v);
     if (status.ok()) {  // Subclass performs the actual data insertion
-      AddToBuffer(mem_buf_, k, v);
+      THIS(T)->AddToBuffer(mem_buf_, k, v);
     }
   }
 
@@ -153,6 +152,7 @@ Status DoubleBuffering::Add(const Slice& k, const Slice& v) {
 }
 
 // REQUIRES: mu_ has been locked.
+template <typename T>
 Status DoubleBuffering::Prepare(bool force, const Slice& k, const Slice& v) {
   mu_->AssertHeld();
   assert(!finished_);
@@ -162,7 +162,7 @@ Status DoubleBuffering::Prepare(bool force, const Slice& k, const Slice& v) {
     if (!bg_status_.ok()) {
       status = bg_status_;
       break;
-    } else if (!force && HasRoom(mem_buf_, k, v)) {
+    } else if (!force && THIS(T)->HasRoom(mem_buf_, k, v)) {
       // There is room in current write buffer
       break;
     } else if (imm_buf_) {
@@ -173,7 +173,7 @@ Status DoubleBuffering::Prepare(bool force, const Slice& k, const Slice& v) {
       force = false;
       assert(!imm_buf_);
       imm_buf_ = mem_buf_;
-      MaybeScheduleCompaction();
+      MaybeScheduleCompaction<T>();
       void* const current_buf = mem_buf_;
       if (current_buf == buf0_) {
         mem_buf_ = buf1_;
@@ -187,6 +187,7 @@ Status DoubleBuffering::Prepare(bool force, const Slice& k, const Slice& v) {
 }
 
 // REQUIRES: mu_ has been LOCKED.
+template <typename T>
 void DoubleBuffering::MaybeScheduleCompaction() {
   mu_->AssertHeld();
 
@@ -206,31 +207,38 @@ void DoubleBuffering::MaybeScheduleCompaction() {
   // Schedule it
   has_bg_compaction_ = true;
 
-  if (IsEmpty(imm_buf_)) {
+  if (THIS(T)->IsEmpty(imm_buf_)) {
     // Buffer is empty so compaction should be quick. As such we directly
     // execute the compaction in the current thread
-    DoCompaction();  // No context switch
+    DoCompaction<T>();  // No context switch
   } else {
-    ScheduleCompaction();
+    THIS(T)->ScheduleCompaction();
   }
 }
 
 // REQUIRES: mu_ has been LOCKED.
+template <typename T>
 void DoubleBuffering::DoCompaction() {
   mu_->AssertHeld();
   assert(has_bg_compaction_);
   assert(imm_buf_);
-  Status status = Compact(imm_buf_);
+  Status status = THIS(T)->Compact(imm_buf_);
   num_flush_completed_ += is_compaction_forced_;
   is_compaction_forced_ = false;
   assert(bg_status_.ok());
   bg_status_ = status;
-  Clear(imm_buf_);
+  THIS(T)->Clear(imm_buf_);
   imm_buf_ = NULL;
   has_bg_compaction_ = false;
-  MaybeScheduleCompaction();
+  MaybeScheduleCompaction<DirectWriter>();
   bg_cv_->SignalAll();
 }
+
+template Status DoubleBuffering::Add<DirectWriter>(const Slice&, const Slice&);
+template Status DoubleBuffering::Flush<DirectWriter>(bool);
+template Status DoubleBuffering::Sync<DirectWriter>(bool);
+template Status DoubleBuffering::Wait<DirectWriter>();
+template Status DoubleBuffering::Finish<DirectWriter>();
 
 }  // namespace plfsio
 }  // namespace pdlfs

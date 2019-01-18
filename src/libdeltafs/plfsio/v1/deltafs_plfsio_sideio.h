@@ -31,6 +31,8 @@ class DirectWriter : public DoubleBuffering {
   // flushing buffers and never stop. Is this a problem? Likely not.
   DirectWriter(const DirOptions& opts, WritableFile* dst, size_t buf_size);
 
+  ~DirectWriter();
+
  private:
   const DirOptions& options_;
   WritableFile* const dst_;
@@ -40,6 +42,7 @@ class DirectWriter : public DoubleBuffering {
   // Memory pre-reserved for each write buffer
   size_t buf_reserv_;
 
+  friend class DoubleBuffering;
   Status Compact(void* buf);
   Status SyncBackend(bool close = false);
   void ScheduleCompaction();
