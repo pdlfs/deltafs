@@ -38,7 +38,7 @@ class DirectWriter : public DoubleBuffering {
   WritableFile* const dst_;
   port::Mutex mu_;
   port::CondVar bg_cv_;
-  size_t buf_threshold_;  // Threshold for write buffer flush
+  const size_t buf_threshold_;  // Threshold for write buffer flush
   // Memory pre-reserved for each write buffer
   size_t buf_reserv_;
 

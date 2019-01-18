@@ -13,7 +13,7 @@
 #include "deltafs_client.h"
 #include "deltafs_envs.h"
 
-#include "plfsio/v1/deltafs_plfsio_sideio.h"
+#include "plfsio/v1/deltafs_plfsio_bulkio.h"
 #include "plfsio/v1/deltafs_plfsio_types.h"
 #include "plfsio/v1/deltafs_plfsio_v1.h"
 

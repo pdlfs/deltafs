@@ -1,18 +1,14 @@
 /*
- * Copyright (c) 2018 Carnegie Mellon University.
- *
+ * Copyright (c) 2015-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio_sideio.h"
+#include "deltafs_plfsio_bulkio.h"
 #include "deltafs_plfsio_types.h"
-
-#include "pdlfs-common/mutexlock.h"
-
-#include <assert.h>
 
 namespace pdlfs {
 namespace plfsio {
