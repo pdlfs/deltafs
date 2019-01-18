@@ -18,8 +18,6 @@ namespace plfsio {
 
 class DoubleBuffering {
  public:
-  ~DoubleBuffering();
-
   // Append data into the buffer. Return OK on success, or a non-OK status on
   // errors. REQUIRES: Finish() has not been called.
   Status Add(const Slice& k, const Slice& v);
@@ -55,6 +53,7 @@ class DoubleBuffering {
 
  protected:
   DoubleBuffering(port::Mutex*, port::CondVar*, void* buf0, void* buf1);
+  ~DoubleBuffering();
 
   // Functions below are to be implemented by subclasses
   Status Compact(void* buf) { return bg_status_; }

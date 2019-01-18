@@ -1809,8 +1809,7 @@ ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
     s = BadArgs();
   } else {
     const char* data = static_cast<const char*>(__buf);
-    pdlfs::Slice v(data, __sz);
-    s = __dir->io_writer->Append(v);
+    s = __dir->io_writer->Add(pdlfs::Slice(data, __sz), pdlfs::Slice());
   }
 
   if (!s.ok()) {
@@ -1828,7 +1827,7 @@ int deltafs_plfsdir_io_flush(deltafs_plfsdir_t* __dir) {
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
-    s = __dir->io_writer->Flush(DirectWriter::FlushOptions());
+    s = __dir->io_writer->Flush(false /* wait */);
   }
 
   if (!s.ok()) {
@@ -1864,7 +1863,7 @@ int deltafs_plfsdir_io_sync(deltafs_plfsdir_t* __dir) {
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
-    s = __dir->io_writer->Sync(DirectWriter::SyncOptions());
+    s = __dir->io_writer->Sync(true /* force compaction */);
   }
 
   if (!s.ok()) {
