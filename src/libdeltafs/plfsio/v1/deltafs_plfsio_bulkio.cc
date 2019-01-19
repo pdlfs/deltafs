@@ -35,11 +35,11 @@ DirectWriter::~DirectWriter() {
   }
 }
 
-// Insert data into the buffer.
+// Insert data into the writer.
 // REQUIRES: Finish() has NOT been called.
-Status DirectWriter::Append(const Slice& k) {
+Status DirectWriter::Append(const Slice& dat) {
   MutexLock ml(&mu_);
-  return __Add<DirectWriter>(k, Slice());
+  return __Add<DirectWriter>(dat, Slice());
 }
 
 // Force a compaction but do not wait for the compaction to clear.
@@ -59,12 +59,11 @@ Status DirectWriter::Sync() {
 // Wait until there is no outstanding compactions.
 // REQUIRES: Finish() has NOT been called.
 Status DirectWriter::Wait() {
-  MutexLock ml(&mu_);
-  WaitForCompactions();
-  return bg_status_;
+  MutexLock ml(&mu_);  // Wait until !has_bg_compaction_
+  return __Wait();
 }
 
-// Finalize the writer. Expected to be called only once.
+// Finalize the writer. Expected to be called ONLY once.
 Status DirectWriter::Finish() {
   MutexLock ml(&mu_);
   return __Finish<DirectWriter>();

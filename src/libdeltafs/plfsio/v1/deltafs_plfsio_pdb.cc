@@ -36,6 +36,40 @@ BufferedBlockWriter::~BufferedBlockWriter() {
   }
 }
 
+// Insert data into the writer.
+// REQUIRES: Finish() has NOT been called.
+Status BufferedBlockWriter::Add(const Slice& k, const Slice& v) {
+  MutexLock ml(&mu_);
+  return __Add<BufferedBlockWriter>(k, v);
+}
+
+// Force a compaction but do not wait for the compaction to clear.
+// REQUIRES: Finish() has NOT been called.
+Status BufferedBlockWriter::Flush() {
+  MutexLock ml(&mu_);
+  return __Flush<BufferedBlockWriter>(false);
+}
+
+// Sync data to storage. Data still buffered in memory is not sync'ed.
+// REQUIRES: Finish() has NOT been called.
+Status BufferedBlockWriter::Sync() {
+  MutexLock ml(&mu_);
+  return __Sync<BufferedBlockWriter>(false);
+}
+
+// Wait until there is no outstanding compactions.
+// REQUIRES: Finish() has NOT been called.
+Status BufferedBlockWriter::Wait() {
+  MutexLock ml(&mu_);  // Wait until !has_bg_compaction_
+  return __Wait();
+}
+
+// Finalize the writer. Expected to be called ONLY once.
+Status BufferedBlockWriter::Finish() {
+  MutexLock ml(&mu_);
+  return __Finish<BufferedBlockWriter>();
+}
+
 // REQUIRES: mu_ has been LOCKED.
 Status BufferedBlockWriter::Compact(void* buf) {
   mu_.AssertHeld();

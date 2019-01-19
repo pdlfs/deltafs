@@ -32,7 +32,7 @@ class DirectWriter : public DoubleBuffering {
   DirectWriter(const DirOptions& opts, WritableFile* dst, size_t buf_size);
 
   // REQUIRES: Finish() has NOT been called.
-  // Insert data into the buffer.
+  // Insert data into the writer.
   Status Append(const Slice& data);
   // Wait until there is no outstanding compactions.
   Status Wait();

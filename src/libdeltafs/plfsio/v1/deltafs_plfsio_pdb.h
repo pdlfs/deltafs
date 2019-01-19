@@ -29,6 +29,19 @@ class BufferedBlockWriter : public DoubleBuffering {
   BufferedBlockWriter(const DirOptions& options, WritableFile* dst,
                       size_t buf_size);
 
+  // REQUIRES: Finish() has NOT been called.
+  // Insert data into the writer.
+  Status Add(const Slice& k, const Slice& v);
+  // Wait until there is no outstanding compactions.
+  Status Wait();
+  // Force a compaction.
+  Status Flush();
+  // Sync data to storage.
+  Status Sync();
+
+  // Finalize the writer.
+  Status Finish();
+
   ~BufferedBlockWriter();
 
  private:

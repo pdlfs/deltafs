@@ -25,14 +25,14 @@ class DoubleBuffering {
   DoubleBuffering(port::Mutex*, port::CondVar*, void* buf0, void* buf1);
 
   // Append data into the buffer. Return OK on success, or a non-OK status on
-  // errors. REQUIRES: __Finish() has not been called.
+  // errors. REQUIRES: __Finish() has NOT been called.
   template <typename T>
   Status __Add(const Slice& k, const Slice& v);
 
   // Force a buffer flush (compaction) and maybe wait for it.
   // Compaction does not force data to be sync'ed. Sync() does.
   // Return OK on success, or a non-OK status on errors.
-  // REQUIRES: __Finish() has not been called.
+  // REQUIRES: __Finish() has NOT been called.
   template <typename T>
   Status __Flush(bool wait);
 
@@ -41,9 +41,13 @@ class DoubleBuffering {
   // scheduled for compaction is not sync'ed, unless do_flush is set to true.
   // Will wait until all outstanding compactions are done before performing
   // the sync. Return OK on success, or a non-OK status on errors.
-  // REQUIRES: __Finish() has not been called.
+  // REQUIRES: __Finish() has NOT been called.
   template <typename T>
   Status __Sync(bool do_flush);
+
+  // Wait until there is no outstanding compactions.
+  // REQUIRES: __Finish() has NOT been called.
+  Status __Wait();
 
   // Finalize the writes because all writes are done. All data in write buffer
   // will be scheduled for compaction and will be sync'ed to storage after
