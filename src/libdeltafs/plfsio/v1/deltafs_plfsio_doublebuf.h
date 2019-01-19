@@ -25,55 +25,50 @@ class DoubleBuffering {
   DoubleBuffering(port::Mutex*, port::CondVar*, void* buf0, void* buf1);
 
   // Append data into the buffer. Return OK on success, or a non-OK status on
-  // errors. REQUIRES: Finish() has not been called.
+  // errors. REQUIRES: __Finish() has not been called.
   template <typename T>
-  Status Add(const Slice& k, const Slice& v);
+  Status __Add(const Slice& k, const Slice& v);
 
   // Force a buffer flush (compaction) and maybe wait for it.
   // Compaction does not force data to be sync'ed. Sync() does.
   // Return OK on success, or a non-OK status on errors.
-  // REQUIRES: Finish() has not been called.
+  // REQUIRES: __Finish() has not been called.
   template <typename T>
-  Status Flush(bool wait);
+  Status __Flush(bool wait);
 
-  // Wait for all outstanding compactions to clear. Return OK on success,
-  // or a non-OK status on errors.
-  // REQUIRES: Finish() has not been called.
+  // Sync data to storage. By default, only data that is already scheduled
+  // for compaction is sync'ed. Data that is in the write buffer and not yet
+  // scheduled for compaction is not sync'ed, unless do_flush is set to true.
+  // Will wait until all outstanding compactions are done before performing
+  // the sync. Return OK on success, or a non-OK status on errors.
+  // REQUIRES: __Finish() has not been called.
   template <typename T>
-  Status Wait();
+  Status __Sync(bool do_flush);
 
-  // Sync data to storage. By default, only data already scheduled for
-  // compaction is sync'ed. Data in write buffer that is not yet scheduled for
-  // compaction is not sync'ed, unless do_flush is set to true. Will wait
-  // until all outstanding compactions are done before performing the sync.
-  // Return OK on success, or a non-OK status on errors.
-  // REQUIRES: Finish() has not been called.
+  // Finalize the writes because all writes are done. All data in write buffer
+  // will be scheduled for compaction and will be sync'ed to storage after
+  // the compaction. Return OK on success, or a non-OK status on errors.
+  // NOTE: No more write operations after this call.
   template <typename T>
-  Status Sync(bool do_flush);
-
-  // Finalize the writes because all writes are done.
-  // All data in write buffer will be scheduled for compaction and will be
-  // sync'ed to storage after the compaction. Return OK on success, or a non-OK
-  // status on errors. No more write operations after this call.
-  template <typename T>
-  Status Finish();
+  Status __Finish();
 
  protected:
   port::Mutex* mu_;
   port::CondVar* bg_cv_;
 
   template <typename T>
-  Status Prepare(bool force = true, const Slice& k = Slice(),
-                 const Slice& v = Slice());
-  void WaitForCompaction();
+  Status Prepare(uint32_t* compac_seq, bool force = true,
+                 const Slice& k = Slice(), const Slice& v = Slice());
+  void WaitFor(uint32_t compac_seq);
+  void WaitForCompactions();
   template <typename T>
-  void MaybeScheduleCompaction();
+  void TryScheduleCompaction(uint32_t*);
   template <typename T>
   void DoCompaction();
 
   // State below is protected by mu_
-  uint32_t num_flush_requested_;
-  uint32_t num_flush_completed_;
+  uint32_t num_compac_scheduled_;
+  uint32_t num_compac_completed_;
   bool finished_;  // If Finish() has been called
   // True if the current compaction is forced by Flush()
   bool is_compaction_forced_;
@@ -87,105 +82,102 @@ class DoubleBuffering {
 
 #define __this static_cast<T*>(this)
 
-// Finalize all writes and sync all remaining data to storage.
-// Return OK on success, or a non-OK status on errors.
+// Finalize all writes and sync all remaining data in the write buffer to
+// storage. Return OK on success, or a non-OK status on errors.
+// REQUIRES: mu_ has been LOCKed.
 template <typename T>
-Status DoubleBuffering::Finish() {
-  MutexLock ml(mu_);
-  if (finished_)
+Status DoubleBuffering::__Finish() {
+  mu_->AssertHeld();
+  Status finish_status;
+  if (finished_)  // __Finish() has already been called.
     return bg_status_;
   else {
-    Status status = Prepare<T>();
-    if (status.ok()) {
-      WaitForCompaction();
-    }
+    __Flush<T>(false);
   }
 
-  bg_status_ = __this->SyncBackend(true /* close */);
+  // Wait until !has_bg_compaction_
+  WaitForCompactions();
+  if (bg_status_.ok()) {  // Sync and close
+    bg_status_ = __this->SyncBackend(true /* close */);
+    finish_status = bg_status_;
+    bg_status_ =
+        Status::AssertionFailed("Already finished", finish_status.ToString());
+  } else {
+    finish_status = bg_status_;
+  }
+
   finished_ = true;
-  return bg_status_;
+  return finish_status;
 }
 
 // Sync data so data hits storage, but will wait until all outstanding
 // compactions are completed before performing the sync operation.
 // Return OK on success, or a non-OK status on errors.
-// REQUIRES: Finish() has not been called.
+// REQUIRES: __Finish() has NOT been called.
+// REQUIRES: mu_ has been LOCKed.
 template <typename T>
-Status DoubleBuffering::Sync(bool force_flush) {
-  MutexLock ml(mu_);
-  if (finished_)
-    return Status::AssertionFailed("Already finished");
-  else {
-    Status status = Prepare<T>(force_flush);
-    if (status.ok()) {
-      WaitForCompaction();
-    }
-  }
-
-  bg_status_ = __this->SyncBackend();
-  return bg_status_;
-}
-
-// Wait until all outstanding compactions to clear. INVARIANT: no
-// compaction has been scheduled at the moment this function returns.
-// Return OK on success, or a non-OK status on errors.
-template <typename T>
-Status DoubleBuffering::Wait() {
-  MutexLock ml(mu_);
-  if (finished_)
-    return Status::AssertionFailed("Already finished");
-  else {
-    WaitForCompaction();
-  }
-
-  return bg_status_;
-}
-
-// Force a buffer flush.
-// REQUIRES: Finish() has not been called.
-template <typename T>
-Status DoubleBuffering::Flush(bool wait) {
-  MutexLock ml(mu_);
-  if (finished_)
-    return Status::AssertionFailed("Already finished");
-  else {
-    // Wait for buffer space
-    while (imm_buf_) {
-      bg_cv_->Wait();
-    }
-  }
-
+Status DoubleBuffering::__Sync(bool flush) {
+  mu_->AssertHeld();
+  uint32_t my_compac_seq = 0;
   Status status;
-  if (!bg_status_.ok()) {
+  if (finished_)  // __Finish() has already been called
     status = bg_status_;
-  } else {
-    num_flush_requested_++;
-    const uint32_t my = num_flush_requested_;
-    status = Prepare<T>();
-    if (status.ok()) {
-      if (wait) {
-        while (num_flush_completed_ < my) {
-          bg_cv_->Wait();
-        }
-      }
-    }
+  else {
+    status = Prepare<T>(&my_compac_seq, flush);
   }
 
-  return status;
+  if (!status.ok()) {
+    return status;
+  } else {
+    // If compaction is scheduled, wait for it until num_compac_completed_
+    // >= my_compac_seq, otherwise my_compac_seq is 0 and
+    // WaitFor(seq) will return immediately.
+    WaitFor(my_compac_seq);
+    // Then, wait until !has_bg_compaction_
+    WaitForCompactions();
+    if (bg_status_.ok()) {
+      bg_status_ = __this->SyncBackend();
+    }
+    return bg_status_;
+  }
+}
+
+// Force a compaction and maybe wait for it to complete.
+// REQUIRES: __Finish() has NOT been called.
+// REQUIRES: mu_ has been LOCKed.
+template <typename T>
+Status DoubleBuffering::__Flush(bool wait) {
+  mu_->AssertHeld();
+  uint32_t my_compac_seq = 0;
+  Status status;
+  if (finished_)  // __Finish() has already been called
+    status = bg_status_;
+  else {
+    status = Prepare<T>(&my_compac_seq);
+  }
+
+  if (status.ok() && wait) {  // Wait for compaction to clear
+    WaitFor(my_compac_seq);
+    return bg_status_;
+  } else {
+    return status;
+  }
 }
 
 // Insert data into the buffer.
 // Return OK on success, or a non-OK status on errors.
-// REQUIRES: Finish() has not been called.
+// REQUIRES: __Finish() has NOT been called.
+// REQUIRES: mu_ has been LOCKed.
 template <typename T>
-Status DoubleBuffering::Add(const Slice& k, const Slice& v) {
-  MutexLock ml(mu_);
+Status DoubleBuffering::__Add(const Slice& k, const Slice& v) {
+  mu_->AssertHeld();
+  uint32_t ignored_compac_seq;
   Status status;
-  if (finished_)
-    status = Status::AssertionFailed("Already finished");
+  if (finished_)  // __Finish() has already been called
+    status = bg_status_;
   else {
-    status = Prepare<T>(false /* force */, k, v);
-    if (status.ok()) {  // Subclass performs the actual data insertion
+    status = Prepare<T>(&ignored_compac_seq, false /* !force */, k, v);
+    if (status.ok()) {  // Subclass performs the actual insertion
       __this->AddToBuffer(mem_buf_, k, v);
     }
   }
@@ -193,29 +185,28 @@ Status DoubleBuffering::Add(const Slice& k, const Slice& v) {
   return status;
 }
 
-// REQUIRES: mu_ has been locked.
+// REQUIRES: mu_ has been LOCKed.
 template <typename T>
-Status DoubleBuffering::Prepare(bool force, const Slice& k, const Slice& v) {
+Status DoubleBuffering::Prepare(uint32_t* seq, bool force, const Slice& k,
+                                const Slice& v) {
   mu_->AssertHeld();
-  assert(!finished_);
   Status status;
-  assert(mem_buf_);
   while (true) {
+    assert(mem_buf_);
     if (!bg_status_.ok()) {
       status = bg_status_;
       break;
     } else if (!force && __this->HasRoom(mem_buf_, k, v)) {
       // There is room in current write buffer
       break;
-    } else if (imm_buf_) {
-      bg_cv_->Wait();  // Wait for background compaction to finish
+    } else if (has_bg_compaction_) {
+      bg_cv_->Wait();  // Wait for background compactions to finish
     } else {
       // Attempt to switch to a new write buffer
-      is_compaction_forced_ = force;
       force = false;
       assert(!imm_buf_);
       imm_buf_ = mem_buf_;
-      MaybeScheduleCompaction<T>();
+      TryScheduleCompaction<T>(seq);
       void* const current_buf = mem_buf_;
       if (current_buf == buf0_) {
         mem_buf_ = buf1_;
@@ -228,25 +219,12 @@ Status DoubleBuffering::Prepare(bool force, const Slice& k, const Slice& v) {
   return status;
 }
 
-// REQUIRES: mu_ has been LOCKED.
+// REQUIRES: mu_ has been LOCKed.
 template <typename T>
-void DoubleBuffering::MaybeScheduleCompaction() {
+void DoubleBuffering::TryScheduleCompaction(uint32_t* compac_seq) {
   mu_->AssertHeld();
 
-  // Do not schedule more if we are in error status
-  if (!bg_status_.ok()) {
-    return;
-  }
-  // Skip if there is one already scheduled
-  if (has_bg_compaction_) {
-    return;
-  }
-  // Nothing to be scheduled
-  if (!imm_buf_) {
-    return;
-  }
-
-  // Schedule it
+  *compac_seq = ++num_compac_scheduled_;
   has_bg_compaction_ = true;
 
   if (__this->IsEmpty(imm_buf_)) {
@@ -258,21 +236,23 @@ void DoubleBuffering::MaybeScheduleCompaction() {
   }
 }
 
-// REQUIRES: mu_ has been LOCKED.
+// REQUIRES: mu_ has been LOCKed.
 template <typename T>
 void DoubleBuffering::DoCompaction() {
   mu_->AssertHeld();
   assert(has_bg_compaction_);
   assert(imm_buf_);
   Status status = __this->Compact(imm_buf_);
-  num_flush_completed_ += is_compaction_forced_;
-  is_compaction_forced_ = false;
   assert(bg_status_.ok());
   bg_status_ = status;
   __this->Clear(imm_buf_);
   imm_buf_ = NULL;
+  ++num_compac_completed_;
   has_bg_compaction_ = false;
-  MaybeScheduleCompaction<T>();
+  // Just finished one compaction
+  // Try another one
+  uint32_t ignored_compac_seq;
+  Prepare<T>(&ignored_compac_seq, false /* !force */);
   bg_cv_->SignalAll();
 }
 

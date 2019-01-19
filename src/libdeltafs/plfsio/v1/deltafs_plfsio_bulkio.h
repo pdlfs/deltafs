@@ -24,12 +24,25 @@ struct DirOptions;
 // That is, data is written to a log file without any indexing.
 class DirectWriter : public DoubleBuffering {
  public:
-  // NOTE: deadlock when the write size is greater than the write buffer size.
+  // Deadlock when the write size is greater than the write buffer size.
   // This is because the current version of the code will flush buffer if the
   // buffer is not large enough to accept the incoming write. If the write size
   // itself is larger than the buffer size, the current code is going to keep
   // flushing buffers and never stop. Is this a problem? Likely not.
   DirectWriter(const DirOptions& opts, WritableFile* dst, size_t buf_size);
+
+  // REQUIRES: Finish() has NOT been called.
+  // Insert data into the buffer.
+  Status Append(const Slice& data);
+  // Wait until there is no outstanding compactions.
+  Status Wait();
+  // Force a compaction.
+  Status Flush();
+  // Sync data to storage.
+  Status Sync();
+
+  // Finalize the writer.
+  Status Finish();
 
   ~DirectWriter();
 

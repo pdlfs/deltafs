@@ -35,7 +35,42 @@ DirectWriter::~DirectWriter() {
   }
 }
 
-// REQUIRES: mu_ has been LOCKED.
+// Insert data into the buffer.
+// REQUIRES: Finish() has NOT been called.
+Status DirectWriter::Append(const Slice& k) {
+  MutexLock ml(&mu_);
+  return __Add<DirectWriter>(k, Slice());
+}
+
+// Force a compaction but do not wait for the compaction to clear.
+// REQUIRES: Finish() has NOT been called.
+Status DirectWriter::Flush() {
+  MutexLock ml(&mu_);
+  return __Flush<DirectWriter>(false);
+}
+
+// Sync data to storage. Data still buffered in memory is not sync'ed.
+// REQUIRES: Finish() has NOT been called.
+Status DirectWriter::Sync() {
+  MutexLock ml(&mu_);
+  return __Sync<DirectWriter>(false);
+}
+
+// Wait until there is no outstanding compactions.
+// REQUIRES: Finish() has NOT been called.
+Status DirectWriter::Wait() {
+  MutexLock ml(&mu_);
+  WaitForCompactions();
+  return bg_status_;
+}
+
+// Finalize the writer. Expected to be called only once.
+Status DirectWriter::Finish() {
+  MutexLock ml(&mu_);
+  return __Finish<DirectWriter>();
+}
+
+// REQUIRES: mu_ has been LOCKed.
 Status DirectWriter::Compact(void* buf) {
   mu_.AssertHeld();
   assert(dst_);
@@ -53,7 +88,7 @@ Status DirectWriter::Compact(void* buf) {
   return status;
 }
 
-// REQUIRES: mu_ has been LOCKED.
+// REQUIRES: mu_ has been LOCKed.
 Status DirectWriter::SyncBackend(bool close) {
   mu_.AssertHeld();
   assert(dst_);
@@ -64,7 +99,7 @@ Status DirectWriter::SyncBackend(bool close) {
   return status;
 }
 
-// REQUIRES: mu_ has been LOCKED.
+// REQUIRES: mu_ has been LOCKed.
 void DirectWriter::ScheduleCompaction() {
   mu_.AssertHeld();
 

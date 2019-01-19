@@ -16,8 +16,8 @@ DoubleBuffering::DoubleBuffering(port::Mutex* mu, port::CondVar* cv, void* buf0,
                                  void* buf1)
     : mu_(mu),
       bg_cv_(cv),
-      num_flush_requested_(0),
-      num_flush_completed_(0),
+      num_compac_scheduled_(0),
+      num_compac_completed_(0),
       finished_(false),
       is_compaction_forced_(false),
       has_bg_compaction_(false),
@@ -26,12 +26,19 @@ DoubleBuffering::DoubleBuffering(port::Mutex* mu, port::CondVar* cv, void* buf0,
       buf0_(buf0),
       buf1_(buf1) {}
 
-// Wait for one or more outstanding compactions to clear.
-// REQUIRES: Finish() has not been called.
-// REQUIRES: mu_ has been locked.
-void DoubleBuffering::WaitForCompaction() {
+// Wait for a certain compaction to clear.
+// REQUIRES: mu_ has been LOCKed.
+void DoubleBuffering::WaitFor(uint32_t compac_seq) {
   mu_->AssertHeld();
-  assert(!finished_);  // Finish() has not been called
+  while (bg_status_.ok() && num_compac_completed_ < compac_seq) {
+    bg_cv_->Wait();
+  }
+}
+
+// Wait until there is no outstanding compactions.
+// REQUIRES: mu_ has been LOCKed.
+void DoubleBuffering::WaitForCompactions() {
+  mu_->AssertHeld();
   while (bg_status_.ok() && has_bg_compaction_) {
     bg_cv_->Wait();
   }
