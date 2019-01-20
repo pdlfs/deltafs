@@ -1169,8 +1169,8 @@ int deltafs_plfsdir_force_leveldb_fmt(deltafs_plfsdir_t* __dir, int __flag) {
 }
 
 int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size) {
-  if (__key_size < 8) {
-    __key_size = 8;
+  if (__key_size < 1) {
+    __key_size = 1;
   } else if (__key_size > 16) {
     __key_size = 16;
   }
