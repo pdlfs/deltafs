@@ -34,6 +34,8 @@ class BufferedBlockWriter : public DoubleBuffering {
   Status Add(const Slice& k, const Slice& v);
   // Wait until there is no outstanding compactions.
   Status Wait();
+  // Force an epoch flush.
+  Status EpochFlush();
   // Force a compaction.
   Status Flush();
   // Sync data to storage.

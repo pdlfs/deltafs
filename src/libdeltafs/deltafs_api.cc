@@ -1323,13 +1323,6 @@ std::string LevelDbName(const std::string& parent, int rank) {
   return parent + "/" + tmp;
 }
 
-pdlfs::Status PdbPut(deltafs_plfsdir_t* dir, const pdlfs::Slice& k,
-                     const pdlfs::Slice& v) {
-  pdlfs::Status s;
-  s = dir->blk_writer_->Add(k, v);
-  return s;
-}
-
 pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
   pdlfs::Status s;
   int rank = dir->io_options->rank;
@@ -1380,7 +1373,7 @@ pdlfs::Status LevelDbPut(deltafs_plfsdir_t* dir, const pdlfs::Slice& k,
   return s;
 }
 
-pdlfs::Status DbEpochFlush(deltafs_plfsdir_t* dir) {
+pdlfs::Status LevelDbEpochFlush(deltafs_plfsdir_t* dir) {
   pdlfs::Status s;
   pdlfs::FlushOptions options;
   options.wait = false;
@@ -1392,7 +1385,7 @@ pdlfs::Status DbEpochFlush(deltafs_plfsdir_t* dir) {
   return s;
 }
 
-pdlfs::Status DbFlush(deltafs_plfsdir_t* dir) {
+pdlfs::Status LevelDbFlush(deltafs_plfsdir_t* dir) {
   pdlfs::Status s;
   pdlfs::FlushOptions options;
   options.wait = false;
@@ -1402,19 +1395,19 @@ pdlfs::Status DbFlush(deltafs_plfsdir_t* dir) {
   return s;
 }
 
-pdlfs::Status DbWait(deltafs_plfsdir_t* dir) {
+pdlfs::Status LevelDbWait(deltafs_plfsdir_t* dir) {
   pdlfs::Status s;
   s = dir->db->DrainCompactions();
   return s;
 }
 
-pdlfs::Status DbSync(deltafs_plfsdir_t* dir) {
+pdlfs::Status LevelDbSync(deltafs_plfsdir_t* dir) {
   pdlfs::Status s;
   s = dir->db->SyncWAL();
   return s;
 }
 
-pdlfs::Status DbFin(deltafs_plfsdir_t* dir) {
+pdlfs::Status LevelDbFin(deltafs_plfsdir_t* dir) {
   pdlfs::Status s;
   pdlfs::FlushOptions options;
   if (dir->io_engine != DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF &&
@@ -1652,10 +1645,10 @@ ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
     pdlfs::Slice k(__key, __keylen), v(__value, __sz);
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
       s = __dir->writer->Add(k, v, __epoch);
-    } else if (__dir->io_engine != DELTAFS_PLFSDIR_PLAINDB) {
-      s = LevelDbPut(__dir, k, v);
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
+      s = __dir->blk_writer_->Add(k, v);
     } else {
-      s = PdbPut(__dir, k, v);
+      s = LevelDbPut(__dir, k, v);
     }
   }
 
@@ -1667,7 +1660,7 @@ ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
 }
 
 ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
-                               int __epoch, const void* __buf, size_t __sz) {
+                               int __ep, const void* __buf, size_t __sz) {
   pdlfs::Status s;
 
   if (!IsDirOpened(__dir)) {
@@ -1689,11 +1682,11 @@ ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
     const char* data = static_cast<const char*>(__buf);
     pdlfs::Slice v(data, __sz);
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
-      s = __dir->writer->Add(k, v, __epoch);
-    } else if (__dir->io_engine != DELTAFS_PLFSDIR_PLAINDB) {
-      s = LevelDbPut(__dir, k, v);
+      s = __dir->writer->Add(k, v, __ep);
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
+      s = __dir->blk_writer_->Add(k, v);
     } else {
-      s = PdbPut(__dir, k, v);
+      s = LevelDbPut(__dir, k, v);
     }
   }
 
@@ -1714,8 +1707,10 @@ int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch) {
   } else {
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
       s = __dir->writer->EpochFlush(__epoch);
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
+      s = __dir->blk_writer_->EpochFlush();
     } else {
-      s = DbEpochFlush(__dir);
+      s = LevelDbEpochFlush(__dir);
     }
   }
 
@@ -1736,8 +1731,10 @@ int deltafs_plfsdir_flush(deltafs_plfsdir_t* __dir, int __epoch) {
   } else {
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
       s = __dir->writer->Flush(__epoch);
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
+      s = __dir->blk_writer_->Flush();
     } else {
-      s = DbFlush(__dir);
+      s = LevelDbFlush(__dir);
     }
   }
 
@@ -1758,8 +1755,10 @@ int deltafs_plfsdir_wait(deltafs_plfsdir_t* __dir) {
   } else {
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
       s = __dir->writer->Wait();
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
+      s = __dir->blk_writer_->Wait();
     } else {
-      s = DbWait(__dir);
+      s = LevelDbWait(__dir);
     }
   }
 
@@ -1780,8 +1779,10 @@ int deltafs_plfsdir_sync(deltafs_plfsdir_t* __dir) {
   } else {
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
       s = __dir->writer->Sync();
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
+      s = __dir->blk_writer_->Sync();
     } else {
-      s = DbSync(__dir);
+      s = LevelDbSync(__dir);
     }
   }
 
@@ -1802,8 +1803,10 @@ int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
   } else {
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
       s = __dir->writer->Finish();
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
+      s = __dir->blk_writer_->Finish();
     } else {
-      s = DbFin(__dir);
+      s = LevelDbFin(__dir);
     }
   }
 

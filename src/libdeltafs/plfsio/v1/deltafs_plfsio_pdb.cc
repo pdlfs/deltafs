@@ -43,6 +43,12 @@ Status BufferedBlockWriter::Add(const Slice& k, const Slice& v) {
   return __Add<BufferedBlockWriter>(k, v);
 }
 
+// Force an epoch flush.
+// REQUIRES: Finish() has NOT been called.
+Status BufferedBlockWriter::EpochFlush() {
+  return Flush();  // TODO
+}
+
 // Force a compaction but do NOT wait for the compaction to clear.
 // REQUIRES: Finish() has NOT been called.
 Status BufferedBlockWriter::Flush() {
