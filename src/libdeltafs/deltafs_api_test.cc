@@ -162,6 +162,7 @@ TEST(PlfsDirTest, PdbEmpty) {
 
 TEST(PlfsDirTest, PdbRw) {
   OpenWriter(DELTAFS_PLFSDIR_PLAINDB);
+  Put("k1", "v1");
   IoWrite("a");
   Put("k2", "v2");
   IoWrite("b");

@@ -2222,15 +2222,17 @@ int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir, const char* __name) {
 int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
   if (__dir == NULL) return 0;
 
-  delete __dir->writer;
-  delete __dir->reader;
   delete __dir->db;
   delete __dir->db_filter;
-  delete __dir->io_options;
+  delete __dir->writer;
+  delete __dir->reader;
+  delete __dir->blk_writer_;
+  delete __dir->blk_dst_;
   delete __dir->io_writer;
   delete __dir->io_dst;
   delete __dir->io_reader;
   delete __dir->io_src;
+  delete __dir->io_options;
   delete __dir->io_env;
 
   free(__dir);

@@ -476,18 +476,21 @@ Status LogSource::Open(const LogOptions& opts, const std::string& prefix,
   return status;
 }
 
-static DirOptions SanitizeDirOptions(const DirOptions& opts) {
+namespace {
+
+DirOptions SanitizeDirOptions(const DirOptions& opts) {
   DirOptions result = opts;
   if (!result.env) result.env = Env::Default();
   return result;
 }
 
-static Status Delete(const char* filename, Env* env) {
+Status Delete(const char* filename, Env* env) {
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Removing %s ...", filename);
 #endif
   return env->DeleteFile(filename);
 }
+}  // namespace
 
 // Purge an existing directory. All directory data is removed.
 // Designed to be called by a single process. This process removes all files in
@@ -505,7 +508,8 @@ Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
       for (size_t i = 0; i < names.size() && status.ok(); i++) {
         if (!names[i].empty() && names[i][0] != '.') {
           std::string entry = prefix + "/" + names[i];
-          if (names[i][0] == 'T') {  // Log rotation set
+          const Slice name(names[i]);
+          if (name.starts_with("T-")) {  // Log rotation set
             std::vector<std::string> subnames;
             status = env->GetChildren(entry.c_str(), &subnames);
             if (status.ok()) {
@@ -520,9 +524,11 @@ Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
               }
             }
 
-          } else if (names[i][0] == 'L') {
-            garbage.push_back(entry);  // LSM data and index log files
-          } else if (names[i][0] == 'D') {
+          } else if (name.starts_with("L-")) {
+            garbage.push_back(entry);  // Plfsdir data and index log files
+          } else if (name.starts_with("PDB-")) {
+            garbage.push_back(entry);  // Pdb log files
+          } else if (name.starts_with("D-")) {
             garbage.push_back(entry);  // Direct data files
           } else {
             // Skip
