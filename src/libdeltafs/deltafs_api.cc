@@ -14,6 +14,7 @@
 #include "deltafs_envs.h"
 
 #include "plfsio/v1/deltafs_plfsio_bulkio.h"
+#include "plfsio/v1/deltafs_plfsio_pdb.h"
 #include "plfsio/v1/deltafs_plfsio_types.h"
 #include "plfsio/v1/deltafs_plfsio_v1.h"
 
@@ -655,6 +656,7 @@ IMPORT(DirWriter);
 IMPORT(DirReader);
 IMPORT(DirMode);
 
+IMPORT(BufferedBlockWriter);
 IMPORT(DirectWriter);
 IMPORT(DirectReader);
 #undef IMPORT
@@ -1078,6 +1080,8 @@ struct deltafs_plfsdir {
   bool db_drain_compactions;
   uint32_t db_epoch;
   pdlfs::DB* db;
+  pdlfs::WritableFile* blk_dst_;
+  BufferedBlockWriter* blk_writer_;
   pdlfs::WritableFile* io_dst;
   DirectWriter* io_writer;
   DirWriter* writer;
@@ -1277,7 +1281,7 @@ namespace {
 
 std::string PdbName(const std::string& parent, int rank) {
   char tmp[20];
-  snprintf(tmp, sizeof(tmp), "Pdb-%08x", rank);
+  snprintf(tmp, sizeof(tmp), "PDB-%08x.dat", rank);
   return parent + "/" + tmp;
 }
 
@@ -1285,16 +1289,37 @@ pdlfs::Status OpenAsPdb(deltafs_plfsdir_t* dir, const std::string& parent) {
   pdlfs::Status s;
   int rank = dir->io_options->rank;
   pdlfs::Env* env = dir->env;
-  std::string dbname = PdbName(parent, rank);
+  std::string dstname = PdbName(parent, rank);
 
-  // TODO
+  dir->io_options->allow_env_threads = false;
+  dir->io_options->is_env_pfs = dir->is_env_pfs;
+
+  if (dir->enable_io_measurement) {
+    dir->io_env = new DirEnvWrapper(dir->env);
+    env = dir->io_env;
+  }
+  dir->io_options->env = env;
+
+  if (dir->mode == O_WRONLY) {
+    const size_t bufsz = dir->io_options->total_memtable_budget / 2;
+    dir->io_options->compaction_pool = dir->pool;
+    pdlfs::WritableFile* dstfile;
+    s = env->NewWritableFile(dstname.c_str(), &dstfile);
+    if (s.ok()) {
+      dir->blk_writer_ =
+          new BufferedBlockWriter(*dir->io_options, dstfile, bufsz);
+      dir->blk_dst_ = dstfile;
+    }
+  } else {
+    s = BadArgs();
+  }
 
   return s;
 }
 
 std::string LevelDbName(const std::string& parent, int rank) {
   char tmp[20];
-  snprintf(tmp, sizeof(tmp), "Ldb-%08x", rank);
+  snprintf(tmp, sizeof(tmp), "LSM-%08x", rank);
   return parent + "/" + tmp;
 }
 

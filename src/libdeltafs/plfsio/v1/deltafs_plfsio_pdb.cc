@@ -43,14 +43,14 @@ Status BufferedBlockWriter::Add(const Slice& k, const Slice& v) {
   return __Add<BufferedBlockWriter>(k, v);
 }
 
-// Force a compaction but do not wait for the compaction to clear.
+// Force a compaction but do NOT wait for the compaction to clear.
 // REQUIRES: Finish() has NOT been called.
 Status BufferedBlockWriter::Flush() {
   MutexLock ml(&mu_);
   return __Flush<BufferedBlockWriter>(false);
 }
 
-// Sync data to storage. Data still buffered in memory is not sync'ed.
+// Sync data to storage. Data still buffered in memory is NOT sync'ed.
 // REQUIRES: Finish() has NOT been called.
 Status BufferedBlockWriter::Sync() {
   MutexLock ml(&mu_);
