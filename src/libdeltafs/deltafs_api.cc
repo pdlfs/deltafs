@@ -1323,6 +1323,13 @@ std::string LevelDbName(const std::string& parent, int rank) {
   return parent + "/" + tmp;
 }
 
+pdlfs::Status PdbPut(deltafs_plfsdir_t* dir, const pdlfs::Slice& k,
+                     const pdlfs::Slice& v) {
+  pdlfs::Status s;
+  s = dir->blk_writer_->Add(k, v);
+  return s;
+}
+
 pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
   pdlfs::Status s;
   int rank = dir->io_options->rank;
@@ -1360,15 +1367,15 @@ pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
   return s;
 }
 
-pdlfs::Status DbPut(deltafs_plfsdir_t* dir, const pdlfs::Slice& key,
-                    const pdlfs::Slice& value) {
+pdlfs::Status LevelDbPut(deltafs_plfsdir_t* dir, const pdlfs::Slice& k,
+                         const pdlfs::Slice& v) {
   pdlfs::Status s;
   pdlfs::WriteOptions options;
   options.sync = false;
 
-  std::string composite = key.ToString();
+  std::string composite = k.ToString();
   pdlfs::PutFixed32(&composite, dir->db_epoch);
-  s = dir->db->Put(options, composite, value);
+  s = dir->db->Put(options, composite, v);
 
   return s;
 }
@@ -1537,12 +1544,13 @@ std::string SideName(const std::string& parent, int rank) {
   return parent + "/" + tmp;
 }
 
-// Open a side I/O channel for the given plfsdir.
-// Return OK on success, or a non-OK status on errors.
+// Open a side I/O channel for a given plfsdir.
 // REQUIRES: deltafs_plfsdir_open(__dir, __name) must has been called.
+// Return OK on success, or a non-OK status on errors.
 pdlfs::Status OpenSideIo(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;
-  assert(dir->opened);  // So dir->io_options->env contains the right Env
+  assert(dir->opened);  // So dir->io_options->env contains the right Env, and
+  // dir->io_options->compaction_pool is populated
   pdlfs::Env* const env = dir->io_options->env;
   const int r = dir->io_options->rank;
 
@@ -1598,9 +1606,9 @@ extern "C" {
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
   pdlfs::Status s;
 
-  if (__dir == NULL || __dir->opened) {
+  if (!__dir || __dir->opened) {
     s = BadArgs();
-  } else if (__name == NULL || __name[0] == 0) {
+  } else if (!__name || __name[0] == 0) {
     s = BadArgs();
   } else {
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
@@ -1609,8 +1617,10 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
                __dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY ||
                __dir->io_engine == DELTAFS_PLFSDIR_LEVELDB) {
       s = OpenAsLevelDb(__dir, __name);
-    } else {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = OpenAsPdb(__dir, __name);
+    } else {
+      s = BadArgs();
     }
   }
 
@@ -1634,7 +1644,7 @@ ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
     s = BadArgs();
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
-  } else if (__key == NULL) {
+  } else if (!__key) {
     s = BadArgs();
   } else if (__keylen == 0) {
     s = BadArgs();
@@ -1642,8 +1652,10 @@ ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
     pdlfs::Slice k(__key, __keylen), v(__value, __sz);
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
       s = __dir->writer->Add(k, v, __epoch);
+    } else if (__dir->io_engine != DELTAFS_PLFSDIR_PLAINDB) {
+      s = LevelDbPut(__dir, k, v);
     } else {
-      s = DbPut(__dir, k, v);
+      s = PdbPut(__dir, k, v);
     }
   }
 
@@ -1662,7 +1674,7 @@ ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
     s = BadArgs();
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
-  } else if (__fname == NULL) {
+  } else if (!__fname) {
     s = BadArgs();
   } else if (__fname[0] == 0) {
     s = BadArgs();
@@ -1678,8 +1690,10 @@ ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
     pdlfs::Slice v(data, __sz);
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
       s = __dir->writer->Add(k, v, __epoch);
+    } else if (__dir->io_engine != DELTAFS_PLFSDIR_PLAINDB) {
+      s = LevelDbPut(__dir, k, v);
     } else {
-      s = DbPut(__dir, k, v);
+      s = PdbPut(__dir, k, v);
     }
   }
 
