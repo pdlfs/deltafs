@@ -55,10 +55,15 @@ class BufferedBlockWriter : public DoubleBuffering {
   const size_t buf_threshold_;  // Threshold for write buffer flush
   // Memory pre-reserved for each write buffer
   size_t buf_reserv_;
+  uint64_t offset_;  // Current write offset
+  std::string bloomfilter_;
+  std::string indexes_;
 
   friend class DoubleBuffering;
   Status Compact(void* buf);
   Status SyncBackend(bool close = false);
+  Status DumpIndexesAndFilters();
+  Status Close();
   void ScheduleCompaction();
   void Clear(void* buf) { static_cast<BlockBuf*>(buf)->Reset(); }
   void AddToBuffer(void* buf, const Slice& k, const Slice& v) {
@@ -75,6 +80,8 @@ class BufferedBlockWriter : public DoubleBuffering {
 
   static void BGWork(void*);
 
+  BlockHandle bloomfilter_handle_;
+  BlockHandle index_handle_;
   BlockBuf bb0_;
   BlockBuf bb1_;
 };
