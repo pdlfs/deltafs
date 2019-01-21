@@ -11,14 +11,14 @@
 
 #include "pdlfs-common/pdlfs_config.h"
 
+#include "pdlfs-common/leveldb/block.h"
+#include "pdlfs-common/leveldb/db/options.h"
+#include "pdlfs-common/leveldb/format.h"
+
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/crc32c.h"
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/leveldb/db/options.h"
-#include "pdlfs-common/leveldb/format.h"
 #include "pdlfs-common/port.h"
-
-#include "block.h"
 
 namespace pdlfs {
 

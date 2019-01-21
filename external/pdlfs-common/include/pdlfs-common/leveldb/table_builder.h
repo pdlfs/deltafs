@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "pdlfs-common/compression_type.h"
 #include "pdlfs-common/status.h"
 
 #include <stdint.h>

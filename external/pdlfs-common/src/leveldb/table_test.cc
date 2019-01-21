@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  *
  * All rights reserved.
  *
@@ -14,6 +15,7 @@
 
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/table.h"
 #include "pdlfs-common/leveldb/table_builder.h"
 #include "pdlfs-common/testharness.h"

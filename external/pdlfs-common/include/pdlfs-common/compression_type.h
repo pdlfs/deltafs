@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2011 The LevelDB Authors.
- * Copyright (c) 2015-2018 Carnegie Mellon University.
+ * Copyright (c) 2015-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  *
  * All rights reserved.
  *
