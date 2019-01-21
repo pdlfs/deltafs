@@ -16,6 +16,7 @@
 #include "pdlfs-common/leveldb/block_builder.h"
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/format.h"
 #include "pdlfs-common/leveldb/index_block.h"

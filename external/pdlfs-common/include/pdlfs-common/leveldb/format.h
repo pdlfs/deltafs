@@ -11,7 +11,6 @@
 
 #pragma once
 
-#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/status.h"
 
@@ -22,6 +21,7 @@ namespace pdlfs {
 
 class Block;
 class RandomAccessFile;
+
 struct ReadOptions;
 
 // BlockHandle is a pointer to the extent of a file that stores a data

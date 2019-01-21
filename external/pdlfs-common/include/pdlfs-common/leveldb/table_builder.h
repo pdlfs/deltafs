@@ -11,7 +11,6 @@
 
 #pragma once
 
-#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/status.h"
 
 #include <stdint.h>

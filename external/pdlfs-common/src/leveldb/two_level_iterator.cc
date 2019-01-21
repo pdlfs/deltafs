@@ -13,6 +13,7 @@
 #include "iterator_wrapper.h"
 
 #include "pdlfs-common/leveldb/block.h"
+#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/format.h"
 
 namespace pdlfs {
@@ -166,16 +167,12 @@ void TwoLevelIterator::InitDataBlock() {
 
 }  // namespace
 
-/* clang-format off */
-
-Iterator* NewTwoLevelIterator(
+Iterator* NewTwoLevelIterator(/* clang-format off */
     Iterator* index_iter,
     BlockFunction block_function,
     void* arg,
     const ReadOptions& options) {
   return new TwoLevelIterator(index_iter, block_function, arg, options);
-}
-
-/* clang-format on */
+} /* clang-format on */
 
 }  // namespace pdlfs
