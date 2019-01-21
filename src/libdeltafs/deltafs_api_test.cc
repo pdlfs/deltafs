@@ -73,20 +73,28 @@ class PlfsDirTest {
   }
 
   void Put(const Slice& k, const Slice& v) {
-    if (wdir_ == NULL) OpenWriter(DEF_ENGINE);
+    if (wdir_ == NULL) OpenWriter(kDefEngine);
     ssize_t r = deltafs_plfsdir_put(wdir_, k.data(), k.size(), epoch_, v.data(),
                                     v.size());
     ASSERT_TRUE(r == v.size());
   }
 
   void IoWrite(const Slice& d) {
-    if (wdir_ == NULL) OpenWriter(DEF_ENGINE);
+    if (wdir_ == NULL) OpenWriter(kDefEngine);
     ssize_t r = deltafs_plfsdir_io_append(wdir_, d.data(), d.size());
     ASSERT_TRUE(r == d.size());
   }
 
+  void Flush() {
+    if (wdir_ == NULL) OpenWriter(kDefEngine);
+    int r = deltafs_plfsdir_flush(wdir_, epoch_);
+    ASSERT_TRUE(r == 0);
+    r = deltafs_plfsdir_io_flush(wdir_);
+    ASSERT_TRUE(r == 0);
+  }
+
   void FinishEpoch() {
-    if (wdir_ == NULL) OpenWriter(DEF_ENGINE);
+    if (wdir_ == NULL) OpenWriter(kDefEngine);
     int r = deltafs_plfsdir_epoch_flush(wdir_, epoch_);
     ASSERT_TRUE(r == 0);
     r = deltafs_plfsdir_io_flush(wdir_);
@@ -96,7 +104,7 @@ class PlfsDirTest {
 
   std::string Get(const Slice& k) {
     if (wdir_ != NULL) Finish();
-    if (rdir_ == NULL) OpenReader(DEF_ENGINE);
+    if (rdir_ == NULL) OpenReader(kDefEngine);
     size_t sz = 0;
     char* result =
         deltafs_plfsdir_get(rdir_, k.data(), k.size(), -1, &sz, NULL, NULL);
@@ -108,7 +116,7 @@ class PlfsDirTest {
 
   std::string IoRead(uint64_t off, size_t sz) {
     if (wdir_ != NULL) Finish();
-    if (rdir_ == NULL) OpenReader(DEF_ENGINE);
+    if (rdir_ == NULL) OpenReader(kDefEngine);
     char* result = static_cast<char*>(malloc(sz));
     ssize_t r = deltafs_plfsdir_io_pread(rdir_, result, sz, off);
     ASSERT_TRUE(r >= 0);
@@ -119,7 +127,7 @@ class PlfsDirTest {
 
   std::string dirname_;
   std::string dirconf_;
-  enum { DEF_ENGINE = DELTAFS_PLFSDIR_DEFAULT };
+  enum { kDefEngine = DELTAFS_PLFSDIR_DEFAULT };
   std::vector<std::string> options_;
   deltafs_plfsdir_t* wdir_;
   deltafs_plfsdir_t* rdir_;
@@ -139,6 +147,7 @@ TEST(PlfsDirTest, SingleEpoch) {
   IoWrite("b");
   Put("k3", "v3");
   IoWrite("c");
+  Flush();
   Put("k4", "v4");
   IoWrite("x");
   Put("k5", "v5");
@@ -159,6 +168,9 @@ TEST(PlfsDirTest, PdbEmpty) {
   OpenWriter(DELTAFS_PLFSDIR_PLAINDB);
   FinishEpoch();
   Finish();
+  OpenReader(DELTAFS_PLFSDIR_PLAINDB);
+  std::string val = Get("non");
+  ASSERT_TRUE(val.empty());
 }
 
 TEST(PlfsDirTest, PdbRw) {
@@ -169,6 +181,7 @@ TEST(PlfsDirTest, PdbRw) {
   IoWrite("b");
   Put("k3", "v3");
   IoWrite("c");
+  Flush();
   Put("k4", "v4");
   IoWrite("x");
   Put("k5", "v5");
@@ -177,6 +190,14 @@ TEST(PlfsDirTest, PdbRw) {
   IoWrite("z");
   FinishEpoch();
   Finish();
+  OpenReader(DELTAFS_PLFSDIR_PLAINDB);
+  ASSERT_EQ(IoRead(0, 6), "abcxyz");
+  ASSERT_EQ(Get("k1"), "v1");
+  ASSERT_EQ(Get("k2"), "v2");
+  ASSERT_EQ(Get("k3"), "v3");
+  ASSERT_EQ(Get("k4"), "v4");
+  ASSERT_EQ(Get("k5"), "v5");
+  ASSERT_EQ(Get("k6"), "v6");
 }
 
 class PlfsWiscBench {
