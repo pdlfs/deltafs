@@ -197,6 +197,7 @@ bool BufferedBlockReader::GetFrom(Status* status, const Slice& k,
 
   if (status->ok()) {
     Block block(contents);
+    // TODO: switch to IterWrapper
     Iterator* iter = block.NewIterator(NULL /* force linear search */);
     iter->Seek(k);
     if (iter->Valid()) {

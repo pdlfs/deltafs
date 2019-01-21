@@ -656,6 +656,7 @@ IMPORT(DirWriter);
 IMPORT(DirReader);
 IMPORT(DirMode);
 
+IMPORT(BufferedBlockReader);
 IMPORT(BufferedBlockWriter);
 IMPORT(DirectWriter);
 IMPORT(DirectReader);
@@ -1082,6 +1083,8 @@ struct deltafs_plfsdir {
   pdlfs::DB* db;
   pdlfs::WritableFile* blk_dst_;
   BufferedBlockWriter* blk_writer_;
+  pdlfs::RandomAccessFile* blk_src_;
+  BufferedBlockReader* blk_reader_;
   pdlfs::WritableFile* io_dst;
   DirectWriter* io_writer;
   DirWriter* writer;
@@ -1289,7 +1292,7 @@ pdlfs::Status OpenAsPdb(deltafs_plfsdir_t* dir, const std::string& parent) {
   pdlfs::Status s;
   int rank = dir->io_options->rank;
   pdlfs::Env* env = dir->env;
-  std::string dstname = PdbName(parent, rank);
+  std::string fname = PdbName(parent, rank);
 
   dir->io_options->allow_env_threads = false;
   dir->io_options->is_env_pfs = dir->is_env_pfs;
@@ -1304,11 +1307,24 @@ pdlfs::Status OpenAsPdb(deltafs_plfsdir_t* dir, const std::string& parent) {
     const size_t bufsz = dir->io_options->total_memtable_budget / 2;
     dir->io_options->compaction_pool = dir->pool;
     pdlfs::WritableFile* dstfile;
-    s = env->NewWritableFile(dstname.c_str(), &dstfile);
+    s = env->NewWritableFile(fname.c_str(), &dstfile);
     if (s.ok()) {
       dir->blk_writer_ =
           new BufferedBlockWriter(*dir->io_options, dstfile, bufsz);
       dir->blk_dst_ = dstfile;
+    }
+  } else if (dir->mode == O_RDONLY) {
+    dir->io_options->reader_pool = dir->pool;
+    pdlfs::RandomAccessFile* srcfile;
+    uint64_t srcsz;
+    s = env->GetFileSize(fname.c_str(), &srcsz);
+    if (s.ok()) {
+      s = env->NewRandomAccessFile(fname.c_str(), &srcfile);
+      if (s.ok()) {
+        dir->blk_reader_ =
+            new BufferedBlockReader(*dir->io_options, srcfile, srcsz);
+        dir->blk_src_ = srcfile;
+      }
     }
   } else {
     s = BadArgs();
@@ -2031,6 +2047,8 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
     op.seeks = __seeks;
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
       s = __dir->reader->Read(op, pdlfs::Slice(__key, __keylen), &dst);
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
+      s = __dir->blk_reader_->Get(pdlfs::Slice(__key, __keylen), &dst);
     } else {
       s = DbGet(__dir, pdlfs::Slice(__key, __keylen), &dst);
     }
@@ -2080,6 +2098,8 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
     pdlfs::Slice k(tmp, __dir->io_options->key_size);
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
       s = __dir->reader->Read(op, k, &dst);
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
+      s = __dir->blk_reader_->Get(k, &dst);
     } else {
       s = DbGet(__dir, k, &dst);
     }
@@ -2228,6 +2248,8 @@ int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
   delete __dir->reader;
   delete __dir->blk_writer_;
   delete __dir->blk_dst_;
+  delete __dir->blk_reader_;
+  delete __dir->blk_src_;
   delete __dir->io_writer;
   delete __dir->io_dst;
   delete __dir->io_reader;
