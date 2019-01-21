@@ -176,5 +176,128 @@ void BufferedBlockWriter::BGWork(void* arg) {
   ins->DoCompaction<BufferedBlockWriter>();
 }
 
+BufferedBlockReader::BufferedBlockReader(const DirOptions& options,
+                                         RandomAccessFile* src, uint64_t src_sz)
+    : options_(options), src_(src), src_sz_(src_sz) {}
+
+bool BufferedBlockReader::GetFrom(Status* status, const Slice& k,
+                                  std::string* result, uint64_t offset,
+                                  size_t n) {
+  BlockContents contents;
+  contents.heap_allocated = false;
+  contents.cachable = false;
+  std::string buf;
+  buf.resize(n);
+  *status = src_->Read(offset, n, &contents.data, &buf[0]);
+  if (status->ok()) {
+    if (contents.data.size() != n) {
+      *status = Status::IOError("Read ret partial data");
+    }
+  }
+
+  if (status->ok()) {
+    Block block(contents);
+    Iterator* iter = block.NewIterator(NULL /* force linear search */);
+    iter->Seek(k);
+    if (iter->Valid()) {
+      *result = iter->value().ToString();
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Get the value for a specific key.
+Status BufferedBlockReader::Get(const Slice& k, std::string* result) {
+  Status status = MaybeLoadCache();
+  if (!status.ok()) {
+    return status;
+  }
+
+  assert(indexes_.size() >= 8);
+  uint64_t offset = DecodeFixed64(&indexes_[0]);
+  uint64_t next_offset;
+  const size_t limit = indexes_.size();
+  size_t off = 8;
+  for (; off + 7 < limit; off += 8) {
+    next_offset = DecodeFixed64(&indexes_[0] + off);
+    if (GetFrom(&status, k, result, offset, next_offset - offset)) {
+      break;
+    } else if (!status.ok()) {
+      break;
+    }
+  }
+
+  return status;
+}
+
+Status BufferedBlockReader::LoadIndexesAndFilters(Slice* footer) {
+  BlockHandle bloomfilter_handle;
+  BlockHandle index_handle;
+  cache_status_ = bloomfilter_handle.DecodeFrom(footer);
+  if (cache_status_.ok()) {
+    cache_status_ = index_handle.DecodeFrom(footer);
+  }
+  if (!cache_status_.ok()) {
+    return cache_status_;
+  }
+
+  uint64_t start = bloomfilter_handle.offset();
+  assert(start + bloomfilter_handle.size() == index_handle.offset());
+  size_t totalbytes = bloomfilter_handle.size() + index_handle.size();
+  cache_.resize(totalbytes);
+  cache_status_ = src_->Read(start, totalbytes, &cache_contents_, &cache_[0]);
+  if (cache_status_.ok()) {
+    if (cache_contents_.size() != totalbytes) {
+      cache_status_ = Status::IOError("Read ret partial data");
+    }
+  }
+  if (!cache_status_.ok()) {
+    return cache_status_;
+  }
+
+  indexes_ = bloomfilter_ = cache_contents_;
+  indexes_.remove_prefix(bloomfilter_handle.size());
+  bloomfilter_.remove_suffix(index_handle.size());
+  if (indexes_.size() < 8) {
+    std::string error = "Indexes are shorter than 8 bytes and are invalid";
+    cache_status_ = Status::AssertionFailed(error);
+  }
+
+  return cache_status_;
+}
+
+// Read and cache all indexes and filters.
+// Return OK on success, or a non-OK status on errors.
+Status BufferedBlockReader::MaybeLoadCache() {
+  if (!cache_status_.ok() ||
+      !cache_contents_.empty()) {  // Do not repeat previous efforts
+    return cache_status_;
+  }
+
+  std::string footer_stor;
+  footer_stor.resize(2 * BlockHandle::kMaxEncodedLength);
+  Slice footer;
+  if (src_sz_ < footer_stor.size()) {
+    cache_status_ =
+        Status::AssertionFailed("Input file is too short for a footer");
+  } else {
+    cache_status_ = src_->Read(src_sz_ - footer_stor.size(), footer_stor.size(),
+                               &footer, &footer_stor[0]);
+    if (cache_status_.ok()) {
+      if (footer.size() != footer_stor.size()) {
+        cache_status_ = Status::IOError("Read ret partial data");
+      }
+    }
+  }
+
+  if (cache_status_.ok()) {
+    return LoadIndexesAndFilters(&footer);
+  } else {
+    return cache_status_;
+  }
+}
+
 }  // namespace plfsio
 }  // namespace pdlfs

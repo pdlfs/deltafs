@@ -86,5 +86,31 @@ class BufferedBlockWriter : public DoubleBuffering {
   BlockBuf bb1_;
 };
 
+// Read data written by a BufferedBlockWriter.
+class BufferedBlockReader {
+ public:
+  BufferedBlockReader(const DirOptions& options, RandomAccessFile* src,
+                      uint64_t src_sz);
+
+  Status Get(const Slice& k, std::string* result);
+
+ private:
+  typedef ArrayBlock Block;
+  const DirOptions& options_;
+  RandomAccessFile* const src_;
+  uint64_t src_sz_;
+  Status cache_status_;  // OK if cache is ready
+  Slice cache_contents_;
+  std::string cache_;
+
+  bool GetFrom(Status* status, const Slice& k, std::string* result,
+               uint64_t off, size_t n);
+  Status LoadIndexesAndFilters(Slice* footer);
+  Status MaybeLoadCache();
+
+  Slice bloomfilter_;
+  Slice indexes_;
+};
+
 }  // namespace plfsio
 }  // namespace pdlfs

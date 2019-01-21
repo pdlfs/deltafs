@@ -1281,7 +1281,7 @@ namespace {
 
 std::string PdbName(const std::string& parent, int rank) {
   char tmp[20];
-  snprintf(tmp, sizeof(tmp), "PDB-%08x.dat", rank);
+  snprintf(tmp, sizeof(tmp), "PDB-%08x.tbl", rank);
   return parent + "/" + tmp;
 }
 
