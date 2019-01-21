@@ -158,6 +158,7 @@ TEST(PlfsDirTest, SingleEpoch) {
 TEST(PlfsDirTest, PdbEmpty) {
   OpenWriter(DELTAFS_PLFSDIR_PLAINDB);
   FinishEpoch();
+  Finish();
 }
 
 TEST(PlfsDirTest, PdbRw) {
@@ -175,6 +176,7 @@ TEST(PlfsDirTest, PdbRw) {
   Put("k6", "v6");
   IoWrite("z");
   FinishEpoch();
+  Finish();
 }
 
 class PlfsWiscBench {

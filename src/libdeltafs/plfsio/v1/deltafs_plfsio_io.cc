@@ -547,7 +547,7 @@ Status DestroyDir(const std::string& prefix, const DirOptions& opts) {
     for (it = garbage.begin(); it != garbage.end(); ++it) {
       status = Delete(it->c_str(), env);
       if (!status.ok()) {
-        break;
+        // Ignore errors
       }
     }
   }
