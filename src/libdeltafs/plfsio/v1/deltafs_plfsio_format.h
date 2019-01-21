@@ -11,11 +11,10 @@
 
 #include "deltafs_plfsio_types.h"
 
-#include "../../external/pdlfs-common/src/leveldb/block.h"
-#include "../../external/pdlfs-common/src/leveldb/block_builder.h"
-#include "../../external/pdlfs-common/src/leveldb/format.h"
-
+#include "pdlfs-common/leveldb/block.h"
+#include "pdlfs-common/leveldb/block_builder.h"
 #include "pdlfs-common/leveldb/comparator.h"
+#include "pdlfs-common/leveldb/format.h"
 #include "pdlfs-common/leveldb/iterator.h"
 
 #include "pdlfs-common/coding.h"

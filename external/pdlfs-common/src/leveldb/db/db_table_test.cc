@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2011 The LevelDB Authors.
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  *
  * All rights reserved.
  *
@@ -8,27 +9,28 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <map>
-#include <string>
-
 #include "pdlfs-common/pdlfs_config.h"
 
-#include "../block.h"
-#include "../block_builder.h"
-#include "../format.h"
 #include "memtable.h"
 #include "options_internal.h"
 #include "write_batch_internal.h"
 
-#include "pdlfs-common/env.h"
+#include "pdlfs-common/leveldb/block.h"
+#include "pdlfs-common/leveldb/block_builder.h"
 #include "pdlfs-common/leveldb/db/db.h"
 #include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/format.h"
 #include "pdlfs-common/leveldb/iterator.h"
 #include "pdlfs-common/leveldb/table.h"
 #include "pdlfs-common/leveldb/table_builder.h"
+
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/random.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
+
+#include <map>
+#include <string>
 
 namespace pdlfs {
 

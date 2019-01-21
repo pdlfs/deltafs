@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2011 The LevelDB Authors.
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  *
  * All rights reserved.
  *
@@ -10,12 +11,11 @@
 
 #include "pdlfs-common/pdlfs_config.h"
 
-#include "format.h"
-
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/crc32c.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/leveldb/db/options.h"
+#include "pdlfs-common/leveldb/format.h"
 #include "pdlfs-common/port.h"
 
 #include "block.h"

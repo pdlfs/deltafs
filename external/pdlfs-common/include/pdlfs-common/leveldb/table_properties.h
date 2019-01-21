@@ -1,7 +1,6 @@
-#pragma once
-
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
+ * Copyright (c) 2015-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  *
  * All rights reserved.
  *
@@ -9,10 +8,12 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <stdint.h>
+#pragma once
 
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/status.h"
+
+#include <stdint.h>
 
 namespace pdlfs {
 
