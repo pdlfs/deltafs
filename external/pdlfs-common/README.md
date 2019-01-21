@@ -1,6 +1,7 @@
 **Internal code shared by several top-level projects inside PDL including deltafs, indexfs, and tablefs.**
 
 [![Build Status](https://travis-ci.org/pdlfs/pdlfs-common.svg?branch=master)](https://travis-ci.org/pdlfs/pdlfs-common)
+[![License](https://img.shields.io/badge/license-New%20BSD-blue.svg)](LICENSE.txt)
 
 # Building
 
