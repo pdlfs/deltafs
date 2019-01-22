@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015-2018 Carnegie Mellon University.
- *
+ * Copyright (c) 2018-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
@@ -15,49 +15,38 @@
 namespace pdlfs {
 namespace plfsio {
 
-template <size_t b = 16>
+template <size_t k = 16, size_t v = 16>
 struct CuckooBucket {  // Fixed 4 items per bucket
-  unsigned x0 : b;
-  unsigned x1 : b;
-  unsigned x2 : b;
-  unsigned x3 : b;
+  unsigned x0_ : k;
+  //  unsigned y0_ : v;
+  unsigned x1_ : k;
+  //  unsigned y1_ : v;
+  unsigned x2_ : k;
+  //  unsigned y2_ : v;
+  unsigned x3_ : k;
+  //  unsigned y3_ : v;
 };
 
-template <size_t bits_per_item = 16>
-class CuckooReader {
- public:
+template <size_t k = 16, size_t v = 16>
+struct CuckooReader {
   explicit CuckooReader(const Slice& input) : input_(input) {}
-  ~CuckooReader() {}
 
   uint32_t Read(size_t i, size_t j) const {
-    if (i >= NumBuckets()) return 0;
-    const char* c = input_.data();
-    const BucketType* const b = reinterpret_cast<const BucketType*>(c);
-    j = j % kItemsPerBucket;
-    if (j == 0) return b[i].x0;
-    if (j == 1) return b[i].x1;
-    if (j == 2) return b[i].x2;
-    if (j == 3) return b[i].x3;
+    const CuckooBucket<k, v>* const b =
+        reinterpret_cast<const CuckooBucket<k, v>*>(input_.data());
+    if (j == 0) return b[i].x0_;
+    if (j == 1) return b[i].x1_;
+    if (j == 2) return b[i].x2_;
+    if (j == 3) return b[i].x3_;
     return 0;
   }
 
-  size_t NumBuckets() const {  // Return the effective number of buckets
-    return input_.size() / kBytesPerBucket;
-  }
-
- private:
-  template <size_t>
-  friend class CuckooKeyTester;
-  typedef CuckooBucket<bits_per_item> BucketType;
-  static const int kBytesPerBucket = sizeof(BucketType);
-  static const int kItemsPerBucket = 4;
   Slice input_;
 };
 
-template <size_t bits_per_item = 16>
-class CuckooTable {
- public:
-  CuckooTable(const DirOptions& options)
+template <size_t k = 16, size_t v = 16>
+struct CuckooTable {
+  explicit CuckooTable(const DirOptions& options)
       : num_buckets_(0), frac_(options.cuckoo_frac) {}
 
   static uint64_t UpperPower2(uint64_t x) {
@@ -74,52 +63,48 @@ class CuckooTable {
 
   void Reset(uint32_t num_keys) {
     space_.resize(0);
-    num_buckets_ = static_cast<size_t>(
-        ceil(1.0 / frac_ * (num_keys + kItemsPerBucket - 1) / kItemsPerBucket));
+#if 0
+    num_buckets_ =
+        static_cast<size_t>(ceil(1.0 / frac_ * (num_keys + 3) / 4));
+#else
+    num_buckets_ = (num_keys + 3) / 4;
+#endif
     num_buckets_ = UpperPower2(num_buckets_);
-    space_.resize(num_buckets_ * kBytesPerBucket, 0);
+    space_.resize(num_buckets_ * sizeof(CuckooBucket<k, v>), 0);
   }
 
   void Write(size_t i, size_t j, uint32_t x) {
-    assert(i < num_buckets_ && j < kItemsPerBucket);
-    char* c = const_cast<char*>(space_.data());
-    BucketType* const b = reinterpret_cast<BucketType*>(c);
+    assert(i < num_buckets_ && j < 4);
+    CuckooBucket<k, v>* const b =
+        reinterpret_cast<CuckooBucket<k, v>*>(&space_[0]);
     assert(x != 0);
-    if (j == 0) b[i].x0 = x;
-    if (j == 1) b[i].x1 = x;
-    if (j == 2) b[i].x2 = x;
-    if (j == 3) b[i].x3 = x;
+    if (j == 0) b[i].x0_ = x;
+    if (j == 1) b[i].x1_ = x;
+    if (j == 2) b[i].x2_ = x;
+    if (j == 3) b[i].x3_ = x;
   }
 
   uint32_t Read(size_t i, size_t j) const {
-    assert(i < num_buckets_ && j < kItemsPerBucket);
-    const char* c = space_.data();
-    const BucketType* const b = reinterpret_cast<const BucketType*>(c);
-    if (j == 0) return b[i].x0;
-    if (j == 1) return b[i].x1;
-    if (j == 2) return b[i].x2;
-    if (j == 3) return b[i].x3;
+    assert(i < num_buckets_ && j < 4);
+    const CuckooBucket<k, v>* const b =
+        reinterpret_cast<const CuckooBucket<k, v>*>(&space_[0]);
+    if (j == 0) return b[i].x0_;
+    if (j == 1) return b[i].x1_;
+    if (j == 2) return b[i].x2_;
+    if (j == 3) return b[i].x3_;
     return 0;
   }
 
- private:
-  template <size_t>
-  friend class CuckooBlock;
-  typedef CuckooBucket<bits_per_item> BucketType;
-  static const int kBytesPerBucket = sizeof(BucketType);
-  static const int kItemsPerBucket = 4;
-  size_t num_buckets_;  // Total number of hash buckets, over-allocated by frac_
+  // Total number of hash buckets, over-allocated by frac_
+  size_t num_buckets_;  // Must be a power of 2
   std::string space_;
-  double frac_;  // Target table occupation rate
-
-  // No copying allowed
-  void operator=(const CuckooTable&);
-  CuckooTable(const CuckooTable&);
+  // Target occupation rate
+  double frac_;
 };
 
-template <size_t bits_per_key>
-CuckooBlock<bits_per_key>::CuckooBlock(const DirOptions& options,
-                                       size_t bytes_to_reserve)
+template <size_t k, size_t v>
+CuckooBlock<k, v>::CuckooBlock(const DirOptions& options,
+                               size_t bytes_to_reserve)
     : max_cuckoo_moves_(options.cuckoo_max_moves),
       finished_(true),  // Reset(num_keys) must be called before inserts
       rnd_(options.cuckoo_seed) {
@@ -129,37 +114,39 @@ CuckooBlock<bits_per_key>::CuckooBlock(const DirOptions& options,
   }
 }
 
-template <size_t bits_per_key>
-CuckooBlock<bits_per_key>::~CuckooBlock() {
+template <size_t k, size_t v>
+CuckooBlock<k, v>::~CuckooBlock() {
   delete rep_;
 }
 
-template <size_t bits_per_key>
-void CuckooBlock<bits_per_key>::Reset(uint32_t num_keys) {
+template <size_t k, size_t v>
+void CuckooBlock<k, v>::Reset(uint32_t num_keys) {
   rep_->Reset(num_keys);
   finished_ = false;
 }
 
-template <size_t bits_per_key>
-Slice CuckooBlock<bits_per_key>::Finish() {
+template <size_t k, size_t v>
+Slice CuckooBlock<k, v>::Finish() {
   assert(!finished_);
   finished_ = true;
   Rep* const r = rep_;
-  PutFixed32(&r->space_, r->num_buckets_);
-  PutFixed32(&r->space_, bits_per_key);
+  const uint32_t n = static_cast<uint32_t>(r->num_buckets_);
+  PutFixed32(&r->space_, n);
+  PutFixed32(&r->space_, k);
   return r->space_;
 }
 
-template <size_t bits_per_key>
-void CuckooBlock<bits_per_key>::AddKey(const Slice& key) {
+template <size_t k, size_t v>
+void CuckooBlock<k, v>::AddKey(const Slice& key) {
+  uint64_t ha = CuckooHash(key);
+  uint32_t fp = CuckooFingerprint(ha, k);
+
   Rep* const r = rep_;
-  uint32_t fp = CuckooFingerprint(key, bits_per_key);
-  uint32_t hash = CuckooHash(key);
-  size_t i = hash % r->num_buckets_;
+  size_t i = ha & (r->num_buckets_ - 1);
   // Our goal is to put fp into bucket i
   for (int count = 0; count < max_cuckoo_moves_; count++) {
-    if (bits_per_key < 32) assert((fp & (~((1u << bits_per_key) - 1))) == 0);
-    for (size_t j = 0; j < r->kItemsPerBucket; j++) {
+    if (k < 32) assert((fp & (~((1u << k) - 1))) == 0);
+    for (size_t j = 0; j < 4; j++) {
       uint32_t cur = r->Read(i, j);
       if (cur == fp) return;  // Done
       if (cur == 0) {
@@ -168,30 +155,35 @@ void CuckooBlock<bits_per_key>::AddKey(const Slice& key) {
       }
     }
     if (count != 0) {  // Kick out a victim so we can put fp in
-      size_t v = rnd_.Next() % r->kItemsPerBucket;
-      uint32_t old = r->Read(i, v);
+      size_t victim = rnd_.Next() & 3;
+      uint32_t old = r->Read(i, victim);
       assert(old != 0 && old != fp);
-      r->Write(i, v, fp);
+      r->Write(i, victim, fp);
       fp = old;
     }
 
-    i = CuckooAlt(i, fp) % r->num_buckets_;
+    i = CuckooAlt(i, fp) & (r->num_buckets_ - 1);
   }
 
   victims_.insert(fp);
 }
 
-template <size_t bits_per_key>
-size_t CuckooBlock<bits_per_key>::bytes_per_bucket() const {
-  return static_cast<size_t>(rep_->kBytesPerBucket);
+template <size_t k, size_t v>
+size_t CuckooBlock<k, v>::num_victims() const {
+  return victims_.size();
 }
 
-template <size_t bits_per_key>
-size_t CuckooBlock<bits_per_key>::num_buckets() const {
+template <size_t k, size_t v>
+size_t CuckooBlock<k, v>::bytes_per_bucket() const {
+  return static_cast<size_t>(sizeof(CuckooBucket<k, v>));
+}
+
+template <size_t k, size_t v>
+size_t CuckooBlock<k, v>::num_buckets() const {
   return rep_->num_buckets_;
 }
 
-template <size_t bits_per_key>
+template <size_t k, size_t v>
 class CuckooKeyTester {
  public:
   bool operator()(const Slice& key, const Slice& input) {
@@ -199,17 +191,17 @@ class CuckooKeyTester {
 #ifndef NDEBUG
     assert(input.size() >= 8);
     size_t bits = DecodeFixed32(tail - 4);
-    assert(bits == bits_per_key);
+    assert(bits == k);
 #endif
     size_t num_bucket = DecodeFixed32(tail - 8);
-    uint32_t fp = CuckooFingerprint(key, bits_per_key);
-    uint32_t hash = CuckooHash(key);
+    uint64_t ha = CuckooHash(key);
+    uint32_t fp = CuckooFingerprint(ha, k);
 
-    CuckooReader<bits_per_key> reader(Slice(input.data(), input.size() - 8));
-    size_t i1 = hash % num_bucket;
-    size_t i2 = CuckooAlt(i1, fp) % num_bucket;
+    CuckooReader<k, v> reader(Slice(input.data(), input.size() - 8));
+    size_t i1 = ha & (num_bucket - 1);
+    size_t i2 = CuckooAlt(i1, fp) & (num_bucket - 1);
 
-    for (size_t j = 0; j < reader.kItemsPerBucket; j++) {
+    for (size_t j = 0; j < 4; j++) {
       if (reader.Read(i1, j) == fp) {
         return true;
       } else if (reader.Read(i2, j) == fp) {
@@ -221,11 +213,11 @@ class CuckooKeyTester {
   }
 };
 
-template class CuckooBlock<32>;
-template class CuckooBlock<24>;
-template class CuckooBlock<20>;
-template class CuckooBlock<16>;
-template class CuckooBlock<10>;
+template class CuckooBlock<32, 32>;
+template class CuckooBlock<24, 24>;
+template class CuckooBlock<20, 20>;
+template class CuckooBlock<16, 16>;
+template class CuckooBlock<12, 12>;
 
 bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
   const size_t len = input.size();
@@ -238,12 +230,12 @@ bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
   switch (int(bits)) {
 #define CASE(n) \
   case n:       \
-    return CuckooKeyTester<n>()(key, input)
+    return CuckooKeyTester<n, n>()(key, input)
     CASE(32);
     CASE(24);
     CASE(20);
     CASE(16);
-    CASE(10);
+    CASE(12);
 #undef CASE
     default:
       return true;

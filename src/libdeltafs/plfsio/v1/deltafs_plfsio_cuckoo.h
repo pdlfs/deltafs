@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015-2018 Carnegie Mellon University.
- *
+ * Copyright (c) 2018-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
@@ -13,6 +13,7 @@
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/random.h"
 #include "pdlfs-common/slice.h"
+#include "pdlfs-common/xxhash.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -22,15 +23,15 @@
 namespace pdlfs {
 namespace plfsio {
 
-template <size_t>
+template <size_t, size_t>
 class CuckooTable;
 
-inline uint32_t CuckooHash(const Slice& key) {
-  return Hash(key.data(), key.size(), 0xbc9f1d34);
+inline uint64_t CuckooHash(const Slice& key) {
+  return xxhash64(key.data(), key.size(), 0);
 }
 
-inline uint32_t CuckooFingerprint(const Slice& key, size_t bits_per_key) {
-  uint32_t h = Hash(key.data(), key.size(), 301);
+inline uint32_t CuckooFingerprint(uint64_t ha, size_t bits_per_key) {
+  uint32_t h = static_cast<uint32_t>(ha >> 32);
   if (bits_per_key < 32) {
     h = h & ((1u << bits_per_key) - 1);
   }
@@ -38,8 +39,8 @@ inline uint32_t CuckooFingerprint(const Slice& key, size_t bits_per_key) {
   return h;
 }
 
-inline size_t CuckooAlt(size_t i, uint32_t f) {  // MurmurHash2
-  return i ^ (f * 0x5bd1e995);
+inline size_t CuckooAlt(size_t i, uint32_t fp) {  // MurmurHash2
+  return i ^ (fp * 0x5bd1e995);
 }
 
 struct DirOptions;
@@ -48,7 +49,7 @@ struct DirOptions;
 extern bool CuckooKeyMayMatch(const Slice& key, const Slice& input);
 
 // A simple cuckoo hash filter implementation.
-template <size_t bits_per_key>
+template <size_t k = 16, size_t v = 16>
 class CuckooBlock {
  public:
   CuckooBlock(const DirOptions& options, size_t bytes_to_reserve);
@@ -64,7 +65,8 @@ class CuckooBlock {
   // Finalize the block data and return its contents.
   Slice Finish();
 
-  size_t num_victims() const { return victims_.size(); }
+  size_t num_victims()
+      const;  // Number of keys not inserted into the cuckoo table
   size_t bytes_per_bucket() const;
   size_t num_buckets() const;
 
@@ -74,7 +76,7 @@ class CuckooBlock {
   bool finished_;  // If Finish() has been called
   Random rnd_;
 
-  typedef CuckooTable<bits_per_key> Rep;
+  typedef CuckooTable<k, v> Rep;
   void operator=(const CuckooBlock&);  // No copying allowed
   CuckooBlock(const CuckooBlock&);
   Rep* rep_;
