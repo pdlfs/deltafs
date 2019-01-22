@@ -10,7 +10,6 @@
 #pragma once
 
 #include "pdlfs-common/coding.h"
-#include "pdlfs-common/hash.h"
 #include "pdlfs-common/random.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/xxhash.h"
@@ -18,7 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <set>
+#include <vector>
 
 namespace pdlfs {
 namespace plfsio {
@@ -59,8 +58,12 @@ class CuckooBlock {
 
   // Insert a key into the cuckoo filter.
   // REQUIRES: Reset(num_keys) has been called.
-  // REQUIRES: Finish() has not been called.
+  // REQUIRES: Finish() has NOT been called.
   void AddKey(const Slice& key);
+
+  // Insert a key into the cuckoo filter.
+  // Return true if the insertion is success, or false otherwise.
+  bool TEST_AddKey(const Slice& key);
 
   // Finalize the block data and return its contents.
   Slice Finish();
@@ -71,11 +74,16 @@ class CuckooBlock {
   size_t num_buckets() const;
 
  private:
-  std::set<uint32_t> victims_;
+  bool full_;
+  std::vector<uint32_t> key_starts;  // Starting offsets of all overflow keys
+  std::string keys_;
+  size_t victim_index_;  // There is only one victim at most
+  uint32_t victim_fp_;
   int max_cuckoo_moves_;
   bool finished_;  // If Finish() has been called
   Random rnd_;
 
+  void AddMore(const Slice& key);
   typedef CuckooTable<k, v> Rep;
   void operator=(const CuckooBlock&);  // No copying allowed
   CuckooBlock(const CuckooBlock&);

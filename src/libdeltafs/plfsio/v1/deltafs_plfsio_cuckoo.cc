@@ -33,7 +33,7 @@ struct CuckooReader {
 
   uint32_t Read(size_t i, size_t j) const {
     const CuckooBucket<k, v>* const b =
-        reinterpret_cast<const CuckooBucket<k, v>*>(input_.data());
+        reinterpret_cast<const CuckooBucket<k, v>*>(&input_[0]);
     if (j == 0) return b[i].x0_;
     if (j == 1) return b[i].x1_;
     if (j == 2) return b[i].x2_;
@@ -69,7 +69,11 @@ struct CuckooTable {
 #else
     num_buckets_ = (num_keys + 3) / 4;
 #endif
-    num_buckets_ = UpperPower2(num_buckets_);
+    if (num_buckets_ != 0) {  // Always round up to a nearest power of 2
+      num_buckets_ = UpperPower2(num_buckets_);
+    } else {
+      num_buckets_ = 1;
+    }
     space_.resize(num_buckets_ * sizeof(CuckooBucket<k, v>), 0);
   }
 
@@ -105,7 +109,10 @@ struct CuckooTable {
 template <size_t k, size_t v>
 CuckooBlock<k, v>::CuckooBlock(const DirOptions& options,
                                size_t bytes_to_reserve)
-    : max_cuckoo_moves_(options.cuckoo_max_moves),
+    : full_(false),
+      victim_index_(0),
+      victim_fp_(0),
+      max_cuckoo_moves_(options.cuckoo_max_moves),
       finished_(true),  // Reset(num_keys) must be called before inserts
       rnd_(options.cuckoo_seed) {
   rep_ = new Rep(options);
@@ -122,7 +129,10 @@ CuckooBlock<k, v>::~CuckooBlock() {
 template <size_t k, size_t v>
 void CuckooBlock<k, v>::Reset(uint32_t num_keys) {
   rep_->Reset(num_keys);
+  victim_index_ = 0;
+  victim_fp_ = 0;
   finished_ = false;
+  full_ = false;
 }
 
 template <size_t k, size_t v>
@@ -130,16 +140,36 @@ Slice CuckooBlock<k, v>::Finish() {
   assert(!finished_);
   finished_ = true;
   Rep* const r = rep_;
-  const uint32_t n = static_cast<uint32_t>(r->num_buckets_);
-  PutFixed32(&r->space_, n);
+  PutFixed32(&r->space_, r->num_buckets_);
+  PutFixed32(&r->space_, victim_index_);
+  PutFixed32(&r->space_, victim_fp_);
   PutFixed32(&r->space_, k);
   return r->space_;
 }
 
 template <size_t k, size_t v>
+void CuckooBlock<k, v>::AddMore(const Slice& key) {
+  key_starts.push_back(static_cast<uint32_t>(keys_.size()));
+  keys_.append(key.data(), key.size());
+}
+
+template <size_t k, size_t v>
+bool CuckooBlock<k, v>::TEST_AddKey(const Slice& key) {
+  assert(!finished_);
+  if (full_) return false;
+  AddKey(key);
+  return true;
+}
+
+template <size_t k, size_t v>
 void CuckooBlock<k, v>::AddKey(const Slice& key) {
+  assert(!finished_);
   uint64_t ha = CuckooHash(key);
   uint32_t fp = CuckooFingerprint(ha, k);
+  if (full_) {  // If filter is full, directly insert into the overflow space
+    AddMore(key);
+    return;
+  }
 
   Rep* const r = rep_;
   size_t i = ha & (r->num_buckets_ - 1);
@@ -165,12 +195,14 @@ void CuckooBlock<k, v>::AddKey(const Slice& key) {
     i = CuckooAlt(i, fp) & (r->num_buckets_ - 1);
   }
 
-  victims_.insert(fp);
+  victim_index_ = i;
+  victim_fp_ = fp;
+  full_ = true;
 }
 
 template <size_t k, size_t v>
 size_t CuckooBlock<k, v>::num_victims() const {
-  return victims_.size();
+  return keys_.size();
 }
 
 template <size_t k, size_t v>
@@ -188,19 +220,31 @@ class CuckooKeyTester {
  public:
   bool operator()(const Slice& key, const Slice& input) {
     const char* const tail = input.data() + input.size();
+    if (input.size() < 16) return true;
 #ifndef NDEBUG
-    assert(input.size() >= 8);
     size_t bits = DecodeFixed32(tail - 4);
     assert(bits == k);
 #endif
-    size_t num_bucket = DecodeFixed32(tail - 8);
+    const size_t num_bucket = DecodeFixed32(tail - 16);
+    if (input.size() - 16 < sizeof(CuckooBucket<k, v>) * num_bucket ||
+        num_bucket == 0) {
+      return true;
+    }
+
     uint64_t ha = CuckooHash(key);
     uint32_t fp = CuckooFingerprint(ha, k);
-
-    CuckooReader<k, v> reader(Slice(input.data(), input.size() - 8));
     size_t i1 = ha & (num_bucket - 1);
     size_t i2 = CuckooAlt(i1, fp) & (num_bucket - 1);
 
+    uint32_t victim_fp = DecodeFixed32(tail - 8);
+    if (victim_fp == fp) {
+      uint32_t i = DecodeFixed32(tail - 12);
+      if (i == i1 || i == i2) {
+        return true;
+      }
+    }
+
+    CuckooReader<k, v> reader(Slice(input.data(), input.size() - 16));
     for (size_t j = 0; j < 4; j++) {
       if (reader.Read(i1, j) == fp) {
         return true;
@@ -221,11 +265,11 @@ template class CuckooBlock<12, 12>;
 
 bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
   const size_t len = input.size();
-  if (len < 8) {
+  if (len < 4) {
     return true;
   }
 
-  const char* tail = input.data() + input.size();
+  const char* const tail = input.data() + input.size();
   size_t bits = DecodeFixed32(tail - 4);
   switch (int(bits)) {
 #define CASE(n) \

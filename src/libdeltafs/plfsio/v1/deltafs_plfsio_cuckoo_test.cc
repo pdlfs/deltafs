@@ -44,10 +44,10 @@ class CuckooTest {
     return CuckooKeyMayMatch(Slice(tmp, sizeof(tmp)), data_);
   }
 
-  void AddKey(uint32_t k) {
+  bool AddKey(uint32_t k) {
     char tmp[4];
     EncodeFixed32(tmp, k);
-    cf_->AddKey(Slice(tmp, sizeof(tmp)));
+    return cf_->TEST_AddKey(Slice(tmp, sizeof(tmp)));
   }
 
   void Finish() { data_ = cf_->Finish().ToString(); }
@@ -101,14 +101,15 @@ TEST(CuckooTest, CF) {
     Reset(num_keys);
     uint32_t k = 0;
     for (; k < num_keys; k++) {
-      AddKey(k);
+      if (!AddKey(k)) {
+        break;
+      }
     }
     Finish();
-    size_t v = cf_->num_victims();
-    fprintf(stderr, "%d victim keys (%.2f%%)\n", int(v), 100.0 * v / num_keys);
-    k = 0;
-    for (; k < num_keys; k++) {
-      // ASSERT_TRUE(KeyMayMatch(k));
+    fprintf(stderr, "%.2f%% Full\n", 100.0 * k / num_keys);
+    uint32_t j = 0;
+    for (; j < k; j++) {
+      ASSERT_TRUE(KeyMayMatch(j));
     }
   }
 }
