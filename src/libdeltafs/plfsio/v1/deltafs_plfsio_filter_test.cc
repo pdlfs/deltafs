@@ -310,6 +310,7 @@ class PlfsFilterBench {
     const double ki = 1024.0;
 #if defined(PDLFS_PLATFORM_POSIX)
 #if defined(PDLFS_OS_LINUX)
+    const double k = 1000.0;
     const uint64_t start = Env::Default()->NowMicros();
 #endif
     struct rusage tmp_usage;
