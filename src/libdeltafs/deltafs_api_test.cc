@@ -451,9 +451,9 @@ class PlfsFtBench {
   PlfsFtBench() {
     options_.cuckoo_frac = 0.95;
     options_.bf_bits_per_key = GetOptions("BF_BITS_PER_KEY", 20);
-    kranks_ = GetOptions("NUM_RANKS", 1);
-    kkeys_ = GetOptions("NUM_KEYS", 128);
-    qstep_ = GetOptions("QUERY_STEP", kkeys_);
+    kranks_ = GetOptions("LG_RANKS", 1);
+    kkeys_ = GetOptions("LG_KEYS", 128);
+    qstep_ = GetOptions("QUERY_STEP", kkeys_ / 4);
     compression_ = GetOptions("SNAPPY", 0);
     dump_ = GetOptions("DUMP", 0);
   }
@@ -508,6 +508,7 @@ class PlfsFtBench {
     uint32_t num_ranks = kranks_ << 10;
     char tmp[12];
     fprintf(stderr, "Querying...\n");
+    const uint64_t start = Env::Default()->NowMicros();
     for (uint32_t k = 0; k < num_keys; k += qstep_) {
       if ((k & 0x7FFu) == 0) {
         fprintf(stderr, "\r%.2f%%", 100.0 * k / num_keys);
@@ -523,26 +524,36 @@ class PlfsFtBench {
       }
       histo_.Add(n);
     }
+    const uint64_t end = Env::Default()->NowMicros();
+    const uint64_t dura = end - start;
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
     fprintf(stderr, "Done!\n");
 
-    Report();
+    Report(dura);
   }
 
-  int Report() {
+  int Report(uint64_t dura) {
     if (dump_) return Dump();
-    fprintf(stderr, "----------------------------------------\n");
+    const double k = 1000.0, ki = 1024.0;
+    fprintf(stderr, "------------------------------------------------------\n");
     fprintf(stderr, "            Num Keys: %d K (%d victims)\n", kkeys_,
             int(ft_->num_victims()));
     fprintf(stderr, "               Ranks: %d K\n", kranks_);
     fprintf(stderr, "Filter Bytes Per Key: %.3f (%.3f after compression)\n",
-            1.0 * ftdata_.size() / (kkeys_ << 10),
+            1.0 * ftdata_.size() / kkeys_ / ki,
             1.0 * (compressed_.empty() ? ftdata_.size() : compressed_.size()) /
-                (kkeys_ << 10));
-    fprintf(stderr, "         Num Queries: %d\n", int(histo_.num_));
-    fprintf(stderr, "    Avg Hits Per Key: %.3f (MAX=%d)\n", histo_.Average(),
-            int(histo_.max_));
+                kkeys_ / ki);
+    fprintf(stderr, "             Queries: %d\n", int(histo_.num_));
+    fprintf(stderr, "        Total Q-time: %.2f ms\n", dura / k);
+    fprintf(stderr, "               T-put: %.2f K queries/s\n",
+            k * histo_.num_ / dura);
+    assert(histo_.Average() >= 1.00);
+    fprintf(stderr, "                  FP: %.4f%%\n",
+            100.0 * (histo_.Average() - 1) / kranks_ / ki);
+    fprintf(stderr, "    Avg Hits Per Key: %.3f\n", histo_.Average());
+    fprintf(stderr, "            Max Hits: %d\n", int(histo_.max_));
+    fprintf(stderr, "------------------------------------------------------\n");
     fprintf(stderr, "          CDF 1 Hits: %5.2f%% (%u)\n", histo_.CDF(1) * 100,
             histo_.Get(1));
     for (uint32_t i = 2; i <= N; i++) {
