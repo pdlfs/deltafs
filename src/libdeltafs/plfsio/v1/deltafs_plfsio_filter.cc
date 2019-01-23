@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
- *
+ * Copyright (c) 2017-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
@@ -11,10 +11,9 @@
 #include "deltafs_plfsio_format.h"
 #include "deltafs_plfsio_types.h"
 
-#include "pdlfs-common/logging.h"
-
 #include <assert.h>
 #include <algorithm>
+
 #include <typeinfo>  // For operator typeid
 
 namespace pdlfs {
@@ -25,8 +24,8 @@ namespace plfsio {
 //   LeftMostBit(0x01) = 1
 //   LeftMostBit(0x02) = 2
 //   LeftMostBit(0x04) = 3
-//   ...
-static unsigned char LeftMostBit(uint32_t i) {
+namespace {
+unsigned char LeftMostBit(uint32_t i) {
   if (i == 0) return 0;  // Special case
   unsigned char result;
 #if defined(__GNUC__)
@@ -54,12 +53,11 @@ static unsigned char LeftMostBit(uint32_t i) {
 #endif
   return result;
 }
+}  // namespace
 
 BloomBlock::BloomBlock(const DirOptions& options, size_t bytes_to_reserve)
     : bits_per_key_(options.bf_bits_per_key) {
-  // Round down to reduce probing cost a little bit
-  k_ = static_cast<uint32_t>(bits_per_key_ * 0.69);  // 0.69 =~ ln(2)
-  if (k_ < 1) k_ = 1;
+  k_ = static_cast<uint32_t>(bits_per_key_ * 0.69) + 1;  // 0.69 =~ ln(2)
   if (k_ > 30) k_ = 30;
   // Reserve an extra byte for storing the k
   if (bytes_to_reserve != 0) {
@@ -95,12 +93,13 @@ void BloomBlock::Reset(uint32_t num_keys) {
 void BloomBlock::AddKey(const Slice& key) {
   assert(!finished_);  // Finish() has not been called
   // Use double-hashing to generate a sequence of hash values.
-  uint32_t h = BloomHash(key);
-  const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+  const uint64_t hx = BloomHash(key);
+  uint32_t h1 = hx;
+  uint32_t h2 = hx >> 32;
   for (size_t j = 0; j < k_; j++) {
-    const uint32_t b = h % bits_;
+    const uint32_t b = h1 % bits_;
     space_[b / 8] |= (1 << (b % 8));
-    h += delta;
+    h1 += h2;
   }
 }
 
@@ -132,14 +131,15 @@ bool BloomKeyMayMatch(const Slice& key, const Slice& input) {
     return true;
   }
 
-  uint32_t h = BloomHash(key);
-  const uint32_t delta = (h >> 17) | (h << 15);  // Rotate right 17 bits
+  const uint64_t hx = BloomHash(key);
+  uint32_t h1 = hx;
+  uint32_t h2 = hx >> 32;
   for (size_t j = 0; j < k; j++) {
-    const uint32_t b = h % bits;
+    const uint32_t b = h1 % bits;
     if ((array[b / 8] & (1 << (b % 8))) == 0) {
       return false;
     }
-    h += delta;
+    h1 += h2;
   }
 
   return true;
@@ -984,11 +984,7 @@ Slice BitmapBlock<T>::Finish() {
   space_.push_back(static_cast<char>(key_bits_));
   // Remember the bitmap format
   const int fmt = BitmapFormatFromType<BitmapBlock<T> >();
-#ifndef NDEBUG
-  if (fmt != bm_fmt_) {
-    Warn(__LOG_ARGS__, "Bitmap format option does not match class type");
-  }
-#endif
+  assert(fmt == bm_fmt_);
   space_.push_back(static_cast<char>(fmt));
   return space_;
 }

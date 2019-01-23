@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015-2017 Carnegie Mellon University.
- *
+ * Copyright (c) 2017-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
  * All rights reserved.
  *
  * Use of this source code is governed by a BSD-style license that can be
@@ -9,8 +9,8 @@
 
 #pragma once
 
-#include "pdlfs-common/hash.h"
 #include "pdlfs-common/slice.h"
+#include "pdlfs-common/xxhash.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -21,8 +21,9 @@ namespace plfsio {
 // Return true if a key may match a given filter.
 typedef bool (*FilterTester)(const Slice& key, const Slice& input);
 
-inline uint32_t BloomHash(const Slice& key) {
-  return Hash(key.data(), key.size(), 0xbc9f1d34);  // Magic
+inline uint64_t BloomHash(const Slice& key) {
+  // Less Hashing, Same Performance: Building a Better Bloom Filter (RSA '08)
+  return xxhash64(key.data(), key.size(), 0);  // gi(x) = h1(x) + i*h2(x)
 }
 
 struct DirOptions;
