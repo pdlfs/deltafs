@@ -608,7 +608,7 @@ static void BM_LogAndApply(const char* bm) {
     BENCH(Bloom, Block) bench;
     bench.LogAndApply();
   } else if (strcmp(bm, "cf") == 0) {
-    BENCH(Cuckoo, Block<16>) bench;
+    BENCH(Cuckoo, Block<>) bench;
     bench.LogAndApply();
   } else {
     BM_Usage();

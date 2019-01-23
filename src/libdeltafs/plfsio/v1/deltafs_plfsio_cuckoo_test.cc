@@ -33,7 +33,7 @@ class CuckooTest {
   }
 
   static uint32_t KeyFringerprint(uint64_t ha) {
-    return CuckooFingerprint(ha, kBitsPerKey);
+    return CuckooFingerprint(ha, keybits_);
   }
 
   static uint64_t KeyHash(uint32_t k) {
@@ -56,8 +56,8 @@ class CuckooTest {
 
   void Finish() { data_ = cf_->TEST_Finish(); }
   void Reset(uint32_t num_keys) { cf_->Reset(num_keys); }
-  enum { kBitsPerKey = 16 };
-  typedef CuckooBlock<kBitsPerKey> CF;
+  enum { keybits_ = 16 };
+  typedef CuckooBlock<keybits_, 0> CF;
   DirOptions options_;
   std::string data_;  // Final filter data
   CF* cf_;
@@ -137,12 +137,16 @@ class PlfsFalsePositiveBench {
   }
 
   void Report(uint32_t hits, uint32_t n) {
-    fprintf(stderr, "----------------------------------------\n");
-    fprintf(stderr, "        Key bits: %d\n", int(keybits_));
+    const double ki = 1024.0;
+    fprintf(stderr, "------------------------------------------------\n");
+    fprintf(stderr, "          Bits per k: %d\n", int(keybits_));
+    fprintf(stderr, "       Keys inserted: %.3g Mi\n", n / ki / ki);
     const uint32_t num_queries = 1u << qlg_;
-    fprintf(stderr, "         Queries: %u Mi (ALL neg)\n", num_queries >> 20);
-    fprintf(stderr, "            Hits: %u\n", hits);
-    fprintf(stderr, "              FP: %.4f%%\n", 100.0 * hits / n);
+    fprintf(stderr, "             Queries: %.3g Mi (ALL neg)\n",
+            num_queries / ki / ki);
+    fprintf(stderr, "                Hits: %u\n", hits);
+    fprintf(stderr, "                  FP: %.4g%%\n",
+            100.0 * hits / num_queries);
   }
 
   DirOptions options_;
@@ -156,9 +160,11 @@ class PlfsFalsePositiveBench {
 class PlfsBloomBench : protected PlfsFalsePositiveBench {
  public:
   PlfsBloomBench() {
-    keybits_ = GetOption("BLOOM_KEY_BITS", 16);
+    keybits_ = GetOption("BLOOM_KEY_BITS", 12);
     nlg_ = GetOption("LG_KEYS", 20);
-    qlg_ = nlg_;
+    assert(nlg_ < 30);
+    qlg_ = GetOption("LG_QUERIES", nlg_);
+    assert(qlg_ < 30);
   }
 
   // Store filter data in *dst. Return number of keys inserted.
@@ -199,9 +205,11 @@ class PlfsBloomBench : protected PlfsFalsePositiveBench {
 class PlfsCuckooBench : protected PlfsFalsePositiveBench {
  public:
   PlfsCuckooBench() {
-    keybits_ = GetOption("CUCKOO_KEY_BITS", 16);
+    keybits_ = GetOption("CUCKOO_KEY_BITS", 12);
     nlg_ = GetOption("LG_KEYS", 20);
-    qlg_ = nlg_;
+    assert(nlg_ < 30);
+    qlg_ = GetOption("LG_QUERIES", nlg_);
+    assert(qlg_ < 30);
   }
 
   template <size_t k>
@@ -209,7 +217,7 @@ class PlfsCuckooBench : protected PlfsFalsePositiveBench {
     char tmp[4];
     Slice key(tmp, sizeof(tmp));
     options_.cuckoo_frac = -1;
-    CuckooBlock<k, k> ft(options_, 0);  // Do not reserve memory for it
+    CuckooBlock<k, 0> ft(options_, 0);  // Do not reserve memory for it
     const uint32_t num_keys = 1u << nlg_;
     ft.Reset(num_keys);
     uint32_t i = 0;
@@ -230,9 +238,13 @@ class PlfsCuckooBench : protected PlfsFalsePositiveBench {
   case k:                                   \
     n = CuckooBuildFilter<k>(&filterdata_); \
     break
+      CASE(10);
       CASE(12);
+      CASE(14);
       CASE(16);
+      CASE(18);
       CASE(20);
+      CASE(24);
       CASE(32);
       default:
         n = 0;
@@ -254,12 +266,14 @@ class PlfsCuckooBench : protected PlfsFalsePositiveBench {
 
   void Report(uint32_t hits, uint32_t n) {
     PlfsFalsePositiveBench::Report(hits, n);
+    const double ki = 1024.0;
     const uint32_t num_keys = 1u << nlg_;
-    fprintf(stderr, "        Num keys: %u Mi (%u Ki buckets of 4)\n",
-            num_keys >> 20, ((num_keys + 3) / 4) >> 10);
-    fprintf(stderr, "            Util: %.2f%%\n", 100.0 * n / num_keys);
-    fprintf(stderr, "    Bits per key: %.2f\n",
-            1.0 * keybits_ * 4 * (num_keys + 3) / 4 / n);
+    const uint32_t num_buckets = (num_keys + 3) / 4;
+    fprintf(stderr, "   Cuckoo bits per k: %.2f\n",
+            1.0 * keybits_ * 4 * num_buckets / n);
+    fprintf(stderr, "             Buckets: %.3g Ki = %.3g Mi keys\n",
+            1.0 * num_buckets / ki, num_keys / ki / ki);
+    fprintf(stderr, "                Util: %.2f%%\n", 100.0 * n / num_keys);
   }
 };
 

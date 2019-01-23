@@ -17,14 +17,10 @@ namespace plfsio {
 
 template <size_t k = 16, size_t v = 16>
 struct CuckooBucket {  // Fixed 4 items per bucket
-  unsigned x0_ : k;
-  //  unsigned y0_ : v;
-  unsigned x1_ : k;
-  //  unsigned y1_ : v;
-  unsigned x2_ : k;
-  //  unsigned y2_ : v;
-  unsigned x3_ : k;
-  //  unsigned y3_ : v;
+  unsigned long long x0_ : k + v;
+  unsigned long long x1_ : k + v;
+  unsigned long long x2_ : k + v;
+  unsigned long long x3_ : k + v;
 };
 
 template <size_t k = 16, size_t v = 16>
@@ -266,11 +262,14 @@ class CuckooKeyTester {
   }
 };
 
-template class CuckooBlock<32, 32>;
-template class CuckooBlock<24, 24>;
-template class CuckooBlock<20, 20>;
-template class CuckooBlock<16, 16>;
-template class CuckooBlock<12, 12>;
+template class CuckooBlock<32, 0>;
+template class CuckooBlock<24, 0>;
+template class CuckooBlock<20, 0>;
+template class CuckooBlock<18, 0>;
+template class CuckooBlock<16, 0>;
+template class CuckooBlock<14, 0>;
+template class CuckooBlock<12, 0>;
+template class CuckooBlock<10, 0>;
 
 bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
   const size_t len = input.size();
@@ -283,12 +282,15 @@ bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
   switch (int(bits)) {
 #define CASE(n) \
   case n:       \
-    return CuckooKeyTester<n, n>()(key, input)
+    return CuckooKeyTester<n, 0>()(key, input)
     CASE(32);
     CASE(24);
     CASE(20);
+    CASE(18);
     CASE(16);
+    CASE(14);
     CASE(12);
+    CASE(10);
 #undef CASE
     default:
       return true;

@@ -48,7 +48,7 @@ struct DirOptions;
 extern bool CuckooKeyMayMatch(const Slice& key, const Slice& input);
 
 // A simple cuckoo hash filter implementation.
-template <size_t k = 16, size_t v = 16>
+template <size_t k = 16, size_t v = 0>
 class CuckooBlock {
  public:
   CuckooBlock(const DirOptions& options, size_t bytes_to_reserve);
