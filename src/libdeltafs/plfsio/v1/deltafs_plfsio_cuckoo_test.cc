@@ -127,7 +127,7 @@ class PlfsFalsePositiveBench {
     }
   }
 
-  static inline int GetOptions(const char* key, int def) {
+  static inline int GetOption(const char* key, int def) {
     int opt = FromEnv(key, def);
     fprintf(stderr, "%s=%d\n", key, opt);
     return opt;
@@ -153,8 +153,8 @@ class PlfsFalsePositiveBench {
 class PlfsBloomBench : protected PlfsFalsePositiveBench {
  public:
   PlfsBloomBench() {
-    keybits_ = GetOptions("BLOOM_KEY_BITS", 16);
-    nlg_ = GetOptions("LG_KEYS", 20);
+    keybits_ = GetOption("BLOOM_KEY_BITS", 16);
+    nlg_ = GetOption("LG_KEYS", 20);
     qlg_ = nlg_;
   }
 
@@ -196,8 +196,8 @@ class PlfsBloomBench : protected PlfsFalsePositiveBench {
 class PlfsCuckooBench : protected PlfsFalsePositiveBench {
  public:
   PlfsCuckooBench() {
-    keybits_ = GetOptions("CUCKOO_KEY_BITS", 16);
-    nlg_ = GetOptions("LG_KEYS", 20);
+    keybits_ = GetOption("CUCKOO_KEY_BITS", 16);
+    nlg_ = GetOption("LG_KEYS", 20);
     qlg_ = nlg_;
   }
 

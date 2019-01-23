@@ -251,25 +251,29 @@ TEST(RoaringBitmapFilterTest, RoaringFormat) {
 
 template <typename T>
 class PlfsFilterBench {
- public:
-  static int GetOption(const char* key, int defval) {
+  static int FromEnv(const char* key, int def) {
     const char* env = getenv(key);
-    if (env == NULL) {
-      return defval;
-    } else if (env[0] == 0) {
-      return defval;
-    } else {
+    if (env && env[0]) {
       return atoi(env);
+    } else {
+      return def;
     }
   }
 
+  static inline int GetOption(const char* key, int def) {
+    int opt = FromEnv(key, def);
+    fprintf(stderr, "%s=%d\n", key, opt);
+    return opt;
+  }
+
+ public:
   explicit PlfsFilterBench(size_t key_bits = 24)
       : num_tables_(GetOption("TABLE_NUM", 64)), key_bits_(key_bits) {
     options_.bf_bits_per_key = GetOption("BF_BITS", 10);
     options_.bm_fmt = static_cast<BitmapFormat>(BitmapFormatFromType<T>());
     options_.bm_key_bits = key_bits_;
 
-    fprintf(stderr, "Generating keys ... (may take a while)\n");
+    fprintf(stderr, "Generating unordered keys ... (may take a while)\n");
     keys_.reserve(1u << key_bits_);
     for (uint32_t x = 0; x < (1u << key_bits_); x++) keys_.push_back(x);
     std::random_shuffle(keys_.begin(), keys_.end());
@@ -303,9 +307,11 @@ class PlfsFilterBench {
   }
 
   void LogAndApply() {
-    const double k = 1000.0, ki = 1024.0;
-    const uint64_t start = Env::Default()->NowMicros();
+    const double ki = 1024.0;
 #if defined(PDLFS_PLATFORM_POSIX)
+#if defined(PDLFS_OS_LINUX)
+    const uint64_t start = Env::Default()->NowMicros();
+#endif
     struct rusage tmp_usage;
     int r0 = getrusage(RUSAGE_SELF, &tmp_usage);
     ASSERT_EQ(r0, 0);
@@ -321,17 +327,20 @@ class PlfsFilterBench {
     }
     fprintf(stderr, "\r%d/%d\n", int(num_tables_), int(num_tables_));
     fprintf(stderr, "Done!\n");
+#if defined(PDLFS_PLATFORM_POSIX)
+#if defined(PDLFS_OS_LINUX)
     const uint64_t end = Env::Default()->NowMicros();
     const uint64_t dura = end - start;
-
+#endif
+#endif
     fprintf(stderr, "----------------------------------------\n");
-    fprintf(stderr, "  Keys Per Filter: %d\n", int(num_keys));
-    fprintf(stderr, "      Num Filters: %d\n", int(num_tables_));
-    fprintf(stderr, "Total Filter Size: %.2f MiB\n", 1.0 * size / ki / ki);
+    fprintf(stderr, " #Keys Per Filter: %d\n", int(num_keys));
+    fprintf(stderr, "         #Filters: %d\n", int(num_tables_));
+    fprintf(stderr, "      Filter Size: %.2f MiB\n", 1.0 * size / ki / ki);
     fprintf(stderr, "          Density: %.2f%%\n", 100.0 / num_tables_);
-    fprintf(stderr, "     Storage Cost: %.2f (bits per key)\n",
+    fprintf(stderr, "             Cost: %.2f (bits per key)\n",
             8.0 * size / (num_keys * num_tables_));
-    fprintf(stderr, " Memory Footprint: %.2f MiB\n",
+    fprintf(stderr, "       Memory Use: %.2f MiB\n",
             1.0 * ft_->memory_usage() / ki / ki);
 
 #if defined(PDLFS_PLATFORM_POSIX)
