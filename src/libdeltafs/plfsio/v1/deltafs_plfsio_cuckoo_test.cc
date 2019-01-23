@@ -20,6 +20,9 @@ namespace plfsio {
 class CuckooTest {
  public:
   CuckooTest() {
+    // Ignore target occupation rate and always allocate the exact number of
+    // cuckoo buckets
+    options_.cuckoo_frac = -1;
     cf_ = new CF(options_, 0);  // Do not reserve memory
   }
 
@@ -205,6 +208,7 @@ class PlfsCuckooBench : protected PlfsFalsePositiveBench {
   uint32_t CuckooBuildFilter(std::string* const dst) {
     char tmp[4];
     Slice key(tmp, sizeof(tmp));
+    options_.cuckoo_frac = -1;
     CuckooBlock<k, k> ft(options_, 0);  // Do not reserve memory for it
     const uint32_t num_keys = 1u << nlg_;
     ft.Reset(num_keys);

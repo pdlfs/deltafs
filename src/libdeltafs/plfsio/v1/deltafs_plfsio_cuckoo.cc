@@ -61,22 +61,7 @@ struct CuckooTable {
     return x;
   }
 
-  void Reset(uint32_t num_keys) {
-    space_.resize(0);
-#if 0
-    num_buckets_ =
-        static_cast<size_t>(ceil(1.0 / frac_ * (num_keys + 3) / 4));
-#else
-    num_buckets_ = (num_keys + 3) / 4;
-#endif
-    if (num_buckets_ != 0) {  // Always round up to a nearest power of 2
-      num_buckets_ = UpperPower2(num_buckets_);
-    } else {
-      num_buckets_ = 1;
-    }
-    space_.resize(num_buckets_ * sizeof(CuckooBucket<k, v>), 0);
-  }
-
+  // REQUIRES: Resize() must have been CALLed.
   void Write(size_t i, size_t j, uint32_t x) {
     assert(i < num_buckets_ && j < 4);
     CuckooBucket<k, v>* const b =
@@ -88,6 +73,7 @@ struct CuckooTable {
     if (j == 3) b[i].x3_ = x;
   }
 
+  // REQUIRES: Resize() must have been CALLed.
   uint32_t Read(size_t i, size_t j) const {
     assert(i < num_buckets_ && j < 4);
     const CuckooBucket<k, v>* const b =
@@ -99,12 +85,28 @@ struct CuckooTable {
     return 0;
   }
 
+  void Resize(uint32_t num_keys);
   // Total number of hash buckets, over-allocated by frac_
   size_t num_buckets_;  // Must be a power of 2
   std::string space_;
   // Target occupation rate
   double frac_;
 };
+
+template <size_t k, size_t v>
+void CuckooTable<k, v>::Resize(uint32_t num_keys) {
+  const static size_t bucket_sz = sizeof(CuckooBucket<k, v>);
+  space_.resize(0);
+  if (frac_ > 0)
+    num_buckets_ = static_cast<size_t>(ceil(1.0 / frac_ * (num_keys + 3) / 4));
+  else
+    num_buckets_ = (num_keys + 3) / 4;
+  if (num_buckets_ != 0)  // Always round up to a nearest power of 2
+    num_buckets_ = UpperPower2(num_buckets_);
+  else
+    num_buckets_ = 1;
+  space_.resize(num_buckets_ * bucket_sz, 0);
+}
 
 template <size_t k, size_t v>
 CuckooBlock<k, v>::CuckooBlock(const DirOptions& options,
@@ -128,7 +130,7 @@ CuckooBlock<k, v>::~CuckooBlock() {
 
 template <size_t k, size_t v>
 void CuckooBlock<k, v>::Reset(uint32_t num_keys) {
-  rep_->Reset(num_keys);
+  rep_->Resize(num_keys);
   victim_index_ = 0;
   victim_fp_ = 0;
   finished_ = false;
