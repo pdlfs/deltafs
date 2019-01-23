@@ -54,8 +54,11 @@ class BloomBlock {
   // REQUIRES: Finish() has not been called.
   void AddKey(const Slice& key);
 
-  // Finalize the block data and return its contents.
+  // Finalize the filter and return its contents.
   Slice Finish();
+
+  // Finalize the filter and return a copy of its contents.
+  std::string TEST_Finish();
 
   // Return the underlying buffer space.
   size_t memory_usage() const { return space_.capacity(); }

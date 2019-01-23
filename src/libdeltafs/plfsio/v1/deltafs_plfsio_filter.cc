@@ -104,6 +104,11 @@ void BloomBlock::AddKey(const Slice& key) {
   }
 }
 
+std::string BloomBlock::TEST_Finish() {
+  Finish();
+  return space_;
+}
+
 Slice BloomBlock::Finish() {
   assert(!finished_);
   finished_ = true;

@@ -65,8 +65,11 @@ class CuckooBlock {
   // Return true if the insertion is success, or false otherwise.
   bool TEST_AddKey(const Slice& key);
 
-  // Finalize the block data and return its contents.
+  // Finalize the filter and return its contents.
   Slice Finish();
+
+  // Finalize the filter and return a copy of its contents.
+  std::string TEST_Finish();
 
   size_t num_victims()
       const;  // Number of keys not inserted into the cuckoo table

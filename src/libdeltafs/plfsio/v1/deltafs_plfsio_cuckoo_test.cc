@@ -8,6 +8,7 @@
  */
 
 #include "deltafs_plfsio_cuckoo.h"
+#include "deltafs_plfsio_filter.h"
 #include "deltafs_plfsio_types.h"
 
 #include "pdlfs-common/testharness.h"
@@ -50,7 +51,7 @@ class CuckooTest {
     return cf_->TEST_AddKey(Slice(tmp, sizeof(tmp)));
   }
 
-  void Finish() { data_ = cf_->Finish().ToString(); }
+  void Finish() { data_ = cf_->TEST_Finish(); }
   void Reset(uint32_t num_keys) { cf_->Reset(num_keys); }
   enum { kBitsPerKey = 16 };
   typedef CuckooBlock<kBitsPerKey> CF;
@@ -114,9 +115,201 @@ TEST(CuckooTest, CF) {
   }
 }
 
+// Evaluate false positive rate under different filter configurations.
+class PlfsFalsePositiveBench {
+ protected:
+  static int FromEnv(const char* key, int def) {
+    const char* env = getenv(key);
+    if (env && env[0]) {
+      return atoi(env);
+    } else {
+      return def;
+    }
+  }
+
+  static inline int GetOptions(const char* key, int def) {
+    int opt = FromEnv(key, def);
+    fprintf(stderr, "%s=%d\n", key, opt);
+    return opt;
+  }
+
+  void Report(uint32_t hits, uint32_t n) {
+    fprintf(stderr, "----------------------------------------\n");
+    fprintf(stderr, "        Key bits: %d\n", int(keybits_));
+    const uint32_t num_queries = 1u << qlg_;
+    fprintf(stderr, "         Queries: %u Mi (ALL neg)\n", num_queries >> 20);
+    fprintf(stderr, "            Hits: %u\n", hits);
+    fprintf(stderr, "              FP: %.4f%%\n", 100.0 * hits / n);
+  }
+
+  DirOptions options_;
+  std::string filterdata_;
+  size_t keybits_;
+  // Number of keys to query is 1u << qlg_
+  size_t qlg_;
+  size_t nlg_;
+};
+
+class PlfsBloomBench : protected PlfsFalsePositiveBench {
+ public:
+  PlfsBloomBench() {
+    keybits_ = GetOptions("BLOOM_KEY_BITS", 16);
+    nlg_ = GetOptions("LG_KEYS", 20);
+    qlg_ = nlg_;
+  }
+
+  // Store filter data in *dst. Return number of keys inserted.
+  uint32_t BuildFilter(std::string* const dst) {
+    char tmp[4];
+    Slice key(tmp, sizeof(tmp));
+    options_.bf_bits_per_key = keybits_;
+    BloomBlock ft(options_, 0);  // Do not reserve memory for it
+    const uint32_t num_keys = 1u << nlg_;
+    ft.Reset(num_keys);
+    uint32_t i = 0;
+    for (; i < num_keys; i++) {
+      EncodeFixed32(tmp, i);
+      ft.AddKey(key);
+    }
+    *dst = ft.TEST_Finish();
+    return i;
+  }
+
+  void LogAndApply() {
+    uint32_t n = BuildFilter(&filterdata_);
+    uint32_t hits = 0;
+    char tmp[4];
+    Slice key(tmp, sizeof(tmp));
+    const uint32_t num_queries = 1u << qlg_;
+    uint32_t i = n;
+    for (; i < n + num_queries; i++) {
+      EncodeFixed32(tmp, i);
+      if (BloomKeyMayMatch(key, filterdata_)) {
+        hits++;
+      }
+    }
+
+    Report(hits, n);
+  }
+};
+
+class PlfsCuckooBench : protected PlfsFalsePositiveBench {
+ public:
+  PlfsCuckooBench() {
+    keybits_ = GetOptions("CUCKOO_KEY_BITS", 16);
+    nlg_ = GetOptions("LG_KEYS", 20);
+    qlg_ = nlg_;
+  }
+
+  template <size_t k>
+  uint32_t CuckooBuildFilter(std::string* const dst) {
+    char tmp[4];
+    Slice key(tmp, sizeof(tmp));
+    CuckooBlock<k, k> ft(options_, 0);  // Do not reserve memory for it
+    const uint32_t num_keys = 1u << nlg_;
+    ft.Reset(num_keys);
+    uint32_t i = 0;
+    for (; i < num_keys; i++) {
+      EncodeFixed32(tmp, i);
+      if (!ft.TEST_AddKey(key)) {
+        break;
+      }
+    }
+    *dst = ft.TEST_Finish();
+    return i;
+  }
+
+  void LogAndApply() {
+    uint32_t n;
+    switch (keybits_) {
+#define CASE(k)                             \
+  case k:                                   \
+    n = CuckooBuildFilter<k>(&filterdata_); \
+    break
+      CASE(12);
+      CASE(16);
+      CASE(20);
+      CASE(32);
+      default:
+        n = 0;
+    }
+    uint32_t hits = 0;
+    char tmp[4];
+    Slice key(tmp, sizeof(tmp));
+    const uint32_t num_queries = 1u << qlg_;
+    uint32_t i = n;
+    for (; i < n + num_queries; i++) {
+      EncodeFixed32(tmp, i);
+      if (CuckooKeyMayMatch(key, filterdata_)) {
+        hits++;
+      }
+    }
+
+    Report(hits, n);
+  }
+
+  void Report(uint32_t hits, uint32_t n) {
+    PlfsFalsePositiveBench::Report(hits, n);
+    const uint32_t num_keys = 1u << nlg_;
+    fprintf(stderr, "        Num keys: %u Mi (%u Ki buckets of 4)\n",
+            num_keys >> 20, ((num_keys + 3) / 4) >> 10);
+    fprintf(stderr, "            Util: %.2f%%\n", 100.0 * n / num_keys);
+    fprintf(stderr, "    Bits per key: %.2f\n",
+            1.0 * keybits_ * 4 * (num_keys + 3) / 4 / n);
+  }
+};
+
 }  // namespace plfsio
 }  // namespace pdlfs
 
+#if defined(PDLFS_GFLAGS)
+#include <gflags/gflags.h>
+#endif
+#if defined(PDLFS_GLOG)
+#include <glog/logging.h>
+#endif
+
+static void BM_Usage() {
+  fprintf(stderr, "Use --bench=[bf,cf] to run benchmark.\n");
+  fprintf(stderr, "\n");
+}
+
+static void BM_Main(int* argc, char*** argv) {
+#if defined(PDLFS_GFLAGS)
+  google::ParseCommandLineFlags(argc, argv, true);
+#endif
+#if defined(PDLFS_GLOG)
+  google::InitGoogleLogging((*argv)[0]);
+  google::InstallFailureSignalHandler();
+#endif
+  pdlfs::Slice bench_name;
+  if (*argc > 1) {
+    bench_name = pdlfs::Slice((*argv)[*argc - 1]);
+  } else {
+    BM_Usage();
+  }
+  if (bench_name.starts_with("--bench=bf")) {
+    typedef pdlfs::plfsio::PlfsBloomBench BM_Bench;
+    BM_Bench bench;
+    bench.LogAndApply();
+  } else if (bench_name.starts_with("--bench=cf")) {
+    typedef pdlfs::plfsio::PlfsCuckooBench BM_Bench;
+    BM_Bench bench;
+    bench.LogAndApply();
+  } else {
+    BM_Usage();
+  }
+}
+
 int main(int argc, char* argv[]) {
-  return pdlfs::test::RunAllTests(&argc, &argv);
+  pdlfs::Slice token;
+  if (argc > 1) {
+    token = pdlfs::Slice(argv[argc - 1]);
+  }
+  if (!token.starts_with("--bench")) {
+    return pdlfs::test::RunAllTests(&argc, &argv);
+  } else {
+    BM_Main(&argc, &argv);
+    return 0;
+  }
 }

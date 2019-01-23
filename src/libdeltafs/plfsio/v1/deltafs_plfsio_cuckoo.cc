@@ -148,6 +148,13 @@ Slice CuckooBlock<k, v>::Finish() {
 }
 
 template <size_t k, size_t v>
+std::string CuckooBlock<k, v>::TEST_Finish() {
+  Rep* const r = rep_;
+  Finish();
+  return r->space_;
+}
+
+template <size_t k, size_t v>
 void CuckooBlock<k, v>::AddMore(const Slice& key) {
   key_starts.push_back(static_cast<uint32_t>(keys_.size()));
   keys_.append(key.data(), key.size());
