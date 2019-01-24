@@ -596,7 +596,7 @@ class PlfsFtBench {
 
 static void BM_Usage() {
   fprintf(stderr, "Use --bench=[wisc, bf, or cf[n]] to launch tests.\n");
-  fprintf(stderr, "n = 10,12,14,16,18,20,24,32.\n");
+  fprintf(stderr, "n = 10,12,14,16,18,20,22,24,30,32.\n");
   fprintf(stderr, "\n");
 }
 
@@ -627,8 +627,14 @@ static void BM_LogAndApply(const char* bm) {
   } else if (strcmp(bm, "cf20") == 0) {
     BENCH(Cuckoo, Block<20>) bench;
     bench.LogAndApply();
+  } else if (strcmp(bm, "cf22") == 0) {
+    BENCH(Cuckoo, Block<22>) bench;
+    bench.LogAndApply();
   } else if (strcmp(bm, "cf24") == 0) {
     BENCH(Cuckoo, Block<24>) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf30") == 0) {
+    BENCH(Cuckoo, Block<30>) bench;
     bench.LogAndApply();
   } else if (strcmp(bm, "cf32") == 0) {
     BENCH(Cuckoo, Block<32>) bench;

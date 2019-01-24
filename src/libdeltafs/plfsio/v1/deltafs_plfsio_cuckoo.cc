@@ -381,7 +381,9 @@ class CuckooKeyTester {
 };
 
 template class CuckooBlock<32, 0>;
+template class CuckooBlock<30, 0>;
 template class CuckooBlock<24, 0>;
+template class CuckooBlock<22, 0>;
 template class CuckooBlock<20, 0>;
 template class CuckooBlock<18, 0>;
 template class CuckooBlock<16, 0>;
@@ -402,7 +404,9 @@ bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
   case n:       \
     return CuckooKeyTester<n, 0>()(key, input)
     CASE(32);
+    CASE(30);
     CASE(24);
+    CASE(22);
     CASE(20);
     CASE(18);
     CASE(16);

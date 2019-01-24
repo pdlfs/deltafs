@@ -275,7 +275,9 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
       CASE(16);
       CASE(18);
       CASE(20);
+      CASE(22);
       CASE(24);
+      CASE(30);
       CASE(32);
       default:
         n = 0;
