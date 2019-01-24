@@ -580,7 +580,7 @@ class PlfsFtBench {
   int compression_;
   int qstep_;   // So only a subset of keys are queried: [0, max_key, step]
   int kranks_;  // Total number of ranks in Thousands to emulate
-  // Total number of keys (per rank) in Thousands
+  // Total number of keys (per rank) in Millions
   int mkeys_;
 };
 
