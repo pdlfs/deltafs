@@ -248,13 +248,37 @@ void CuckooBlock<k, v>::AddKey(const Slice& key) {
 }
 
 template <size_t k, size_t v>
+bool CuckooBlock<k, v>::Exists(uint64_t ha, uint32_t fp, const Rep* r) {
+  assert(r->num_buckets_ != 0);
+  size_t i1 = ha & (r->num_buckets_ - 1);
+  size_t i2 = CuckooAlt(i1, fp) & (r->num_buckets_ - 1);
+  assert(fp != 0);
+
+  if (r->full_) {
+    if (r->victim_fp_ == fp) {
+      size_t i = r->victim_index_;
+      if (i == i1 || i == i2) {
+        return true;
+      }
+    }
+  }
+
+  for (size_t j = 0; j < 4; j++) {
+    if (r->Read(i1, j) == fp || r->Read(i2, j) == fp) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+template <size_t k, size_t v>
 void CuckooBlock<k, v>::AddTo(uint64_t ha, uint32_t fp, Rep* r) {
   assert(!r->full_);
   size_t i = ha & (r->num_buckets_ - 1);  // Num buckets is always a power of 2
 
   // Our goal is to put fp into bucket i
-  for (int count = 0; count < max_cuckoo_moves_; count++) {
-    if (k < 32) assert((fp & (~((1u << k) - 1))) == 0);
+  for (int moves = 0; moves < max_cuckoo_moves_; moves++) {
     for (size_t j = 0; j < 4; j++) {
       uint32_t cur = r->Read(i, j);
       if (cur == fp) return;  // Done
@@ -263,7 +287,7 @@ void CuckooBlock<k, v>::AddTo(uint64_t ha, uint32_t fp, Rep* r) {
         return;  // Done
       }
     }
-    if (count != 0) {  // Kick out a victim so we can put fp in
+    if (moves != 0) {  // Kick out a victim so we can put fp in
       size_t victim = rnd_.Next() & 3;
       uint32_t old = r->Read(i, victim);
       assert(old != 0 && old != fp);
@@ -351,7 +375,8 @@ class CuckooKeyTester {
   }
 
  private:
-  int Test(uint64_t ha, uint32_t fp, uint32_t num_buckets, const Slice& input) {
+  static int Test(uint64_t ha, uint32_t fp, uint32_t num_buckets,
+                  const Slice& input) {
     const char* const tail = input.data() + input.size();
     assert(input.size() >= 12);
 
@@ -367,7 +392,9 @@ class CuckooKeyTester {
       }
     }
 
-    CuckooReader<k, v> reader(Slice(input.data(), input.size() - 12));
+    Slice cuckoo_buckets = input;
+    cuckoo_buckets.remove_suffix(12);
+    const CuckooReader<k, v> reader(cuckoo_buckets);
     for (size_t j = 0; j < 4; j++) {
       if (reader.Read(i1, j) == fp) {
         return true;

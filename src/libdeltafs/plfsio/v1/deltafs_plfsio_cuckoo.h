@@ -94,6 +94,7 @@ class CuckooBlock {
   typedef CuckooTable<k, v> Rep;
   void operator=(const CuckooBlock& cuckoo);  // No copying allowed
   CuckooBlock(const CuckooBlock&);
+  bool Exists(uint64_t ha, uint32_t fp, const Rep* rep);
   void AddTo(uint64_t ha, uint32_t fp, Rep* rep);
   std::vector<Rep*> morereps_;  // Auxiliary tables
   // The main table
