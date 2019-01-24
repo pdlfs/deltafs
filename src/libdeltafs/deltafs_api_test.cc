@@ -449,11 +449,11 @@ class PlfsFtBench {
 
  public:
   PlfsFtBench() {
-    options_.cuckoo_frac = 0.95;
+    options_.cuckoo_frac = -1;  // Force exact match, no over-allocation
     options_.bf_bits_per_key = GetOptions("BF_BITS_PER_KEY", 20);
-    kranks_ = GetOptions("LG_RANKS", 1);
-    kkeys_ = GetOptions("LG_KEYS", 128);
-    qstep_ = GetOptions("QUERY_STEP", kkeys_ / 4);
+    kranks_ = GetOptions("KI_RANKS", 1);
+    mkeys_ = GetOptions("MI_KEYS", 1);
+    qstep_ = GetOptions("QUERY_STEP", (mkeys_ << 13));
     compression_ = GetOptions("SNAPPY", 0);
     dump_ = GetOptions("DUMP", 0);
   }
@@ -467,7 +467,7 @@ class PlfsFtBench {
   void LogAndApply() {
     ft_ = new FilterType(options_, 0);  // Do not reserve memory for the filter
     ASSERT_TRUE(ft_ != NULL);
-    const uint32_t num_keys = kkeys_ << 10;
+    const uint32_t num_keys = mkeys_ << 20;
     uint32_t num_ranks = kranks_ << 10;
     ft_->Reset(num_keys);
     char tmp[12];
@@ -504,7 +504,7 @@ class PlfsFtBench {
   }
 
   void Query() {
-    const uint32_t num_keys = kkeys_ << 10;
+    const uint32_t num_keys = mkeys_ << 20;
     uint32_t num_ranks = kranks_ << 10;
     char tmp[12];
     fprintf(stderr, "Querying...\n");
@@ -537,19 +537,19 @@ class PlfsFtBench {
     if (dump_) return Dump();
     const double k = 1000.0, ki = 1024.0;
     fprintf(stderr, "------------------------------------------------------\n");
-    fprintf(stderr, "            Num Keys: %d K (%d victims)\n", kkeys_,
-            int(ft_->num_victims()));
-    fprintf(stderr, "               Ranks: %d K\n", kranks_);
+    fprintf(stderr, "            Num Keys: %d Mi (%.3g%% victims)\n", mkeys_,
+            100.0 * ft_->num_victims() / mkeys_ / ki / ki);
+    fprintf(stderr, "               Ranks: %d Ki\n", kranks_);
     fprintf(stderr, "Filter Bytes Per Key: %.3f (%.3f after compression)\n",
-            1.0 * ftdata_.size() / kkeys_ / ki,
+            1.0 * ftdata_.size() / mkeys_ / ki / ki,
             1.0 * (compressed_.empty() ? ftdata_.size() : compressed_.size()) /
-                kkeys_ / ki);
+                mkeys_ / ki / ki);
     fprintf(stderr, "             Queries: %d\n", int(histo_.num_));
-    fprintf(stderr, "        Total Q-time: %.2f ms\n", dura / k);
-    fprintf(stderr, "               T-put: %.2f K queries/s\n",
+    fprintf(stderr, "        Total Q-time: %.3f ms\n", dura / k);
+    fprintf(stderr, "               T-put: %.3g K queries/s\n",
             k * histo_.num_ / dura);
     assert(histo_.Average() >= 1.00);
-    fprintf(stderr, "                  FP: %.4f%%\n",
+    fprintf(stderr, "                  FP: %.4g%%\n",
             100.0 * (histo_.Average() - 1) / kranks_ / ki);
     fprintf(stderr, "    Avg Hits Per Key: %.3f\n", histo_.Average());
     fprintf(stderr, "            Max Hits: %d\n", int(histo_.max_));
@@ -581,7 +581,7 @@ class PlfsFtBench {
   int qstep_;   // So only a subset of keys are queried: [0, max_key, step]
   int kranks_;  // Total number of ranks in Thousands to emulate
   // Total number of keys (per rank) in Thousands
-  int kkeys_;
+  int mkeys_;
 };
 
 }  // namespace pdlfs
@@ -594,7 +594,8 @@ class PlfsFtBench {
 #endif
 
 static void BM_Usage() {
-  fprintf(stderr, "Use --bench=[wisc, bf, or cf] to launch tests.\n");
+  fprintf(stderr, "Use --bench=[wisc, bf, or cf[n]] to launch tests.\n");
+  fprintf(stderr, "n = 10,12,14,16,18,20,24,32.\n");
   fprintf(stderr, "\n");
 }
 
@@ -607,8 +608,29 @@ static void BM_LogAndApply(const char* bm) {
   } else if (strcmp(bm, "bf") == 0) {
     BENCH(Bloom, Block) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "cf") == 0) {
-    BENCH(Cuckoo, Block<>) bench;
+  } else if (strcmp(bm, "cf10") == 0) {
+    BENCH(Cuckoo, Block<10>) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf12") == 0) {
+    BENCH(Cuckoo, Block<12>) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf14") == 0) {
+    BENCH(Cuckoo, Block<14>) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf16") == 0) {
+    BENCH(Cuckoo, Block<16>) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf18") == 0) {
+    BENCH(Cuckoo, Block<18>) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf20") == 0) {
+    BENCH(Cuckoo, Block<20>) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf24") == 0) {
+    BENCH(Cuckoo, Block<24>) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf32") == 0) {
+    BENCH(Cuckoo, Block<32>) bench;
     bench.LogAndApply();
   } else {
     BM_Usage();

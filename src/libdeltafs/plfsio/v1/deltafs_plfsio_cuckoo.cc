@@ -281,7 +281,7 @@ void CuckooBlock<k, v>::AddTo(uint64_t ha, uint32_t fp, Rep* r) {
 
 template <size_t k, size_t v>
 size_t CuckooBlock<k, v>::num_victims() const {
-  return keys_.size();
+  return key_sizes_.size();
 }
 
 template <size_t k, size_t v>
