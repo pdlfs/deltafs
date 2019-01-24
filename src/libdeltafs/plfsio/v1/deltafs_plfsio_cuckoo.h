@@ -83,9 +83,9 @@ class CuckooBlock {
   size_t TEST_NumBuckets() const;
 
  private:
-  std::vector<uint32_t> key_sizes;  // The size of each overflow key
+  std::vector<uint32_t> key_sizes_;  // The size of each overflow key
   std::string keys_;
-  int max_cuckoo_moves_;
+  const int max_cuckoo_moves_;
   bool finished_;  // If Finish() has been called
   Random rnd_;
 

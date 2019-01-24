@@ -155,14 +155,14 @@ void CuckooBlock<k, v>::Reset(uint32_t num_keys) {
   }
   morereps_.resize(0);
   rep_->Reset(num_keys);
-  key_sizes.resize(0);
+  key_sizes_.resize(0);
   keys_.resize(0);
   finished_ = false;
 }
 
 template <size_t k, size_t v>
 void CuckooBlock<k, v>::MaybeBuildMoreTables() {
-  uint32_t limit = static_cast<uint32_t>(key_sizes.size());
+  uint32_t limit = static_cast<uint32_t>(key_sizes_.size());
   const char* start = &keys_[0];
 
   uint32_t i = 0;
@@ -171,9 +171,9 @@ void CuckooBlock<k, v>::MaybeBuildMoreTables() {
     r->Resize(limit - i);
 
     for (; i < limit; i++) {
-      uint64_t ha = CuckooHash(Slice(start, key_sizes[i]));
+      uint64_t ha = CuckooHash(Slice(start, key_sizes_[i]));
       uint32_t fp = CuckooFingerprint(ha, k);
-      start += key_sizes[i];
+      start += key_sizes_[i];
 
       AddTo(ha, fp, r);
       if (r->full_) {
@@ -218,7 +218,7 @@ std::string CuckooBlock<k, v>::TEST_Finish() {
 
 template <size_t k, size_t v>
 void CuckooBlock<k, v>::AddMore(const Slice& key) {
-  key_sizes.push_back(static_cast<uint32_t>(key.size()));
+  key_sizes_.push_back(static_cast<uint32_t>(key.size()));
   keys_.append(key.data(), key.size());
 }
 
