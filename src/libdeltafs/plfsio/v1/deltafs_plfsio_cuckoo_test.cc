@@ -262,7 +262,7 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
   }
 
   void LogAndApply() {
-    uint32_t num_buckets;
+    uint32_t num_buckets = 0;
     uint32_t n;
     switch (keybits_) {
 #define CASE(k)                                           \
