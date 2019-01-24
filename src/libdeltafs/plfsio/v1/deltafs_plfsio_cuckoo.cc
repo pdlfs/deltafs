@@ -32,19 +32,22 @@ struct CuckooBucket {  // Fixed 4 items per bucket
 
 template <size_t k = 16, size_t v = 16>
 struct CuckooReader {
-  explicit CuckooReader(const Slice& input) : input_(input) {}
+  explicit CuckooReader(const Slice& input)
+      : b_(reinterpret_cast<const CuckooBucket<k, v>*>(&input[0])),
+        num_buckets_(input.size() / sizeof(b_[0])) {}
 
   uint32_t Read(size_t i, size_t j) const {
-    const CuckooBucket<k, v>* const b =
-        reinterpret_cast<const CuckooBucket<k, v>*>(&input_[0]);
-    if (j == 0) return b[i].x0_;
-    if (j == 1) return b[i].x1_;
-    if (j == 2) return b[i].x2_;
-    if (j == 3) return b[i].x3_;
+    assert(i < num_buckets_);
+    assert(j < 4);
+    if (j == 0) return b_[i].x0_;
+    if (j == 1) return b_[i].x1_;
+    if (j == 2) return b_[i].x2_;
+    if (j == 3) return b_[i].x3_;
     return 0;
   }
 
-  Slice input_;
+  const CuckooBucket<k, v>* const b_;
+  const uint32_t num_buckets_;
 };
 
 template <size_t k = 16, size_t v = 16>
