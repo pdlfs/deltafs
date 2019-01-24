@@ -231,6 +231,7 @@ class PlfsBloomBench : protected PlfsFalsePositiveBench {
 class PlfsCuckoBench : protected PlfsFalsePositiveBench {
  public:
   PlfsCuckoBench() {
+    use_auxtables_ = GetOption("CUCKOO_ENABLE_AUX", 1);
     keybits_ = GetOption("CUCKOO_KEY_BITS", 12);
     nlg_ = GetOption("LG_KEYS", 20);
     assert(nlg_ < 30);
@@ -239,7 +240,7 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
   }
 
   template <size_t k>
-  uint32_t CuckooBuildFilter(std::string* const dst) {
+  uint32_t CuckooBuildFilter(uint32_t* num_buckets, std::string* const dst) {
     char tmp[4];
     Slice key(tmp, sizeof(tmp));
     options_.cuckoo_frac = -1;
@@ -249,20 +250,24 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
     uint32_t i = 0;
     for (; i < num_keys; i++) {
       EncodeFixed32(tmp, i);
-      if (!ft.TEST_AddKey(key)) {
+      if (use_auxtables_) {
+        ft.AddKey(key);
+      } else if (!ft.TEST_AddKey(key)) {
         break;
       }
     }
     *dst = ft.TEST_Finish();
+    *num_buckets = ft.TEST_NumBuckets();
     return i;
   }
 
   void LogAndApply() {
+    uint32_t num_buckets;
     uint32_t n;
     switch (keybits_) {
-#define CASE(k)                             \
-  case k:                                   \
-    n = CuckooBuildFilter<k>(&filterdata_); \
+#define CASE(k)                                           \
+  case k:                                                 \
+    n = CuckooBuildFilter<k>(&num_buckets, &filterdata_); \
     break
       CASE(10);
       CASE(12);
@@ -287,20 +292,22 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
       }
     }
 
-    Report(hits, n);
+    Report(num_buckets, hits, n);
   }
 
-  void Report(uint32_t hits, uint32_t n) {
+  void Report(uint32_t num_buckets, uint32_t hits, uint32_t n) {
     PlfsFalsePositiveBench::Report(hits, n);
     const double ki = 1024.0;
-    const uint32_t num_keys = 1u << nlg_;
-    const uint32_t num_buckets = (num_keys + 3) / 4;
     fprintf(stderr, "   Cuckoo bits per k: %.2f\n",
             1.0 * keybits_ * 4 * num_buckets / n);
     fprintf(stderr, "             Buckets: %.3g Ki = %.3g Mi keys\n",
-            1.0 * num_buckets / ki, num_keys / ki / ki);
-    fprintf(stderr, "                Util: %.2f%%\n", 100.0 * n / num_keys);
+            1.0 * num_buckets / ki, 4.0 * num_buckets / ki / ki);
+    fprintf(stderr, "                Util: %.2f%%\n",
+            100.0 * n / num_buckets / 4);
   }
+
+  // If aux tables should be used
+  int use_auxtables_;
 };
 
 }  // namespace plfsio

@@ -247,8 +247,8 @@ void CuckooBlock<k, v>::AddKey(const Slice& key) {
 template <size_t k, size_t v>
 void CuckooBlock<k, v>::AddTo(uint64_t ha, uint32_t fp, Rep* r) {
   assert(!r->full_);
+  size_t i = ha & (r->num_buckets_ - 1);  // Num buckets is always a power of 2
 
-  size_t i = ha & (r->num_buckets_ - 1);
   // Our goal is to put fp into bucket i
   for (int count = 0; count < max_cuckoo_moves_; count++) {
     if (k < 32) assert((fp & (~((1u << k) - 1))) == 0);
@@ -317,27 +317,27 @@ class CuckooKeyTester {
     }
 
     uint64_t ha = CuckooHash(key);
-    uint32_t fp = CuckooFingerprint(ha, k);
+    const uint32_t fp = CuckooFingerprint(ha, k);
 
     size_t remaining_size = input.size();
-    size_t table_sz = 8;
+    size_t table_size = 8;
     for (; num_tables != 0; num_tables--) {
-      assert(remaining_size >= table_sz);
-      remaining_size -= table_sz;
+      assert(remaining_size >= table_size);
+      remaining_size -= table_size;
       if (remaining_size < 12) {  // Cannot read the next table
         return true;
       }
 
-      tail -= table_sz;
+      tail -= table_size;
       uint32_t num_buckets = DecodeFixed32(tail - 12);
-      table_sz = num_buckets * sizeof(CuckooBucket<k, v>) + 12;
+      table_size = num_buckets * sizeof(CuckooBucket<k, v>) + 12;
       if (num_buckets == 0) {  // No buckets found
         return true;
-      } else if (remaining_size < table_sz) {  // Cannot read table
+      } else if (remaining_size < table_size) {  // Cannot read table
         return true;
       }
 
-      Slice cuckoo_table(tail - table_sz, table_sz);
+      Slice cuckoo_table(tail - table_size, table_size);
       if (Test(ha, fp, num_buckets, cuckoo_table)) {
         return true;
       }
