@@ -30,10 +30,8 @@ inline uint64_t CuckooHash(const Slice& key) {
 }
 
 inline uint32_t CuckooFingerprint(uint64_t ha, size_t bits_per_key) {
-  uint32_t fp = static_cast<uint32_t>(ha >> 32);
-  if (bits_per_key < 32) {
-    fp = fp & ((1u << bits_per_key) - 1);
-  }
+  const size_t bits_to_move = 64 - bits_per_key;
+  uint32_t fp = static_cast<uint32_t>(ha >> bits_to_move);
   fp += (fp == 0);
   return fp;
 }
