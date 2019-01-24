@@ -30,12 +30,12 @@ inline uint64_t CuckooHash(const Slice& key) {
 }
 
 inline uint32_t CuckooFingerprint(uint64_t ha, size_t bits_per_key) {
-  uint32_t h = static_cast<uint32_t>(ha >> 32);
+  uint32_t fp = static_cast<uint32_t>(ha >> 32);
   if (bits_per_key < 32) {
-    h = h & ((1u << bits_per_key) - 1);
+    fp = fp & ((1u << bits_per_key) - 1);
   }
-  h += (h == 0);
-  return h;
+  fp += (fp == 0);
+  return fp;
 }
 
 inline size_t CuckooAlt(size_t i, uint32_t fp) {  // MurmurHash2
@@ -44,7 +44,7 @@ inline size_t CuckooAlt(size_t i, uint32_t fp) {  // MurmurHash2
 
 struct DirOptions;
 
-// Return false iff the target key does not exist in the given filter.
+// Return false iff the target key is absent from the given filter.
 extern bool CuckooKeyMayMatch(const Slice& key, const Slice& input);
 
 // A simple cuckoo hash filter implementation.
@@ -56,13 +56,18 @@ class CuckooBlock {
 
   void Reset(uint32_t num_keys);
 
-  // Insert a key into the cuckoo filter.
+  // Insert a key into the cuckoo filter. Key is first inserted into the
+  // main table. If the main table is full, key is inserted into
+  // one or more auxiliary tables.
   // REQUIRES: Reset(num_keys) has been called.
   // REQUIRES: Finish() has NOT been called.
   void AddKey(const Slice& key);
 
-  // Insert a key into the cuckoo filter.
+  // Insert a key into the cuckoo filter. Key is only inserted to the main
+  // table. The auxiliary table is ignored.
   // Return true if the insertion is success, or false otherwise.
+  // REQUIRES: Reset(num_keys) has been called.
+  // REQUIRES: Finish() has NOT been called.
   bool TEST_AddKey(const Slice& key);
 
   // Finalize the filter and return its contents.
@@ -71,25 +76,27 @@ class CuckooBlock {
   // Finalize the filter and return a copy of its contents.
   std::string TEST_Finish();
 
-  size_t num_victims()
-      const;  // Number of keys not inserted into the cuckoo table
-  size_t bytes_per_bucket() const;
-  size_t num_buckets() const;
+  size_t num_victims() const;  // #keys not inserted to the main table
+
+  size_t TEST_BytesPerCuckooBucket() const;
+  size_t TEST_NumCuckooTables() const;
+  size_t TEST_NumBuckets() const;
 
  private:
-  bool full_;
-  std::vector<uint32_t> key_starts;  // Starting offsets of all overflow keys
+  std::vector<uint32_t> key_sizes;  // The size of each overflow key
   std::string keys_;
-  size_t victim_index_;  // There is only one victim at most
-  uint32_t victim_fp_;
   int max_cuckoo_moves_;
   bool finished_;  // If Finish() has been called
   Random rnd_;
 
+  void MaybeBuildMoreTables();
   void AddMore(const Slice& key);
   typedef CuckooTable<k, v> Rep;
-  void operator=(const CuckooBlock&);  // No copying allowed
+  void operator=(const CuckooBlock& cuckoo);  // No copying allowed
   CuckooBlock(const CuckooBlock&);
+  void AddTo(uint64_t ha, uint32_t fp, Rep* rep);
+  std::vector<Rep*> morereps_;  // Auxiliary tables
+  // The main table
   Rep* rep_;
 };
 

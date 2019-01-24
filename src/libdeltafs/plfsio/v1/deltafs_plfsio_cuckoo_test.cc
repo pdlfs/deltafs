@@ -64,21 +64,19 @@ class CuckooTest {
 };
 
 TEST(CuckooTest, BytesPerBucket) {
-  fprintf(stderr, "%d\n", int(cf_->bytes_per_bucket()));
+  fprintf(stderr, "%d\n", int(cf_->TEST_BytesPerCuckooBucket()));
 }
 
 TEST(CuckooTest, AltIndex) {
   for (uint32_t ki = 1; ki <= 1024; ki *= 2) {
     uint32_t num_keys = ki << 10;
-    fprintf(stderr, "%4u Ki keys\n", ki);
     Reset(num_keys);
-    size_t num_buckets = cf_->num_buckets();
+    size_t num_buckets = cf_->TEST_NumBuckets();
     uint32_t k = 0;
     for (; k < num_keys; k++) {
       uint64_t hash = KeyHash(k);
       uint32_t fp = KeyFringerprint(hash);
-      size_t i1 = hash % num_buckets;
-      size_t i2 = CuckooAlt(i1, fp) % num_buckets;
+      size_t i1 = hash % num_buckets, i2 = CuckooAlt(i1, fp) % num_buckets;
       size_t i3 = CuckooAlt(i2, fp) % num_buckets;
       ASSERT_TRUE(i1 == i3);
     }
@@ -88,7 +86,6 @@ TEST(CuckooTest, AltIndex) {
 TEST(CuckooTest, Empty) {
   for (uint32_t ki = 1; ki <= 1024; ki *= 2) {
     uint32_t num_keys = ki << 10;
-    fprintf(stderr, "%4u Ki keys\n", ki);
     Reset(num_keys);
     Finish();
     uint32_t k = 0;
@@ -98,7 +95,7 @@ TEST(CuckooTest, Empty) {
   }
 }
 
-TEST(CuckooTest, CF) {
+TEST(CuckooTest, AddAndMatch) {
   for (uint32_t ki = 1; ki <= 1024; ki *= 2) {
     uint32_t num_keys = ki << 10;
     fprintf(stderr, "%4u Ki keys: ", ki);
@@ -110,7 +107,36 @@ TEST(CuckooTest, CF) {
       }
     }
     Finish();
-    fprintf(stderr, "%.2f%% Full\n", 100.0 * k / num_keys);
+    fprintf(stderr, "%.2f%% filled\n", 100.0 * k / num_keys);
+    uint32_t j = 0;
+    for (; j < k; j++) {
+      ASSERT_TRUE(KeyMayMatch(j));
+    }
+  }
+}
+
+class CuckooAuxTest : public CuckooTest {
+ public:
+  void AddKey(uint32_t k) {
+    char tmp[4];
+    EncodeFixed32(tmp, k);
+    cf_->AddKey(Slice(tmp, sizeof(tmp)));
+  }
+};
+
+TEST(CuckooAuxTest, AuxiliaryTables) {
+  for (uint32_t ki = 1; ki <= 1024; ki *= 2) {
+    uint32_t num_keys = ki << 10;
+    fprintf(stderr, "%4u Ki keys: ", ki);
+    Reset(num_keys);
+    uint32_t k = 0;
+    for (; k < num_keys; k++) {
+      AddKey(k);
+    }
+    Finish();
+    fprintf(stderr, "%.2fx buckets, %+d aux tables\n",
+            1.0 * cf_->TEST_NumBuckets() / ((num_keys + 3) / 4),
+            int(cf_->TEST_NumCuckooTables()) - 1);
     uint32_t j = 0;
     for (; j < k; j++) {
       ASSERT_TRUE(KeyMayMatch(j));
@@ -202,9 +228,9 @@ class PlfsBloomBench : protected PlfsFalsePositiveBench {
   }
 };
 
-class PlfsCuckooBench : protected PlfsFalsePositiveBench {
+class PlfsCuckoBench : protected PlfsFalsePositiveBench {
  public:
-  PlfsCuckooBench() {
+  PlfsCuckoBench() {
     keybits_ = GetOption("CUCKOO_KEY_BITS", 12);
     nlg_ = GetOption("LG_KEYS", 20);
     assert(nlg_ < 30);
@@ -311,7 +337,7 @@ static void BM_Main(int* argc, char*** argv) {
     BM_Bench bench;
     bench.LogAndApply();
   } else if (bench_name.starts_with("--bench=cf")) {
-    typedef pdlfs::plfsio::PlfsCuckooBench BM_Bench;
+    typedef pdlfs::plfsio::PlfsCuckoBench BM_Bench;
     BM_Bench bench;
     bench.LogAndApply();
   } else {
