@@ -449,7 +449,8 @@ class PlfsFtBench {
 
  public:
   PlfsFtBench() {
-    options_.cuckoo_frac = -1;  // Force exact match, no over-allocation
+    // Force exact space match for the main cuckoo table
+    options_.cuckoo_frac = -1;  // Auxiliary tables will be created on-demand
     options_.bf_bits_per_key = GetOptions("BF_BITS_PER_KEY", 20);
     kranks_ = GetOptions("KI_RANKS", 1);
     mkeys_ = GetOptions("MI_KEYS", 1);
