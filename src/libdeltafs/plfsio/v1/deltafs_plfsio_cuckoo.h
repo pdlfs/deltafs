@@ -59,14 +59,14 @@ class CuckooBlock {
   // one or more auxiliary tables.
   // REQUIRES: Reset(num_keys) has been called.
   // REQUIRES: Finish() has NOT been called.
-  void AddKey(const Slice& key);
+  void AddKey(const Slice& key, uint32_t value = 0);
 
   // Insert a key into the cuckoo filter. Key is only inserted to the main
   // table. The auxiliary table is ignored.
   // Return true if the insertion is success, or false otherwise.
   // REQUIRES: Reset(num_keys) has been called.
   // REQUIRES: Finish() has NOT been called.
-  bool TEST_AddKey(const Slice& key);
+  bool TEST_AddKey(const Slice& key, uint32_t value = 0);
 
   // Finalize the filter and return its contents.
   Slice Finish();
@@ -82,18 +82,19 @@ class CuckooBlock {
 
  private:
   std::vector<uint32_t> key_sizes_;  // The size of each overflow key
+  std::vector<uint32_t> values_;
   std::string keys_;
   const int max_cuckoo_moves_;
   bool finished_;  // If Finish() has been called
   Random rnd_;
 
   void MaybeBuildMoreTables();
-  void AddMore(const Slice& key);
+  void AddMore(const Slice& key, uint32_t value);
   typedef CuckooTable<k, v> Rep;
   void operator=(const CuckooBlock& cuckoo);  // No copying allowed
   CuckooBlock(const CuckooBlock&);
-  bool Exists(uint64_t ha, uint32_t fp, const Rep* rep);
   void AddTo(uint64_t ha, uint32_t fp, uint32_t data, Rep* rep);
+  bool Exists(uint64_t ha, uint32_t fp, const Rep* rep);
   std::vector<Rep*> morereps_;  // Auxiliary tables
   // The main table
   Rep* rep_;

@@ -56,7 +56,7 @@ class CuckooTest {
 
   void Finish() { data_ = cf_->TEST_Finish(); }
   void Reset(uint32_t num_keys) { cf_->Reset(num_keys); }
-  enum { keybits_ = 16 };
+  enum { keybits_ = 12 };
   typedef CuckooBlock<keybits_, 0> CF;
   DirOptions options_;
   std::string data_;  // Final filter data

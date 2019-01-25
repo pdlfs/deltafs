@@ -98,7 +98,8 @@ struct CuckooTable {
     assert(i < num_buckets_);
     assert(j < 4);
     uint64_t x = fp;
-    if (v != 0) x = (x << v) | (data & ((1ull << v) - 1));
+    if (v != 0)  // Fuse into a single composite value
+      x = (x << v) | (data & ((1ull << v) - 1));
     if (j == 0) b[i].x0_ = x;
     if (j == 1) b[i].x1_ = x;
     if (j == 2) b[i].x2_ = x;
@@ -190,6 +191,7 @@ void CuckooBlock<k, v>::Reset(uint32_t num_keys) {
   morereps_.resize(0);
   rep_->Reset(num_keys);
   key_sizes_.resize(0);
+  values_.resize(0);
   keys_.resize(0);
   finished_ = false;
 }
@@ -209,7 +211,11 @@ void CuckooBlock<k, v>::MaybeBuildMoreTables() {
       uint32_t fp = CuckooFingerprint(ha, k);
       start += key_sizes_[i];
 
-      AddTo(ha, fp, 0, r);
+      if (v != 0) {  // Skip values when v is disabled
+        AddTo(ha, fp, values_[i], r);
+      } else {
+        AddTo(ha, fp, 0, r);
+      }
       if (r->full_) {
         break;
       }
@@ -254,31 +260,34 @@ std::string CuckooBlock<k, v>::TEST_Finish() {
 }
 
 template <size_t k, size_t v>
-void CuckooBlock<k, v>::AddMore(const Slice& key) {
+void CuckooBlock<k, v>::AddMore(const Slice& key, uint32_t value) {
   key_sizes_.push_back(static_cast<uint32_t>(key.size()));
   keys_.append(key.data(), key.size());
+  if (v != 0) {  // Ignore data when v is disabled
+    values_.push_back(value);
+  }
 }
 
 template <size_t k, size_t v>
-bool CuckooBlock<k, v>::TEST_AddKey(const Slice& key) {
+bool CuckooBlock<k, v>::TEST_AddKey(const Slice& key, uint32_t value) {
   assert(!finished_);
   if (rep_->full_) return false;
-  AddKey(key);
+  AddKey(key, value);
   return true;
 }
 
 template <size_t k, size_t v>
-void CuckooBlock<k, v>::AddKey(const Slice& key) {
+void CuckooBlock<k, v>::AddKey(const Slice& key, uint32_t value) {
   assert(!finished_);
   uint64_t ha = CuckooHash(key);
   uint32_t fp = CuckooFingerprint(ha, k);
   // If the main table is full, stage the key at an overflow space
   if (rep_->full_) {
-    AddMore(key);
+    AddMore(key, value);
     return;
   }
 
-  AddTo(ha, fp, 0, rep_);
+  AddTo(ha, fp, value, rep_);
 }
 
 template <size_t k, size_t v>
@@ -314,11 +323,20 @@ void CuckooBlock<k, v>::AddTo(uint64_t ha, uint32_t fp, uint32_t data, Rep* r) {
   // Our goal is to put "fp" into bucket "i"
   for (int moves = 0; moves < max_cuckoo_moves_; moves++) {
     for (size_t j = 0; j < 4; j++) {
-      const uint32_t cur = r->key(i, j);
-      if (cur == fp) return;  // Done
-      if (cur == 0) {
+      std::pair<uint32_t, uint32_t> kv = r->pair(i, j);
+      if (kv.first == 0) {  // Direct insert if cell is empty
         r->Write(i, j, fp, data);
-        return;  // Done
+        return;
+      } else if (kv.first == fp) {  // Fingerprint matches the input
+        // If v is disabled we are done
+        if (v == 0) {
+          return;
+        }
+        // Otherwise we are done only if data
+        // happens to match as well
+        if (kv.second == (data & ((1ull << v) - 1))) {
+          return;
+        }
       }
     }
     if (moves != 0) {  // Kick out a victim so we can put "fp" in
@@ -333,10 +351,10 @@ void CuckooBlock<k, v>::AddTo(uint64_t ha, uint32_t fp, uint32_t data, Rep* r) {
     i = CuckooAlt(i, fp) & (r->num_buckets_ - 1);
   }
 
+  r->full_ = true;  // Full, no more inserts
   r->victim_index_ = i;
   r->victim_data_ = data;
   r->victim_fp_ = fp;
-  r->full_ = true;
 }
 
 template <size_t k, size_t v>
@@ -369,7 +387,7 @@ class CuckooKeyTester {
  public:
   bool operator()(const Slice& key, const Slice& input) {
     const char* tail = input.data() + input.size();
-    if (input.size() < 12) return true;  // No filter header, considered a match
+    if (input.size() < 12) return true;  // Not enough data for a header
 #ifndef NDEBUG
     size_t valbits = DecodeFixed32(tail - 8);
     assert(valbits == v);
@@ -377,7 +395,7 @@ class CuckooKeyTester {
     assert(keybits == k);
 #endif
     uint32_t num_tables = DecodeFixed32(tail - 12);
-    if (num_tables == 0) {  // No cuckoo tables found
+    if (num_tables == 0) {  // No cuckoo tables
       return true;
     }
 
@@ -389,14 +407,14 @@ class CuckooKeyTester {
     for (; num_tables != 0; num_tables--) {
       assert(remaining_size >= table_size);
       remaining_size -= table_size;
-      if (remaining_size < 16) {  // No table header, cannot proceed
+      if (remaining_size < 16) {  // No enough data for a table header
         return true;
       }
 
       tail -= table_size;
       uint32_t num_buckets = DecodeFixed32(tail - 16);
       table_size = num_buckets * sizeof(CuckooBucket<k, v>) + 16;
-      if (num_buckets == 0) {  // Empty table has no use
+      if (num_buckets == 0) {  // An empty table has no use
         return true;
       } else if (remaining_size < table_size) {  // Premature end of table
         return true;
