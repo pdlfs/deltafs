@@ -121,7 +121,7 @@ struct CuckooTable {
   std::string space_;
   // Total number of hash buckets, over-allocated by frac_
   size_t num_buckets_;  // Must be a power of 2
-  size_t victim_index_;
+  uint32_t victim_index_;
   uint32_t victim_data_;
   uint32_t victim_fp_;
   bool full_;
