@@ -422,15 +422,16 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
   case k:                                                 \
     n = CuckooBuildFilter<k>(&num_buckets, &filterdata_); \
     break
+      CASE(1);
+      CASE(2);
+      CASE(4);
+      CASE(8);
       CASE(10);
       CASE(12);
       CASE(14);
       CASE(16);
-      CASE(18);
       CASE(20);
-      CASE(22);
       CASE(24);
-      CASE(30);
       CASE(32);
       default:
         n = 0;
@@ -446,7 +447,7 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
         hits++;
       }
     }
-
+#undef CASE
     Report(num_buckets, hits, n);
   }
 
@@ -465,6 +466,89 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
   int use_auxtables_;
 };
 
+// Evaluate the accuracy of a cuckoo filter
+// when used as a hash table.
+class PlfsTableBench : public PlfsCuckoBench {
+ public:
+  PlfsTableBench() {  // Use a random generator to get random values
+    fprintf(stderr, "== LG_QUERIES IS IGNORED AND ONLY LG_KEYS MATTERS\n");
+    rndseed_ = GetOption("RANDOM_SEED", 301);
+  }
+
+  template <size_t k>
+  uint32_t CuckooBuildTable(std::string* const dst) {
+    Random rnd(rndseed_);
+    char tmp[4];
+    Slice key(tmp, sizeof(tmp));
+    options_.cuckoo_frac = -1;
+    CuckooBlock<k, 32> ft(options_, 0);  // Do not reserve memory for it
+    const uint32_t num_keys = 1u << nlg_;
+    ft.Reset(num_keys);
+    uint32_t i = 0;
+    for (; i < num_keys; i++) {
+      EncodeFixed32(tmp, i);
+      if (use_auxtables_) {
+        ft.AddKey(key, rnd.Next());
+      } else if (!ft.TEST_AddKey(key, rnd.Next())) {
+        break;
+      }
+    }
+    *dst = ft.TEST_Finish();
+    return i;
+  }
+
+  void LogAndApply() {
+    uint32_t n;
+    switch (keybits_) {
+#define CASE(k)                            \
+  case k:                                  \
+    n = CuckooBuildTable<k>(&filterdata_); \
+    break
+      CASE(1);
+      CASE(2);
+      CASE(4);
+      CASE(8);
+      CASE(10);
+      CASE(12);
+      CASE(14);
+      CASE(16);
+      CASE(20);
+      CASE(24);
+      CASE(32);
+      default:
+        n = 0;
+    }
+    std::vector<uint32_t> values;
+    size_t hits_sum = 0;
+    size_t hits_max = 0;
+    char tmp[4];
+    Slice key(tmp, sizeof(tmp));
+    uint32_t i = 0;
+    for (; i < n; i++) {
+      EncodeFixed32(tmp, i);
+      CuckooValues(key, filterdata_, &values);
+      hits_max = std::max(hits_max, values.size());
+      hits_sum += values.size();
+      values.resize(0);
+    }
+#undef CASE
+    Report(hits_sum, hits_max, n);
+  }
+
+  void Report(size_t hits_sum, size_t hits_max, uint32_t n) {
+    const double ki = 1024.0;
+    fprintf(stderr, "------------------------------------------------\n");
+    fprintf(stderr, "          Bits per k: %d\n", int(keybits_));
+    fprintf(stderr, "       Keys inserted: %.3g Mi\n", n / ki / ki);
+    fprintf(stderr, "             Queries: %.3g Mi\n", n / ki / ki);
+    fprintf(stderr, "    Max hits per key: %d\n", int(hits_max));
+    fprintf(stderr, "            Avg hits: %.3g\n", 1.0 * hits_sum / n);
+  }
+
+ private:
+  int rndseed_;
+};
+
 }  // namespace plfsio
 }  // namespace pdlfs
 
@@ -476,7 +560,7 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
 #endif
 
 static void BM_Usage() {
-  fprintf(stderr, "Use --bench=[bf,cf] to run benchmark.\n");
+  fprintf(stderr, "Use --bench=[bf,cf,kv] to run benchmark.\n");
   fprintf(stderr, "\n");
 }
 
@@ -500,6 +584,10 @@ static void BM_Main(int* argc, char*** argv) {
     bench.LogAndApply();
   } else if (bench_name.starts_with("--bench=cf")) {
     typedef pdlfs::plfsio::PlfsCuckoBench BM_Bench;
+    BM_Bench bench;
+    bench.LogAndApply();
+  } else if (bench_name.starts_with("--bench=kv")) {
+    typedef pdlfs::plfsio::PlfsTableBench BM_Bench;
     BM_Bench bench;
     bench.LogAndApply();
   } else {

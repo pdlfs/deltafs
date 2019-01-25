@@ -494,15 +494,16 @@ class CuckooKeyTester {
   template class CuckooBlock<K, 0>
 
 TEMPLATE(32);
-TEMPLATE(30);
 TEMPLATE(24);
-TEMPLATE(22);
 TEMPLATE(20);
-TEMPLATE(18);
 TEMPLATE(16);
 TEMPLATE(14);
 TEMPLATE(12);
 TEMPLATE(10);
+TEMPLATE(8);
+TEMPLATE(4);
+TEMPLATE(2);
+TEMPLATE(1);
 
 bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
   return CuckooValues(key, input, NULL);  // Test key existence only
@@ -524,15 +525,16 @@ bool CuckooValues(const Slice& key, const Slice& input,
   case n:       \
     return CuckooKeyTester<n, 0>()(key, input, values)
       CASE(32);
-      CASE(30);
       CASE(24);
-      CASE(22);
       CASE(20);
-      CASE(18);
       CASE(16);
       CASE(14);
       CASE(12);
       CASE(10);
+      CASE(8);
+      CASE(4);
+      CASE(2);
+      CASE(1);
 #undef CASE
       default:
         return true;
@@ -543,15 +545,16 @@ bool CuckooValues(const Slice& key, const Slice& input,
   case n:       \
     return CuckooKeyTester<n, 32>()(key, input, values)
       CASE(32);
-      CASE(30);
       CASE(24);
-      CASE(22);
       CASE(20);
-      CASE(18);
       CASE(16);
       CASE(14);
       CASE(12);
       CASE(10);
+      CASE(8);
+      CASE(4);
+      CASE(2);
+      CASE(1);
 #undef CASE
       default:
         return true;
