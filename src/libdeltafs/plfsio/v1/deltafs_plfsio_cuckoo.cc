@@ -62,25 +62,7 @@ struct CuckooReader {
 
 template <size_t k = 16, size_t v = 16>
 struct CuckooTable {
-  explicit CuckooTable(double frac)
-      : frac_(frac),
-        num_buckets_(0),  // Use Resize(num_keys) to allocate space
-        victim_index_(0),
-        victim_data_(0),
-        victim_fp_(0),
-        full_(false) {}
-
-  static inline uint64_t UpperPower2(uint64_t x) {
-    x--;
-    x |= x >> 1;
-    x |= x >> 2;
-    x |= x >> 4;
-    x |= x >> 8;
-    x |= x >> 16;
-    x |= x >> 32;
-    x++;
-    return x;
-  }
+  explicit CuckooTable(double frac) : frac_(frac) { Reset(0); }
 
   void Reset(uint32_t num_keys) {
     Resize(num_keys);  // Make room for buckets
@@ -145,6 +127,20 @@ struct CuckooTable {
   bool full_;
 };
 
+namespace {
+inline uint64_t UpperPower2(uint64_t x) {
+  x--;
+  x |= x >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  x |= x >> 32;
+  x++;
+  return x;
+}
+}  // namespace
+
 template <size_t k, size_t v>
 void CuckooTable<k, v>::Resize(uint32_t num_keys) {
   const static size_t bucket_sz = sizeof(CuckooBucket<k, v>);
@@ -198,7 +194,7 @@ void CuckooBlock<k, v>::Reset(uint32_t num_keys) {
 
 template <size_t k, size_t v>
 void CuckooBlock<k, v>::MaybeBuildMoreTables() {
-  uint32_t limit = static_cast<uint32_t>(key_sizes_.size());
+  const uint32_t limit = static_cast<uint32_t>(key_sizes_.size());
   const char* start = &keys_[0];
 
   uint32_t i = 0;
@@ -515,7 +511,7 @@ bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
 bool CuckooValues(const Slice& key, const Slice& input,
                   std::vector<uint32_t>* values) {
   const size_t len = input.size();
-  if (len < 8) {  // Filter invalid, considered a match
+  if (len < 8) {  // Not enough data for a header, consider it to be a match
     return true;
   }
 
