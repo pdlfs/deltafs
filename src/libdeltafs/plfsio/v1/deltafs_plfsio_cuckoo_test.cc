@@ -25,8 +25,9 @@ class CuckooTest {
 
   static uint64_t KeyHash(uint32_t k) {
     char tmp[4];
+    Slice key(tmp, sizeof(tmp));
     EncodeFixed32(tmp, k);
-    return CuckooHash(Slice(tmp, sizeof(tmp)));
+    return CuckooHash(key);
   }
 
   enum { keybits_ = 12 };
@@ -52,14 +53,16 @@ class CuckooFtTest : public CuckooTest {
 
   bool KeyMayMatch(uint32_t k) {
     char tmp[4];
+    Slice key(tmp, sizeof(tmp));
     EncodeFixed32(tmp, k);
-    return CuckooKeyMayMatch(Slice(tmp, sizeof(tmp)), data_);
+    return CuckooKeyMayMatch(key, data_);
   }
 
   bool AddKey(uint32_t k) {
     char tmp[4];
+    Slice key(tmp, sizeof(tmp));
     EncodeFixed32(tmp, k);
-    return cf_->TEST_AddKey(Slice(tmp, sizeof(tmp)));
+    return cf_->TEST_AddKey(key);
   }
 
   void Finish() { data_ = cf_->TEST_Finish(); }
@@ -124,8 +127,9 @@ class CuckooAuxTest : public CuckooFtTest {
  public:
   void AddKey(uint32_t k) {
     char tmp[4];
+    Slice key(tmp, sizeof(tmp));
     EncodeFixed32(tmp, k);
-    cf_->AddKey(Slice(tmp, sizeof(tmp)));
+    cf_->AddKey(key);
   }
 };
 
@@ -164,16 +168,25 @@ class CuckooKvTest : public CuckooTest {
     }
   }
 
+  bool GetValues(uint32_t k, std::vector<uint32_t>* values) {
+    char tmp[4];
+    Slice key(tmp, sizeof(tmp));
+    EncodeFixed32(tmp, k);
+    return CuckooValues(key, data_, values);
+  }
+
   bool KeyMayMatch(uint32_t k) {
     char tmp[4];
+    Slice key(tmp, sizeof(tmp));
     EncodeFixed32(tmp, k);
-    return CuckooKeyMayMatch(Slice(tmp, sizeof(tmp)), data_);
+    return CuckooKeyMayMatch(key, data_);
   }
 
   bool AddKey(uint32_t k) {
     char tmp[4];
+    Slice key(tmp, sizeof(tmp));
     EncodeFixed32(tmp, k);
-    return cf_->TEST_AddKey(Slice(tmp, sizeof(tmp)), k);
+    return cf_->TEST_AddKey(key, k);
   }
 
   void Finish() { data_ = cf_->TEST_Finish(); }
@@ -218,12 +231,36 @@ TEST(CuckooKvTest, KvAddAndMatch) {
   }
 }
 
+TEST(CuckooKvTest, KvAddAndGet) {
+  for (uint32_t ki = 1; ki <= 1024; ki *= 2) {
+    uint32_t num_keys = ki << 10;
+    fprintf(stderr, "%4u Ki keys: ", ki);
+    Reset(num_keys);
+    uint32_t k = 0;
+    for (; k < num_keys; k++) {
+      if (!AddKey(k)) {
+        break;
+      }
+    }
+    Finish();
+    fprintf(stderr, "%.2f%% filled\n", 100.0 * k / num_keys);
+    uint32_t j = 0;
+    std::vector<uint32_t> values;
+    for (; j < k; j++) {
+      ASSERT_TRUE(GetValues(j, &values));
+      ASSERT_TRUE(!values.empty());
+      values.resize(0);
+    }
+  }
+}
+
 class CuckooKvAuxTest : public CuckooKvTest {
  public:
   void AddKey(uint32_t k) {
     char tmp[4];
+    Slice key(tmp, sizeof(tmp));
     EncodeFixed32(tmp, k);
-    cf_->AddKey(Slice(tmp, sizeof(tmp)), k);
+    cf_->AddKey(key, k);
   }
 };
 
@@ -241,8 +278,11 @@ TEST(CuckooKvAuxTest, KvAuxiliaryTables) {
             1.0 * cf_->TEST_NumBuckets() / ((num_keys + 3) / 4),
             int(cf_->TEST_NumCuckooTables()) - 1);
     uint32_t j = 0;
+    std::vector<uint32_t> values;
     for (; j < k; j++) {
-      ASSERT_TRUE(KeyMayMatch(j));
+      ASSERT_TRUE(GetValues(j, &values));
+      ASSERT_TRUE(!values.empty());
+      values.resize(0);
     }
   }
 }
