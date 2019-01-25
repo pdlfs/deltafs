@@ -44,6 +44,9 @@ struct DirOptions;
 
 // Return false iff the target key is absent from the given filter.
 extern bool CuckooKeyMayMatch(const Slice& key, const Slice& input);
+// Retrieve the values to a specific key
+extern bool CuckooValues(const Slice& key, const Slice& input,
+                         std::vector<uint32_t>*);
 
 // A simple cuckoo hash filter implementation.
 template <size_t k = 16, size_t v = 0>

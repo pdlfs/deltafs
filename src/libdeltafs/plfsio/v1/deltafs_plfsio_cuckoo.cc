@@ -390,13 +390,8 @@ size_t CuckooBlock<k, v>::TEST_NumBuckets() const {
 template <size_t k, size_t v>
 class CuckooKeyTester {
  public:
-  bool operator()(const Slice& key, const Slice& input) {
-    return Find(key, input, NULL /* only test key existence */);
-  }
-
- private:
-  static bool Find(const Slice& key, const Slice& input,
-                   std::vector<uint32_t>* values) {
+  bool operator()(const Slice& key, const Slice& input,
+                  std::vector<uint32_t>* values) {
     const char* tail = input.data() + input.size();
     if (input.size() < 12) return true;  // Not enough data for a header
 #ifndef NDEBUG
@@ -446,6 +441,7 @@ class CuckooKeyTester {
     }
   }
 
+ private:
   static bool Fetch(uint64_t ha, uint32_t fp, uint32_t num_buckets,
                     const Slice& input, std::vector<uint32_t>* values) {
     const char* const tail = input.data() + input.size();
@@ -513,6 +509,11 @@ TEMPLATE(12);
 TEMPLATE(10);
 
 bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
+  return CuckooValues(key, input, NULL);  // Test key existence only
+}
+
+bool CuckooValues(const Slice& key, const Slice& input,
+                  std::vector<uint32_t>* values) {
   const size_t len = input.size();
   if (len < 8) {  // Filter invalid, considered a match
     return true;
@@ -525,7 +526,7 @@ bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
     switch (int(keybits)) {
 #define CASE(n) \
   case n:       \
-    return CuckooKeyTester<n, 0>()(key, input)
+    return CuckooKeyTester<n, 0>()(key, input, values)
       CASE(32);
       CASE(30);
       CASE(24);
@@ -544,7 +545,7 @@ bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
     switch (int(keybits)) {
 #define CASE(n) \
   case n:       \
-    return CuckooKeyTester<n, 32>()(key, input)
+    return CuckooKeyTester<n, 32>()(key, input, values)
       CASE(32);
       CASE(30);
       CASE(24);
