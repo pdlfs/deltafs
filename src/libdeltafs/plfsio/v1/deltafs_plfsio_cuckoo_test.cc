@@ -218,6 +218,35 @@ TEST(CuckooKvTest, KvAddAndMatch) {
   }
 }
 
+class CuckooKvAuxTest : public CuckooKvTest {
+ public:
+  void AddKey(uint32_t k) {
+    char tmp[4];
+    EncodeFixed32(tmp, k);
+    cf_->AddKey(Slice(tmp, sizeof(tmp)), k);
+  }
+};
+
+TEST(CuckooKvAuxTest, KvAuxiliaryTables) {
+  for (uint32_t ki = 1; ki <= 1024; ki *= 2) {
+    uint32_t num_keys = ki << 10;
+    fprintf(stderr, "%4u Ki keys: ", ki);
+    Reset(num_keys);
+    uint32_t k = 0;
+    for (; k < num_keys; k++) {
+      AddKey(k);
+    }
+    Finish();
+    fprintf(stderr, "%.2fx buckets, %+d aux tables\n",
+            1.0 * cf_->TEST_NumBuckets() / ((num_keys + 3) / 4),
+            int(cf_->TEST_NumCuckooTables()) - 1);
+    uint32_t j = 0;
+    for (; j < k; j++) {
+      ASSERT_TRUE(KeyMayMatch(j));
+    }
+  }
+}
+
 // Evaluate false positive rate under different filter configurations.
 class PlfsFalsePositiveBench {
  protected:
