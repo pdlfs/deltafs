@@ -14,6 +14,8 @@
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 
+#include <set>
+
 namespace pdlfs {
 namespace plfsio {
 
@@ -246,10 +248,14 @@ TEST(CuckooKvTest, KvAddAndGet) {
     fprintf(stderr, "%.2f%% filled\n", 100.0 * k / num_keys);
     uint32_t j = 0;
     std::vector<uint32_t> values;
+    std::set<uint32_t> set;
     for (; j < k; j++) {
       ASSERT_TRUE(GetValues(j, &values));
       ASSERT_TRUE(!values.empty());
+      set.insert(values.begin(), values.end());
+      ASSERT_TRUE(set.count(j) != 0);
       values.resize(0);
+      set.clear();
     }
   }
 }
@@ -279,10 +285,14 @@ TEST(CuckooKvAuxTest, KvAuxiliaryTables) {
             int(cf_->TEST_NumCuckooTables()) - 1);
     uint32_t j = 0;
     std::vector<uint32_t> values;
+    std::set<uint32_t> set;
     for (; j < k; j++) {
       ASSERT_TRUE(GetValues(j, &values));
       ASSERT_TRUE(!values.empty());
+      set.insert(values.begin(), values.end());
+      ASSERT_TRUE(set.count(j) != 0);
       values.resize(0);
+      set.clear();
     }
   }
 }
