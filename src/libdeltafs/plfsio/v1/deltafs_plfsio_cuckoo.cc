@@ -391,6 +391,12 @@ template <size_t k, size_t v>
 class CuckooKeyTester {
  public:
   bool operator()(const Slice& key, const Slice& input) {
+    return Find(key, input, NULL /* only test key existence */);
+  }
+
+ private:
+  static bool Find(const Slice& key, const Slice& input,
+                   std::vector<uint32_t>* values) {
     const char* tail = input.data() + input.size();
     if (input.size() < 12) return true;  // Not enough data for a header
 #ifndef NDEBUG
@@ -426,18 +432,22 @@ class CuckooKeyTester {
       }
 
       Slice cuckoo_table(tail - table_size, table_size);
-      if (Test(ha, fp, num_buckets, cuckoo_table)) {
-        return true;
+      if (Fetch(ha, fp, num_buckets, cuckoo_table, values)) {
+        if (v == 0 || !values) {
+          return true;
+        }
       }
     }
 
-    // All tables consulted
-    return false;
+    if (v != 0 && values) {  // All tables consulted
+      return !values->empty();
+    } else {
+      return false;
+    }
   }
 
- private:
-  static int Test(uint64_t ha, uint32_t fp, uint32_t num_buckets,
-                  const Slice& input) {
+  static bool Fetch(uint64_t ha, uint32_t fp, uint32_t num_buckets,
+                    const Slice& input, std::vector<uint32_t>* values) {
     const char* const tail = input.data() + input.size();
     assert(input.size() >= 16);
 
@@ -449,22 +459,41 @@ class CuckooKeyTester {
     if (victim_fp == fp) {
       uint32_t i = DecodeFixed32(tail - 12);
       if (i == i1 || i == i2) {
-        return true;
+        if (v != 0 && values) {
+          values->push_back(DecodeFixed32(tail - 8));
+        } else {  // Immediately return
+          return true;
+        }
       }
     }
 
     Slice cuckoo_buckets = input;
-    cuckoo_buckets.remove_suffix(16);  // Remove the 16-byte table header
+    cuckoo_buckets.remove_suffix(16);  // Remove the 16-byte header
     const CuckooReader<k, v> reader(cuckoo_buckets);
     for (size_t j = 0; j < 4; j++) {
-      if (reader.key(i1, j) == fp) {
-        return true;
-      } else if (reader.key(i2, j) == fp) {
-        return true;
+      if (v != 0 && values) {  // Test all locations to gather all values
+        std::pair<uint32_t, uint32_t> kv1 = reader.pair(i1, j);
+        if (kv1.first == fp) {
+          values->push_back(kv1.second);
+        }
+        std::pair<uint32_t, uint32_t> kv2 = reader.pair(i2, j);
+        if (kv2.first == fp) {
+          values->push_back(kv2.second);
+        }
+      } else {  // Immediately return on first match
+        if (reader.key(i1, j) == fp) {
+          return true;
+        } else if (reader.key(i2, j) == fp) {
+          return true;
+        }
       }
     }
 
-    return false;
+    if (v != 0 && values) {
+      return !values->empty();
+    } else {
+      return false;
+    }
   }
 };
 
