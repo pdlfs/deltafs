@@ -432,6 +432,7 @@ class Histo {
 template <typename FilterType, plfsio::FilterTester filter_tester,
           int N = 10240>
 class PlfsFtBench {
+ protected:
   static int FromEnv(const char* key, int def) {
     const char* env = getenv(key);
     if (env && env[0]) {
@@ -570,7 +571,7 @@ class PlfsFtBench {
     return 0;
   }
 
- private:
+ protected:
   // Point to filter data once finished
   Slice ftdata_;
   Histo<N> histo_;
@@ -585,6 +586,77 @@ class PlfsFtBench {
   int mkeys_;
 };
 
+template <size_t K, int N = 10240>
+class PlfsFtBenchKv
+    : public PlfsFtBench<plfsio::CuckooBlock<K, 32>,
+                         static_cast<plfsio::FilterTester>(NULL), N> {
+ public:
+  void LogAndApply() {
+    plfsio::CuckooBlock<K, 32>* const ft =
+        new plfsio::CuckooBlock<K, 32>(this->options_, 0);
+    ASSERT_TRUE(ft != NULL);
+    const uint32_t num_keys = this->mkeys_ << 20;
+    uint32_t num_ranks = this->kranks_ << 10;
+    ft->Reset(num_keys);
+    char tmp[8];
+    Slice key(tmp, sizeof(tmp));
+    fprintf(stderr, "Populating filter data...\n");
+    for (uint32_t k = 0; k < num_keys; k++) {
+      if ((k & 0x7FFFFu) == 0) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * k / num_keys);
+      }
+      uint64_t h = xxhash64(&k, sizeof(k), 0);
+      EncodeFixed64(tmp, h);
+      uint32_t x = xxhash32(&h, sizeof(h), 301);
+      uint32_t r = x % num_ranks;
+      ft->AddKey(key, r);
+    }
+    fprintf(stderr, "\r100.00%%");
+    fprintf(stderr, "\n");
+
+    this->ftdata_ = ft->Finish();
+    this->ft_ = ft;
+    ASSERT_TRUE(!this->ftdata_.empty());
+    if (this->compression_) {
+      if (!port::Snappy_Compress(this->ftdata_.data(), this->ftdata_.size(),
+                                 &this->compressed_)) {
+        this->compressed_.clear();
+      }
+    }
+
+    fprintf(stderr, "Done!\n");
+    Query();
+  }
+
+  void Query() {
+    Slice ftdata(this->ftdata_);
+    const uint32_t num_keys = this->mkeys_ << 20;
+    std::vector<uint32_t> ranks;
+    char tmp[8];
+    Slice key(tmp, sizeof(tmp));
+    fprintf(stderr, "Querying...\n");
+    const uint64_t start = Env::Default()->NowMicros();
+    const uint32_t step = this->qstep_;
+    for (uint32_t k = 0; k < num_keys; k += step) {
+      if ((k & 0x7FFu) == 0) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * k / num_keys);
+      }
+      uint64_t h = xxhash64(&k, sizeof(k), 0);
+      EncodeFixed64(tmp, h);
+      plfsio::CuckooValues(key, ftdata, &ranks);
+      this->histo_.Add(ranks.size());
+      ranks.resize(0);
+    }
+    const uint64_t end = Env::Default()->NowMicros();
+    const uint64_t dura = end - start;
+    fprintf(stderr, "\r100.00%%");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Done!\n");
+
+    this->Report(dura);
+  }
+};
+
 }  // namespace pdlfs
 
 #if defined(PDLFS_GFLAGS)
@@ -595,7 +667,7 @@ class PlfsFtBench {
 #endif
 
 static void BM_Usage() {
-  fprintf(stderr, "Use --bench=[wisc, bf, or cf[n]] to launch tests.\n");
+  fprintf(stderr, "Use --bench=[wisc, bf, cf[n], or kv[n]] to launch tests.\n");
   fprintf(stderr, "n = 10,12,14,16,18,20,22,24,30,32.\n");
   fprintf(stderr, "\n");
 }
@@ -603,11 +675,42 @@ static void BM_Usage() {
 static void BM_LogAndApply(const char* bm) {
 #define BENCH(x, y) \
   pdlfs::PlfsFtBench<pdlfs::plfsio::x##y, pdlfs::plfsio::x##KeyMayMatch>
+#define KV_BENCH(n) pdlfs::PlfsFtBenchKv<n>
   if (strcmp(bm, "wisc") == 0) {
     pdlfs::PlfsWiscBench bench;
     bench.LogAndApply();
   } else if (strcmp(bm, "bf") == 0) {
     BENCH(Bloom, Block) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "kv10") == 0) {
+    KV_BENCH(10) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "kv12") == 0) {
+    KV_BENCH(12) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "kv14") == 0) {
+    KV_BENCH(14) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "kv16") == 0) {
+    KV_BENCH(16) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "kv18") == 0) {
+    KV_BENCH(18) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "kv20") == 0) {
+    KV_BENCH(20) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "kv22") == 0) {
+    KV_BENCH(22) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "kv24") == 0) {
+    KV_BENCH(24) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "kv30") == 0) {
+    KV_BENCH(30) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "kv32") == 0) {
+    KV_BENCH(32) bench;
     bench.LogAndApply();
   } else if (strcmp(bm, "cf10") == 0) {
     BENCH(Cuckoo, Block<10>) bench;
