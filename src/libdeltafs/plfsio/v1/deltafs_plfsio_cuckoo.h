@@ -57,15 +57,15 @@ class CuckooBlock {
 
   void Reset(uint32_t num_keys);
 
-  // Insert a key into the cuckoo filter. Key is first inserted into the
-  // main table. If the main table is full, key is inserted into
+  // Insert a key into the cuckoo filter. Keys are first inserted to the
+  // main table. If the main table is full, keys are inserted into
   // one or more auxiliary tables.
   // REQUIRES: Reset(num_keys) has been called.
   // REQUIRES: Finish() has NOT been called.
   void AddKey(const Slice& key, uint32_t value = 0);
 
-  // Insert a key into the cuckoo filter. Key is only inserted to the main
-  // table. The auxiliary table is ignored.
+  // Insert a key into the cuckoo filter. Keys are only inserted to the main
+  // table. Auxiliary tables are ignored.
   // Return true if the insertion is success, or false otherwise.
   // REQUIRES: Reset(num_keys) has been called.
   // REQUIRES: Finish() has NOT been called.
