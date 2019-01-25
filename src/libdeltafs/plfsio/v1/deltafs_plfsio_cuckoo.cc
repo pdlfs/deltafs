@@ -83,7 +83,7 @@ struct CuckooTable {
   }
 
   void Reset(uint32_t num_keys) {
-    Resize(num_keys);  // Make room for cuckoo buckets
+    Resize(num_keys);  // Make room for buckets
     victim_index_ = 0;
     victim_data_ = 0;
     victim_fp_ = 0;
@@ -98,7 +98,7 @@ struct CuckooTable {
     assert(i < num_buckets_);
     assert(j < 4);
     uint64_t x = fp;
-    if (v != 0)  // Fuse into a single composite value
+    if (v != 0)  // Fuse kv into a single composite value
       x = (x << v) | (data & ((1ull << v) - 1));
     if (j == 0) b[i].x0_ = x;
     if (j == 1) b[i].x1_ = x;
@@ -246,7 +246,7 @@ Slice CuckooBlock<k, v>::Finish() {
     r->space_.append(morereps_[i]->space_);
   }
 
-  PutFixed32(&r->space_, 1 + morereps_.size());  // Remember #tables
+  PutFixed32(&r->space_, 1 + morereps_.size());  // Remember #Tables
   PutFixed32(&r->space_, v);
   PutFixed32(&r->space_, k);
   return r->space_;
@@ -400,7 +400,7 @@ class CuckooKeyTester {
     assert(keybits == k);
 #endif
     uint32_t num_tables = DecodeFixed32(tail - 12);
-    if (num_tables == 0) {  // No cuckoo tables
+    if (num_tables == 0) {  // No tables found
       return true;
     }
 
@@ -408,11 +408,11 @@ class CuckooKeyTester {
     const uint32_t fp = CuckooFingerprint(ha, k);
 
     size_t remaining_size = input.size();
-    size_t table_size = 12;  // Filter header to be removed
+    size_t table_size = 12;  // The 12-byte header to be removed
     for (; num_tables != 0; num_tables--) {
       assert(remaining_size >= table_size);
       remaining_size -= table_size;
-      if (remaining_size < 16) {  // No enough data for a table header
+      if (remaining_size < 16) {  // Not enough data for a table header
         return true;
       }
 
