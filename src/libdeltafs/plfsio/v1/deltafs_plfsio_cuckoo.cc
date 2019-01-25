@@ -11,23 +11,17 @@
 #include "deltafs_plfsio_types.h"
 
 #include <math.h>
+#include <map>
 
 namespace pdlfs {
 namespace plfsio {
 
 template <size_t k = 16, size_t v = 16>
 struct CuckooBucket {  // Fixed 4 items per bucket
-#if k + v > 32
-  unsigned long long x0_ : k + v;
-  unsigned long long x1_ : k + v;
-  unsigned long long x2_ : k + v;
-  unsigned long long x3_ : k + v;
-#else
-  unsigned x0_ : k + v;
-  unsigned x1_ : k + v;
-  unsigned x2_ : k + v;
-  unsigned x3_ : k + v;
-#endif
+  uint64_t x0_ : k + v;
+  uint64_t x1_ : k + v;
+  uint64_t x2_ : k + v;
+  uint64_t x3_ : k + v;
 };
 
 template <size_t k = 16, size_t v = 16>
@@ -36,7 +30,7 @@ struct CuckooReader {
       : b_(reinterpret_cast<const CuckooBucket<k, v>*>(&input[0])),
         num_buckets_(input.size() / sizeof(b_[0])) {}
 
-  uint32_t Read(size_t i, size_t j) const {
+  uint64_t Read(size_t i, size_t j) const {
     assert(i < num_buckets_);
     assert(j < 4);
     if (j == 0) return b_[i].x0_;
@@ -45,6 +39,22 @@ struct CuckooReader {
     if (j == 3) return b_[i].x3_;
     return 0;
   }
+
+  std::pair<uint32_t, uint32_t> pair(size_t i, size_t j) const {
+    const uint64_t x = Read(i, j);
+    if (v != 0)
+      return std::pair<uint32_t, uint32_t>(x >> v, x & ((1ull << v) - 1));
+    else
+      return std::pair<uint32_t, uint32_t>(x, 0);
+  }
+
+  uint32_t key(size_t i, size_t j) const {
+    const uint64_t x = Read(i, j);
+    if (v != 0)
+      return x >> v;
+    else
+      return x;
+  };
 
   const CuckooBucket<k, v>* const b_;
   const uint32_t num_buckets_;
@@ -56,6 +66,7 @@ struct CuckooTable {
       : frac_(frac),
         num_buckets_(0),  // Use Resize(num_keys) to allocate space
         victim_index_(0),
+        victim_data_(0),
         victim_fp_(0),
         full_(false) {}
 
@@ -72,26 +83,29 @@ struct CuckooTable {
   }
 
   void Reset(uint32_t num_keys) {
-    Resize(num_keys);  // Allocate buckets
+    Resize(num_keys);  // Make room for cuckoo buckets
     victim_index_ = 0;
+    victim_data_ = 0;
     victim_fp_ = 0;
     full_ = false;
   }
 
-  void Write(size_t i, size_t j, uint32_t x) {
+  void Write(size_t i, size_t j, uint32_t fp, uint32_t data) {
     assert(!full_);
-    assert(x != 0);
+    assert(fp != 0);
     CuckooBucket<k, v>* const b =
         reinterpret_cast<CuckooBucket<k, v>*>(&space_[0]);
     assert(i < num_buckets_);
     assert(j < 4);
+    uint64_t x = fp;
+    if (v != 0) x = (x << v) | (data & ((1ull << v) - 1));
     if (j == 0) b[i].x0_ = x;
     if (j == 1) b[i].x1_ = x;
     if (j == 2) b[i].x2_ = x;
     if (j == 3) b[i].x3_ = x;
   }
 
-  uint32_t Read(size_t i, size_t j) const {
+  uint64_t Read(size_t i, size_t j) const {
     const CuckooBucket<k, v>* const b =
         reinterpret_cast<const CuckooBucket<k, v>*>(&space_[0]);
     assert(i < num_buckets_);
@@ -103,12 +117,29 @@ struct CuckooTable {
     return 0;
   }
 
+  std::pair<uint32_t, uint32_t> pair(size_t i, size_t j) const {
+    const uint64_t x = Read(i, j);
+    if (v != 0)
+      return std::pair<uint32_t, uint32_t>(x >> v, x & ((1ull << v) - 1));
+    else
+      return std::pair<uint32_t, uint32_t>(x, 0);
+  }
+
+  uint32_t key(size_t i, size_t j) const {
+    const uint64_t x = Read(i, j);
+    if (v != 0)
+      return x >> v;
+    else
+      return x;
+  };
+
   const double frac_;  // Target table occupation rate, or -1 for exact match
   void Resize(uint32_t num_keys);
   std::string space_;
   // Total number of hash buckets, over-allocated by frac_
   size_t num_buckets_;  // Must be a power of 2
   size_t victim_index_;
+  uint32_t victim_data_;
   uint32_t victim_fp_;
   bool full_;
 };
@@ -178,7 +209,7 @@ void CuckooBlock<k, v>::MaybeBuildMoreTables() {
       uint32_t fp = CuckooFingerprint(ha, k);
       start += key_sizes_[i];
 
-      AddTo(ha, fp, r);
+      AddTo(ha, fp, 0, r);
       if (r->full_) {
         break;
       }
@@ -186,6 +217,7 @@ void CuckooBlock<k, v>::MaybeBuildMoreTables() {
 
     PutFixed32(&r->space_, r->num_buckets_);
     PutFixed32(&r->space_, r->victim_index_);
+    PutFixed32(&r->space_, r->victim_data_);
     PutFixed32(&r->space_, r->victim_fp_);
 
     morereps_.push_back(r);
@@ -200,6 +232,7 @@ Slice CuckooBlock<k, v>::Finish() {
   Rep* const r = rep_;
   PutFixed32(&r->space_, r->num_buckets_);
   PutFixed32(&r->space_, r->victim_index_);
+  PutFixed32(&r->space_, r->victim_data_);
   PutFixed32(&r->space_, r->victim_fp_);
   MaybeBuildMoreTables();
   size_t i = 0;
@@ -208,6 +241,7 @@ Slice CuckooBlock<k, v>::Finish() {
   }
 
   PutFixed32(&r->space_, 1 + morereps_.size());  // Remember #tables
+  PutFixed32(&r->space_, v);
   PutFixed32(&r->space_, k);
   return r->space_;
 }
@@ -244,7 +278,7 @@ void CuckooBlock<k, v>::AddKey(const Slice& key) {
     return;
   }
 
-  AddTo(ha, fp, rep_);
+  AddTo(ha, fp, 0, rep_);
 }
 
 template <size_t k, size_t v>
@@ -264,7 +298,7 @@ bool CuckooBlock<k, v>::Exists(uint64_t ha, uint32_t fp, const Rep* r) {
   }
 
   for (size_t j = 0; j < 4; j++) {
-    if (r->Read(i1, j) == fp || r->Read(i2, j) == fp) {
+    if (r->key(i1, j) == fp || r->key(i2, j) == fp) {
       return true;
     }
   }
@@ -273,32 +307,34 @@ bool CuckooBlock<k, v>::Exists(uint64_t ha, uint32_t fp, const Rep* r) {
 }
 
 template <size_t k, size_t v>
-void CuckooBlock<k, v>::AddTo(uint64_t ha, uint32_t fp, Rep* r) {
+void CuckooBlock<k, v>::AddTo(uint64_t ha, uint32_t fp, uint32_t data, Rep* r) {
   assert(!r->full_);
-  size_t i = ha & (r->num_buckets_ - 1);  // Num buckets is always a power of 2
+  size_t i = ha & (r->num_buckets_ - 1);
 
-  // Our goal is to put fp into bucket i
+  // Our goal is to put "fp" into bucket "i"
   for (int moves = 0; moves < max_cuckoo_moves_; moves++) {
     for (size_t j = 0; j < 4; j++) {
-      uint32_t cur = r->Read(i, j);
+      const uint32_t cur = r->key(i, j);
       if (cur == fp) return;  // Done
       if (cur == 0) {
-        r->Write(i, j, fp);
+        r->Write(i, j, fp, data);
         return;  // Done
       }
     }
-    if (moves != 0) {  // Kick out a victim so we can put fp in
+    if (moves != 0) {  // Kick out a victim so we can put "fp" in
       size_t victim = rnd_.Next() & 3;
-      uint32_t old = r->Read(i, victim);
-      assert(old != 0 && old != fp);
-      r->Write(i, victim, fp);
-      fp = old;
+      std::pair<uint32_t, uint32_t> kv = r->pair(i, victim);
+      assert(kv.first != 0 && kv.first != fp);
+      r->Write(i, victim, fp, data);
+      data = kv.second;
+      fp = kv.first;
     }
 
     i = CuckooAlt(i, fp) & (r->num_buckets_ - 1);
   }
 
   r->victim_index_ = i;
+  r->victim_data_ = data;
   r->victim_fp_ = fp;
   r->full_ = true;
 }
@@ -333,13 +369,15 @@ class CuckooKeyTester {
  public:
   bool operator()(const Slice& key, const Slice& input) {
     const char* tail = input.data() + input.size();
-    if (input.size() < 8) return true;  // Filter invalid, considered a match
+    if (input.size() < 12) return true;  // No filter header, considered a match
 #ifndef NDEBUG
-    size_t bits = DecodeFixed32(tail - 4);
-    assert(bits == k);
+    size_t valbits = DecodeFixed32(tail - 8);
+    assert(valbits == v);
+    size_t keybits = DecodeFixed32(tail - 4);
+    assert(keybits == k);
 #endif
-    uint32_t num_tables = DecodeFixed32(tail - 8);
-    if (num_tables == 0) {  // No cuckoo tables found !!!
+    uint32_t num_tables = DecodeFixed32(tail - 12);
+    if (num_tables == 0) {  // No cuckoo tables found
       return true;
     }
 
@@ -347,20 +385,20 @@ class CuckooKeyTester {
     const uint32_t fp = CuckooFingerprint(ha, k);
 
     size_t remaining_size = input.size();
-    size_t table_size = 8;
+    size_t table_size = 12;  // Filter header to be removed
     for (; num_tables != 0; num_tables--) {
       assert(remaining_size >= table_size);
       remaining_size -= table_size;
-      if (remaining_size < 12) {  // Cannot read the next table
+      if (remaining_size < 16) {  // No table header, cannot proceed
         return true;
       }
 
       tail -= table_size;
-      uint32_t num_buckets = DecodeFixed32(tail - 12);
-      table_size = num_buckets * sizeof(CuckooBucket<k, v>) + 12;
-      if (num_buckets == 0) {  // No buckets found
+      uint32_t num_buckets = DecodeFixed32(tail - 16);
+      table_size = num_buckets * sizeof(CuckooBucket<k, v>) + 16;
+      if (num_buckets == 0) {  // Empty table has no use
         return true;
-      } else if (remaining_size < table_size) {  // Cannot read table
+      } else if (remaining_size < table_size) {  // Premature end of table
         return true;
       }
 
@@ -378,7 +416,7 @@ class CuckooKeyTester {
   static int Test(uint64_t ha, uint32_t fp, uint32_t num_buckets,
                   const Slice& input) {
     const char* const tail = input.data() + input.size();
-    assert(input.size() >= 12);
+    assert(input.size() >= 16);
 
     assert(num_buckets != 0);
     size_t i1 = ha & (num_buckets - 1);
@@ -386,19 +424,19 @@ class CuckooKeyTester {
 
     uint32_t victim_fp = DecodeFixed32(tail - 4);
     if (victim_fp == fp) {
-      uint32_t i = DecodeFixed32(tail - 8);
+      uint32_t i = DecodeFixed32(tail - 12);
       if (i == i1 || i == i2) {
         return true;
       }
     }
 
     Slice cuckoo_buckets = input;
-    cuckoo_buckets.remove_suffix(12);
+    cuckoo_buckets.remove_suffix(16);  // Remove the 16-byte table header
     const CuckooReader<k, v> reader(cuckoo_buckets);
     for (size_t j = 0; j < 4; j++) {
-      if (reader.Read(i1, j) == fp) {
+      if (reader.key(i1, j) == fp) {
         return true;
-      } else if (reader.Read(i2, j) == fp) {
+      } else if (reader.key(i2, j) == fp) {
         return true;
       }
     }
@@ -407,42 +445,70 @@ class CuckooKeyTester {
   }
 };
 
-template class CuckooBlock<32, 0>;
-template class CuckooBlock<30, 0>;
-template class CuckooBlock<24, 0>;
-template class CuckooBlock<22, 0>;
-template class CuckooBlock<20, 0>;
-template class CuckooBlock<18, 0>;
-template class CuckooBlock<16, 0>;
-template class CuckooBlock<14, 0>;
-template class CuckooBlock<12, 0>;
-template class CuckooBlock<10, 0>;
+#define TEMPLATE(K)                  \
+  template class CuckooBlock<K, 32>; \
+  template class CuckooBlock<K, 0>
+
+TEMPLATE(32);
+TEMPLATE(30);
+TEMPLATE(24);
+TEMPLATE(22);
+TEMPLATE(20);
+TEMPLATE(18);
+TEMPLATE(16);
+TEMPLATE(14);
+TEMPLATE(12);
+TEMPLATE(10);
 
 bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
   const size_t len = input.size();
-  if (len < 4) {
+  if (len < 8) {  // Filter invalid, considered a match
     return true;
   }
 
   const char* const tail = input.data() + input.size();
-  size_t bits = DecodeFixed32(tail - 4);
-  switch (int(bits)) {
+  size_t valbits = DecodeFixed32(tail - 8);
+  size_t keybits = DecodeFixed32(tail - 4);
+  if (valbits == 0) {
+    switch (int(keybits)) {
 #define CASE(n) \
   case n:       \
     return CuckooKeyTester<n, 0>()(key, input)
-    CASE(32);
-    CASE(30);
-    CASE(24);
-    CASE(22);
-    CASE(20);
-    CASE(18);
-    CASE(16);
-    CASE(14);
-    CASE(12);
-    CASE(10);
+      CASE(32);
+      CASE(30);
+      CASE(24);
+      CASE(22);
+      CASE(20);
+      CASE(18);
+      CASE(16);
+      CASE(14);
+      CASE(12);
+      CASE(10);
 #undef CASE
-    default:
-      return true;
+      default:
+        return true;
+    }
+  } else if (valbits == 32) {
+    switch (int(keybits)) {
+#define CASE(n) \
+  case n:       \
+    return CuckooKeyTester<n, 32>()(key, input)
+      CASE(32);
+      CASE(30);
+      CASE(24);
+      CASE(22);
+      CASE(20);
+      CASE(18);
+      CASE(16);
+      CASE(14);
+      CASE(12);
+      CASE(10);
+#undef CASE
+      default:
+        return true;
+    }
+  } else {
+    return true;
   }
 }
 
