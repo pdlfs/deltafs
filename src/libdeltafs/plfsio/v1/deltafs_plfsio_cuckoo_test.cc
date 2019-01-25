@@ -19,19 +19,6 @@ namespace plfsio {
 
 class CuckooTest {
  public:
-  CuckooTest() {
-    // Ignore target occupation rate and always allocate the exact number of
-    // cuckoo buckets
-    options_.cuckoo_frac = -1;
-    cf_ = new CF(options_, 0);  // Do not reserve memory
-  }
-
-  ~CuckooTest() {
-    if (cf_ != NULL) {
-      delete cf_;
-    }
-  }
-
   static uint32_t KeyFringerprint(uint64_t ha) {
     return CuckooFingerprint(ha, keybits_);
   }
@@ -40,6 +27,27 @@ class CuckooTest {
     char tmp[4];
     EncodeFixed32(tmp, k);
     return CuckooHash(Slice(tmp, sizeof(tmp)));
+  }
+
+  enum { keybits_ = 12 };
+  enum { valbits_ = 32 };
+  std::string data_;  // Final filter representation
+  DirOptions options_;
+};
+
+class CuckooFtTest : public CuckooTest {
+ public:
+  CuckooFtTest() {
+    // Ignore target occupation rate and always allocate the exact number of
+    // cuckoo buckets
+    options_.cuckoo_frac = -1;
+    cf_ = new Filter(options_, 0);  // Do not reserve memory
+  }
+
+  ~CuckooFtTest() {
+    if (cf_ != NULL) {
+      delete cf_;
+    }
   }
 
   bool KeyMayMatch(uint32_t k) {
@@ -56,18 +64,15 @@ class CuckooTest {
 
   void Finish() { data_ = cf_->TEST_Finish(); }
   void Reset(uint32_t num_keys) { cf_->Reset(num_keys); }
-  enum { keybits_ = 12 };
-  typedef CuckooBlock<keybits_, 0> CF;
-  DirOptions options_;
-  std::string data_;  // Final filter data
-  CF* cf_;
+  typedef CuckooBlock<keybits_, 0> Filter;
+  Filter* cf_;
 };
 
-TEST(CuckooTest, BytesPerBucket) {
+TEST(CuckooFtTest, BytesPerBucket) {
   fprintf(stderr, "%d\n", int(cf_->TEST_BytesPerCuckooBucket()));
 }
 
-TEST(CuckooTest, AltIndex) {
+TEST(CuckooFtTest, AltIndex) {
   for (uint32_t ki = 1; ki <= 1024; ki *= 2) {
     uint32_t num_keys = ki << 10;
     Reset(num_keys);
@@ -83,7 +88,7 @@ TEST(CuckooTest, AltIndex) {
   }
 }
 
-TEST(CuckooTest, Empty) {
+TEST(CuckooFtTest, Empty) {
   for (uint32_t ki = 1; ki <= 1024; ki *= 2) {
     uint32_t num_keys = ki << 10;
     Reset(num_keys);
@@ -95,7 +100,7 @@ TEST(CuckooTest, Empty) {
   }
 }
 
-TEST(CuckooTest, AddAndMatch) {
+TEST(CuckooFtTest, AddAndMatch) {
   for (uint32_t ki = 1; ki <= 1024; ki *= 2) {
     uint32_t num_keys = ki << 10;
     fprintf(stderr, "%4u Ki keys: ", ki);
@@ -115,7 +120,7 @@ TEST(CuckooTest, AddAndMatch) {
   }
 }
 
-class CuckooAuxTest : public CuckooTest {
+class CuckooAuxTest : public CuckooFtTest {
  public:
   void AddKey(uint32_t k) {
     char tmp[4];
@@ -137,6 +142,75 @@ TEST(CuckooAuxTest, AuxiliaryTables) {
     fprintf(stderr, "%.2fx buckets, %+d aux tables\n",
             1.0 * cf_->TEST_NumBuckets() / ((num_keys + 3) / 4),
             int(cf_->TEST_NumCuckooTables()) - 1);
+    uint32_t j = 0;
+    for (; j < k; j++) {
+      ASSERT_TRUE(KeyMayMatch(j));
+    }
+  }
+}
+
+class CuckooKvTest : public CuckooTest {
+ public:
+  CuckooKvTest() {
+    // Ignore target occupation rate and always allocate the exact number of
+    // cuckoo buckets
+    options_.cuckoo_frac = -1;
+    cf_ = new Filter(options_, 0);  // Do not reserve memory
+  }
+
+  ~CuckooKvTest() {
+    if (cf_ != NULL) {
+      delete cf_;
+    }
+  }
+
+  bool KeyMayMatch(uint32_t k) {
+    char tmp[4];
+    EncodeFixed32(tmp, k);
+    return CuckooKeyMayMatch(Slice(tmp, sizeof(tmp)), data_);
+  }
+
+  bool AddKey(uint32_t k) {
+    char tmp[4];
+    EncodeFixed32(tmp, k);
+    return cf_->TEST_AddKey(Slice(tmp, sizeof(tmp)), k);
+  }
+
+  void Finish() { data_ = cf_->TEST_Finish(); }
+  void Reset(uint32_t num_keys) { cf_->Reset(num_keys); }
+  typedef CuckooBlock<keybits_, valbits_> Filter;
+  Filter* cf_;
+};
+
+TEST(CuckooKvTest, KvBytesPerBucket) {
+  fprintf(stderr, "%d\n", int(cf_->TEST_BytesPerCuckooBucket()));
+}
+
+TEST(CuckooKvTest, KvEmpty) {
+  for (uint32_t ki = 1; ki <= 1024; ki *= 2) {
+    uint32_t num_keys = ki << 10;
+    Reset(num_keys);
+    Finish();
+    uint32_t k = 0;
+    for (; k < num_keys; k++) {
+      ASSERT_FALSE(KeyMayMatch(k));
+    }
+  }
+}
+
+TEST(CuckooKvTest, KvAddAndMatch) {
+  for (uint32_t ki = 1; ki <= 1024; ki *= 2) {
+    uint32_t num_keys = ki << 10;
+    fprintf(stderr, "%4u Ki keys: ", ki);
+    Reset(num_keys);
+    uint32_t k = 0;
+    for (; k < num_keys; k++) {
+      if (!AddKey(k)) {
+        break;
+      }
+    }
+    Finish();
+    fprintf(stderr, "%.2f%% filled\n", 100.0 * k / num_keys);
     uint32_t j = 0;
     for (; j < k; j++) {
       ASSERT_TRUE(KeyMayMatch(j));

@@ -340,9 +340,14 @@ void CuckooBlock<k, v>::AddTo(uint64_t ha, uint32_t fp, uint32_t data, Rep* r) {
       }
     }
     if (moves != 0) {  // Kick out a victim so we can put "fp" in
-      size_t victim = rnd_.Next() & 3;
+      const size_t victim = rnd_.Next() & 3;
       std::pair<uint32_t, uint32_t> kv = r->pair(i, victim);
-      assert(kv.first != 0 && kv.first != fp);
+#ifndef NDEBUG
+      if (v != 0)
+        assert(kv.first != 0 && !(kv.first == fp && kv.second == data));
+      else
+        assert(kv.first != 0 && !(kv.first == fp));
+#endif
       r->Write(i, victim, fp, data);
       data = kv.second;
       fp = kv.first;
