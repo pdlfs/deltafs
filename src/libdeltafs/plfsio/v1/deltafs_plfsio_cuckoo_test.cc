@@ -476,7 +476,7 @@ class PlfsTableBench : public PlfsCuckoBench {
   }
 
   template <size_t k>
-  uint32_t CuckooBuildTable(std::string* const dst) {
+  uint32_t CuckooBuildTable(uint32_t* num_tables, std::string* const dst) {
     Random rnd(rndseed_);
     char tmp[4];
     Slice key(tmp, sizeof(tmp));
@@ -485,7 +485,10 @@ class PlfsTableBench : public PlfsCuckoBench {
     const uint32_t num_keys = 1u << nlg_;
     ft.Reset(num_keys);
     uint32_t i = 0;
+    fprintf(stderr, "Building ...\n");
     for (; i < num_keys; i++) {
+      if ((i & 0x7FFFFu) == 0)
+        fprintf(stderr, "\r%.2f%%", 100.0 * i / num_keys);
       EncodeFixed32(tmp, i);
       if (use_auxtables_) {
         ft.AddKey(key, rnd.Next());
@@ -493,16 +496,20 @@ class PlfsTableBench : public PlfsCuckoBench {
         break;
       }
     }
+    fprintf(stderr, "\r100.00%%");
+    fprintf(stderr, "\n");
     *dst = ft.TEST_Finish();
+    *num_tables = ft.TEST_NumCuckooTables();
     return i;
   }
 
   void LogAndApply() {
+    uint32_t num_tables = 0;
     uint32_t n;
     switch (keybits_) {
-#define CASE(k)                            \
-  case k:                                  \
-    n = CuckooBuildTable<k>(&filterdata_); \
+#define CASE(k)                                         \
+  case k:                                               \
+    n = CuckooBuildTable<k>(&num_tables, &filterdata_); \
     break
       CASE(1);
       CASE(2);
@@ -524,25 +531,31 @@ class PlfsTableBench : public PlfsCuckoBench {
     char tmp[4];
     Slice key(tmp, sizeof(tmp));
     uint32_t i = 0;
+    fprintf(stderr, "Querying ...\n");
     for (; i < n; i++) {
+      if ((i & 0x7FFu) == 0) fprintf(stderr, "\r%.2f%%", 100.0 * i / n);
       EncodeFixed32(tmp, i);
       CuckooValues(key, filterdata_, &values);
       hits_max = std::max(hits_max, values.size());
       hits_sum += values.size();
       values.resize(0);
     }
+    fprintf(stderr, "\r100.00%%");
+    fprintf(stderr, "\n");
 #undef CASE
-    Report(hits_sum, hits_max, n);
+    Report(hits_sum, hits_max, num_tables, n);
   }
 
-  void Report(size_t hits_sum, size_t hits_max, uint32_t n) {
+  void Report(size_t hits_sum, size_t hits_max, uint32_t num_tables,
+              uint32_t n) {
     const double ki = 1024.0;
-    fprintf(stderr, "------------------------------------------------\n");
-    fprintf(stderr, "          Bits per k: %d\n", int(keybits_));
-    fprintf(stderr, "       Keys inserted: %.3g Mi\n", n / ki / ki);
-    fprintf(stderr, "             Queries: %.3g Mi\n", n / ki / ki);
-    fprintf(stderr, "    Max hits per key: %d\n", int(hits_max));
-    fprintf(stderr, "            Avg hits: %.3g\n", 1.0 * hits_sum / n);
+    fprintf(stderr, "-------------------------------------------------\n");
+    fprintf(stderr, "              Bits per k: %d\n", int(keybits_));
+    fprintf(stderr, "           Keys inserted: %.3g Mi\n", n / ki / ki);
+    fprintf(stderr, "                 Queries: %.3g Mi\n", n / ki / ki);
+    fprintf(stderr, " Num cuckoo tables built: %d\n", int(num_tables));
+    fprintf(stderr, "        Max hits per key: %d\n", int(hits_max));
+    fprintf(stderr, "                Avg hits: %.3g\n", 1.0 * hits_sum / n);
   }
 
  private:
