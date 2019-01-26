@@ -476,7 +476,8 @@ class PlfsTableBench : public PlfsCuckoBench {
   }
 
   template <size_t k>
-  uint32_t CuckooBuildTable(uint32_t* num_tables, std::string* const dst) {
+  uint32_t CuckooBuildTable(uint32_t* num_buckets, uint32_t* num_tables,
+                            std::string* const dst) {
     Random rnd(rndseed_);
     char tmp[4];
     Slice key(tmp, sizeof(tmp));
@@ -500,16 +501,17 @@ class PlfsTableBench : public PlfsCuckoBench {
     fprintf(stderr, "\n");
     *dst = ft.TEST_Finish();
     *num_tables = ft.TEST_NumCuckooTables();
+    *num_buckets = ft.TEST_NumBuckets();
     return i;
   }
 
   void LogAndApply() {
-    uint32_t num_tables = 0;
+    uint32_t num_buckets = 0, num_tables = 0;
     uint32_t n;
     switch (keybits_) {
-#define CASE(k)                                         \
-  case k:                                               \
-    n = CuckooBuildTable<k>(&num_tables, &filterdata_); \
+#define CASE(k)                                                       \
+  case k:                                                             \
+    n = CuckooBuildTable<k>(&num_buckets, &num_tables, &filterdata_); \
     break
       CASE(1);
       CASE(2);
@@ -543,11 +545,11 @@ class PlfsTableBench : public PlfsCuckoBench {
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
 #undef CASE
-    Report(hits_sum, hits_max, num_tables, n);
+    Report(hits_sum, hits_max, num_buckets, num_tables, n);
   }
 
-  void Report(size_t hits_sum, size_t hits_max, uint32_t num_tables,
-              uint32_t n) {
+  void Report(size_t hits_sum, size_t hits_max, uint32_t num_buckets,
+              uint32_t num_tables, uint32_t n) {
     const double ki = 1024.0;
     fprintf(stderr, "-------------------------------------------------\n");
     fprintf(stderr, "              Bits per k: %d\n", int(keybits_));
@@ -556,6 +558,8 @@ class PlfsTableBench : public PlfsCuckoBench {
     fprintf(stderr, " Num cuckoo tables built: %d\n", int(num_tables));
     fprintf(stderr, "        Max hits per key: %d\n", int(hits_max));
     fprintf(stderr, "                Avg hits: %.3g\n", 1.0 * hits_sum / n);
+    fprintf(stderr, "                    Util: %.2f%%\n",
+            100.0 * n / num_buckets / 4);
   }
 
  private:
