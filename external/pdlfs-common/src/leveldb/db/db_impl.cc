@@ -16,7 +16,6 @@
 #include "table_cache.h"
 #include "version_set.h"
 
-#include "../iterator_wrapper.h"
 #include "../merger.h"
 #include "../table_stats.h"
 #include "../two_level_iterator.h"
@@ -24,6 +23,7 @@
 #include "pdlfs-common/leveldb/block.h"
 #include "pdlfs-common/leveldb/db/db.h"
 #include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/iterator_wrapper.h"
 #include "pdlfs-common/leveldb/table.h"
 #include "pdlfs-common/leveldb/table_builder.h"
 

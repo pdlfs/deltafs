@@ -10,11 +10,11 @@
  */
 
 #include "two_level_iterator.h"
-#include "iterator_wrapper.h"
 
 #include "pdlfs-common/leveldb/block.h"
 #include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/format.h"
+#include "pdlfs-common/leveldb/iterator_wrapper.h"
 
 namespace pdlfs {
 namespace {
