@@ -332,8 +332,8 @@ class PlfsFalsePositiveBench {
   std::string filterdata_;
   size_t keybits_;
   // Number of keys to query is 1u << qlg_
-  size_t qlg_;
-  size_t nlg_;
+  int qlg_;
+  int nlg_;
 };
 
 class PlfsBloomBench : protected PlfsFalsePositiveBench {
