@@ -63,11 +63,13 @@ class SortedStringBlockBuilder : public BlockBuilder {
 // fixed sized. Each block can be seen as a simple array.
 class ArrayBlockBuilder : public AbstractBlockBuilder {
  public:
-  explicit ArrayBlockBuilder(const DirOptions& options)
+  explicit ArrayBlockBuilder(const DirOptions& options,
+                             bool force_unordered = false)
       : AbstractBlockBuilder(BytewiseComparator()),
         value_size_(options.value_size),
-        key_size_(options.key_size) {
-    if (IsKeyUnOrdered(options.mode)) {
+        key_size_(options.key_size),
+        n_(0) {
+    if (force_unordered || IsKeyUnOrdered(options.mode)) {
       cmp_ = NULL;
     }
   }
@@ -80,12 +82,18 @@ class ArrayBlockBuilder : public AbstractBlockBuilder {
   Slice Finish(CompressionType compression = kNoCompression,
                bool force_compression = false);
 
+  // Return the number of entries inserted.
+  size_t NumEntries() const { return n_; }
+
   // Return an estimate of the size of the block we are building.
   size_t CurrentSizeEstimate() const;
+
+  void Reset();
 
  private:
   size_t value_size_;
   size_t key_size_;
+  size_t n_;
 };
 
 // Read block contents built by ArrayBlockBuilder.

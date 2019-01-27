@@ -45,6 +45,12 @@ void ArrayBlockBuilder::Add(const Slice& key, const Slice& value) {
   buffer_.append(key.data(), key_size_);
   assert(value.size() == value_size_);
   buffer_.append(value.data(), value_size_);
+  ++n_;
+}
+
+void ArrayBlockBuilder::Reset() {
+  AbstractBlockBuilder::Reset();
+  n_ = 0;
 }
 
 Slice ArrayBlockBuilder::Finish(CompressionType compression,

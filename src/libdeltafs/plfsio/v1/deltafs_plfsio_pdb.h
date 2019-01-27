@@ -11,6 +11,7 @@
 
 #include "deltafs_plfsio_builder.h"
 #include "deltafs_plfsio_doublebuf.h"
+#include "deltafs_plfsio_filter.h"
 
 namespace pdlfs {
 namespace plfsio {
@@ -48,6 +49,7 @@ class BufferedBlockWriter : public DoubleBuffering {
 
  private:
   typedef ArrayBlockBuilder BlockBuf;
+  typedef BloomBlock BloomBuilder;
   const DirOptions& options_;
   WritableFile* const dst_;
   port::Mutex mu_;
@@ -56,6 +58,7 @@ class BufferedBlockWriter : public DoubleBuffering {
   // Memory pre-reserved for each write buffer
   size_t buf_reserv_;
   uint64_t offset_;  // Current write offset
+  BloomBuilder bloombuilder_;
   std::string bloomfilter_;
   std::string indexes_;
 

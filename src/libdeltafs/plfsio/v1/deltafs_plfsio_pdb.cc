@@ -21,6 +21,7 @@ BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
       buf_threshold_(buf_size),
       buf_reserv_(buf_size),
       offset_(0),
+      bloombuilder_(options_, 0),  // Do not reserve memory for it
       bb0_(options),
       bb1_(options) {
   bb0_.Reserve(buf_reserv_);
@@ -78,20 +79,37 @@ Status BufferedBlockWriter::Finish() {
 }
 
 // REQUIRES: mu_ has been LOCKed.
-Status BufferedBlockWriter::Compact(void* buf) {
+Status BufferedBlockWriter::Compact(void* const buf) {
   mu_.AssertHeld();
   assert(dst_);
   BlockBuf* const bb = static_cast<BlockBuf*>(buf);
   // Skip empty buffers
   if (bb->empty()) return Status::OK();
   mu_.Unlock();  // Unlock during I/O operations
-  const Slice blk_contents = bb->Finish(kNoCompression);
+  const Slice block_contents = bb->Finish(kNoCompression);
+  PutFixed64(&indexes_, bloomfilter_.size());
+  if (options_.bf_bits_per_key != 0) {
+    bloombuilder_.Reset(bb->NumEntries());
+    BlockContents bc;
+    bc.data = block_contents;
+    bc.heap_allocated = false;
+    bc.cachable = false;
+    Block b(bc);
+    IteratorWrapper it(b.NewIterator(NULL));
+    it.SeekToFirst();
+    for (; it.Valid();) {
+      bloombuilder_.AddKey(it.key());
+      it.Next();
+    }
+    Slice f = bloombuilder_.Finish();
+    bloomfilter_.append(f.data(), f.size());
+  }
   PutFixed64(&indexes_, offset_);
-  Status status = dst_->Append(blk_contents);
+  Status status = dst_->Append(block_contents);
   // Does not sync data to storage.
   // Sync() does.
   if (status.ok()) {
-    offset_ += blk_contents.size();
+    offset_ += block_contents.size();
     status = dst_->Flush();
   }
   mu_.Lock();
