@@ -49,6 +49,7 @@ class BufferedBlockWriter : public DoubleBuffering {
 
  private:
   typedef ArrayBlockBuilder BlockBuf;
+  typedef ArrayBlock Block;
   typedef BloomBlock BloomBuilder;
   const DirOptions& options_;
   WritableFile* const dst_;
