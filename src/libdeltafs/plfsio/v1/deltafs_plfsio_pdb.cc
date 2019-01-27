@@ -228,6 +228,8 @@ Status BufferedBlockReader::Get(const Slice& k, std::string* result) {
     } else if (!status.ok()) {
       break;
     }
+
+    offset = next_offset;
   }
 
   return status;
