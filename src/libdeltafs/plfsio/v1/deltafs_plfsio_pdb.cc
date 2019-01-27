@@ -22,8 +22,8 @@ BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
       buf_reserv_(buf_size),
       offset_(0),
       bloombuilder_(options_, 0),  // Do not reserve memory for it
-      bb0_(options),
-      bb1_(options) {
+      bb0_(options_, true),        // Force unordered
+      bb1_(options_, true) {
   bb0_.Reserve(buf_reserv_);
   bb1_.Reserve(buf_reserv_);
 
@@ -118,6 +118,7 @@ Status BufferedBlockWriter::Compact(void* const buf) {
 
 // REQUIRES: mu_ has been LOCKed.
 Status BufferedBlockWriter::DumpIndexesAndFilters() {
+  PutFixed64(&indexes_, bloomfilter_.size());
   PutFixed64(&indexes_, offset_);
   Status status;
 
@@ -234,19 +235,26 @@ Status BufferedBlockReader::Get(const Slice& k, std::string* result) {
     return status;
   }
 
-  assert(indexes_.size() >= 8);
-  uint64_t offset = DecodeFixed64(&indexes_[0]);
+  assert(indexes_.size() >= 16);
+  uint64_t bloomoffset = DecodeFixed64(&indexes_[0]);
+  uint64_t offset = DecodeFixed64(&indexes_[8]);
+  uint64_t next_bloomoffset;
   uint64_t next_offset;
   const size_t limit = indexes_.size();
-  size_t off = 8;
-  for (; off + 7 < limit; off += 8) {
-    next_offset = DecodeFixed64(&indexes_[0] + off);
-    if (GetFrom(&status, k, result, offset, next_offset - offset)) {
-      break;
-    } else if (!status.ok()) {
-      break;
+  size_t off = 16;
+  for (; off + 15 < limit; off += 16) {
+    next_bloomoffset = DecodeFixed64(&indexes_[0] + off);
+    next_offset = DecodeFixed64(&indexes_[0] + 8 + off);
+    Slice bf(bloomfilter_.data() + bloomoffset, next_bloomoffset - bloomoffset);
+    if (BloomKeyMayMatch(k, bf)) {
+      if (GetFrom(&status, k, result, offset, next_offset - offset)) {
+        break;
+      } else if (!status.ok()) {
+        break;
+      }
     }
 
+    bloomoffset = next_bloomoffset;
     offset = next_offset;
   }
 
@@ -281,9 +289,9 @@ Status BufferedBlockReader::LoadIndexesAndFilters(Slice* footer) {
   indexes_ = bloomfilter_ = cache_contents_;
   indexes_.remove_prefix(bloomfilter_handle.size());
   bloomfilter_.remove_suffix(index_handle.size());
-  if (indexes_.size() < 8) {
-    std::string error = "Indexes are shorter than 8 bytes and are invalid";
-    cache_status_ = Status::AssertionFailed(error);
+  if (indexes_.size() < 16) {
+    cache_status_ =
+        Status::AssertionFailed("Indexes are shorter than 16 bytes");
   }
 
   return cache_status_;
