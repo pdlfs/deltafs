@@ -14,6 +14,7 @@
 #include "deltafs_envs.h"
 
 #include "plfsio/v1/deltafs_plfsio_bulkio.h"
+#include "plfsio/v1/deltafs_plfsio_cuckoo.h"
 #include "plfsio/v1/deltafs_plfsio_pdb.h"
 #include "plfsio/v1/deltafs_plfsio_types.h"
 #include "plfsio/v1/deltafs_plfsio_v1.h"
@@ -649,6 +650,7 @@ int deltafs_version_patch() { return DELTAFS_VERSION_PATCH; }
 // Light-weight plfsdir api
 // -------------------------
 namespace {
+typedef pdlfs::plfsio::CuckooBlock<8, 24> Cuckoo;
 #define PLFSIO_HASH_USE_SPOOKY  // Any prefix of a hash is still a hash
 #define IMPORT(x) typedef pdlfs::plfsio::x x
 IMPORT(DirOptions);
@@ -1085,6 +1087,9 @@ struct deltafs_plfsdir {
   BufferedBlockWriter* blk_writer_;
   pdlfs::RandomAccessFile* blk_src_;
   BufferedBlockReader* blk_reader_;
+  pdlfs::WritableFile* cuckoo_dst_;
+  Cuckoo* cuckoo_;
+  std::string* cuckoo_data_;
   pdlfs::WritableFile* io_dst;
   DirectWriter* io_writer;
   DirWriter* writer;
@@ -1097,8 +1102,10 @@ struct deltafs_plfsdir {
   bool is_env_pfs;
   bool opened;  // If deltafs_plfsdir_open() has been called
   bool enable_io_measurement;
+  bool ft_opened;
   bool io_opened;  // If side io has been opened
   size_t side_io_buf_size;
+  size_t side_filter_size;
   DirOptions* io_options;
   deltafs_printer_t printer;  // Error printer
   void* printer_arg;
@@ -1132,7 +1139,7 @@ deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
 }
 
 int deltafs_plfsdir_set_fixed_kv(deltafs_plfsdir_t* __dir, int __flag) {
-  if (__dir != NULL && !__dir->opened) {
+  if (__dir && !__dir->opened) {
     __dir->io_options->fixed_kv_length = static_cast<bool>(__flag);
     return 0;
   } else {
@@ -1142,7 +1149,7 @@ int deltafs_plfsdir_set_fixed_kv(deltafs_plfsdir_t* __dir, int __flag) {
 }
 
 int deltafs_plfsdir_set_unordered(deltafs_plfsdir_t* __dir, int __flag) {
-  if (__dir != NULL && !__dir->opened) {
+  if (__dir && !__dir->opened) {
     __dir->unordered = static_cast<bool>(__flag);
     return 0;
   } else {
@@ -1152,7 +1159,7 @@ int deltafs_plfsdir_set_unordered(deltafs_plfsdir_t* __dir, int __flag) {
 }
 
 int deltafs_plfsdir_set_multimap(deltafs_plfsdir_t* __dir, int __flag) {
-  if (__dir != NULL && !__dir->opened) {
+  if (__dir && !__dir->opened) {
     __dir->multi = static_cast<bool>(__flag);
     return 0;
   } else {
@@ -1162,7 +1169,7 @@ int deltafs_plfsdir_set_multimap(deltafs_plfsdir_t* __dir, int __flag) {
 }
 
 int deltafs_plfsdir_force_leveldb_fmt(deltafs_plfsdir_t* __dir, int __flag) {
-  if (__dir != NULL && !__dir->opened) {
+  if (__dir && !__dir->opened) {
     __dir->io_options->leveldb_compatible = static_cast<bool>(__flag);
     return 0;
   } else {
@@ -1177,7 +1184,7 @@ int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size) {
   } else if (__key_size > 16) {
     __key_size = 16;
   }
-  if (__dir != NULL && !__dir->opened) {
+  if (__dir && !__dir->opened) {
     __dir->io_options->key_size = __key_size;
     return 0;
   } else {
@@ -1187,7 +1194,7 @@ int deltafs_plfsdir_set_key_size(deltafs_plfsdir_t* __dir, size_t __key_size) {
 }
 
 int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size) {
-  if (__dir != NULL && !__dir->opened) {
+  if (__dir && !__dir->opened) {
     __dir->io_options->value_size = __val_size;
     return 0;
   } else {
@@ -1197,7 +1204,7 @@ int deltafs_plfsdir_set_val_size(deltafs_plfsdir_t* __dir, size_t __val_size) {
 }
 
 int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env) {
-  if (__dir != NULL && !__dir->opened && __env != NULL) {
+  if (__dir && !__dir->opened && __env) {
     __dir->is_env_pfs = __env->is_pfs;
     __dir->env = __env->env;
     return 0;
@@ -1209,7 +1216,7 @@ int deltafs_plfsdir_set_env(deltafs_plfsdir_t* __dir, deltafs_env_t* __env) {
 
 int deltafs_plfsdir_set_thread_pool(deltafs_plfsdir_t* __dir,
                                     deltafs_tp_t* __tp) {
-  if (__dir != NULL && !__dir->opened && __tp != NULL) {
+  if (__dir && !__dir->opened && __tp) {
     __dir->pool = __tp->pool;
     return 0;
   } else {
@@ -1219,7 +1226,7 @@ int deltafs_plfsdir_set_thread_pool(deltafs_plfsdir_t* __dir,
 }
 
 int deltafs_plfsdir_set_rank(deltafs_plfsdir_t* __dir, int __rank) {
-  if (__dir != NULL && !__dir->opened) {
+  if (__dir && !__dir->opened) {
     __dir->io_options->rank = __rank;
     return 0;
   } else {
@@ -1231,7 +1238,7 @@ int deltafs_plfsdir_set_rank(deltafs_plfsdir_t* __dir, int __rank) {
 int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
                                     deltafs_printer_t __printer,
                                     void* __printer_arg) {
-  if (__dir != NULL && !__dir->opened) {
+  if (__dir && !__dir->opened) {
     __dir->printer_arg = __printer_arg;
     __dir->printer = __printer;
     return 0;
@@ -1243,7 +1250,7 @@ int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
 
 int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir,
                                           int __flag) {
-  if (__dir != NULL && !__dir->opened) {
+  if (__dir && !__dir->opened) {
     const bool measure_io = static_cast<bool>(__flag);
     __dir->enable_io_measurement = measure_io;
     return 0;
@@ -1255,7 +1262,7 @@ int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir,
 
 int deltafs_plfsdir_set_side_io_buf_size(deltafs_plfsdir_t* __dir,
                                          size_t __sz) {
-  if (__dir != NULL && !__dir->opened) {
+  if (__dir && !__dir->opened) {
     if (__sz < 4096) {
       __sz = 4096;
     }
@@ -1267,8 +1274,19 @@ int deltafs_plfsdir_set_side_io_buf_size(deltafs_plfsdir_t* __dir,
   }
 }
 
+int deltafs_plfsdir_set_side_filter_size(deltafs_plfsdir_t* __dir,
+                                         size_t __sz) {
+  if (__dir && !__dir->opened) {
+    __dir->side_filter_size = __sz;
+    return 0;
+  } else {
+    SetErrno(BadArgs());
+    return -1;
+  }
+}
+
 int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
-  if (__dir != NULL) {
+  if (__dir) {
     int lg_parts = __dir->io_options->lg_parts;
     if (lg_parts < 0) lg_parts = 0;
     return 1 << lg_parts;
@@ -1547,6 +1565,65 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   return s;
 }
 
+std::string SideFilterName(const std::string& parent, int rank) {
+  char tmp[20];
+  snprintf(tmp, sizeof(tmp), "PDB-%08x.ftl", rank);
+  return parent + "/" + tmp;
+}
+
+pdlfs::Status ReadFilter(pdlfs::Env* env, pdlfs::SequentialFile* file,
+                         std::string* data) {
+  pdlfs::Status s;
+  data->clear();
+  char* space = new char[8 << 20];
+  while (true) {
+    pdlfs::Slice fragment;
+    s = file->Read(8 << 20, &fragment, space);
+    if (!s.ok()) {
+      break;
+    }
+    data->append(fragment.data(), fragment.size());
+    if (fragment.empty()) {
+      break;
+    }
+  }
+  delete[] space;
+  return s;
+}
+
+// Open a side filter for a given plfsdir.
+// REQUIRES: deltafs_plfsdir_open(__dir, __name) has been CALLed.
+// Return OK on success, or a non-OK status on errors.
+pdlfs::Status OpenSideFt(deltafs_plfsdir_t* dir, const std::string& name) {
+  pdlfs::Status s;
+  assert(dir->opened);
+  dir->io_options->cuckoo_frac = -1;
+  pdlfs::Env* const env = dir->io_options->env;
+  const int r = dir->io_options->rank;
+
+  if (dir->mode == O_WRONLY) {
+    pdlfs::WritableFile* dst;
+    s = env->NewWritableFile(SideFilterName(name, r).c_str(), &dst);
+    if (s.ok()) {
+      dir->cuckoo_ = new Cuckoo(*dir->io_options, 0);
+      dir->cuckoo_->Reset(dir->side_filter_size);
+      dir->cuckoo_dst_ = dst;
+    }
+  } else if (dir->mode == O_RDONLY) {
+    pdlfs::SequentialFile* src;
+    s = env->NewSequentialFile(SideFilterName(name, r).c_str(), &src);
+    if (s.ok()) {
+      dir->cuckoo_data_ = new std::string;
+      s = ReadFilter(env, src, dir->cuckoo_data_);
+      delete src;
+    }
+  } else {
+    s = BadArgs();
+  }
+
+  return s;
+}
+
 std::string SideName(const std::string& parent, int rank) {
   char tmp[20];
   snprintf(tmp, sizeof(tmp), "D-%08x.bin", rank);
@@ -1554,7 +1631,7 @@ std::string SideName(const std::string& parent, int rank) {
 }
 
 // Open a side I/O channel for a given plfsdir.
-// REQUIRES: deltafs_plfsdir_open(__dir, __name) must has been called.
+// REQUIRES: deltafs_plfsdir_open(__dir, __name) has been CALLed.
 // Return OK on success, or a non-OK status on errors.
 pdlfs::Status OpenSideIo(deltafs_plfsdir_t* dir, const std::string& name) {
   pdlfs::Status s;
@@ -1593,8 +1670,16 @@ int DirError(deltafs_plfsdir_t* dir, const pdlfs::Status& s) {
   return -1;
 }
 
+bool IsSideFtOpened(deltafs_plfsdir_t* dir) {
+  if (dir) {
+    return dir->ft_opened;
+  } else {
+    return false;
+  }
+}
+
 bool IsSideIoOpened(deltafs_plfsdir_t* dir) {
-  if (dir != NULL) {
+  if (dir) {
     return dir->io_opened;
   } else {
     return false;
@@ -1602,7 +1687,7 @@ bool IsSideIoOpened(deltafs_plfsdir_t* dir) {
 }
 
 bool IsDirOpened(deltafs_plfsdir_t* dir) {
-  if (dir != NULL) {
+  if (dir) {
     return dir->opened;
   } else {
     return false;
@@ -1833,14 +1918,104 @@ int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
   }
 }
 
-int deltafs_plfsdir_io_open(deltafs_plfsdir_t* __dir, const char* __name) {
+int deltafs_plfsdir_filter_open(deltafs_plfsdir_t* __dir, const char* __name) {
   pdlfs::Status s;
 
-  if (__dir == NULL || __dir->io_opened) {
+  if (!__dir || __dir->ft_opened) {
     s = BadArgs();
   } else if (!__dir->opened) {
     s = BadArgs();
-  } else if (__name == NULL || __name[0] == 0) {
+  } else if (!__name || __name[0] == 0) {
+    s = BadArgs();
+  } else {
+    s = OpenSideFt(__dir, __name);
+  }
+
+  if (s.ok()) {
+    __dir->ft_opened = true;
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+int deltafs_plfsdir_filter_put(deltafs_plfsdir_t* __dir, const char* __key,
+                               size_t __keylen, uint32_t __rank) {
+  pdlfs::Status s;
+
+  if (!IsSideFtOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else {
+    pdlfs::Slice k(__key, __keylen);
+    __dir->cuckoo_->AddKey(k, __rank);
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+int deltafs_plfsdir_filter_flush(deltafs_plfsdir_t* __dir) {
+  pdlfs::Status s;
+
+  if (!IsSideFtOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else {
+    pdlfs::Slice ft = __dir->cuckoo_->Finish();
+    pdlfs::WritableFile* const f = __dir->cuckoo_dst_;
+    s = f->Append(ft);
+    if (s.ok()) {
+      s = f->Sync();
+    }
+
+    __dir->cuckoo_->Reset(__dir->side_filter_size);
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+int deltafs_plfsdir_filter_finish(deltafs_plfsdir_t* __dir) {
+  pdlfs::Status s;
+
+  if (!IsSideFtOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_WRONLY) {
+    s = BadArgs();
+  } else {
+    pdlfs::WritableFile* const f = __dir->cuckoo_dst_;
+    s = f->Sync();
+
+    f->Close();
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+int deltafs_plfsdir_io_open(deltafs_plfsdir_t* __dir, const char* __name) {
+  pdlfs::Status s;
+
+  if (!__dir || __dir->io_opened) {
+    s = BadArgs();
+  } else if (!__dir->opened) {
+    s = BadArgs();
+  } else if (!__name || __name[0] == 0) {
     s = BadArgs();
   } else {
     s = OpenSideIo(__dir, __name);
@@ -2250,6 +2425,9 @@ int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
   delete __dir->blk_dst_;
   delete __dir->blk_reader_;
   delete __dir->blk_src_;
+  delete __dir->cuckoo_;
+  delete __dir->cuckoo_dst_;
+  delete __dir->cuckoo_data_;
   delete __dir->io_writer;
   delete __dir->io_dst;
   delete __dir->io_reader;

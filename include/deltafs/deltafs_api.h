@@ -131,6 +131,7 @@ int deltafs_plfsdir_force_leveldb_fmt(deltafs_plfsdir_t* __dir, int __flag);
 int deltafs_plfsdir_enable_io_measurement(deltafs_plfsdir_t* __dir, int __flag);
 int deltafs_plfsdir_set_fixed_kv(deltafs_plfsdir_t* __dir, int __flag);
 int deltafs_plfsdir_set_side_io_buf_size(deltafs_plfsdir_t* __dir, size_t __sz);
+int deltafs_plfsdir_set_side_filter_size(deltafs_plfsdir_t* __dir, size_t __sz);
 /* Error printer type */
 typedef void (*deltafs_printer_t)(const char* __err, void* __arg);
 int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
@@ -140,6 +141,11 @@ int deltafs_plfsdir_set_err_printer(deltafs_plfsdir_t* __dir,
 int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir, const char* __name);
 int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name);
+int deltafs_plfsdir_filter_open(deltafs_plfsdir_t* __dir, const char* __name);
+int deltafs_plfsdir_filter_put(deltafs_plfsdir_t* __dir, const char* __key,
+                               size_t __keylen, uint32_t __rank);
+int deltafs_plfsdir_filter_flush(deltafs_plfsdir_t* __dir);
+int deltafs_plfsdir_filter_finish(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_io_open(deltafs_plfsdir_t* __dir, const char* __name);
 ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
                                   size_t __sz);
