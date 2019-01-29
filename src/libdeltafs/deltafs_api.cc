@@ -1970,14 +1970,7 @@ int deltafs_plfsdir_filter_flush(deltafs_plfsdir_t* __dir) {
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
-    pdlfs::Slice ft = __dir->cuckoo_->Finish();
-    pdlfs::WritableFile* const f = __dir->cuckoo_dst_;
-    s = f->Append(ft);
-    if (s.ok()) {
-      s = f->Sync();
-    }
-
-    __dir->cuckoo_->Reset(__dir->side_filter_size);
+    // TODO
   }
 
   if (!s.ok()) {
@@ -1995,8 +1988,12 @@ int deltafs_plfsdir_filter_finish(deltafs_plfsdir_t* __dir) {
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
   } else {
+    pdlfs::Slice ft = __dir->cuckoo_->Finish();
     pdlfs::WritableFile* const f = __dir->cuckoo_dst_;
-    s = f->Sync();
+    s = f->Append(ft);
+    if (s.ok()) {
+      s = f->Sync();
+    }
 
     f->Close();
   }
