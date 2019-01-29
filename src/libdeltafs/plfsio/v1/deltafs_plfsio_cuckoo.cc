@@ -491,15 +491,13 @@ class CuckooKeyTester {
 
 #define TEMPLATE(K)                  \
   template class CuckooBlock<K, 32>; \
+  template class CuckooBlock<K, 24>; \
   template class CuckooBlock<K, 0>
 
 TEMPLATE(32);
 TEMPLATE(24);
-TEMPLATE(20);
 TEMPLATE(16);
-TEMPLATE(14);
 TEMPLATE(12);
-TEMPLATE(10);
 TEMPLATE(8);
 TEMPLATE(4);
 TEMPLATE(2);
@@ -519,18 +517,15 @@ bool CuckooValues(const Slice& key, const Slice& input,
   const char* const tail = input.data() + input.size();
   size_t valbits = DecodeFixed32(tail - 8);
   size_t keybits = DecodeFixed32(tail - 4);
-  if (valbits == 0) {
+  if (valbits == 32) {
     switch (int(keybits)) {
 #define CASE(n) \
   case n:       \
-    return CuckooKeyTester<n, 0>()(key, input, values)
+    return CuckooKeyTester<n, 32>()(key, input, values)
       CASE(32);
       CASE(24);
-      CASE(20);
       CASE(16);
-      CASE(14);
       CASE(12);
-      CASE(10);
       CASE(8);
       CASE(4);
       CASE(2);
@@ -539,18 +534,32 @@ bool CuckooValues(const Slice& key, const Slice& input,
       default:
         return true;
     }
-  } else if (valbits == 32) {
+  } else if (valbits == 24) {
     switch (int(keybits)) {
 #define CASE(n) \
   case n:       \
-    return CuckooKeyTester<n, 32>()(key, input, values)
+    return CuckooKeyTester<n, 24>()(key, input, values)
       CASE(32);
       CASE(24);
-      CASE(20);
       CASE(16);
-      CASE(14);
       CASE(12);
-      CASE(10);
+      CASE(8);
+      CASE(4);
+      CASE(2);
+      CASE(1);
+#undef CASE
+      default:
+        return true;
+    }
+  } else if (valbits == 0) {
+    switch (int(keybits)) {
+#define CASE(n) \
+  case n:       \
+    return CuckooKeyTester<n, 0>()(key, input, values)
+      CASE(32);
+      CASE(24);
+      CASE(16);
+      CASE(12);
       CASE(8);
       CASE(4);
       CASE(2);

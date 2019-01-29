@@ -426,15 +426,13 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
       CASE(2);
       CASE(4);
       CASE(8);
-      CASE(10);
       CASE(12);
-      CASE(14);
       CASE(16);
-      CASE(20);
       CASE(24);
       CASE(32);
       default:
-        n = 0;
+        fprintf(stderr, "!! FILTER CONF NOT SUPPORTED\n");
+        exit(1);
     }
     uint32_t hits = 0;
     char tmp[4];
@@ -471,7 +469,7 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
 class PlfsTableBench : public PlfsCuckoBench {
  public:
   PlfsTableBench() {  // Use a random generator to get random values
-    fprintf(stderr, "== LG_QUERIES IS IGNORED AND ONLY LG_KEYS MATTERS\n");
+    fprintf(stderr, "LG_QUERIES IS IGNORED AND ONLY LG_KEYS MATTERS\n");
     rndseed_ = GetOption("RANDOM_SEED", 301);
   }
 
@@ -517,15 +515,13 @@ class PlfsTableBench : public PlfsCuckoBench {
       CASE(2);
       CASE(4);
       CASE(8);
-      CASE(10);
       CASE(12);
-      CASE(14);
       CASE(16);
-      CASE(20);
       CASE(24);
       CASE(32);
       default:
-        n = 0;
+        fprintf(stderr, "!! FILTER CONF NOT SUPPORTED\n");
+        exit(1);
     }
     std::vector<uint32_t> values;
     size_t hits_sum = 0;
