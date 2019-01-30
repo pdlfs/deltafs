@@ -1708,6 +1708,8 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
       s = OpenAsLevelDb(__dir, __name);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = OpenAsPdb(__dir, __name);
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_NOTHING) {
+      s = OpenDirEnv(__dir);
     } else {
       s = BadArgs();
     }
@@ -2401,7 +2403,7 @@ int* deltafs_plfsdir_filter_get(deltafs_plfsdir_t* __dir, const char* __key,
   } else {
     pdlfs::Slice k(__key, __keylen);
     pdlfs::plfsio::CuckooValues(k, *__dir->cuckoo_data_, &values);
-    result = new int[values.size()];
+    result = static_cast<int*>(malloc(sizeof(int) * values.size()));
     for (size_t i = 0; i < values.size(); i++) {
       result[i] = values[i];
     }
