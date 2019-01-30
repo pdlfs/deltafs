@@ -1940,7 +1940,7 @@ int deltafs_plfsdir_filter_open(deltafs_plfsdir_t* __dir, const char* __name) {
 }
 
 int deltafs_plfsdir_filter_put(deltafs_plfsdir_t* __dir, const char* __key,
-                               size_t __keylen, uint32_t __rank) {
+                               size_t __keylen, int __rank) {
   pdlfs::Status s;
 
   if (!IsSideFtOpened(__dir)) {
