@@ -1300,17 +1300,10 @@ int deltafs_plfsdir_get_memparts(deltafs_plfsdir_t* __dir) {
 
 namespace {
 
-std::string PdbName(const std::string& parent, int rank) {
-  char tmp[20];
-  snprintf(tmp, sizeof(tmp), "PDB-%08x.tbl", rank);
-  return parent + "/" + tmp;
-}
-
-pdlfs::Status OpenAsPdb(deltafs_plfsdir_t* dir, const std::string& parent) {
+pdlfs::Status OpenDirEnv(deltafs_plfsdir_t* dir) {
   pdlfs::Status s;
-  int rank = dir->io_options->rank;
   pdlfs::Env* env = dir->env;
-  std::string fname = PdbName(parent, rank);
+  assert(env);
 
   dir->io_options->allow_env_threads = false;
   dir->io_options->is_env_pfs = dir->is_env_pfs;
@@ -1319,7 +1312,23 @@ pdlfs::Status OpenAsPdb(deltafs_plfsdir_t* dir, const std::string& parent) {
     dir->io_env = new DirEnvWrapper(dir->env);
     env = dir->io_env;
   }
+
   dir->io_options->env = env;
+
+  return s;
+}
+
+std::string PdbName(const std::string& parent, int rank) {
+  char tmp[20];
+  snprintf(tmp, sizeof(tmp), "PDB-%08x.tbl", rank);
+  return parent + "/" + tmp;
+}
+
+pdlfs::Status OpenAsPdb(deltafs_plfsdir_t* dir, const std::string& parent) {
+  pdlfs::Status s = OpenDirEnv(dir);  // OpenDirEnv() always return OK
+  pdlfs::Env* const env = dir->io_options->env;
+  int r = dir->io_options->rank;
+  std::string fname = PdbName(parent, r);
 
   if (dir->mode == O_WRONLY) {
     const size_t bufsz = dir->io_options->total_memtable_budget / 2;
@@ -1358,10 +1367,10 @@ std::string LevelDbName(const std::string& parent, int rank) {
 }
 
 pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
-  pdlfs::Status s;
-  int rank = dir->io_options->rank;
-  pdlfs::Env* env = dir->env;
-  std::string dbname = LevelDbName(parent, rank);
+  pdlfs::Status s = OpenDirEnv(dir);  // OpenDirEnv() always return OK
+  pdlfs::Env* const env = dir->io_options->env;
+  int r = dir->io_options->rank;
+  std::string dbname = LevelDbName(parent, r);
   pdlfs::DBOptions dboptions;
 
   dboptions.skip_lock_file = true;
@@ -1372,10 +1381,6 @@ pdlfs::Status OpenAsLevelDb(deltafs_plfsdir_t* dir, const std::string& parent) {
   dboptions.compaction_pool = dir->pool;
   dboptions.write_buffer_size =  //
       dir->io_options->total_memtable_budget / 2;
-  if (dir->enable_io_measurement) {
-    dir->io_env = new DirEnvWrapper(dir->env);
-    env = dir->io_env;
-  }
   if (dir->io_engine == DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF &&
       dir->io_options->bf_bits_per_key != 0)
     dir->db_filter =
@@ -1529,18 +1534,9 @@ void FinalizeDirMode(deltafs_plfsdir_t* dir) {
 pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   // To obtain detailed error status, an error printer
   // must be set by the caller
-  pdlfs::Status s;
-  pdlfs::Env* env = dir->env;
+  pdlfs::Status s = OpenDirEnv(dir);  // OpenDirEnv() always return OK
+  pdlfs::Env* const env = dir->io_options->env;
   FinalizeDirMode(dir);
-
-  dir->io_options->allow_env_threads = false;  // No implicit background threads
-  dir->io_options->is_env_pfs = dir->is_env_pfs;
-
-  if (dir->enable_io_measurement) {
-    dir->io_env = new DirEnvWrapper(dir->env);
-    env = dir->io_env;
-  }
-  dir->io_options->env = env;
 
   if (dir->mode == O_WRONLY) {
     DirWriter* writer;
