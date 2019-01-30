@@ -2203,7 +2203,7 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
     s = BadArgs();
   } else if (__dir->mode != O_RDONLY) {
     s = BadArgs();
-  } else if (__key == NULL) {
+  } else if (!__key) {
     s = BadArgs();
   } else if (__keylen == 0) {
     s = BadArgs();
@@ -2222,7 +2222,7 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
     if (s.ok()) {
       result = static_cast<char*>(malloc(dst.size()));
       memcpy(result, dst.data(), dst.size());
-      if (__sz != NULL) {
+      if (__sz) {
         *__sz = dst.size();
       }
     }
@@ -2247,7 +2247,7 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
     s = BadArgs();
   } else if (__dir->mode != O_RDONLY) {
     s = BadArgs();
-  } else if (__fname == NULL) {
+  } else if (!__fname) {
     s = BadArgs();
   } else if (__fname[0] == 0) {
     s = BadArgs();
@@ -2273,7 +2273,7 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
     if (s.ok()) {
       result = static_cast<char*>(malloc(dst.size()));
       memcpy(result, dst.data(), dst.size());
-      if (__sz != NULL) {
+      if (__sz) {
         *__sz = dst.size();
       }
     }
@@ -2388,10 +2388,40 @@ ssize_t deltafs_plfsdir_io_pread(deltafs_plfsdir_t* __dir, void* __buf,
   }
 }
 
+int* deltafs_plfsdir_filter_get(deltafs_plfsdir_t* __dir, const char* __key,
+                                size_t __keylen, size_t* __sz) {
+  pdlfs::Status s;
+  std::vector<uint32_t> values;
+  int* result = NULL;
+
+  if (!IsSideFtOpened(__dir)) {
+    s = BadArgs();
+  } else if (__dir->mode != O_RDONLY) {
+    s = BadArgs();
+  } else {
+    pdlfs::Slice k(__key, __keylen);
+    pdlfs::plfsio::CuckooValues(k, *__dir->cuckoo_data_, &values);
+    result = new int[values.size()];
+    for (size_t i = 0; i < values.size(); i++) {
+      result[i] = values[i];
+    }
+    if (__sz) {
+      *__sz = values.size();
+    }
+  }
+
+  if (!s.ok()) {
+    DirError(__dir, s);
+    return NULL;
+  } else {
+    return result;
+  }
+}
+
 int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir, const char* __name) {
   pdlfs::Status s;
 
-  if (__dir == NULL) {
+  if (!__dir) {
     s = BadArgs();
   } else if (__dir->opened) {
     s = BadArgs();
@@ -2407,7 +2437,7 @@ int deltafs_plfsdir_destroy(deltafs_plfsdir_t* __dir, const char* __name) {
 }
 
 int deltafs_plfsdir_free_handle(deltafs_plfsdir_t* __dir) {
-  if (__dir == NULL) return 0;
+  if (!__dir) return 0;
 
   delete __dir->db;
   delete __dir->db_filter;

@@ -190,7 +190,7 @@ ssize_t deltafs_plfsdir_count(deltafs_plfsdir_t* __dir, int __epoch);
 ssize_t deltafs_plfsdir_io_pread(deltafs_plfsdir_t* __dir, void* __buf,
                                  size_t __sz, off_t __off);
 int* deltafs_plfsdir_filter_get(deltafs_plfsdir_t* __dir, const char* __key,
-                                size_t __keylen);
+                                size_t __keylen, size_t* __sz);
 /* Returns NULL if not found. A malloc()ed array otherwise.
    The result should be deleted by free(). */
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);
