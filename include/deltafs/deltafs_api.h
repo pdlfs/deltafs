@@ -152,8 +152,6 @@ int deltafs_plfsdir_io_flush(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_io_wait(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_io_sync(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_io_finish(deltafs_plfsdir_t* __dir);
-ssize_t deltafs_plfsdir_io_pread(deltafs_plfsdir_t* __dir, void* __buf,
-                                 size_t __sz, off_t __off);
 /* Put a piece of data into a given key.
    Return -1 on errors, or num bytes written. */
 ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
@@ -189,6 +187,10 @@ ssize_t deltafs_plfsdir_scan(deltafs_plfsdir_t* __dir, int __epoch,
 /* Count the number of keys at a specified epoch, or all epochs if
    __epoch is -1. Return the number of keys found. Return -1 on error. */
 ssize_t deltafs_plfsdir_count(deltafs_plfsdir_t* __dir, int __epoch);
+ssize_t deltafs_plfsdir_io_pread(deltafs_plfsdir_t* __dir, void* __buf,
+                                 size_t __sz, off_t __off);
+int* deltafs_plfsdir_filter_get(deltafs_plfsdir_t* __dir, const char* __key,
+                                size_t __keylen);
 /* Returns NULL if not found. A malloc()ed array otherwise.
    The result should be deleted by free(). */
 char* deltafs_plfsdir_get_property(deltafs_plfsdir_t* __dir, const char* __key);

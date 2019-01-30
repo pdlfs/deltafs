@@ -1105,7 +1105,7 @@ struct deltafs_plfsdir {
   bool ft_opened;
   bool io_opened;  // If side io has been opened
   size_t side_io_buf_size;
-  size_t side_filter_size;
+  size_t side_ft_size;
   DirOptions* io_options;
   deltafs_printer_t printer;  // Error printer
   void* printer_arg;
@@ -1277,7 +1277,7 @@ int deltafs_plfsdir_set_side_io_buf_size(deltafs_plfsdir_t* __dir,
 int deltafs_plfsdir_set_side_filter_size(deltafs_plfsdir_t* __dir,
                                          size_t __sz) {
   if (__dir && !__dir->opened) {
-    __dir->side_filter_size = __sz;
+    __dir->side_ft_size = __sz;
     return 0;
   } else {
     SetErrno(BadArgs());
@@ -1535,7 +1535,6 @@ pdlfs::Status OpenDir(deltafs_plfsdir_t* dir, const std::string& name) {
   // To obtain detailed error status, an error printer
   // must be set by the caller
   pdlfs::Status s = OpenDirEnv(dir);  // OpenDirEnv() always return OK
-  pdlfs::Env* const env = dir->io_options->env;
   FinalizeDirMode(dir);
 
   if (dir->mode == O_WRONLY) {
@@ -1602,7 +1601,7 @@ pdlfs::Status OpenSideFt(deltafs_plfsdir_t* dir, const std::string& name) {
     s = env->NewWritableFile(SideFilterName(name, r).c_str(), &dst);
     if (s.ok()) {
       dir->cuckoo_ = new Cuckoo(*dir->io_options, 0);
-      dir->cuckoo_->Reset(dir->side_filter_size);
+      dir->cuckoo_->Reset(dir->side_ft_size);
       dir->cuckoo_dst_ = dst;
     }
   } else if (dir->mode == O_RDONLY) {
