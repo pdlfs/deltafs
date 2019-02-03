@@ -492,6 +492,7 @@ class CuckooKeyTester {
 #define TEMPLATE(K)                  \
   template class CuckooBlock<K, 32>; \
   template class CuckooBlock<K, 24>; \
+  template class CuckooBlock<K, 12>; \
   template class CuckooBlock<K, 0>
 
 TEMPLATE(32);
@@ -539,6 +540,23 @@ bool CuckooValues(const Slice& key, const Slice& input,
 #define CASE(n) \
   case n:       \
     return CuckooKeyTester<n, 24>()(key, input, values)
+      CASE(32);
+      CASE(24);
+      CASE(16);
+      CASE(12);
+      CASE(8);
+      CASE(4);
+      CASE(2);
+      CASE(1);
+#undef CASE
+      default:
+        return true;
+    }
+  } else if (valbits == 12) {
+    switch (int(keybits)) {
+#define CASE(n) \
+  case n:       \
+    return CuckooKeyTester<n, 12>()(key, input, values)
       CASE(32);
       CASE(24);
       CASE(16);

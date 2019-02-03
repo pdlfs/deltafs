@@ -650,7 +650,10 @@ int deltafs_version_patch() { return DELTAFS_VERSION_PATCH; }
 // Light-weight plfsdir api
 // -------------------------
 namespace {
-typedef pdlfs::plfsio::CuckooBlock<8, 24> Cuckoo;
+#define PLFSIO_CUCKOO_KEYBITS 4
+#define PLFSIO_CUCKOO_BITS 12
+typedef pdlfs::plfsio::CuckooBlock<PLFSIO_CUCKOO_KEYBITS, PLFSIO_CUCKOO_BITS>
+    Cuckoo;
 #define PLFSIO_HASH_USE_SPOOKY  // Any prefix of a hash is still a hash
 #define IMPORT(x) typedef pdlfs::plfsio::x x
 IMPORT(DirOptions);
