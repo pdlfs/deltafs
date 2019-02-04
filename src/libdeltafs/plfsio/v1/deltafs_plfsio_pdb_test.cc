@@ -1,0 +1,193 @@
+/*
+ * Copyright (c) 2018-2019 Carnegie Mellon University and
+ *         Los Alamos National Laboratory.
+ * All rights reserved.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. See the AUTHORS file for names of contributors.
+ */
+
+#include "deltafs_plfsio_pdb.h"
+
+#include "pdlfs-common/port.h"
+#include "pdlfs-common/testharness.h"
+#include "pdlfs-common/testutil.h"
+#include "pdlfs-common/xxhash.h"
+
+#if __cplusplus >= 201103
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
+
+namespace pdlfs {
+namespace plfsio {
+
+// Test Env ...
+namespace {
+// A file implementation that controls write speed and discards all data.
+class EmulatedWritableFile : public WritableFileWrapper {
+ public:
+  explicit EmulatedWritableFile(uint64_t bps) : bytes_per_sec_(bps) {}
+
+  virtual ~EmulatedWritableFile() {}
+
+  virtual Status Append(const Slice& buf) OVERRIDE {
+    if (!buf.empty()) {
+      const int micros_to_delay =
+          static_cast<int>(1000 * 1000 * buf.size() / bytes_per_sec_);
+      Env::Default()->SleepForMicroseconds(micros_to_delay);
+    }
+    return Status::OK();
+  }
+
+ private:
+  const uint64_t bytes_per_sec_;
+};
+
+// All writable files are individually rate limited.
+class EmulatedEnv : public EnvWrapper {
+ public:
+  explicit EmulatedEnv(uint64_t bps)
+      : EnvWrapper(Env::Default()), bytes_per_sec_(bps) {}
+
+  virtual ~EmulatedEnv() {}
+
+  virtual Status NewWritableFile(const char* f, WritableFile** r) OVERRIDE {
+    *r = new EmulatedWritableFile(bytes_per_sec_);
+    return Status::OK();
+  }
+
+ private:
+  const uint64_t bytes_per_sec_;
+};
+
+}  // namespace
+
+class PdbBench {
+  static int FromEnv(const char* key, int def) {
+    const char* env = getenv(key);
+    if (env && env[0]) {
+      return atoi(env);
+    } else {
+      return def;
+    }
+  }
+
+  static inline int GetOption(const char* key, int def) {
+    int opt = FromEnv(key, def);
+    fprintf(stderr, "%s=%d\n", key, opt);
+    return opt;
+  }
+
+ public:
+  PdbBench() {
+    mkeys_ = GetOption("MI_KEYS", 16);
+    bytes_per_sec_ = GetOption("BYTES_PER_SEC", 6000000);
+    buf_size_ = GetOption("BUF_SIZE", 8 << 20);
+    options_.allow_env_threads = true;
+    options_.bf_bits_per_key = 12;
+    options_.cuckoo_frac = -1;
+    options_.value_size = 56;
+    options_.key_size = 8;
+  }
+
+  void LogAndApply() {
+    BufferedBlockWriter* pdb = NULL;
+    WritableFile* dst = NULL;
+
+    Env* const env = new EmulatedEnv(bytes_per_sec_);
+    ASSERT_OK(env->NewWritableFile("test.tbl", &dst));
+    pdb = new BufferedBlockWriter(options_, dst, buf_size_);
+    const uint64_t start = env->NowMicros();
+    char tmp[8];
+    Slice key(tmp, sizeof(tmp));
+    std::string data(56, '\0');
+    const size_t num_keys = static_cast<size_t>(mkeys_) << 20;
+    size_t i = 0;
+    for (; i < num_keys; i++) {
+      if ((i & 0x7FFFFu) == 0)
+        fprintf(stderr, "\r%.2f%%", 100.0 * i / num_keys);
+      EncodeFixed64(tmp, i);
+      ASSERT_OK(pdb->Add(key, data));
+    }
+    fprintf(stderr, "\r100.00%%");
+    fprintf(stderr, "\n");
+    ASSERT_OK(pdb->Finish());
+    uint64_t dura = env->NowMicros() - start;
+    Report(dura);
+
+    delete pdb;
+    delete dst;
+    delete env;
+  }
+
+  void Report(uint64_t dura) {
+    const double k = 1000.0, ki = 1024.0;
+    fprintf(stderr, "-----------------------------------------\n");
+    fprintf(stderr, "     Total dura: %.0f sec\n", 1.0 * dura / k / k);
+    fprintf(stderr, "          Speed: %.0f bytes per sec\n",
+            (8 + 56) * mkeys_ * ki * ki * k * k / dura);
+    fprintf(stderr, "           Util: %.2f%%\n",
+            100.0 *
+                (options_.key_size + options_.value_size +
+                 double(options_.bf_bits_per_key) / 8) *
+                mkeys_ * ki * ki * k * k / dura / bytes_per_sec_);
+  }
+
+ private:
+  DirOptions options_;
+  size_t buf_size_;
+  uint64_t bytes_per_sec_;
+  int mkeys_;
+};
+
+}  // namespace plfsio
+}  // namespace pdlfs
+
+#if defined(PDLFS_GFLAGS)
+#include <gflags/gflags.h>
+#endif
+#if defined(PDLFS_GLOG)
+#include <glog/logging.h>
+#endif
+
+static void BM_Usage() {
+  fprintf(stderr, "Use --bench=pdb to run benchmark.\n");
+  fprintf(stderr, "\n");
+}
+
+static void BM_Main(int* argc, char*** argv) {
+#if defined(PDLFS_GFLAGS)
+  google::ParseCommandLineFlags(argc, argv, true);
+#endif
+#if defined(PDLFS_GLOG)
+  google::InitGoogleLogging((*argv)[0]);
+  google::InstallFailureSignalHandler();
+#endif
+  pdlfs::Slice bench_name;
+  if (*argc > 1) {
+    bench_name = pdlfs::Slice((*argv)[*argc - 1]);
+  } else {
+    BM_Usage();
+  }
+  if (bench_name == "--bench=pdb") {
+    pdlfs::plfsio::PdbBench bench;
+    bench.LogAndApply();
+  } else {
+    BM_Usage();
+  }
+}
+
+int main(int argc, char* argv[]) {
+  pdlfs::Slice token;
+  if (argc > 1) {
+    token = pdlfs::Slice(argv[argc - 1]);
+  }
+  if (!token.starts_with("--bench")) {
+    return pdlfs::test::RunAllTests(&argc, &argv);
+  } else {
+    BM_Main(&argc, &argv);
+    return 0;
+  }
+}
