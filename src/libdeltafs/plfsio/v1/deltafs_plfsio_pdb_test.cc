@@ -64,6 +64,8 @@ class EmulatedEnv : public EnvWrapper {
 
 }  // namespace
 
+// Evaluate implementation's bandwidth utilization under different
+// DB configurations.
 class PdbBench {
   static int FromEnv(const char* key, int def) {
     const char* env = getenv(key);
@@ -82,7 +84,7 @@ class PdbBench {
 
  public:
   PdbBench() {
-    mkeys_ = GetOption("MI_KEYS", 16);
+    mkeys_ = GetOption("MI_KEYS", 4);
     bytes_per_sec_ = GetOption("BYTES_PER_SEC", 6000000);
     buf_size_ = GetOption("BUF_SIZE", 8 << 20);
     options_.allow_env_threads = true;
@@ -106,7 +108,7 @@ class PdbBench {
     const size_t num_keys = static_cast<size_t>(mkeys_) << 20;
     size_t i = 0;
     for (; i < num_keys; i++) {
-      if ((i & 0x7FFFFu) == 0)
+      if ((i & 0x7FFFu) == 0)
         fprintf(stderr, "\r%.2f%%", 100.0 * i / num_keys);
       EncodeFixed64(tmp, i);
       ASSERT_OK(pdb->Add(key, data));
@@ -152,12 +154,13 @@ class PdbBench {
 #include <glog/logging.h>
 #endif
 
-static void BM_Usage() {
+namespace {
+void BM_Usage() {
   fprintf(stderr, "Use --bench=pdb to run benchmark.\n");
   fprintf(stderr, "\n");
 }
 
-static void BM_Main(int* argc, char*** argv) {
+void BM_Main(int* argc, char*** argv) {
 #if defined(PDLFS_GFLAGS)
   google::ParseCommandLineFlags(argc, argv, true);
 #endif
@@ -178,6 +181,7 @@ static void BM_Main(int* argc, char*** argv) {
     BM_Usage();
   }
 }
+}  // namespace
 
 int main(int argc, char* argv[]) {
   pdlfs::Slice token;
