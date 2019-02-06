@@ -14,7 +14,7 @@ namespace plfsio {
 
 BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
                                          WritableFile* dst, size_t buf_size)
-    : DoubleBuffering(&mu_, &bg_cv_, &bb0_, &bb1_),
+    : DoubleBuffering(&mu_, &bg_cv_),
       options_(options),
       dst_(dst),  // Not owned by us
       bg_cv_(&mu_),
@@ -22,18 +22,20 @@ BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
       buf_reserv_(buf_size),
       offset_(0),
       bloombuilder_(options_, 0),  // Do not reserve memory for it
-      bb0_(options_, true),        // Force unordered
+      bb0_(options_, true),
       bb1_(options_, true) {
+  // Reserve memory for block builders
   bb0_.Reserve(buf_reserv_);
   bb1_.Reserve(buf_reserv_);
 
-  mem_buf_ = &bb0_;
+  bufs_.push_back(&bb1_);
+  membuf_ = &bb0_;
 }
 
 // Wait for all outstanding compactions to clear.
 BufferedBlockWriter::~BufferedBlockWriter() {
   MutexLock ml(&mu_);
-  while (has_bg_compaction_) {
+  while (num_bg_compactions_) {
     bg_cv_.Wait();
   }
 }
@@ -79,10 +81,10 @@ Status BufferedBlockWriter::Finish() {
 }
 
 // REQUIRES: mu_ has been LOCKed.
-Status BufferedBlockWriter::Compact(void* const buf) {
+Status BufferedBlockWriter::Compact(void* immbuf) {
   mu_.AssertHeld();
   assert(dst_);
-  BlockBuf* const bb = static_cast<BlockBuf*>(buf);
+  BlockBuf* const bb = static_cast<BlockBuf*>(immbuf);
   // Skip empty buffers
   if (bb->empty()) return Status::OK();
   mu_.Unlock();  // Unlock during I/O operations
@@ -174,25 +176,38 @@ Status BufferedBlockWriter::SyncBackend(bool close) {
   }
 }
 
+namespace { // State for each compaction
+struct State {
+  BufferedBlockWriter* writer;
+  void* immbuf;
+};
+}  // namespace
+
 // REQUIRES: mu_ has been LOCKed.
-void BufferedBlockWriter::ScheduleCompaction() {
+void BufferedBlockWriter::ScheduleCompaction(void* immbuf) {
   mu_.AssertHeld();
 
-  assert(has_bg_compaction_);
+  assert(num_bg_compactions_);
+
+  State* s = new State;
+  s->immbuf = immbuf;
+  s->writer = this;
 
   if (options_.compaction_pool) {
-    options_.compaction_pool->Schedule(BufferedBlockWriter::BGWork, this);
+    options_.compaction_pool->Schedule(BufferedBlockWriter::BGWork, s);
   } else if (options_.allow_env_threads) {
-    Env::Default()->Schedule(BufferedBlockWriter::BGWork, this);
+    Env::Default()->Schedule(BufferedBlockWriter::BGWork, s);
   } else {
-    DoCompaction<BufferedBlockWriter>();
+    DoCompaction<BufferedBlockWriter>(immbuf);
+    delete s;
   }
 }
 
 void BufferedBlockWriter::BGWork(void* arg) {
-  BufferedBlockWriter* const ins = reinterpret_cast<BufferedBlockWriter*>(arg);
-  MutexLock ml(&ins->mu_);
-  ins->DoCompaction<BufferedBlockWriter>();
+  State* const s = reinterpret_cast<State*>(arg);
+  MutexLock ml(&s->writer->mu_);
+  s->writer->DoCompaction<BufferedBlockWriter>(s->immbuf);
+  delete s;
 }
 
 BufferedBlockReader::BufferedBlockReader(const DirOptions& options,

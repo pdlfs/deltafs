@@ -16,13 +16,14 @@
 
 #include <assert.h>
 #include <stddef.h>
+#include <deque>
 
 namespace pdlfs {
 namespace plfsio {
 
 class DoubleBuffering {
  public:
-  DoubleBuffering(port::Mutex*, port::CondVar*, void* buf0, void* buf1);
+  DoubleBuffering(port::Mutex* mu, port::CondVar* cv);
 
   // Append data into the buffer. Return OK on success, or a non-OK status on
   // errors. REQUIRES: __Finish() has NOT been called.
@@ -66,22 +67,18 @@ class DoubleBuffering {
   void WaitFor(uint32_t compac_seq);
   void WaitForCompactions();
   template <typename T>
-  void TryScheduleCompaction(uint32_t*);
+  void TryScheduleCompaction(uint32_t*, void*);
   template <typename T>
-  void DoCompaction();
+  void DoCompaction(void*);
 
   // State below is protected by mu_
   uint32_t num_compac_scheduled_;
   uint32_t num_compac_completed_;
   bool finished_;  // If Finish() has been called
-  // True if the current compaction is forced by Flush()
-  bool is_compaction_forced_;
-  bool has_bg_compaction_;
+  uint32_t num_bg_compactions_;
   Status bg_status_;
-  void* mem_buf_;
-  void* imm_buf_;
-  void* buf0_;
-  void* buf1_;
+  std::deque<void*> bufs_;
+  void* membuf_;
 };
 
 #define __this static_cast<T*>(this)
@@ -181,8 +178,9 @@ Status DoubleBuffering::__Add(const Slice& k, const Slice& v) {
     status = bg_status_;
   else {
     status = Prepare<T>(&ignored_compac_seq, false /* !force */, k, v);
-    if (status.ok()) {  // Subclass performs the actual insertion
-      __this->AddToBuffer(mem_buf_, k, v);
+    if (status.ok()) {
+      assert(membuf_);
+      __this->AddToBuffer(membuf_, k, v);
     }
   }
 
@@ -196,27 +194,21 @@ Status DoubleBuffering::Prepare(uint32_t* seq, bool force, const Slice& k,
   mu_->AssertHeld();
   Status status;
   while (true) {
-    assert(mem_buf_);
+    assert(membuf_);
     if (!bg_status_.ok()) {
       status = bg_status_;
       break;
-    } else if (!force && __this->HasRoom(mem_buf_, k, v)) {
+    } else if (!force && __this->HasRoom(membuf_, k, v)) {
       // There is room in current write buffer
       break;
-    } else if (has_bg_compaction_) {
+    } else if (bufs_.empty()) {
       bg_cv_->Wait();  // Wait for background compactions to finish
     } else {
       // Attempt to switch to a new write buffer
       force = false;
-      assert(!imm_buf_);
-      imm_buf_ = mem_buf_;
-      TryScheduleCompaction<T>(seq);
-      void* const current_buf = mem_buf_;
-      if (current_buf == buf0_) {
-        mem_buf_ = buf1_;
-      } else {
-        mem_buf_ = buf0_;
-      }
+      TryScheduleCompaction<T>(seq, membuf_);
+      membuf_ = bufs_.back();
+      bufs_.pop_back();
     }
   }
 
@@ -225,36 +217,37 @@ Status DoubleBuffering::Prepare(uint32_t* seq, bool force, const Slice& k,
 
 // REQUIRES: mu_ has been LOCKed.
 template <typename T>
-void DoubleBuffering::TryScheduleCompaction(uint32_t* compac_seq) {
+void DoubleBuffering::TryScheduleCompaction(uint32_t* compac_seq,
+                                            void* immbuf) {
   mu_->AssertHeld();
 
   *compac_seq = ++num_compac_scheduled_;
-  has_bg_compaction_ = true;
+  num_bg_compactions_++;
 
-  if (__this->IsEmpty(imm_buf_)) {
+  if (__this->IsEmpty(immbuf)) {
     // Buffer is empty so compaction should be quick. As such we directly
     // execute the compaction in the current thread
-    DoCompaction<T>();  // No context switch
+    DoCompaction<T>(immbuf);  // No context switch guaranteed
   } else {
-    __this->ScheduleCompaction();
+    __this->ScheduleCompaction(immbuf);
   }
 }
 
 // REQUIRES: mu_ has been LOCKed.
 template <typename T>
-void DoubleBuffering::DoCompaction() {
+void DoubleBuffering::DoCompaction(void* immbuf) {
   mu_->AssertHeld();
-  assert(has_bg_compaction_);
-  assert(imm_buf_);
-  Status status = __this->Compact(imm_buf_);
+  assert(immbuf);
+  Status status = __this->Compact(immbuf);
+  ++num_compac_completed_;
   assert(bg_status_.ok());
   bg_status_ = status;
-  __this->Clear(imm_buf_);
-  imm_buf_ = NULL;
-  ++num_compac_completed_;
-  has_bg_compaction_ = false;
-  // Just finished one compaction
-  // Try another one
+  __this->Clear(immbuf);
+  bufs_.push_back(immbuf);
+  assert(num_bg_compactions_ > 0);
+  --num_bg_compactions_;
+  // Just completed one compaction
+  // Try launching another one
   uint32_t ignored_compac_seq;
   Prepare<T>(&ignored_compac_seq, false /* !force */);
   bg_cv_->SignalAll();

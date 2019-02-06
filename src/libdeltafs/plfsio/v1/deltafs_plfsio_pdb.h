@@ -68,7 +68,7 @@ class BufferedBlockWriter : public DoubleBuffering {
   Status SyncBackend(bool close = false);
   Status DumpIndexesAndFilters();
   Status Close();
-  void ScheduleCompaction();
+  void ScheduleCompaction(void* buf);
   void Clear(void* buf) { static_cast<BlockBuf*>(buf)->Reset(); }
   void AddToBuffer(void* buf, const Slice& k, const Slice& v) {
     static_cast<BlockBuf*>(buf)->Add(k, v);

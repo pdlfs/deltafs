@@ -58,7 +58,7 @@ class DirectWriter : public DoubleBuffering {
   friend class DoubleBuffering;
   Status Compact(void* buf);
   Status SyncBackend(bool close = false);
-  void ScheduleCompaction();
+  void ScheduleCompaction(void* buf);
   void Clear(void* buf) { static_cast<std::string*>(buf)->resize(0); }
   void AddToBuffer(void* buf, const Slice& k, const Slice& v) {
     std::string* const s = static_cast<std::string*>(buf);

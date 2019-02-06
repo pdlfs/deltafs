@@ -15,22 +15,24 @@ namespace plfsio {
 
 DirectWriter::DirectWriter(const DirOptions& options, WritableFile* dst,
                            size_t buf_size)
-    : DoubleBuffering(&mu_, &bg_cv_, &str0_, &str1_),
+    : DoubleBuffering(&mu_, &bg_cv_),
       options_(options),
       dst_(dst),  // Not owned by us
       bg_cv_(&mu_),
       buf_threshold_(buf_size),
       buf_reserv_(buf_size) {
+  // Reserve memory for our write buffers
   str0_.reserve(buf_reserv_);
   str1_.reserve(buf_reserv_);
 
-  mem_buf_ = &str0_;
+  bufs_.push_back(&str1_);
+  membuf_ = &str0_;
 }
 
 // Wait for all outstanding compactions to clear.
 DirectWriter::~DirectWriter() {
   MutexLock ml(&mu_);
-  while (has_bg_compaction_) {
+  while (num_bg_compactions_) {
     bg_cv_.Wait();
   }
 }
@@ -70,10 +72,10 @@ Status DirectWriter::Finish() {
 }
 
 // REQUIRES: mu_ has been LOCKed.
-Status DirectWriter::Compact(void* buf) {
+Status DirectWriter::Compact(void* immbuf) {
   mu_.AssertHeld();
   assert(dst_);
-  std::string* const s = static_cast<std::string*>(buf);
+  std::string* const s = static_cast<std::string*>(immbuf);
   // Skip empty buffers
   if (s->empty()) return Status::OK();
   mu_.Unlock();  // Unlock during I/O operations
@@ -98,25 +100,38 @@ Status DirectWriter::SyncBackend(bool close) {
   return status;
 }
 
+namespace {  // State for each compaction
+struct State {
+  DirectWriter* writer;
+  void* immbuf;
+};
+}  // namespace
+
 // REQUIRES: mu_ has been LOCKed.
-void DirectWriter::ScheduleCompaction() {
+void DirectWriter::ScheduleCompaction(void* immbuf) {
   mu_.AssertHeld();
 
-  assert(has_bg_compaction_);
+  assert(num_bg_compactions_);
+
+  State* s = new State;
+  s->immbuf = immbuf;
+  s->writer = this;
 
   if (options_.compaction_pool) {
-    options_.compaction_pool->Schedule(DirectWriter::BGWork, this);
+    options_.compaction_pool->Schedule(DirectWriter::BGWork, s);
   } else if (options_.allow_env_threads) {
-    Env::Default()->Schedule(DirectWriter::BGWork, this);
+    Env::Default()->Schedule(DirectWriter::BGWork, s);
   } else {
-    DoCompaction<DirectWriter>();
+    DoCompaction<DirectWriter>(immbuf);
+    delete s;
   }
 }
 
 void DirectWriter::BGWork(void* arg) {
-  DirectWriter* const ins = reinterpret_cast<DirectWriter*>(arg);
-  MutexLock ml(&ins->mu_);
-  ins->DoCompaction<DirectWriter>();
+  State* const s = reinterpret_cast<State*>(arg);
+  MutexLock ml(&s->writer->mu_);
+  s->writer->DoCompaction<DirectWriter>(s->immbuf);
+  delete s;
 }
 
 DirectReader::DirectReader(const DirOptions& options, RandomAccessFile* src)

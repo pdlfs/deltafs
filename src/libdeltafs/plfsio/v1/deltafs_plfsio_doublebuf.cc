@@ -12,25 +12,20 @@
 namespace pdlfs {
 namespace plfsio {
 
-DoubleBuffering::DoubleBuffering(port::Mutex* mu, port::CondVar* cv, void* buf0,
-                                 void* buf1)
+DoubleBuffering::DoubleBuffering(port::Mutex* mu, port::CondVar* cv)
     : mu_(mu),
       bg_cv_(cv),
       num_compac_scheduled_(0),
       num_compac_completed_(0),
       finished_(false),
-      is_compaction_forced_(false),
-      has_bg_compaction_(false),
-      mem_buf_(NULL),
-      imm_buf_(NULL),
-      buf0_(buf0),
-      buf1_(buf1) {}
+      num_bg_compactions_(0),
+      membuf_(NULL) {}
 
 // Wait until there is no outstanding compactions.
 // REQUIRES: __Finish() has NOT been called.
 // REQUIRES: mu_ has been LOCKed.
 Status DoubleBuffering::__Wait() {
-  WaitForCompactions();  // Wait until !has_bg_compaction_
+  WaitForCompactions();  // Wait until !num_bg_compactions_
   return bg_status_;
 }
 
@@ -47,7 +42,7 @@ void DoubleBuffering::WaitFor(uint32_t compac_seq) {
 // REQUIRES: mu_ has been LOCKed.
 void DoubleBuffering::WaitForCompactions() {
   mu_->AssertHeld();
-  while (bg_status_.ok() && has_bg_compaction_) {
+  while (bg_status_.ok() && num_bg_compactions_) {
     bg_cv_->Wait();
   }
 }
