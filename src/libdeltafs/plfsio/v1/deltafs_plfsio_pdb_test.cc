@@ -86,11 +86,11 @@ class PdbBench {
   PdbBench() {
     thread_pool_ = ThreadPool::NewFixed(4, true /* eager init */);
     mkeys_ = GetOption("MI_KEYS", 4);
+    bf_bits_per_key_ = GetOption("BF_BITS_PER_KEY", 13);
     bytes_per_sec_ = GetOption("BYTES_PER_SEC", 6000000);
     buf_size_ = GetOption("BUF_SIZE", 8 << 20);
-    options_.allow_env_threads = false;
+    options_.bf_bits_per_key = bf_bits_per_key_;
     options_.compaction_pool = thread_pool_;
-    options_.bf_bits_per_key = 13;
     options_.cuckoo_frac = -1;
     options_.value_size = 56;
     options_.key_size = 8;
@@ -106,6 +106,7 @@ class PdbBench {
 
     Env* const env = new EmulatedEnv(bytes_per_sec_);
     ASSERT_OK(env->NewWritableFile("test.tbl", &dst));
+    options_.allow_env_threads = false;
     pdb = new BufferedBlockWriter(options_, dst, buf_size_);
     const uint64_t start = env->NowMicros();
     char tmp[8];
@@ -146,6 +147,7 @@ class PdbBench {
   ThreadPool* thread_pool_;
   DirOptions options_;
   size_t buf_size_;
+  size_t bf_bits_per_key_;
   uint64_t bytes_per_sec_;
   int mkeys_;
 };
