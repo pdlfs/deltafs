@@ -92,8 +92,8 @@ Status BufferedBlockWriter::Compact(void* immbuf) {
   mu_.Unlock();  // Unlock during I/O operations
   const Slice block_contents = bb->Finish(kNoCompression);
   Slice filter_contents;
-  if (options_.bf_bits_per_key != 0) {  // Make a filter if requested
-    BloomBlock bloombuilder(options_);
+  BloomBlock bloombuilder(options_);
+  if (options_.bf_bits_per_key != 0) {  // Create a filter when requested
     bloombuilder.Reset(bb->NumEntries());
     BlockContents bc;
     bc.data = block_contents;
@@ -108,7 +108,7 @@ Status BufferedBlockWriter::Compact(void* immbuf) {
     }
     filter_contents = bloombuilder.Finish();
   }
-  iomu_.Lock();  // Writing must be serialized
+  iomu_.Lock();  // All writes must be serialized
   PutFixed64(&indexes_, bloomfilter_.size());
   bloomfilter_.append(filter_contents.data(), filter_contents.size());
   PutFixed64(&indexes_, offset_);
