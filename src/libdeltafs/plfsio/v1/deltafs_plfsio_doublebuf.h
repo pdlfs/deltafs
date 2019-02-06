@@ -227,7 +227,7 @@ void DoubleBuffering::TryScheduleCompaction(uint32_t* compac_seq,
   if (__this->IsEmpty(immbuf)) {
     // Buffer is empty so compaction should be quick. As such we directly
     // execute the compaction in the current thread
-    DoCompaction<T>(immbuf);  // No context switch guaranteed
+    DoCompaction<T>(immbuf);  // Avoid context switches
   } else {
     __this->ScheduleCompaction(immbuf);
   }

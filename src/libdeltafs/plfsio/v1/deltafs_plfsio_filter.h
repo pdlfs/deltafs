@@ -40,7 +40,7 @@ class BloomBlock {
   // memory to reserve for storing the underlying bitmap.
   // Insufficient memory reservation may cause dynamic memory allocation
   // at a later time.
-  BloomBlock(const DirOptions& options, size_t bytes_to_reserve);
+  BloomBlock(const DirOptions& options, size_t bytes_to_reserve = 0);
   ~BloomBlock();
 
   // A bloom filter must be reset before keys may be inserted.

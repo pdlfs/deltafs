@@ -53,13 +53,13 @@ class BufferedBlockWriter : public DoubleBuffering {
   typedef BloomBlock BloomBuilder;
   const DirOptions& options_;
   WritableFile* const dst_;
+  port::Mutex iomu_;
   port::Mutex mu_;
   port::CondVar bg_cv_;
   const size_t buf_threshold_;  // Threshold for write buffer flush
   // Memory pre-reserved for each write buffer
   size_t buf_reserv_;
   uint64_t offset_;  // Current write offset
-  BloomBuilder bloombuilder_;
   std::string bloomfilter_;
   std::string indexes_;
 
@@ -88,6 +88,7 @@ class BufferedBlockWriter : public DoubleBuffering {
   BlockHandle index_handle_;
   BlockBuf bb0_;
   BlockBuf bb1_;
+  BlockBuf bb2_;
 };
 
 // Read data written by a BufferedBlockWriter.

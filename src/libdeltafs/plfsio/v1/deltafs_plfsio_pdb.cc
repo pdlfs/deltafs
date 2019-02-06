@@ -21,13 +21,15 @@ BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
       buf_threshold_(buf_size),
       buf_reserv_(buf_size),
       offset_(0),
-      bloombuilder_(options_, 0),  // Do not reserve memory for it
       bb0_(options_, true),
-      bb1_(options_, true) {
-  // Reserve memory for block builders
+      bb1_(options_, true),
+      bb2_(options_, true) {
+  // Reserve memory for all the block builders
   bb0_.Reserve(buf_reserv_);
   bb1_.Reserve(buf_reserv_);
+  bb2_.Reserve(buf_reserv_);
 
+  bufs_.push_back(&bb2_);
   bufs_.push_back(&bb1_);
   membuf_ = &bb0_;
 }
@@ -89,9 +91,10 @@ Status BufferedBlockWriter::Compact(void* immbuf) {
   if (bb->empty()) return Status::OK();
   mu_.Unlock();  // Unlock during I/O operations
   const Slice block_contents = bb->Finish(kNoCompression);
-  PutFixed64(&indexes_, bloomfilter_.size());
-  if (options_.bf_bits_per_key != 0) {
-    bloombuilder_.Reset(bb->NumEntries());
+  Slice filter_contents;
+  if (options_.bf_bits_per_key != 0) {  // Make a filter if requested
+    BloomBlock bloombuilder(options_);
+    bloombuilder.Reset(bb->NumEntries());
     BlockContents bc;
     bc.data = block_contents;
     bc.heap_allocated = false;
@@ -100,12 +103,14 @@ Status BufferedBlockWriter::Compact(void* immbuf) {
     IteratorWrapper it(b.NewIterator(NULL));
     it.SeekToFirst();
     for (; it.Valid();) {
-      bloombuilder_.AddKey(it.key());
+      bloombuilder.AddKey(it.key());
       it.Next();
     }
-    Slice f = bloombuilder_.Finish();
-    bloomfilter_.append(f.data(), f.size());
+    filter_contents = bloombuilder.Finish();
   }
+  iomu_.Lock();  // Writing must be serialized
+  PutFixed64(&indexes_, bloomfilter_.size());
+  bloomfilter_.append(filter_contents.data(), filter_contents.size());
   PutFixed64(&indexes_, offset_);
   Status status = dst_->Append(block_contents);
   // Does not sync data to storage.
@@ -114,12 +119,15 @@ Status BufferedBlockWriter::Compact(void* immbuf) {
     offset_ += block_contents.size();
     status = dst_->Flush();
   }
+  iomu_.Unlock();
   mu_.Lock();
   return status;
 }
 
+// REQUIRES: no outstanding background compactions.
 // REQUIRES: mu_ has been LOCKed.
 Status BufferedBlockWriter::DumpIndexesAndFilters() {
+  assert(!num_bg_compactions_);
   PutFixed64(&indexes_, bloomfilter_.size());
   PutFixed64(&indexes_, offset_);
   Status status;
@@ -145,8 +153,10 @@ Status BufferedBlockWriter::DumpIndexesAndFilters() {
   return status;
 }
 
+// REQUIRES: no outstanding background compactions.
 // REQUIRES: mu_ has been LOCKed.
 Status BufferedBlockWriter::Close() {
+  assert(!num_bg_compactions_);
   Status status = DumpIndexesAndFilters();
 
   if (status.ok()) {
@@ -176,7 +186,7 @@ Status BufferedBlockWriter::SyncBackend(bool close) {
   }
 }
 
-namespace { // State for each compaction
+namespace {  // State for each compaction
 struct State {
   BufferedBlockWriter* writer;
   void* immbuf;

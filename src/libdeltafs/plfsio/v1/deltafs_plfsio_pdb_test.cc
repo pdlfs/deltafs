@@ -84,14 +84,20 @@ class PdbBench {
 
  public:
   PdbBench() {
+    thread_pool_ = ThreadPool::NewFixed(4, true /* eager init */);
     mkeys_ = GetOption("MI_KEYS", 4);
     bytes_per_sec_ = GetOption("BYTES_PER_SEC", 6000000);
     buf_size_ = GetOption("BUF_SIZE", 8 << 20);
-    options_.allow_env_threads = true;
-    options_.bf_bits_per_key = 12;
+    options_.allow_env_threads = false;
+    options_.compaction_pool = thread_pool_;
+    options_.bf_bits_per_key = 13;
     options_.cuckoo_frac = -1;
     options_.value_size = 56;
     options_.key_size = 8;
+  }
+
+  ~PdbBench() {  //
+    delete thread_pool_;
   }
 
   void LogAndApply() {
@@ -108,8 +114,7 @@ class PdbBench {
     const size_t num_keys = static_cast<size_t>(mkeys_) << 20;
     size_t i = 0;
     for (; i < num_keys; i++) {
-      if ((i & 0x7FFFu) == 0)
-        fprintf(stderr, "\r%.2f%%", 100.0 * i / num_keys);
+      if ((i & 0x7FFFu) == 0) fprintf(stderr, "\r%.2f%%", 100.0 * i / num_keys);
       EncodeFixed64(tmp, i);
       ASSERT_OK(pdb->Add(key, data));
     }
@@ -138,6 +143,7 @@ class PdbBench {
   }
 
  private:
+  ThreadPool* thread_pool_;
   DirOptions options_;
   size_t buf_size_;
   uint64_t bytes_per_sec_;
