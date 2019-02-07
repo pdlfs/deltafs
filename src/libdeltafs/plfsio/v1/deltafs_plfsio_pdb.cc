@@ -36,7 +36,7 @@ BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
     }
   }
 
-  bloomfilter_.reserve(1 << 20);
+  bloomfilter_.reserve(4 << 20);
   membuf_ = bbs_[0];
 }
 
