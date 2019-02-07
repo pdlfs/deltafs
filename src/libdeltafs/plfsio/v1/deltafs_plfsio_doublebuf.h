@@ -30,12 +30,12 @@ class DoubleBuffering {
   template <typename T>
   Status __Add(const Slice& k, const Slice& v, bool nowait);
 
-  // Force a buffer flush (compaction) and maybe wait for it.
-  // Compaction does not force data to be sync'ed. Sync() does.
+  // Force a compaction, and wait for it to complete if "synchronous" is on.
+  // Compactions do not force data to be sync'ed. Sync() does.
   // Return OK on success, or a non-OK status on errors.
   // REQUIRES: __Finish() has NOT been called.
   template <typename T>
-  Status __Flush(bool wait);
+  Status __Flush(bool synchronous);
 
   // Sync data to storage. By default, only data that is already scheduled
   // for compaction is sync'ed. Data that is in the write buffer and not yet
@@ -65,7 +65,7 @@ class DoubleBuffering {
   Status Prepare(uint32_t* compac_seq, bool force = true, bool nowait = false,
                  const Slice& k = Slice(), const Slice& v = Slice());
   void WaitFor(uint32_t compac_seq);
-  void WaitForCompactions();
+  void WaitForAny();
   template <typename T>
   void TryScheduleCompaction(uint32_t*, void*);
   template <typename T>
@@ -93,11 +93,11 @@ Status DoubleBuffering::__Finish() {
   if (finished_)  // __Finish() has already been called.
     return bg_status_;
   else {
-    __Flush<T>(false);
+    __Flush<T>(true);
   }
 
-  // Wait until !has_bg_compaction_
-  WaitForCompactions();
+  // Wait until !num_bg_compactions_
+  WaitForAny();
   if (bg_status_.ok()) {  // Sync and close
     bg_status_ = __this->SyncBackend(true /* close */);
     finish_status = bg_status_;
@@ -134,8 +134,8 @@ Status DoubleBuffering::__Sync(bool flush) {
     // >= my_compac_seq, otherwise my_compac_seq is 0 and
     // WaitFor(seq) will return immediately.
     WaitFor(my_compac_seq);
-    // Then, wait until !has_bg_compaction_
-    WaitForCompactions();
+    // Then, wait until !num_bg_compactions_
+    WaitForAny();
     if (bg_status_.ok()) {
       bg_status_ = __this->SyncBackend();
     }
@@ -147,7 +147,7 @@ Status DoubleBuffering::__Sync(bool flush) {
 // REQUIRES: __Finish() has NOT been called.
 // REQUIRES: mu_ has been LOCKed.
 template <typename T>
-Status DoubleBuffering::__Flush(bool wait) {
+Status DoubleBuffering::__Flush(bool synchronous) {
   mu_->AssertHeld();
   uint32_t my_compac_seq = 0;
   Status status;
@@ -157,7 +157,7 @@ Status DoubleBuffering::__Flush(bool wait) {
     status = Prepare<T>(&my_compac_seq);
   }
 
-  if (status.ok() && wait) {  // Wait for compaction to clear
+  if (status.ok() && synchronous) {  // Wait for the compaction to complete
     WaitFor(my_compac_seq);
     return bg_status_;
   } else {

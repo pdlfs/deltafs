@@ -25,7 +25,7 @@ DoubleBuffering::DoubleBuffering(port::Mutex* mu, port::CondVar* cv)
 // REQUIRES: __Finish() has NOT been called.
 // REQUIRES: mu_ has been LOCKed.
 Status DoubleBuffering::__Wait() {
-  WaitForCompactions();  // Wait until !num_bg_compactions_
+  WaitForAny();  // Wait until !num_bg_compactions_
   return bg_status_;
 }
 
@@ -40,7 +40,7 @@ void DoubleBuffering::WaitFor(uint32_t compac_seq) {
 
 // Wait until there is no outstanding compactions.
 // REQUIRES: mu_ has been LOCKed.
-void DoubleBuffering::WaitForCompactions() {
+void DoubleBuffering::WaitForAny() {
   mu_->AssertHeld();
   while (bg_status_.ok() && num_bg_compactions_) {
     bg_cv_->Wait();

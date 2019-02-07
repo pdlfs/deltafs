@@ -20,7 +20,7 @@ BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
       dst_(dst),  // Not owned by us
       bg_cv_(&mu_),
       buf_threshold_(buf_size),
-      buf_reserv_(buf_size),
+      buf_reserv_(8 + buf_size),
       offset_(0),
       bbs_(NULL),
       n_(n) {
@@ -31,11 +31,12 @@ BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
   for (size_t i = 0; i < n_; i++) {
     bbs_[i] = new BlockBuf(options_, true);  // Force an unordered fmt
     bbs_[i]->Reserve(buf_reserv_);
-    if (i != 0) {  // So we have n-1 immbufs
+    if (i != 0) {  // bbs_[0] will act as membuf_
       bufs_.push_back(bbs_[i]);
     }
   }
 
+  bloomfilter_.reserve(1 << 20);
   membuf_ = bbs_[0];
 }
 
