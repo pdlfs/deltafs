@@ -1332,15 +1332,16 @@ pdlfs::Status OpenAsPdb(deltafs_plfsdir_t* dir, const std::string& parent) {
   pdlfs::Env* const env = dir->io_options->env;
   int r = dir->io_options->rank;
   std::string fname = PdbName(parent, r);
+  const size_t n = 4;
 
   if (dir->mode == O_WRONLY) {
-    const size_t bufsz = dir->io_options->total_memtable_budget / 2;
+    const size_t bufsz = dir->io_options->total_memtable_budget / n;
     dir->io_options->compaction_pool = dir->pool;
     pdlfs::WritableFile* dstfile;
     s = env->NewWritableFile(fname.c_str(), &dstfile);
     if (s.ok()) {
       dir->blk_writer_ =
-          new BufferedBlockWriter(*dir->io_options, dstfile, bufsz);
+          new BufferedBlockWriter(*dir->io_options, dstfile, bufsz, n);
       dir->blk_dst_ = dstfile;
     }
   } else if (dir->mode == O_RDONLY) {

@@ -28,7 +28,7 @@ class ArrayBlockBuilder;
 class BufferedBlockWriter : public DoubleBuffering {
  public:
   BufferedBlockWriter(const DirOptions& options, WritableFile* dst,
-                      size_t buf_size);
+                      size_t buf_size, size_t n);
 
   // REQUIRES: Finish() has NOT been called.
   // Insert data into the writer.
@@ -86,9 +86,8 @@ class BufferedBlockWriter : public DoubleBuffering {
 
   BlockHandle bloomfilter_handle_;
   BlockHandle index_handle_;
-  BlockBuf bb0_;
-  BlockBuf bb1_;
-  BlockBuf bb2_;
+  BlockBuf** bbs_;
+  size_t n_;
 };
 
 // Read data written by a BufferedBlockWriter.

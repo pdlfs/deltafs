@@ -13,7 +13,8 @@ namespace pdlfs {
 namespace plfsio {
 
 BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
-                                         WritableFile* dst, size_t buf_size)
+                                         WritableFile* dst, size_t buf_size,
+                                         size_t n)
     : DoubleBuffering(&mu_, &bg_cv_),
       options_(options),
       dst_(dst),  // Not owned by us
@@ -21,25 +22,34 @@ BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
       buf_threshold_(buf_size),
       buf_reserv_(buf_size),
       offset_(0),
-      bb0_(options_, true),
-      bb1_(options_, true),
-      bb2_(options_, true) {
-  // Reserve memory for all the block builders
-  bb0_.Reserve(buf_reserv_);
-  bb1_.Reserve(buf_reserv_);
-  bb2_.Reserve(buf_reserv_);
+      bbs_(NULL),
+      n_(n) {
+  if (n_ < 2) {
+    n_ = 2;  // We need at least two buffers
+  }
+  bbs_ = new BlockBuf*[n_];  // Allocate a requested amount of block buffers
+  for (size_t i = 0; i < n_; i++) {
+    bbs_[i] = new BlockBuf(options_, true);
+    bbs_[i]->Reserve(buf_reserv_);
+    if (i != 0) {  // So we have n-1 immbufs
+      bufs_.push_back(bbs_[i]);
+    }
+  }
 
-  bufs_.push_back(&bb2_);
-  bufs_.push_back(&bb1_);
-  membuf_ = &bb0_;
+  membuf_ = bbs_[0];
 }
 
 // Wait for all outstanding compactions to clear.
 BufferedBlockWriter::~BufferedBlockWriter() {
-  MutexLock ml(&mu_);
+  mu_.Lock();
   while (num_bg_compactions_) {
     bg_cv_.Wait();
   }
+  mu_.Unlock();
+  for (size_t i = 0; i < n_; i++) {
+    delete bbs_[i];
+  }
+  delete[] bbs_;
 }
 
 // Insert data into the writer.
@@ -91,10 +101,10 @@ Status BufferedBlockWriter::Compact(void* immbuf) {
   if (bb->empty()) return Status::OK();
   mu_.Unlock();  // Unlock during I/O operations
   const Slice block_contents = bb->Finish(kNoCompression);
+  BloomBuilder bf(options_);
   Slice filter_contents;
-  BloomBlock bloombuilder(options_);
   if (options_.bf_bits_per_key != 0) {  // Create a filter when requested
-    bloombuilder.Reset(bb->NumEntries());
+    bf.Reset(bb->NumEntries());
     BlockContents bc;
     bc.data = block_contents;
     bc.heap_allocated = false;
@@ -103,10 +113,10 @@ Status BufferedBlockWriter::Compact(void* immbuf) {
     IteratorWrapper it(b.NewIterator(NULL));
     it.SeekToFirst();
     for (; it.Valid();) {
-      bloombuilder.AddKey(it.key());
+      bf.AddKey(it.key());
       it.Next();
     }
-    filter_contents = bloombuilder.Finish();
+    filter_contents = bf.Finish();
   }
   iomu_.Lock();  // All writes must be serialized
   PutFixed64(&indexes_, bloomfilter_.size());
