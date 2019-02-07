@@ -668,20 +668,23 @@ class PlfsFtBenchKv
 
 static void BM_Usage() {
   fprintf(stderr, "Use --bench=[wisc, bf, cf[n], or kv[m]] to launch tests.\n");
-  fprintf(stderr, "n = 12,16,24,32.\n");
-  fprintf(stderr, "m = 1,2,4,8,12,16.\n");
+  fprintf(stderr, "n = 8,16,24,32.\n");
+  fprintf(stderr, "m = 1,2,4,8.\n");
   fprintf(stderr, "\n");
 }
 
 static void BM_LogAndApply(const char* bm) {
-#define BENCH(x, y) \
-  pdlfs::PlfsFtBench<pdlfs::plfsio::x##y, pdlfs::plfsio::x##KeyMayMatch>
+#define BF_BENCH \
+  pdlfs::PlfsFtBench<pdlfs::plfsio::BloomBlock, pdlfs::plfsio::BloomKeyMayMatch>
+#define CF_BENCH(n)                                 \
+  pdlfs::PlfsFtBench<pdlfs::plfsio::CuckooBlock<n>, \
+                     pdlfs::plfsio::CuckooKeyMayMatch>
 #define KV_BENCH(n) pdlfs::PlfsFtBenchKv<n>
   if (strcmp(bm, "wisc") == 0) {
     pdlfs::PlfsWiscBench bench;
     bench.LogAndApply();
   } else if (strcmp(bm, "bf") == 0) {
-    BENCH(Bloom, Block) bench;
+    BF_BENCH bench;
     bench.LogAndApply();
   } else if (strcmp(bm, "kv1") == 0) {
     KV_BENCH(1) bench;
@@ -695,23 +698,17 @@ static void BM_LogAndApply(const char* bm) {
   } else if (strcmp(bm, "kv8") == 0) {
     KV_BENCH(8) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "kv12") == 0) {
-    KV_BENCH(12) bench;
-    bench.LogAndApply();
-  } else if (strcmp(bm, "kv16") == 0) {
-    KV_BENCH(16) bench;
-    bench.LogAndApply();
-  } else if (strcmp(bm, "cf12") == 0) {
-    BENCH(Cuckoo, Block<12>) bench;
+  } else if (strcmp(bm, "cf8") == 0) {
+    CF_BENCH(8) bench;
     bench.LogAndApply();
   } else if (strcmp(bm, "cf16") == 0) {
-    BENCH(Cuckoo, Block<16>) bench;
+    CF_BENCH(16) bench;
     bench.LogAndApply();
   } else if (strcmp(bm, "cf24") == 0) {
-    BENCH(Cuckoo, Block<24>) bench;
+    CF_BENCH(24) bench;
     bench.LogAndApply();
   } else if (strcmp(bm, "cf32") == 0) {
-    BENCH(Cuckoo, Block<32>) bench;
+    CF_BENCH(32) bench;
     bench.LogAndApply();
   } else {
     BM_Usage();
