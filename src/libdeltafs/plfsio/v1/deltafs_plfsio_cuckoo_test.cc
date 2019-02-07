@@ -21,19 +21,19 @@ namespace plfsio {
 
 class CuckooTest {
  public:
-  static uint32_t KeyFringerprint(uint64_t ha) {
+  static inline uint32_t KeyFringerprint(uint64_t ha) {
     return CuckooFingerprint(ha, keybits_);
   }
 
-  static uint64_t KeyHash(uint32_t k) {
+  static inline uint64_t KeyHash(uint32_t k) {
     char tmp[4];
     Slice key(tmp, sizeof(tmp));
     EncodeFixed32(tmp, k);
     return CuckooHash(key);
   }
 
-  enum { keybits_ = 4 };
-  enum { valbits_ = 12 };
+  enum { keybits_ = 8 };
+  enum { valbits_ = 24 };
   std::string data_;  // Final filter representation
   DirOptions options_;
 };
