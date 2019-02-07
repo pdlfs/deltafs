@@ -16,13 +16,16 @@
 namespace pdlfs {
 namespace plfsio {
 
+#define PACKED __attribute__((packed))
 template <size_t k = 16, size_t v = 16>
 struct CuckooBucket {  // Fixed 4 items per bucket
   uint64_t x0_ : k + v;
   uint64_t x1_ : k + v;
   uint64_t x2_ : k + v;
   uint64_t x3_ : k + v;
-};
+} PACKED;
+
+#undef PACKED
 
 template <size_t k = 16, size_t v = 16>
 struct CuckooReader {

@@ -49,7 +49,7 @@ extern bool CuckooValues(const Slice& key, const Slice& input,
                          std::vector<uint32_t>*);
 
 // A simple cuckoo hash filter implementation.
-template <size_t k = 16, size_t v = 0>
+template <size_t k, size_t v = 0>
 class CuckooBlock {
  public:
   CuckooBlock(const DirOptions& options, size_t bytes_to_reserve);

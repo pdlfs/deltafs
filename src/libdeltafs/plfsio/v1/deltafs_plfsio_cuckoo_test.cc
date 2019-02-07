@@ -32,8 +32,8 @@ class CuckooTest {
     return CuckooHash(key);
   }
 
-  enum { keybits_ = 12 };
-  enum { valbits_ = 32 };
+  enum { keybits_ = 4 };
+  enum { valbits_ = 12 };
   std::string data_;  // Final filter representation
   DirOptions options_;
 };
@@ -75,6 +75,10 @@ class CuckooFtTest : public CuckooTest {
 
 TEST(CuckooFtTest, BytesPerBucket) {
   fprintf(stderr, "%d\n", int(cf_->TEST_BytesPerCuckooBucket()));
+}
+
+TEST(CuckooFtTest, BitsPerKey) {
+  fprintf(stderr, "%d\n", int(8 * cf_->TEST_BytesPerCuckooBucket() / 4));
 }
 
 TEST(CuckooFtTest, AltIndex) {
@@ -199,6 +203,10 @@ class CuckooKvTest : public CuckooTest {
 
 TEST(CuckooKvTest, KvBytesPerBucket) {
   fprintf(stderr, "%d\n", int(cf_->TEST_BytesPerCuckooBucket()));
+}
+
+TEST(CuckooKvTest, KvBitsPerKey) {
+  fprintf(stderr, "%d\n", int(8 * cf_->TEST_BytesPerCuckooBucket() / 4));
 }
 
 TEST(CuckooKvTest, KvEmpty) {

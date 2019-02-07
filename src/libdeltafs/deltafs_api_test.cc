@@ -676,8 +676,8 @@ static void BM_Usage() {
 static void BM_LogAndApply(const char* bm) {
 #define BF_BENCH \
   pdlfs::PlfsFtBench<pdlfs::plfsio::BloomBlock, pdlfs::plfsio::BloomKeyMayMatch>
-#define CF_BENCH(n)                                 \
-  pdlfs::PlfsFtBench<pdlfs::plfsio::CuckooBlock<n>, \
+#define CF_BENCH(n)                                    \
+  pdlfs::PlfsFtBench<pdlfs::plfsio::CuckooBlock<n, 0>, \
                      pdlfs::plfsio::CuckooKeyMayMatch>
 #define KV_BENCH(n) pdlfs::PlfsFtBenchKv<n>
   if (strcmp(bm, "wisc") == 0) {
