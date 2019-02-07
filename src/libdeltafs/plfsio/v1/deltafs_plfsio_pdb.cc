@@ -148,7 +148,6 @@ Status BufferedBlockWriter::Compact(uint32_t const compac_seq, void* immbuf) {
 // REQUIRES: no outstanding background compactions.
 // REQUIRES: mu_ has been LOCKed.
 Status BufferedBlockWriter::DumpIndexesAndFilters() {
-  assert(!num_bg_compactions_);
   PutFixed64(&indexes_, bloomfilter_.size());
   PutFixed64(&indexes_, offset_);
   Status status;
@@ -178,6 +177,8 @@ Status BufferedBlockWriter::DumpIndexesAndFilters() {
 // REQUIRES: mu_ has been LOCKed.
 Status BufferedBlockWriter::Close() {
   assert(!num_bg_compactions_);
+  mu_.AssertHeld();
+  assert(dst_);
   Status status = DumpIndexesAndFilters();
 
   if (status.ok()) {
@@ -196,8 +197,10 @@ Status BufferedBlockWriter::Close() {
   return status;
 }
 
+// REQUIRES: no outstanding background compactions.
 // REQUIRES: mu_ has been LOCKed.
 Status BufferedBlockWriter::SyncBackend(bool close) {
+  assert(!num_bg_compactions_);
   mu_.AssertHeld();
   assert(dst_);
   if (!close) {
