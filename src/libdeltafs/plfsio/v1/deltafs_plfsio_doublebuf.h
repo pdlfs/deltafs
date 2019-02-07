@@ -67,9 +67,9 @@ class DoubleBuffering {
   void WaitFor(uint32_t compac_seq);
   void WaitForAny();
   template <typename T>
-  void TryScheduleCompaction(uint32_t*, void*);
+  void TryScheduleCompaction(uint32_t* compac_seq, void*);
   template <typename T>
-  void DoCompaction(void*);
+  void DoCompaction(uint32_t compac_seq, void*);
 
   // State below is protected by mu_
   uint32_t num_compac_scheduled_;
@@ -224,23 +224,23 @@ void DoubleBuffering::TryScheduleCompaction(uint32_t* compac_seq,
   mu_->AssertHeld();
 
   *compac_seq = ++num_compac_scheduled_;
-  num_bg_compactions_++;
+  ++num_bg_compactions_;
 
-  if (__this->IsEmpty(immbuf)) {
+  if (__this->IsEmpty(immbuf) && *compac_seq == num_compac_completed_ + 1) {
     // Buffer is empty so compaction should be quick. As such we directly
     // execute the compaction in the current thread
-    DoCompaction<T>(immbuf);  // Avoid context switches
+    DoCompaction<T>(*compac_seq, immbuf);  // Avoid context switches
   } else {
-    __this->ScheduleCompaction(immbuf);
+    __this->ScheduleCompaction(*compac_seq, immbuf);
   }
 }
 
 // REQUIRES: mu_ has been LOCKed.
 template <typename T>
-void DoubleBuffering::DoCompaction(void* immbuf) {
+void DoubleBuffering::DoCompaction(uint32_t seq, void* immbuf) {
   mu_->AssertHeld();
   assert(immbuf);
-  Status status = __this->Compact(immbuf);
+  Status status = __this->Compact(seq, immbuf);
   ++num_compac_completed_;
   assert(bg_status_.ok());
   bg_status_ = status;
@@ -248,10 +248,12 @@ void DoubleBuffering::DoCompaction(void* immbuf) {
   bufs_.push_back(immbuf);
   assert(num_bg_compactions_ > 0);
   --num_bg_compactions_;
-  // Just completed one compaction
-  // Try launching another one
+#if 0
+  // Compaction done. New buffer space available.
+  // Try scheduling another.
   uint32_t ignored_compac_seq;
   Prepare<T>(&ignored_compac_seq, false /* !force */);
+#endif
   bg_cv_->SignalAll();
 }
 

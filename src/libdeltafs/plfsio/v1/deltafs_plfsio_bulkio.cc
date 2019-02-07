@@ -72,7 +72,7 @@ Status DirectWriter::Finish() {
 }
 
 // REQUIRES: mu_ has been LOCKed.
-Status DirectWriter::Compact(void* immbuf) {
+Status DirectWriter::Compact(uint32_t ignored, void* immbuf) {
   mu_.AssertHeld();
   assert(dst_);
   std::string* const s = static_cast<std::string*>(immbuf);
@@ -108,7 +108,7 @@ struct State {
 }  // namespace
 
 // REQUIRES: mu_ has been LOCKed.
-void DirectWriter::ScheduleCompaction(void* immbuf) {
+void DirectWriter::ScheduleCompaction(uint32_t ignored, void* immbuf) {
   mu_.AssertHeld();
 
   assert(num_bg_compactions_);
@@ -122,7 +122,7 @@ void DirectWriter::ScheduleCompaction(void* immbuf) {
   } else if (options_.allow_env_threads) {
     Env::Default()->Schedule(DirectWriter::BGWork, s);
   } else {
-    DoCompaction<DirectWriter>(immbuf);
+    DoCompaction<DirectWriter>(-1, immbuf);
     delete s;
   }
 }
@@ -130,7 +130,7 @@ void DirectWriter::ScheduleCompaction(void* immbuf) {
 void DirectWriter::BGWork(void* arg) {
   State* const s = reinterpret_cast<State*>(arg);
   MutexLock ml(&s->writer->mu_);
-  s->writer->DoCompaction<DirectWriter>(s->immbuf);
+  s->writer->DoCompaction<DirectWriter>(-1, s->immbuf);
   delete s;
 }
 

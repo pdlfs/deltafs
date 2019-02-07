@@ -53,7 +53,6 @@ class BufferedBlockWriter : public DoubleBuffering {
   typedef BloomBlock BloomBuilder;
   const DirOptions& options_;
   WritableFile* const dst_;
-  port::Mutex iomu_;
   port::Mutex mu_;
   port::CondVar bg_cv_;
   const size_t buf_threshold_;  // Threshold for write buffer flush
@@ -64,11 +63,11 @@ class BufferedBlockWriter : public DoubleBuffering {
   std::string indexes_;
 
   friend class DoubleBuffering;
-  Status Compact(void* buf);
+  Status Compact(uint32_t seq, void* buf);
   Status SyncBackend(bool close = false);
   Status DumpIndexesAndFilters();
   Status Close();
-  void ScheduleCompaction(void* buf);
+  void ScheduleCompaction(uint32_t seq, void* buf);
   void Clear(void* buf) { static_cast<BlockBuf*>(buf)->Reset(); }
   void AddToBuffer(void* buf, const Slice& k, const Slice& v) {
     static_cast<BlockBuf*>(buf)->Add(k, v);

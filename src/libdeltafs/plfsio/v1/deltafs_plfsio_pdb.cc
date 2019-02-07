@@ -94,17 +94,21 @@ Status BufferedBlockWriter::Finish() {
 }
 
 // REQUIRES: mu_ has been LOCKed.
-Status BufferedBlockWriter::Compact(void* immbuf) {
+Status BufferedBlockWriter::Compact(uint32_t const compac_seq, void* immbuf) {
   mu_.AssertHeld();
   assert(dst_);
   BlockBuf* const bb = static_cast<BlockBuf*>(immbuf);
   // Skip empty buffers
-  if (bb->empty()) return Status::OK();
-  mu_.Unlock();  // Unlock during I/O operations
-  const Slice block_contents = bb->Finish(kNoCompression);
-  BloomBuilder bf(options_);
+  if (bb->empty() && compac_seq == num_compac_completed_ + 1)
+    return Status::OK();
+  mu_.Unlock();  // Unlock as compaction is expensive
+  Slice block_contents;
+  if (!bb->empty()) {
+    block_contents = bb->Finish(kNoCompression);
+  }
+  BloomBuilder bf(options_);  // Filter is built only when requested
   Slice filter_contents;
-  if (options_.bf_bits_per_key != 0) {  // Create a filter when requested
+  if (!bb->empty() && options_.bf_bits_per_key != 0) {
     bf.Reset(bb->NumEntries());
     BlockContents bc;
     bc.data = block_contents;
@@ -119,18 +123,24 @@ Status BufferedBlockWriter::Compact(void* immbuf) {
     }
     filter_contents = bf.Finish();
   }
-  iomu_.Lock();  // All writes must be serialized
+  mu_.Lock();  // All writes are serialized through compac_seq
+  assert(num_compac_completed_ < compac_seq);
+  while (compac_seq != num_compac_completed_ + 1) {
+    bg_cv_.Wait();
+  }
+  mu_.Unlock();
   PutFixed64(&indexes_, bloomfilter_.size());
-  bloomfilter_.append(filter_contents.data(), filter_contents.size());
+  if (!filter_contents.empty())
+    bloomfilter_.append(filter_contents.data(), filter_contents.size());
   PutFixed64(&indexes_, offset_);
-  Status status = dst_->Append(block_contents);
-  // Does not sync data to storage.
-  // Sync() does.
+  Status status;
+  if (!block_contents.empty()) {
+    status = dst_->Append(block_contents);
+  }
   if (status.ok()) {
     offset_ += block_contents.size();
     status = dst_->Flush();
   }
-  iomu_.Unlock();
   mu_.Lock();
   return status;
 }
@@ -200,17 +210,20 @@ Status BufferedBlockWriter::SyncBackend(bool close) {
 namespace {  // State for each compaction
 struct State {
   BufferedBlockWriter* writer;
+  uint32_t compac_seq;
   void* immbuf;
 };
 }  // namespace
 
 // REQUIRES: mu_ has been LOCKed.
-void BufferedBlockWriter::ScheduleCompaction(void* immbuf) {
+void BufferedBlockWriter::ScheduleCompaction(uint32_t const compac_seq,
+                                             void* immbuf) {
   mu_.AssertHeld();
 
   assert(num_bg_compactions_);
 
   State* s = new State;
+  s->compac_seq = compac_seq;
   s->immbuf = immbuf;
   s->writer = this;
 
@@ -219,7 +232,7 @@ void BufferedBlockWriter::ScheduleCompaction(void* immbuf) {
   } else if (options_.allow_env_threads) {
     Env::Default()->Schedule(BufferedBlockWriter::BGWork, s);
   } else {
-    DoCompaction<BufferedBlockWriter>(immbuf);
+    DoCompaction<BufferedBlockWriter>(compac_seq, immbuf);
     delete s;
   }
 }
@@ -227,7 +240,7 @@ void BufferedBlockWriter::ScheduleCompaction(void* immbuf) {
 void BufferedBlockWriter::BGWork(void* arg) {
   State* const s = reinterpret_cast<State*>(arg);
   MutexLock ml(&s->writer->mu_);
-  s->writer->DoCompaction<BufferedBlockWriter>(s->immbuf);
+  s->writer->DoCompaction<BufferedBlockWriter>(s->compac_seq, s->immbuf);
   delete s;
 }
 
