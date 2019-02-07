@@ -41,7 +41,7 @@ DirectWriter::~DirectWriter() {
 // REQUIRES: Finish() has NOT been called.
 Status DirectWriter::Append(const Slice& dat) {
   MutexLock ml(&mu_);
-  return __Add<DirectWriter>(dat, Slice());
+  return __Add<DirectWriter>(dat, Slice(), false);
 }
 
 // Force a compaction but do not wait for the compaction to clear.

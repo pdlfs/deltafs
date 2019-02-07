@@ -28,7 +28,7 @@ class DoubleBuffering {
   // Append data into the buffer. Return OK on success, or a non-OK status on
   // errors. REQUIRES: __Finish() has NOT been called.
   template <typename T>
-  Status __Add(const Slice& k, const Slice& v);
+  Status __Add(const Slice& k, const Slice& v, bool nowait);
 
   // Force a buffer flush (compaction) and maybe wait for it.
   // Compaction does not force data to be sync'ed. Sync() does.
@@ -62,7 +62,7 @@ class DoubleBuffering {
   port::CondVar* bg_cv_;
 
   template <typename T>
-  Status Prepare(uint32_t* compac_seq, bool force = true,
+  Status Prepare(uint32_t* compac_seq, bool force = true, bool nowait = false,
                  const Slice& k = Slice(), const Slice& v = Slice());
   void WaitFor(uint32_t compac_seq);
   void WaitForCompactions();
@@ -170,16 +170,15 @@ Status DoubleBuffering::__Flush(bool wait) {
 // REQUIRES: __Finish() has NOT been called.
 // REQUIRES: mu_ has been LOCKed.
 template <typename T>
-Status DoubleBuffering::__Add(const Slice& k, const Slice& v) {
+Status DoubleBuffering::__Add(const Slice& k, const Slice& v, bool nowait) {
   mu_->AssertHeld();
   uint32_t ignored_compac_seq;
   Status status;
   if (finished_)  // __Finish() has already been called
     status = bg_status_;
   else {
-    status = Prepare<T>(&ignored_compac_seq, false /* !force */, k, v);
+    status = Prepare<T>(&ignored_compac_seq, false /* !force */, nowait, k, v);
     if (status.ok()) {
-      assert(membuf_);
       __this->AddToBuffer(membuf_, k, v);
     }
   }
@@ -189,8 +188,8 @@ Status DoubleBuffering::__Add(const Slice& k, const Slice& v) {
 
 // REQUIRES: mu_ has been LOCKed.
 template <typename T>
-Status DoubleBuffering::Prepare(uint32_t* seq, bool force, const Slice& k,
-                                const Slice& v) {
+Status DoubleBuffering::Prepare(uint32_t* seq, bool force, bool nowait,
+                                const Slice& k, const Slice& v) {
   mu_->AssertHeld();
   Status status;
   while (true) {
@@ -201,14 +200,17 @@ Status DoubleBuffering::Prepare(uint32_t* seq, bool force, const Slice& k,
     } else if (!force && __this->HasRoom(membuf_, k, v)) {
       // There is room in current write buffer
       break;
-    } else if (bufs_.empty()) {
-      bg_cv_->Wait();  // Wait for background compactions to finish
-    } else {
+    } else if (!bufs_.empty()) {
       // Attempt to switch to a new write buffer
       force = false;
       TryScheduleCompaction<T>(seq, membuf_);
       membuf_ = bufs_.back();
       bufs_.pop_back();
+    } else if (!nowait) {
+      bg_cv_->Wait();  // Wait for background compactions to finish
+    } else {
+      status = Status::TryAgain("");
+      break;
     }
   }
 

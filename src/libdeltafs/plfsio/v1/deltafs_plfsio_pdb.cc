@@ -29,7 +29,7 @@ BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
   }
   bbs_ = new BlockBuf*[n_];  // Allocate a requested amount of block buffers
   for (size_t i = 0; i < n_; i++) {
-    bbs_[i] = new BlockBuf(options_, true);
+    bbs_[i] = new BlockBuf(options_, true);  // Force an unordered fmt
     bbs_[i]->Reserve(buf_reserv_);
     if (i != 0) {  // So we have n-1 immbufs
       bufs_.push_back(bbs_[i]);
@@ -56,7 +56,7 @@ BufferedBlockWriter::~BufferedBlockWriter() {
 // REQUIRES: Finish() has NOT been called.
 Status BufferedBlockWriter::Add(const Slice& k, const Slice& v) {
   MutexLock ml(&mu_);
-  return __Add<BufferedBlockWriter>(k, v);
+  return __Add<BufferedBlockWriter>(k, v, false);
 }
 
 // Force an epoch flush.
