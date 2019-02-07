@@ -65,15 +65,11 @@ struct CuckooReader {
 
 template <size_t k = 16, size_t v = 16>
 struct CuckooTable {
-  explicit CuckooTable(double frac) : frac_(frac) { Reset(0); }
-
-  void Reset(uint32_t num_keys) {
-    Resize(num_keys);  // Make room for buckets
-    victim_index_ = 0;
-    victim_data_ = 0;
-    victim_fp_ = 0;
-    full_ = false;
+  explicit CuckooTable(double frac) : frac_(frac) {
+    Reset(0);  // Will give 1 bucket
   }
+
+  void Reset(uint32_t num_keys);
 
   void Write(size_t i, size_t j, uint32_t fp, uint32_t data) {
     assert(!full_);
@@ -123,10 +119,11 @@ struct CuckooTable {
   void Resize(uint32_t num_keys);
   std::string space_;
   // Total number of hash buckets, over-allocated by frac_
-  size_t num_buckets_;  // Must be a power of 2
+  size_t num_buckets_;  // Always round up to some power of 2
   uint32_t victim_index_;
   uint32_t victim_data_;
   uint32_t victim_fp_;
+  // False until an insertion fails
   bool full_;
 };
 
@@ -157,6 +154,13 @@ void CuckooTable<k, v>::Resize(uint32_t num_keys) {
   else
     num_buckets_ = 1;
   space_.resize(num_buckets_ * bucket_sz, 0);
+}
+
+template <size_t k, size_t v>
+void CuckooTable<k, v>::Reset(uint32_t num_keys) {
+  Resize(num_keys);  // Make room for buckets
+  victim_index_ = victim_data_ = victim_fp_ = 0;
+  full_ = false;
 }
 
 template <size_t k, size_t v>
