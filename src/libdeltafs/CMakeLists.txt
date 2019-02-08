@@ -23,6 +23,7 @@ set (deltafs-plfsio-srcs plfsio/v1/deltafs_plfsio_v1.cc
         plfsio/v1/deltafs_plfsio_cuckoo.cc
         plfsio/v1/deltafs_plfsio_builder.cc
         plfsio/v1/deltafs_plfsio_filter.cc
+        plfsio/v1/deltafs_plfsio_filterio.cc
         plfsio/v1/deltafs_plfsio_format.cc
         plfsio/v1/deltafs_plfsio_recov.cc
         plfsio/v1/deltafs_plfsio_io.cc
