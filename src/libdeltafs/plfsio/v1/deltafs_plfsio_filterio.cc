@@ -151,7 +151,7 @@ Status FilterReader::LoadFilterIndexes(Slice* footer) {
     const size_t indexbytes = 12 * (n_ + 1);
     cache_storage_.resize(indexbytes);
     if (src_sz_ < indexbytes) {
-      cache_status_ = Status::Corruption("Input file too short for indexes");
+      cache_status_ = Status::Corruption("Input file is too short for indexes");
     } else {
       cache_status_ = src_->Read(src_sz_ - indexbytes, indexbytes, &indexes_,
                                  &cache_storage_[0]);
@@ -177,8 +177,7 @@ Status FilterReader::MaybeLoadCache() {
   char footer_tmp[12];
   Slice footer;
   if (src_sz_ < sizeof(footer_tmp)) {
-    cache_status_ =
-        Status::AssertionFailed("Input file too short for a footer");
+    cache_status_ = Status::Corruption("Input file too short for a footer");
   } else {
     cache_status_ = src_->Read(src_sz_ - sizeof(footer_tmp), sizeof(footer_tmp),
                                &footer, footer_tmp);

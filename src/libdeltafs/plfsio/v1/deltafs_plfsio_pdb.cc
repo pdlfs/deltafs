@@ -295,8 +295,8 @@ Status BufferedBlockReader::Get(const Slice& k, std::string* result) {
   const size_t limit = indexes_.size();
   size_t off = 16;
   for (; off + 15 < limit; off += 16) {
-    next_bloomoffset = DecodeFixed64(&indexes_[0] + off);
-    next_offset = DecodeFixed64(&indexes_[0] + 8 + off);
+    next_bloomoffset = DecodeFixed64(&indexes_[off]);
+    next_offset = DecodeFixed64(&indexes_[off + 8]);
     Slice bf(bloomfilter_.data() + bloomoffset, next_bloomoffset - bloomoffset);
     if (BloomKeyMayMatch(k, bf)) {
       if (GetFrom(&status, k, result, offset, next_offset - offset)) {
@@ -342,8 +342,7 @@ Status BufferedBlockReader::LoadIndexesAndFilters(Slice* footer) {
   indexes_.remove_prefix(bloomfilter_handle.size());
   bloomfilter_.remove_suffix(index_handle.size());
   if (indexes_.size() < 16) {
-    cache_status_ =
-        Status::AssertionFailed("Indexes are shorter than 16 bytes");
+    cache_status_ = Status::Corruption("Indexes too short to be valid");
   }
 
   return cache_status_;
@@ -357,12 +356,12 @@ Status BufferedBlockReader::MaybeLoadCache() {
     return cache_status_;
   }
 
+  const size_t footer_sz = 2 * BlockHandle::kMaxEncodedLength;
   std::string footer_stor;
-  footer_stor.resize(2 * BlockHandle::kMaxEncodedLength);
+  footer_stor.resize(footer_sz);
   Slice footer;
   if (src_sz_ < footer_stor.size()) {
-    cache_status_ =
-        Status::AssertionFailed("Input file is too short for a footer");
+    cache_status_ = Status::Corruption("Input file too short for a footer");
   } else {
     cache_status_ = src_->Read(src_sz_ - footer_stor.size(), footer_stor.size(),
                                &footer, &footer_stor[0]);
