@@ -38,6 +38,7 @@ set (deltafs-plfsio-srcs plfsio/v1/deltafs_plfsio_v1.cc
 set (deltafs-tests deltafs_api_test.cc
         plfsio/v1/deltafs_plfsio_cuckoo_test.cc
         plfsio/v1/deltafs_plfsio_filter_test.cc
+        plfsio/v1/deltafs_plfsio_filterio_test.cc
         plfsio/v1/deltafs_plfsio_pdb_test.cc
         plfsio/v1/deltafs_plfsio_test
         mds_api_test.cc

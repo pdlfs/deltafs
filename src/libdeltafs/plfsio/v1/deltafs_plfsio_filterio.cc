@@ -94,14 +94,31 @@ Status FilterReader::Read(uint32_t const ep, Slice* const result,
   if (!status.ok()) {
     return status;
   }
-
   assert(indexes_.size() >= 12);
-  uint32_t filterepoch = DecodeFixed32(&indexes_[0]);
-  uint64_t offset = DecodeFixed64(&indexes_[4]);
+  if (n_ == 0) {
+    return status;
+  }
+
+  uint32_t left = 0;
+  uint32_t right = n_ - 1;
+  while (left < right) {
+    uint32_t mid = (left + right + 1) / 2;
+    uint32_t midepoch = DecodeFixed32(&indexes_[mid * 12]);
+    if (midepoch < ep) {
+      // Mid is smaller than target
+      left = mid;
+    } else {
+      // Mid >= target
+      right = mid - 1;
+    }
+  }
+  uint32_t start = left * 12;
+  uint32_t filterepoch = DecodeFixed32(&indexes_[start]);
+  uint64_t offset = DecodeFixed64(&indexes_[start + 4]);
   uint32_t next_filterepoch;
   uint64_t next_offset;
   const size_t limit = indexes_.size();
-  size_t off = 12;
+  size_t off = start + 12;
   for (; off + 11 < limit; off += 12) {
     next_filterepoch = DecodeFixed32(&indexes_[off]);
     next_offset = DecodeFixed64(&indexes_[off + 4]);
@@ -116,6 +133,12 @@ Status FilterReader::Read(uint32_t const ep, Slice* const result,
   }
 
   return status;
+}
+
+uint32_t FilterReader::TEST_NumEpochs() {
+  Status status = MaybeLoadCache();
+  if (status.ok()) return n_;
+  return 0;
 }
 
 Status FilterReader::LoadFilterIndexes(Slice* footer) {

@@ -43,6 +43,8 @@ class FilterReader {
 
   Status Read(uint32_t epoch, Slice* result, std::string* scratch);
 
+  uint32_t TEST_NumEpochs();
+
  private:
   Status LoadFilterIndexes(Slice* footer);
   Status MaybeLoadCache();
