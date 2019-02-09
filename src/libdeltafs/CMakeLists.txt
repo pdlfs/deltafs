@@ -28,7 +28,7 @@ set (deltafs-plfsio-srcs plfsio/v1/deltafs_plfsio_v1.cc
         plfsio/v1/deltafs_plfsio_recov.cc
         plfsio/v1/deltafs_plfsio_io.cc
         plfsio/v1/deltafs_plfsio_doublebuf.cc
-        plfsio/v1/deltafs_plfsio_bulkio.cc
+        plfsio/v1/deltafs_plfsio_bufio.cc
         plfsio/v1/deltafs_plfsio_pdb.cc
         plfsio/v1/deltafs_plfsio_events.cc
         plfsio/deltafs_plfsio_util.cc
