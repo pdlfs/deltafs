@@ -114,7 +114,7 @@ include (cmake-options)
 include (pdlfs-options)
 
 # user hooks to configure deltafs
-set (DELTAFS_BBOS "OFF" CACHE BOOL "Build Deltafs BBOS Env")
+set (DELTAFS_BBOS "OFF" CACHE BOOL "Build Deltafs BBOS Env (deltafs no longer uses bbos)")
 set (DELTAFS_BENCHMARKS "OFF" CACHE BOOL "Build benchmarks (requires MPI)")
 set (DELTAFS_COMMON_INTREE "OFF" CACHE BOOL
      "Build in-tree common lib (for devel)")
@@ -129,11 +129,6 @@ if (DELTAFS_MPI OR DELTAFS_BENCHMARKS)
     if (NOT MPI_FOUND)
         message (FATAL_ERROR "MPI not found (required for DELTAFS_MPI or benchmarks)")
     endif ()
-endif ()
-
-if (DELTAFS_BBOS)
-  find_package (bbos CONFIG REQUIRED)
-  message (STATUS "deltafs bbos enabled")
 endif ()
 
 #

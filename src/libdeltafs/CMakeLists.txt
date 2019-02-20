@@ -57,14 +57,7 @@ find_package (Threads REQUIRED)
 # common lib is always required
 set (DELTAFS_REQUIRED_PACKAGES "deltafs-common")
 
-# optional deltafs-bb
-if (DELTAFS_BBOS)
-    list (APPEND deltafs-srcs bbos_env.cc)
-    list (APPEND deltafs-tests bbos_env_test.cc)
-    list (APPEND DELTAFS_REQUIRED_PACKAGES bbos)
-endif ()
-
-
+# include MPI if requested
 if (DELTAFS_MPI)
     list (APPEND DELTAFS_REQUIRED_PACKAGES MPI)
     # MPI isn't a normal imported target, so sadly it requires special
@@ -108,10 +101,6 @@ target_link_libraries (deltafs deltafs-common)
 if (THREADS_HAVE_PTHREAD_ARG)
     target_compile_options(deltafs PUBLIC "-pthread")
 endif()
-if (DELTAFS_BBOS)
-    target_compile_definitions(deltafs PUBLIC "-DDELTAFS_BBOS")
-    target_link_libraries (deltafs bbos)
-endif ()
 
 # special handling for MPI, where the config comes in via MPI_<lang>_ vars.
 # we only add to the build interface so that we don't put hardcoded paths
