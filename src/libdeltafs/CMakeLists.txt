@@ -107,9 +107,7 @@ endif()
 # in the config files.
 #
 if (DELTAFS_MPI)
-    # mpich on ub14 gives a leading space that we need to trim off
-    string (REPLACE " " ";" mpicxx_flags "${MPI_CXX_COMPILE_FLAGS}")
-    foreach (lcv ${mpicxx_flags})
+    foreach (lcv ${MPI_CXX_COMPILE_FLAGS_LIST})
         if (NOT ${lcv} STREQUAL "")
             target_compile_options (deltafs PUBLIC $<BUILD_INTERFACE:${lcv}>)
         endif ()

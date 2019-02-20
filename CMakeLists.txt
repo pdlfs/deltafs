@@ -126,6 +126,8 @@ set (DELTAFS_MPI "OFF" CACHE
 #
 if (DELTAFS_MPI OR DELTAFS_BENCHMARKS)
     find_package(MPI MODULE)
+    # XXX: avoid issues when MPI_CXX_COMPILE_FLAGS contains leading spaces
+    string (REPLACE " " ";" MPI_CXX_COMPILE_FLAGS_LIST "${MPI_CXX_COMPILE_FLAGS}")
     if (NOT MPI_FOUND)
         message (FATAL_ERROR "MPI not found (required for DELTAFS_MPI or benchmarks)")
     endif ()
