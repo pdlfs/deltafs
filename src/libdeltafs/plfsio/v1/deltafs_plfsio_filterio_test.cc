@@ -9,18 +9,107 @@
 
 #include "deltafs_plfsio_filterio.h"
 
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
+
+#include <map>
+
+#if __cplusplus >= 201103
+#define OVERRIDE override
+#else
+#define OVERRIDE
+#endif
 
 namespace pdlfs {
 namespace plfsio {
 
+// Test Env ...
+namespace {
+// A simply file implementation that stores data in memory
+class TestWritableFile : public WritableFileWrapper {
+ public:
+  explicit TestWritableFile(std::string* dst) : dst_(dst) {}
+
+  virtual ~TestWritableFile() {}
+
+  virtual Status Append(const Slice& buf) OVERRIDE {
+    if (!buf.empty()) dst_->append(buf.data(), buf.size());
+    return Status::OK();
+  }
+
+ private:
+  std::string* const dst_;
+};
+
+class TestRandomAccessFile : public RandomAccessFile {
+ public:
+  explicit TestRandomAccessFile(std::string* src) : src_(src) {}
+
+  virtual ~TestRandomAccessFile() {}
+
+  virtual Status Read(uint64_t offset, size_t n, Slice* result,
+                      char* scratch) const {
+    *result = *src_;
+    if (offset > result->size()) {
+      offset = result->size();
+    }
+    result->remove_prefix(offset);
+    if (result->size() > n) {
+      result->remove_suffix(result->size() - n);
+    }
+    return Status::OK();
+  }
+
+ private:
+  const std::string* const src_;
+};
+
+class TestEnv : public EnvWrapper {
+ public:
+  TestEnv() : EnvWrapper(Env::Default()) {}
+
+  virtual ~TestEnv() {}
+
+  virtual Status GetFileSize(const char* f, uint64_t* s) OVERRIDE {
+    std::map<std::string, std::string>::iterator const it = files_.find(f);
+    if (it != files_.end()) {
+      *s = it->second.size();
+      return Status::OK();
+    } else {
+      *s = 0;
+      return Status::NotFound(Slice());
+    }
+  }
+
+  virtual Status NewRandomAccessFile(const char* f,
+                                     RandomAccessFile** r) OVERRIDE {
+    std::map<std::string, std::string>::iterator const it = files_.find(f);
+    if (it != files_.end()) {
+      *r = new TestRandomAccessFile(&it->second);
+      return Status::OK();
+    } else {
+      return Status::NotFound(Slice());
+    }
+  }
+
+  virtual Status NewWritableFile(const char* f, WritableFile** r) OVERRIDE {
+    std::string& dst = files_[f];
+    dst.resize(0);
+    *r = new TestWritableFile(&dst);
+    return Status::OK();
+  }
+
+ private:
+  std::map<std::string, std::string> files_;
+};
+
+}  // namespace
+
 class FilterIoTest {
  public:
   FilterIoTest() {
-    dirname_ = test::TmpDir() + "/plfsfilterio_test";
-    fname_ = dirname_ + "/test.ftl";
-    env_ = Env::Default();
+    env_ = new TestEnv;
     src_sz_ = 0;
     reader_ = NULL;
     src_ = NULL;
@@ -33,11 +122,11 @@ class FilterIoTest {
     delete src_;
     delete writer_;
     delete dst_;
+    delete env_;
   }
 
   void OpenWriter() {
-    env_->CreateDir(dirname_.c_str());
-    ASSERT_OK(env_->NewWritableFile(fname_.c_str(), &dst_));
+    ASSERT_OK(env_->NewWritableFile("test.ftl", &dst_));
     writer_ = new FilterWriter(dst_);
   }
 
@@ -53,8 +142,8 @@ class FilterIoTest {
   }
 
   void OpenReader() {
-    ASSERT_OK(env_->NewRandomAccessFile(fname_.c_str(), &src_));
-    ASSERT_OK(env_->GetFileSize(fname_.c_str(), &src_sz_));
+    ASSERT_OK(env_->NewRandomAccessFile("test.ftl", &src_));
+    ASSERT_OK(env_->GetFileSize("test.ftl", &src_sz_));
     reader_ = new FilterReader(src_, src_sz_);
   }
 
@@ -71,7 +160,6 @@ class FilterIoTest {
     return result.ToString();
   }
 
-  std::string dirname_, fname_;
   RandomAccessFile* src_;
   uint64_t src_sz_;
   FilterReader* reader_;
