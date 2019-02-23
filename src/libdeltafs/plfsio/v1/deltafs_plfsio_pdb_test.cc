@@ -8,8 +8,9 @@
  */
 
 #include "deltafs_plfsio_pdb.h"
+#include "deltafs_plfsio_types.h"
 
-#include "pdlfs-common/port.h"
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 #include "pdlfs-common/xxhash.h"
@@ -25,7 +26,7 @@ namespace plfsio {
 
 // Test Env ...
 namespace {
-// A file implementation that controls write speed and discards all data.
+// A file implementation that controls write speed and discards all data...
 class EmulatedWritableFile : public WritableFileWrapper {
  public:
   explicit EmulatedWritableFile(uint64_t bps) : bytes_per_sec_(bps) {}
@@ -64,8 +65,8 @@ class EmulatedEnv : public EnvWrapper {
 
 }  // namespace
 
-// Evaluate implementation's bandwidth utilization under different
-// DB configurations.
+// Measure implementation's bandwidth utilization under
+// different configurations.
 class PdbBench {
   static int FromEnv(const char* key, int def) {
     const char* env = getenv(key);
@@ -111,13 +112,13 @@ class PdbBench {
     const uint64_t start = env->NowMicros();
     char tmp[8];
     Slice key(tmp, sizeof(tmp));
-    std::string data(56, '\0');
+    std::string val(options_.value_size, '\0');
     const size_t num_keys = static_cast<size_t>(mkeys_) << 20;
     size_t i = 0;
     for (; i < num_keys; i++) {
       if ((i & 0x7FFFu) == 0) fprintf(stderr, "\r%.2f%%", 100.0 * i / num_keys);
       EncodeFixed64(tmp, i);
-      ASSERT_OK(pdb->Add(key, data));
+      ASSERT_OK(pdb->Add(key, val));
     }
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
@@ -132,14 +133,14 @@ class PdbBench {
 
   void Report(uint64_t dura) {
     const double k = 1000.0, ki = 1024.0;
-    const double r = options_.key_size + options_.value_size +
+    const double d = options_.key_size + options_.value_size +
                      double(options_.bf_bits_per_key) / 8;
     fprintf(stderr, "-----------------------------------------\n");
     fprintf(stderr, "     Total dura: %.0f sec\n", 1.0 * dura / k / k);
     fprintf(stderr, "          Speed: %.0f bytes per sec\n",
-            r * mkeys_ * ki * ki * k * k / dura);
+            d * mkeys_ * ki * ki * k * k / dura);
     fprintf(stderr, "           Util: %.2f%%\n",
-            100 * r * mkeys_ * ki * ki * k * k / dura / bytes_per_sec_);
+            100 * d * mkeys_ * ki * ki * k * k / dura / bytes_per_sec_);
   }
 
  private:

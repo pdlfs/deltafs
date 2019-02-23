@@ -127,13 +127,13 @@ class BufBench {
 
   void Report(uint64_t dura) {
     const double k = 1000.0, ki = 1024.0;
-    const double r = options_.key_size + options_.value_size;
+    const double d = options_.key_size + options_.value_size;
     fprintf(stderr, "-----------------------------------------\n");
     fprintf(stderr, "     Total dura: %.0f sec\n", 1.0 * dura / k / k);
     fprintf(stderr, "          Speed: %.0f bytes per sec\n",
-            r * mkeys_ * ki * ki * k * k / dura);
+            d * mkeys_ * ki * ki * k * k / dura);
     fprintf(stderr, "           Util: %.2f%%\n",
-            100 * r * mkeys_ * ki * ki * k * k / dura / bytes_per_sec_);
+            100 * d * mkeys_ * ki * ki * k * k / dura / bytes_per_sec_);
   }
 
  private:
