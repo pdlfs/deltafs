@@ -25,6 +25,7 @@ DirectWriter::DirectWriter(const DirOptions& options, WritableFile* dst,
   str0_.reserve(buf_reserv_);
   str1_.reserve(buf_reserv_);
 
+  // One compaction at a time
   bufs_.push_back(&str1_);
   membuf_ = &str0_;
 }
@@ -72,7 +73,7 @@ Status DirectWriter::Finish() {
 }
 
 // REQUIRES: mu_ has been LOCKed.
-Status DirectWriter::Compact(uint32_t ignored, void* immbuf) {
+Status DirectWriter::Compact(uint32_t ignored, void* const immbuf) {
   mu_.AssertHeld();
   assert(dst_);
   std::string* const s = static_cast<std::string*>(immbuf);
@@ -108,12 +109,12 @@ struct State {
 }  // namespace
 
 // REQUIRES: mu_ has been LOCKed.
-void DirectWriter::ScheduleCompaction(uint32_t ignored, void* immbuf) {
+void DirectWriter::ScheduleCompaction(uint32_t ignored, void* const immbuf) {
   mu_.AssertHeld();
 
   assert(num_bg_compactions_);
 
-  State* s = new State;
+  State* const s = new State;
   s->immbuf = immbuf;
   s->writer = this;
 
