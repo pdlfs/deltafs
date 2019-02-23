@@ -42,9 +42,9 @@ DirBuilder::~DirBuilder() {}
 
 void ArrayBlockBuilder::Add(const Slice& key, const Slice& value) {
   assert(key.size() == key_size_);
-  buffer_.append(key.data(), key_size_);
+  buffer_.append(key.data(), key.size());
   assert(value.size() == value_size_);
-  buffer_.append(value.data(), value_size_);
+  buffer_.append(value.data(), value.size());
   ++n_;
 }
 
