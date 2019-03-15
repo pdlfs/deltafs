@@ -9,11 +9,11 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/index_cache.h"
+#include "pdlfs-common/coding.h"
+
 #include <assert.h>
 #include <errno.h>
-
-#include "pdlfs-common/coding.h"
-#include "pdlfs-common/index_cache.h"
 
 namespace pdlfs {
 

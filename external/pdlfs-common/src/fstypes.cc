@@ -9,11 +9,11 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <assert.h>
-
 #include "pdlfs-common/fstypes.h"
 #include "pdlfs-common/gigaplus.h"
 #include "pdlfs-common/port.h"
+
+#include <assert.h>
 
 namespace pdlfs {
 

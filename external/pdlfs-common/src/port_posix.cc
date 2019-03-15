@@ -1,5 +1,4 @@
 /*
- * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2019 Carnegie Mellon University,
  * Copyright (c) 2019 Triad National Security, LLC, as operator of
  *     Los Alamos National Laboratory.
@@ -10,9 +9,13 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/pdlfs_platform.h"
-
+/*
+ * Copyright (c) 2011 The LevelDB Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found at https://github.com/google/leveldb.
+ */
 #include "pdlfs-common/port_posix.h"
+#include "pdlfs-common/pdlfs_platform.h"
 
 #include <errno.h>
 #include <stdio.h>

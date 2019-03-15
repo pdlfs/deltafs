@@ -8,8 +8,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
-#include "spooky_hash.h"
+#include "spooky_impl.h"
 
 #include "pdlfs-common/spooky.h"
 

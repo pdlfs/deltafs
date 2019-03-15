@@ -9,13 +9,13 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/gigaplus.h"
+#include "pdlfs-common/testharness.h"
+
 #include <stdio.h>
 #include <algorithm>
 #include <iostream>
 #include <set>
-
-#include "pdlfs-common/gigaplus.h"
-#include "pdlfs-common/testharness.h"
 
 namespace pdlfs {
 

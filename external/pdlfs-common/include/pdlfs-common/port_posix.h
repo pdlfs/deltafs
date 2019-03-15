@@ -17,6 +17,7 @@
 #pragma once
 
 #include "pdlfs-common/pdlfs_config.h"
+#include "pdlfs-common/pdlfs_platform.h"
 
 #include <string>
 #undef PLATFORM_IS_LITTLE_ENDIAN

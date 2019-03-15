@@ -9,13 +9,13 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/rpc.h"
+#include "pdlfs-common/logging.h"
+#include "pdlfs-common/pdlfs_config.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
-
-#include "pdlfs-common/logging.h"
-#include "pdlfs-common/pdlfs_config.h"
-#include "pdlfs-common/rpc.h"
 
 #if defined(PDLFS_MARGO_RPC)
 #include "margo_rpc.h"
@@ -123,7 +123,7 @@ class MargoRPCImpl : public RPC {
   virtual ~MargoRPCImpl() { rpc_->Unref(); }
 };
 #endif
-}
+}  // namespace
 
 namespace {
 #if defined(PDLFS_MERCURY_RPC)
@@ -152,7 +152,7 @@ class MercuryRPCImpl : public RPC {
   }
 };
 #endif
-}
+}  // namespace
 
 }  // namespace rpc
 

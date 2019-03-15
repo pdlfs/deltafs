@@ -9,12 +9,12 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/lookup_cache.h"
+#include "pdlfs-common/coding.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <stddef.h>
-
-#include "pdlfs-common/coding.h"
-#include "pdlfs-common/lookup_cache.h"
 
 namespace pdlfs {
 

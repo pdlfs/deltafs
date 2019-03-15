@@ -12,7 +12,7 @@
 
 #include <memory.h>
 
-#include "spooky_hash.h"
+#include "spooky_impl.h"
 
 namespace pdlfs {
 

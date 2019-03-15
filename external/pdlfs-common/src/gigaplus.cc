@@ -9,14 +9,14 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "pdlfs-common/gigaplus.h"
+#include "pdlfs-common/coding.h"
+#include "pdlfs-common/xxhash.h"
+
 #include <assert.h>
 #include <math.h>
 #include <string.h>
 #include <algorithm>
-
-#include "pdlfs-common/coding.h"
-#include "pdlfs-common/gigaplus.h"
-#include "pdlfs-common/xxhash.h"
 
 namespace pdlfs {
 

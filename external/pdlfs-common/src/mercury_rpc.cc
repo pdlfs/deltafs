@@ -8,11 +8,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+#include "mercury_rpc.h"
 
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
-
-#include "mercury_rpc.h"
 
 namespace pdlfs {
 namespace rpc {
@@ -156,7 +155,7 @@ struct RPCState {
   hg_return_t ret;
   void* out;
 };
-}
+}  // namespace
 
 static hg_return_t SaveReply(const hg_cb_info* info) {
   RPCState* state = reinterpret_cast<RPCState*>(info->arg);
@@ -288,7 +287,7 @@ struct LookupState {
   hg_return_t ret;
   hg_addr_t addr;
 };
-}
+}  // namespace
 
 static hg_return_t SaveAddr(const hg_cb_info* info) {
   LookupState* state = reinterpret_cast<LookupState*>(info->arg);
