@@ -23,7 +23,7 @@ XX      XX      XX      XX XX   XX X    XX  XX XX         XX
 XXXXXXXXX        XXXXXXX   XX    XX        XX  XX      XX
 ```
 
-Please see the accompanying LICENSE.txt for license details. DeltaFS is still under development.
+This software was developed, in part, under U.S. Government contract 89233218CNA000001 for Los Alamos National Laboratory (LANL), which is operated by Triad National Security, LLC for the U.S. Department of Energy/National Nuclear Security Administration. Please see the accompanying [LICENSE.txt](LICENSE.txt) for further information. DeltaFS is still under development.
 
 # Features
   * Serverless design featuring zero dedicated metadata servers and no global file system namespace.
