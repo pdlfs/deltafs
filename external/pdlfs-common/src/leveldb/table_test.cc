@@ -9,9 +9,6 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <map>
-#include <string>
-
 #include "table_stats.h"
 
 #include "pdlfs-common/leveldb/comparator.h"
@@ -21,6 +18,9 @@
 #include "pdlfs-common/leveldb/table_builder.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
+
+#include <map>
+#include <string>
 
 namespace pdlfs {
 

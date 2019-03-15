@@ -1,7 +1,4 @@
-#pragma once
-
 /*
- * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2019 Carnegie Mellon University,
  * Copyright (c) 2019 Triad National Security, LLC, as operator of
  *     Los Alamos National Laboratory.
@@ -12,13 +9,20 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+/*
+ * Copyright (c) 2011 The LevelDB Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found at https://github.com/google/leveldb.
+ */
+#pragma once
+
+#include "pdlfs-common/hash.h"
+#include "pdlfs-common/slice.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
 #include <vector>
-
-#include "pdlfs-common/hash.h"
-#include "pdlfs-common/slice.h"
 
 // A filter block is stored near the end of a Table file.  It contains
 // filters (e.g., bloom filters) for all data blocks in the table combined

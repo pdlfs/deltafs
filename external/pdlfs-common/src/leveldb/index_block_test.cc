@@ -8,10 +8,11 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+#include "db/memtable.h"
 
-#include "pdlfs-common/leveldb/index_block.h"
 #include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/format.h"
+#include "pdlfs-common/leveldb/index_block.h"
 #include "pdlfs-common/leveldb/table_builder.h"
 
 #include "pdlfs-common/coding.h"
@@ -19,8 +20,6 @@
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 #include "pdlfs-common/xxhash.h"
-
-#include "db/memtable.h"
 
 #include <map>
 #include <set>

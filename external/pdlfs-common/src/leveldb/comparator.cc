@@ -1,5 +1,4 @@
 /*
- * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2019 Carnegie Mellon University,
  * Copyright (c) 2019 Triad National Security, LLC, as operator of
  *     Los Alamos National Laboratory.
@@ -10,13 +9,19 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <stdint.h>
-#include <algorithm>
+/*
+ * Copyright (c) 2011 The LevelDB Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found at https://github.com/google/leveldb.
+ */
 
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/strutil.h"
+
+#include <stdint.h>
+#include <algorithm>
 
 namespace pdlfs {
 

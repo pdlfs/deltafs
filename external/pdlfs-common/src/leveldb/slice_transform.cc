@@ -1,5 +1,4 @@
 /*
- * Copyright (c) 2013 The RocksDB Authors.
  * Copyright (c) 2019 Carnegie Mellon University,
  * Copyright (c) 2019 Triad National Security, LLC, as operator of
  *     Los Alamos National Laboratory.
@@ -10,6 +9,12 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+/*
+ * Copyright (c) 2013 Facebook, Inc. All rights reserved.
+ * This source code is dual-licensed under the GPLv2 and Apache 2.0
+ * License that can both be found at https://github.com/facebook/rocksdb.
+ * One may select either of the two licenses.
+ */
 #include "pdlfs-common/leveldb/slice_transform.h"
 #include "pdlfs-common/port.h"
 
