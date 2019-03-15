@@ -14,6 +14,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found at https://github.com/google/leveldb.
  */
+#pragma once
 
 #include "pdlfs-common/leveldb/db/dbformat.h"
 #include "pdlfs-common/leveldb/db/options.h"
