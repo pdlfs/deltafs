@@ -1,5 +1,4 @@
 /*
- * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2019 Carnegie Mellon University,
  * Copyright (c) 2019 Triad National Security, LLC, as operator of
  *     Los Alamos National Laboratory.
@@ -10,7 +9,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <stdlib.h>
+#include "db_impl.h"
 
 #include "pdlfs-common/cache.h"
 #include "pdlfs-common/dbfiles.h"
@@ -20,7 +19,7 @@
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 
-#include "db_impl.h"
+#include <stdlib.h>
 
 namespace pdlfs {
 

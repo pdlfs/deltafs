@@ -14,6 +14,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found at https://github.com/google/leveldb.
  */
+#pragma once
+
 #include "pdlfs-common/arena.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/random.h"

@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2019 Carnegie Mellon University,
  * Copyright (c) 2019 Triad National Security, LLC, as operator of
