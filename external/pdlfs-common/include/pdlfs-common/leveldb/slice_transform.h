@@ -1,7 +1,8 @@
 /*
  * Copyright (c) 2013 The RocksDB Authors.
- * Copyright (c) 2015-2019 Carnegie Mellon University and
- *         Los Alamos National Laboratory.
+ * Copyright (c) 2019 Carnegie Mellon University,
+ * Copyright (c) 2019 Triad National Security, LLC, as operator of
+ *     Los Alamos National Laboratory.
  *
  * All rights reserved.
  *
