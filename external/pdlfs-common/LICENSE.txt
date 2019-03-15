@@ -1,6 +1,6 @@
 Copyright (c) 2019 Carnegie Mellon University (CMU),
 Copyright (c) 2019 Triad National Security, LLC (TRIAD), as operator of
-    Los Alamos National Laboratory (LANL)
+    Los Alamos National Laboratory (LANL).
 
 All rights reserved.
 
