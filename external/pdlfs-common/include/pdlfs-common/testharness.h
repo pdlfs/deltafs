@@ -1,5 +1,4 @@
 /*
- * Copyright (c) 2011 The LevelDB Authors.
  * Copyright (c) 2019 Carnegie Mellon University,
  * Copyright (c) 2019 Triad National Security, LLC, as operator of
  *     Los Alamos National Laboratory.
@@ -10,16 +9,21 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+/*
+ * Copyright (c) 2011 The LevelDB Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found at https://github.com/google/leveldb.
+ */
 #pragma once
+
+#include "pdlfs-common/env.h"
+#include "pdlfs-common/logging.h"
+#include "pdlfs-common/random.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <ostream>
 #include <sstream>
-
-#include "pdlfs-common/env.h"
-#include "pdlfs-common/logging.h"
-#include "pdlfs-common/random.h"
 
 namespace pdlfs {
 // Append a slice to a given output stream.
@@ -49,7 +53,7 @@ extern std::string TmpDir();
 // Create a sub-directory under test::TmpDir().
 // If the sub-directory already exists, remove all its existing children.
 // Return the full path of this sub-directory.
-extern std::string PrepareTmpDir(const char *subdir, Env *env = NULL);
+extern std::string PrepareTmpDir(const char* subdir, Env* env = NULL);
 
 // Return a randomization seed for this run.  Typically returns the
 // same number on repeated invocations of this binary, but automated

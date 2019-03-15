@@ -9,6 +9,10 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+/*
+ * SpookyHash: a 128-bit noncryptographic hash function.
+ * By Bob Jenkins, public domain.
+ */
 #pragma once
 
 #include <stddef.h>
