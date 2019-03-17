@@ -113,7 +113,6 @@ Type 'c' multiple times and choose suitable options. Recommended options are:
  CMAKE_BUILD_TYPE                 RelWithDebInfo
  CMAKE_INSTALL_PREFIX             /usr/local
  CMAKE_PREFIX_PATH
- DELTAFS_BBOS                     OFF
  DELTAFS_BENCHMARKS               OFF
  DELTAFS_COMMON_INTREE            ON
  DELTAFS_MPI                      ON

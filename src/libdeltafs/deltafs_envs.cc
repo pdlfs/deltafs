@@ -9,15 +9,11 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/pdlfs_config.h"
-#include "pdlfs-common/pdlfs_platform.h"
+#include "deltafs_envs.h"
 
 #include "pdlfs-common/logging.h"
-
-#include "deltafs_envs.h"
-#if defined(DELTAFS_BBOS)
-#include "bbos_env.h"
-#endif
+#include "pdlfs-common/pdlfs_config.h"
+#include "pdlfs-common/pdlfs_platform.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -25,9 +21,9 @@
 #include <time.h>
 
 namespace pdlfs {
-
+namespace {
 #if defined(PDLFS_OS_LINUX)
-static Slice TrimSpace(Slice s) {
+Slice TrimSpace(Slice s) {
   size_t start = 0;
   while (start < s.size() && isspace(s[start])) {
     start++;
@@ -36,10 +32,14 @@ static Slice TrimSpace(Slice s) {
   while (limit > start && isspace(s[limit - 1])) {
     limit--;
   }
-  Slice r = Slice(s.data() + start, limit - start);
+
+  Slice r = s;
+  r.remove_suffix(s.size() - limit);
+  r.remove_prefix(start);
   return r;
 }
 #endif
+}  // namespace
 
 void PrintSysInfo() {
   Info(__LOG_ARGS__, " DeltaFS: Version %d.%d.%d (dev)",
@@ -122,27 +122,7 @@ void PrintSysInfo() {
 EnvRef OpenEnvOrDie(int argc, void* argv[]) {
   if (argc >= 1) {
     const char* name = static_cast<const char*>(argv[0]);
-#if defined(DELTAFS_BBOS)
-    if (strcmp(name, "bbos") == 0) {
-      Env* env = NULL;
-      if (argc >= 5) {
-        Status s = bbos::BbosInit(
-            &env, static_cast<const char*>(argv[1]),  // HG local URI
-            static_cast<const char*>(argv[2]),        // HG remote URI
-            argv[3], argv[4]);
-        if (s.ok()) {
-          EnvRef ref;
-          ref.is_system = false;
-          ref.env = env;
-          return ref;
-        }
-      }
-      Error(__LOG_ARGS__, "Cannot create bbos env");
-      Error(__LOG_ARGS__, "Abort...");
-      abort();
-    }
-#endif
-    return OpenEnvOrDie(name, "");  // Compatibility mode
+    return OpenEnvOrDie(name, "");
   } else {
     EnvRef ref;
     ref.env = Env::Default();
@@ -151,7 +131,6 @@ EnvRef OpenEnvOrDie(int argc, void* argv[]) {
   }
 }
 
-// XXX: BBOS is not supported in this path
 EnvRef OpenEnvOrDie(const char* name, const char* conf) {
   bool is_system;
   Env* env = Env::Open(name, conf, &is_system);

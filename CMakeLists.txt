@@ -54,7 +54,6 @@
 # DELTAFS specific compile time options flags:
 #   -DDELTAFS_CXX_STANDARD=11              -- CXX stardard to request
 #   -DDELTAFS_CXX_STANDARD_REQUIRED=OFF    -- if CXX stardard must be met
-#   -DDELTAFS_BBOS=ON                      -- build BBOS env
 #   -DDELTAFS_BENCHMARKS=ON                -- build our MPI-based benchmarks
 #   -DDELTAFS_COMMON_INTREE=OFF            -- in-tree common lib (for devel)
 #   -DDELTAFS_MPI=ON                       -- enable MPI in deltafs
@@ -125,7 +124,6 @@ include (cmake-options)
 include (pdlfs-options)
 
 # user hooks to configure deltafs
-set (DELTAFS_BBOS "OFF" CACHE BOOL "Build Deltafs BBOS Env (deltafs no longer uses bbos)")
 set (DELTAFS_BENCHMARKS "OFF" CACHE BOOL "Build benchmarks (requires MPI)")
 set (DELTAFS_COMMON_INTREE "OFF" CACHE BOOL
      "Build in-tree common lib (for devel)")
