@@ -25,7 +25,7 @@
 
 # main directory sources and tests
 set (pdlfs-common-srcs arena.cc blkdb.cc cache.cc coding.cc crc32c.cc
-     crc32c_internal.cc crc32c_sse42.cc dbfiles.cc dcntl.cc
+     crc32c_internal.cc crc32c_sse42.cc dcntl.cc
      ect.cc ectrie/bit_vector.cc ectrie/twolevel_bucketing.cc
      env.cc env_files.cc fio.cc fstypes.cc gigaplus.cc hash.cc histogram.cc
      index_cache.cc lease.cc log_reader.cc log_writer.cc logging.cc
@@ -34,8 +34,8 @@ set (pdlfs-common-srcs arena.cc blkdb.cc cache.cc coding.cc crc32c.cc
      random.cc rpc.cc slice.cc spooky.cc spooky_impl.cc status.cc
      strutil.cc testharness.cc testutil.cc xxhash.cc xxhash_impl.cc)
 set (pdlfs-common-tests arena_test.cc blkdb_test.cc cache_test.cc
-     coding_test.cc crc32c_test.cc dbfiles_test.cc ect_test.cc
-     env_test.cc fio_test.cc fstypes_test.cc gigaplus_test.cc hash_test.cc
+     coding_test.cc crc32c_test.cc ect_test.cc env_test.cc fio_test.cc
+     fstypes_test.cc gigaplus_test.cc hash_test.cc
      log_test.cc ofs_test.cc random_test.cc strutil_test.cc)
 
 # leveldb directory sources and tests
@@ -44,14 +44,14 @@ set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
      db/db_impl.cc db/db_iter.cc db/dbformat.cc
      db/memtable.cc db/options.cc db/readonly.cc db/readonly_impl.cc
      db/repair.cc db/table_cache.cc db/version_edit.cc db/version_set.cc
-     db/write_batch.cc filter_block.cc filter_policy.cc format.cc
+     db/write_batch.cc dbfiles.cc filter_block.cc filter_policy.cc format.cc
      index_block.cc iterator.cc merger.cc table.cc table_builder.cc
      table_properties.cc two_level_iterator.cc )
 set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
      db/bulk_test.cc db/corruption_test.cc db/db_table_test.cc db/db_test.cc
      db/dbformat_test.cc db/readonly_test.cc db/columnar_test
      db/version_edit_test.cc db/version_set_test.cc
-     db/write_batch_test.cc filter_block_test.cc
+     db/write_batch_test.cc dbfiles_test.cc filter_block_test.cc
      index_block_test.cc skiplist_test.cc table_test.cc)
 
 # mercury (note that margo uses the mercury rpc class)

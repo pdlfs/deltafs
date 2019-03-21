@@ -21,10 +21,11 @@
 #include "../merger.h"
 #include "../two_level_iterator.h"
 
-#include "pdlfs-common/coding.h"
-#include "pdlfs-common/dbfiles.h"
-#include "pdlfs-common/env.h"
+#include "pdlfs-common/leveldb/dbfiles.h"
 #include "pdlfs-common/leveldb/table_builder.h"
+
+#include "pdlfs-common/coding.h"
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/log_reader.h"
 #include "pdlfs-common/log_writer.h"
 #include "pdlfs-common/strutil.h"

@@ -16,7 +16,7 @@
 #include "version_edit.h"
 #include "version_set.h"
 
-#include "pdlfs-common/dbfiles.h"
+#include "pdlfs-common/leveldb/dbfiles.h"
 #include "pdlfs-common/mutexlock.h"
 
 namespace pdlfs {
@@ -211,7 +211,7 @@ struct IterState {
   MemTable* mem;
   MemTable* imm;
 };
-}
+}  // namespace
 
 static void CleanupIteratorState(void* arg1, void* arg2) {
   IterState* state = reinterpret_cast<IterState*>(arg1);

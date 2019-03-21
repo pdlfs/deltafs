@@ -13,7 +13,7 @@
 #include "db_impl.h"
 
 #include "pdlfs-common/cache.h"
-#include "pdlfs-common/dbfiles.h"
+#include "pdlfs-common/leveldb/dbfiles.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 

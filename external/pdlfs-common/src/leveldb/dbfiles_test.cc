@@ -14,7 +14,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found at https://github.com/google/leveldb.
  */
-#include "pdlfs-common/dbfiles.h"
+#include "pdlfs-common/leveldb/dbfiles.h"
 #include "pdlfs-common/strutil.h"
 #include "pdlfs-common/testharness.h"
 

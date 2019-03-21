@@ -22,7 +22,6 @@
 #include "plfsio/v1/deltafs_plfsio_v1.h"
 
 #include "pdlfs-common/coding.h"
-#include "pdlfs-common/dbfiles.h"
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/murmur.h"

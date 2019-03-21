@@ -19,13 +19,14 @@
 #include "version_set.h"
 #include "write_batch_internal.h"
 
-#include "pdlfs-common/cache.h"
-#include "pdlfs-common/dbfiles.h"
-#include "pdlfs-common/env.h"
-#include "pdlfs-common/hash.h"
 #include "pdlfs-common/leveldb/db/db.h"
+#include "pdlfs-common/leveldb/dbfiles.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/table.h"
+
+#include "pdlfs-common/cache.h"
+#include "pdlfs-common/env.h"
+#include "pdlfs-common/hash.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/strutil.h"
 #include "pdlfs-common/testharness.h"
@@ -67,7 +68,7 @@ class AtomicCounter {
 void DelayMilliseconds(int millis) {
   Env::Default()->SleepForMicroseconds(millis * 1000);
 }
-}
+}  // namespace
 
 // Special Env used to delay background operations
 class SpecialEnv : public EnvWrapper {

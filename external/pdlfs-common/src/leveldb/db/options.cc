@@ -16,11 +16,12 @@
  */
 #include "options_internal.h"
 
-#include "pdlfs-common/cache.h"
-#include "pdlfs-common/dbfiles.h"
-#include "pdlfs-common/env.h"
 #include "pdlfs-common/leveldb/comparator.h"
+#include "pdlfs-common/leveldb/dbfiles.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
+
+#include "pdlfs-common/cache.h"
+#include "pdlfs-common/env.h"
 
 namespace pdlfs {
 

@@ -10,14 +10,16 @@
  */
 
 #include "readonly_impl.h"
-#include "../merger.h"
 #include "db_iter.h"
 #include "table_cache.h"
 #include "version_set.h"
 
-#include "pdlfs-common/dbfiles.h"
-#include "pdlfs-common/env.h"
+#include "../merger.h"
+
 #include "pdlfs-common/leveldb/db/snapshot.h"
+#include "pdlfs-common/leveldb/dbfiles.h"
+
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
@@ -179,7 +181,7 @@ struct IterState {
   port::Mutex* mu;
   Version* version;
 };
-}
+}  // namespace
 
 static void CleanupIteratorState(void* arg1, void* arg2) {
   IterState* state = reinterpret_cast<IterState*>(arg1);
