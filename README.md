@@ -36,27 +36,25 @@ This software was developed, in part, under U.S. Government contract 89233218CNA
 
 # Platform
 
-DeltaFS is able to run on Linux, Mac OS, as well as most UNIX platforms for both development and local testing purposes. To run DeltaFS in production, it must be a Linux. DeltaFS is mainly written by C++. C++11 is not required to compile DeltaFS code, but will be used if the compiler supports it. C++14 is not used.
+DeltaFS is able to run on Linux, Mac OS, as well as most UNIX platforms for both development and local testing purposes. To run DeltaFS in production, it must be a Linux box. DeltaFS is mostly written in C++. C++11 is not required to compile the DeltaFS code, but will be used if the compiler supports it. C++14 or later is currently not used.
 
 # Documentation
 
-Our paper [deltafs_pdsw15](http://www.cs.cmu.edu/~qingzhen/files/deltafs_pdsw15.pdf) provides an overview of DeltaFS, and our another paper [deltafs_pdsw17](http://www.cs.cmu.edu/~qingzhen/files/deltafs_pdsw17.pdf) provides an overview of DeltaFS Indexed Massive Directory.
+Our paper [deltafs_pdsw15](http://www.cs.cmu.edu/~qingzhen/files/deltafs_pdsw15.pdf) provides an overview of the file system, and our other two papers, [deltafs_pdsw17](http://www.cs.cmu.edu/~qingzhen/files/deltafs_pdsw17.pdf) and [deltafs_sc18](http://www.cs.cmu.edu/~qingzhen/files/deltafs_sc18.pdf), provide an overview of the Indexed Massive Directory in DeltaFS.
 
 # Software requirements
 
-Compiling DeltaFS requires a recent C++ compiler, cmake, make, mpi, snappy, glog, and gflags. Compiling some of DeltaFS's dependencies requires a recent autoconf, automake, and libtool.
+Compiling DeltaFS requires a recent C/C++ compiler, cmake, make, mpi, snappy, glog, and gflags. Compiling some of DeltaFS' dependencies requires a recent autoconf, automake, and libtool.
 
-On Ubuntu 16 and 17 distributions, you may use the following to prepare the system environment for DeltaFS.
+On Ubuntu 14.04 LTS or later, you may use the following to prepare the system environment for DeltaFS.
 
 ```bash
-sudo apt-get update
-
-sudo apt-get install -y gcc g++ make  # Alternatively, this can also be clang
-sudo apt-get install -y autoconf automake libtool pkg-config
-sudo apt-get install -y cmake cmake-curses-gui
-sudo apt-get install -y libsnappy-dev libgflags-dev libgoogle-glog-dev
-sudo apt-get install -y libmpich-dev  # Alternatively, this can also be libopenmpi-dev
-sudo apt-get install -y mpich
+sudo apt-get install gcc g++ make  # Alternatively, this can also be clang
+sudo apt-get install autoconf automake libtool pkg-config
+sudo apt-get install cmake cmake-curses-gui
+sudo apt-get install libsnappy-dev libgflags-dev libgoogle-glog-dev
+sudo apt-get install libmpich-dev  # Alternatively, this can also be libopenmpi-dev
+sudo apt-get install mpich
 ```
 
 ## Object store
@@ -65,11 +63,10 @@ DeltaFS assumes an underlying object storage service to store file system metada
 
 ### RADOS
 
-On Ubuntu 16 and 17 distributions, RADOS can be installed through apt-get.
+On Ubuntu 14.04 LTS or later, RADOS can be installed via apt-get.
 
 ```bash
-sudo apt-get install -y librados-dev
-sudo apt-get install -y ceph
+sudo apt-get install librados-dev
 ```
 
 ## RPC
