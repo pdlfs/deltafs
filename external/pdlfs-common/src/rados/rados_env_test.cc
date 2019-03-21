@@ -9,9 +9,11 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "rados_env.h"
 #include "rados_conn.h"
 
 #include "pdlfs-common/ofs.h"
+#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/testharness.h"
 
 #include <algorithm>

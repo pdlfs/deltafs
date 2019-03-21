@@ -11,7 +11,6 @@
 
 #pragma once
 
-#include "pdlfs-common/dbfiles.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/fio.h"
 #include "pdlfs-common/osd.h"

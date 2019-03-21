@@ -11,8 +11,8 @@
 
 #include "rados_conn.h"
 
+#include "pdlfs-common/hashmap.h"
 #include "pdlfs-common/logging.h"
-#include "pdlfs-common/map.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/rados/rados_ld.h"
 #include "pdlfs-common/strutil.h"

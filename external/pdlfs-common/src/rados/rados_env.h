@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "pdlfs-common/leveldb/dbfiles.h"
+
 #include "rados_common.h"
 #include "rados_conn.h"
 
