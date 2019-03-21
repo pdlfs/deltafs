@@ -14,10 +14,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found at https://github.com/google/leveldb.
  */
+#include "crc32c_internal.h"
+
 #include "pdlfs-common/crc32c.h"
 #include "pdlfs-common/testharness.h"
-
-#include "crc32c_internal.h"
 
 namespace pdlfs {
 namespace crc32c {

@@ -45,9 +45,9 @@
  */
 
 #include "crc32c_internal.h"
-#include "pdlfs-common/pdlfs_platform.h"
 
 #include <stdint.h>
+#include "pdlfs-common/pdlfs_platform.h"
 #ifdef PDLFS_PLATFORM_POSIX
 #include <pthread.h>
 #endif
