@@ -25,12 +25,19 @@ class WritableFile;
 
 class Env;
 
-// An Osd is an abstract interface used by high-level systems to access a shared
-// underlying object storage service, such as Ceph RADOS, Amazon S3, LinkedIn
-// Ambry, or Openstack Swift.
+// OSD is an abstract interface for accessing objects stored in an underlying
+// object store with a flat namespace. This underlying object store can
+// potentially be Ceph RADOS, Amazon S3, LinkedIn Ambry, Openstack Swift, and
+// Intel DAOS. This interface is different from, and simpler than, the interface
+// defined by Env which expects a POSIX file system.
 //
-// All Osd implementation should be safe for concurrent access from
-// multiple threads without any external synchronization.
+// To build software components on top of an object store, say Xyz, first
+// implement an XyzOsd (this is simpler than directly implementing an XyzEnv),
+// then use the code defined at "pdlfs-common/ofs.h" to make an XyzEnv on
+// top of this XyzOsd.
+//
+// OSD implementations are expected to be safe for concurrent access from
+// multiple threads without requiring external synchronization.
 class Osd {
  public:
   Osd() {}

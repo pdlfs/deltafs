@@ -16,15 +16,21 @@ namespace pdlfs {
 
 Osd::~Osd() {}
 
-class EnvOsd : public Osd {
+namespace {
+// A simple OSD wrapper implementation that routes everything to an Env
+// instance. The caller specifies a path prefix so that all data objects will
+// be stored under that path. If "env" is NULL, the result of Env::Default()
+// will be used. The caller must delete the result when it is no longer needed.
+// In addition, "*env" must remain live while the result is in use.
+class OsdWrapper : public Osd {
  public:
-  EnvOsd(Env* env, const char* prefix) : env_(env) {
+  OsdWrapper(Env* env, const char* prefix) : env_(env) {
     prefix_ = prefix;
-    env_->CreateDir(prefix_.c_str());
+    env_->CreateDir(prefix_.c_str());  // Ignore error. Dir may exist.
     prefix_.append("/obj_");
   }
 
-  virtual ~EnvOsd() {}
+  virtual ~OsdWrapper() {}
 
   virtual Status NewSequentialObj(const char* name, SequentialFile** r) {
     const std::string fp = prefix_ + name;
@@ -74,16 +80,17 @@ class EnvOsd : public Osd {
 
  private:
   // No copying allowed
-  void operator=(const EnvOsd&);
-  EnvOsd(const EnvOsd&);
+  void operator=(const OsdWrapper&);
+  OsdWrapper(const OsdWrapper&);
 
   std::string prefix_;
-  Env* env_;
+  Env* const env_;
 };
+}  // namespace
 
 Osd* Osd::FromEnv(const char* prefix, Env* env) {
   if (env == NULL) env = Env::Default();
-  return new EnvOsd(env, prefix);
+  return new OsdWrapper(env, prefix);
 }
 
 }  // namespace pdlfs
