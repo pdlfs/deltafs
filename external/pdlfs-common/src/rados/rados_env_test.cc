@@ -15,6 +15,7 @@
 #include "pdlfs-common/ofs.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/testharness.h"
+#include "pdlfs-common/testutil.h"
 
 #include <algorithm>
 #include <vector>
@@ -36,33 +37,36 @@ static const bool FLAGS_useposixosd = true;
 namespace pdlfs {
 namespace rados {
 
+namespace {
 // Make sure we only connect to rados once during the entire run.
-static port::OnceType once = PDLFS_ONCE_INIT;
-static RadosConn* rados_conn = NULL;
-static void OpenRadosConn() {
+port::OnceType once = PDLFS_ONCE_INIT;
+RadosConn* rados_conn = NULL;
+void OpenRadosConn() {
   rados_conn = new RadosConn;
   Status s = rados_conn->Open(RadosOptions());
   ASSERT_OK(s);
 }
 
-static void TestRWEnvFile(Env* env, const char* dirname, const char* fname) {
+void UseFile(Env* env, const char* dirname, const char* fname) {
+  std::string rnddatastor;
+  Random rnd(301);
   for (int i = 0; i < 3; i++) {
+    Slice rnddata = test::RandomString(&rnd, 16, &rnddatastor);
     env->DeleteFile(fname);
-    ASSERT_OK(WriteStringToFile(env, Slice("xxxxxxxyyyyzz"), fname));
+    ASSERT_OK(WriteStringToFile(env, rnddata, fname));
     ASSERT_TRUE(env->FileExists(fname));
     std::string tmp;
     ASSERT_OK(ReadFileToString(env, fname, &tmp));
-    ASSERT_EQ(Slice(tmp), Slice("xxxxxxxyyyyzz"));
+    ASSERT_EQ(Slice(tmp), rnddata);
     std::vector<std::string> names;
     ASSERT_OK(env->GetChildren(dirname, &names));
-    Slice slice = fname;
-    slice.remove_prefix(strlen(dirname) + 1);
-    std::string name = slice.ToString();
+    std::string name(fname + strlen(dirname) + 1);
     ASSERT_TRUE(std::find(names.begin(), names.end(), name) != names.end());
   }
 
   env->DeleteFile(fname);
 }
+}  // namespace
 
 class RadosTest {
  public:
@@ -180,7 +184,7 @@ TEST(RadosTest, ReadWriteFiles) {
   fnames.push_back(InfoLogFileName(working_dir_));
   fnames.push_back(OldInfoLogFileName(working_dir_));
   for (size_t i = 0; i < fnames.size(); i++) {
-    TestRWEnvFile(env_, working_dir_.c_str(), fnames[i].c_str());
+    UseFile(env_, working_dir_.c_str(), fnames[i].c_str());
   }
 }
 

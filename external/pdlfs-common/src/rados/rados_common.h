@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <rados/librados.h>
 #include "rados_conn.h"
 
 #include "pdlfs-common/coding.h"
@@ -18,8 +19,6 @@
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/ofs.h"
 #include "pdlfs-common/port.h"
-
-#include <rados/librados.h>
 
 namespace pdlfs {
 namespace rados {
