@@ -55,7 +55,7 @@ int RunAllTests(int* argc, char*** argv) {
   ::google::SetUsageMessage(
       "command line arguments are initially absorbed by gflags; "
       "to pass additional arguments to the actual test program, add '--' "
-      "and put those additional arguments after it");
+      "and put those additional arguments after it.");
   ::google::SetVersionString(PDLFS_COMMON_VERSION);
   ::google::ParseCommandLineFlags(argc, argv, true);
 #endif
@@ -91,6 +91,9 @@ int RunAllTests(int* argc, char*** argv) {
     }
   }
   fprintf(stderr, "==== PASSED %d tests\n", num);
+#if defined(PDLFS_GLOG)
+  ::google::ShutdownGoogleLogging();
+#endif
   return 0;
 }
 
