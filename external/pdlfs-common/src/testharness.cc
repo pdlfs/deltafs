@@ -22,6 +22,7 @@
 #if defined(PDLFS_GLOG)
 #include <glog/logging.h>
 #endif
+
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
