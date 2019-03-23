@@ -31,7 +31,9 @@
 #include <gflags/gflags.h>
 DEFINE_bool(useposixosd, true, "Use POSIX to simulate a ceph rados cluster");
 #else
-static const bool FLAGS_useposixosd = true;
+namespace {
+const bool FLAGS_useposixosd = true;
+}  // namespace
 #endif
 
 namespace pdlfs {
@@ -43,7 +45,9 @@ port::OnceType once = PDLFS_ONCE_INIT;
 RadosConn* rados_conn = NULL;
 void OpenRadosConn() {
   rados_conn = new RadosConn;
-  Status s = rados_conn->Open(RadosOptions());
+  RadosOptions options;
+  fprintf(stderr, "Connecting to rados (%s) ...\n", options.conf_path.c_str());
+  Status s = rados_conn->Open(options);
   ASSERT_OK(s);
 }
 
@@ -61,7 +65,8 @@ void UseFile(Env* env, const char* dirname, const char* fname) {
     std::vector<std::string> names;
     ASSERT_OK(env->GetChildren(dirname, &names));
     std::string name(fname + strlen(dirname) + 1);
-    ASSERT_TRUE(std::find(names.begin(), names.end(), name) != names.end());
+    bool in = (std::find(names.begin(), names.end(), name) != names.end());
+    ASSERT_TRUE(in);
   }
 
   env->DeleteFile(fname);
@@ -207,6 +212,6 @@ TEST(RadosTest, Reloading) {
 }  // namespace rados
 }  // namespace pdlfs
 
-int main(int argc, char** argv) {
+int main(int argc, char* argv[]) {
   return ::pdlfs::test::RunAllTests(&argc, &argv);
 }
