@@ -52,6 +52,11 @@ bool RegisterTest(const char* base, const char* name, void (*func)()) {
 
 int RunAllTests(int* argc, char*** argv) {
 #if defined(PDLFS_GFLAGS)
+  ::google::SetUsageMessage(
+      "command line arguments are initially absorbed by gflags; "
+      "to pass additional arguments to the actual test program, add '--' "
+      "and put those additional arguments after it");
+  ::google::SetVersionString(PDLFS_COMMON_VERSION);
   ::google::ParseCommandLineFlags(argc, argv, true);
 #endif
   const char* matcher = getenv("PDLFS_TESTS");
@@ -97,15 +102,18 @@ std::string TmpDir() {
 }
 
 int RandomSeed() {
-  const char* env = getenv("TEST_RANDOM_SEED");
-  int result = (env != NULL ? atoi(env) : 301);
+  const char* seed = getenv("PDLFS_TEST_RANDOM_SEED");
+  if (seed == NULL) {
+    seed = getenv("TEST_RANDOM_SEED");
+  }
+  int result = (seed != NULL ? atoi(seed) : 301);
   if (result <= 0) {
     result = 301;
   }
   return result;
 }
 
-std::string PrepareTmpDir(const char *subdir, Env *env) {
+std::string PrepareTmpDir(const char* subdir, Env* env) {
   if (env == NULL) env = Env::Default();
   const std::string dirname = TmpDir() + "/" + subdir;
   env->CreateDir(dirname.c_str());
