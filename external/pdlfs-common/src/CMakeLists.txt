@@ -36,7 +36,7 @@ set (pdlfs-common-srcs arena.cc blkdb.cc cache.cc coding.cc
 set (pdlfs-common-tests arena_test.cc blkdb_test.cc cache_test.cc
      coding_test.cc crc32c/crc32c_test.cc ect_test.cc env_test.cc
      fio_test.cc fstypes_test.cc gigaplus_test.cc hash_test.cc
-     log_test.cc ofs_test.cc random_test.cc strutil_test.cc)
+     log_test.cc ofs_test.cc osd_test.cc random_test.cc strutil_test.cc)
 
 # leveldb directory sources and tests
 set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
