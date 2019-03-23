@@ -17,15 +17,15 @@
 
 namespace pdlfs {
 
-class OfsTest {
+class OFS {
  public:
-  OfsTest() {
+  OFS() {
     root_ = test::PrepareTmpDir("ofs_test");
     osd_ = Osd::FromEnv(root_.c_str());
     ofs_ = new Ofs(osd_);
   }
 
-  ~OfsTest() {
+  ~OFS() {
     delete ofs_;
     delete osd_;
   }
@@ -52,13 +52,13 @@ class OfsTest {
   Osd* osd_;
 };
 
-TEST(OfsTest, Empty) {
+TEST(OFS, Empty) {
   ASSERT_TRUE(!ofs_->FileExists("/mnt/fset/a"));
   ASSERT_TRUE(!Mounted());
   ASSERT_NOTFOUND(Unmount());
 }
 
-TEST(OfsTest, MountUnmount) {
+TEST(OFS, MountUnmount) {
   mount_opts_.read_only = true;
   ASSERT_NOTFOUND(Mount());
   mount_opts_.read_only = false;
@@ -80,7 +80,7 @@ TEST(OfsTest, MountUnmount) {
   ASSERT_NOTFOUND(Mount());
 }
 
-TEST(OfsTest, CreateDeleteFile) {
+TEST(OFS, CreateDeleteFile) {
   ASSERT_OK(Mount());
   WritableFile* wf;
   ASSERT_OK(ofs_->NewWritableFile("/mnt/fset/a", &wf));
