@@ -1,4 +1,8 @@
-**This document shows how to make mac ready for deltafs development**
+**This document shows how to make mac ready for deltafs development using gcc.**
+
+[![Build Status](https://travis-ci.org/pdlfs/deltafs.svg?branch=master)](https://travis-ci.org/pdlfs/deltafs)
+[![GitHub (pre-)release](https://img.shields.io/github/release-pre/pdlfs/deltafs.svg)](https://github.com/pdlfs/deltafs/releases)
+[![License](https://img.shields.io/badge/license-New%20BSD-blue.svg)](LICENSE.txt)
 
 # Step 1
 
