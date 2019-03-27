@@ -6,7 +6,8 @@ The first step is to have xcode command line tools ready by invoking `xcode-sele
 
 ```bash
 brew install git gcc cmake automake autoconf libtool pkg-config
-brew install --verbose --build-from-source \
+CC=/usr/local/bin/gcc-<n> CXX=/usr/local/bin/g++-<n> \
+    brew install -v --build-from-source \
     mpich snappy gflags glog
 ```
 
