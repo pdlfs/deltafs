@@ -36,35 +36,35 @@ ccmake -DCMAKE_INSTALL_PREFIX=/usr/local/mercury \
 Type 'c' a few times and check the following.
 
 ```bash
-BUILD_DOCUMENTATION             *OFF
-BUILD_EXAMPLES                  *OFF
-BUILD_SHARED_LIBS               *ON  ## <--- make sure this is ON
-BUILD_TESTING                   *OFF
-CMAKE_ARCHIVE_OUTPUT_DIRECTORY  */proj/mercury-1.0.1/build/bin
-CMAKE_BUILD_TYPE                *RelWithDebInfo
-CMAKE_EXECUTABLE_FORMAT         *MACHO
-CMAKE_INSTALL_PREFIX            */usr/local/mercury  ## <--- make sure this is something you desire
-CMAKE_LIBRARY_OUTPUT_DIRECTORY  */proj/mercury-1.0.1/build/bin
-CMAKE_RUNTIME_OUTPUT_DIRECTORY  */proj/mercury-1.0.1/build/bin
-MCHECKSUM_ENABLE_VERBOSE_ERROR  *ON
-MCHECKSUM_USE_ISAL              *OFF
-MCHECKSUM_USE_SSE4_2            *ON
-MCHECKSUM_USE_ZLIB              *OFF
-MERCURY_ENABLE_COVERAGE         *OFF
-MERCURY_ENABLE_STATS            *OFF
-MERCURY_ENABLE_VERBOSE_ERROR    *ON
-MERCURY_USE_BOOST_PP            *OFF
-MERCURY_USE_CHECKSUMS           *OFF  ## <--- make sure this is OFF
-MERCURY_USE_EAGER_BULK          *ON
-MERCURY_USE_SELF_FORWARD        *OFF
-MERCURY_USE_SM_ROUTING          *OFF
-MERCURY_USE_SYSTEM_MCHECKSUM    *OFF
-MERCURY_USE_XDR                 *OFF
-NA_USE_BMI                      *OFF
-NA_USE_CCI                      *OFF
-NA_USE_MPI                      *OFF
-NA_USE_OFI                      *OFF
-NA_USE_SM                       *ON
+BUILD_DOCUMENTATION             OFF
+BUILD_EXAMPLES                  OFF
+BUILD_SHARED_LIBS               ON  ## <--- make sure this is ON
+BUILD_TESTING                   OFF
+CMAKE_ARCHIVE_OUTPUT_DIRECTORY  /proj/mercury-1.0.1/build/bin
+CMAKE_BUILD_TYPE                RelWithDebInfo
+CMAKE_EXECUTABLE_FORMAT         MACHO
+CMAKE_INSTALL_PREFIX            /usr/local/mercury  ## <--- make sure this is something you desire
+CMAKE_LIBRARY_OUTPUT_DIRECTORY  /proj/mercury-1.0.1/build/bin
+CMAKE_RUNTIME_OUTPUT_DIRECTORY  /proj/mercury-1.0.1/build/bin
+MCHECKSUM_ENABLE_VERBOSE_ERROR  ON
+MCHECKSUM_USE_ISAL              OFF
+MCHECKSUM_USE_SSE4_2            ON
+MCHECKSUM_USE_ZLIB              OFF
+MERCURY_ENABLE_COVERAGE         OFF
+MERCURY_ENABLE_STATS            OFF
+MERCURY_ENABLE_VERBOSE_ERROR    ON
+MERCURY_USE_BOOST_PP            OFF
+MERCURY_USE_CHECKSUMS           OFF  ## <--- make sure this is OFF
+MERCURY_USE_EAGER_BULK          ON
+MERCURY_USE_SELF_FORWARD        OFF
+MERCURY_USE_SM_ROUTING          OFF
+MERCURY_USE_SYSTEM_MCHECKSUM    OFF
+MERCURY_USE_XDR                 OFF
+NA_USE_BMI                      OFF
+NA_USE_CCI                      OFF
+NA_USE_MPI                      OFF
+NA_USE_OFI                      OFF
+NA_USE_SM                       ON
 ```
 
 If everything matches, type 'g' and do `make`.
@@ -75,4 +75,49 @@ make && make install
 
 # Step 3
 
-TODO
+At this moment, we can use `cmake` to build deltafs.
+
+```bash
+git clone https://github.com/pdlfs/deltafs.git
+cd deltafs
+mkdir build
+cd build
+ccmake -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug \
+-DCMAKE_INSTALL_PREFIX=/tmp/deltafs-prefix \
+-DCMAKE_PREFIX_PATH=/usr/local/mercury \
+-DDELTAFS_COMMON_INTREE=ON \
+-DDELTAFS_MPI=ON \
+-DPDLFS_SNAPPY=ON \
+-DPDLFS_MERCURY_RPC=ON \
+-DPDLFS_GFLAGS=ON \
+-DPDLFS_GLOG=ON \
+-DPDLFS_VERBOSE=0 \
+..
+```
+Type 'c' a few times and check the following.
+
+```bash
+BUILD_SHARED_LIBS                ON
+BUILD_TESTS                      ON
+CMAKE_BUILD_TYPE                 Debug
+CMAKE_EXECUTABLE_FORMAT          MACHO
+CMAKE_INSTALL_PREFIX             /tmp/deltafs-prefix
+CMAKE_PREFIX_PATH                /usr/local/mercury  ## <--- this should match step 2
+DELTAFS_BENCHMARKS               OFF  ## <--- this should be OFF
+DELTAFS_COMMON_INTREE            ON
+DELTAFS_MPI                      ON
+PDLFS_GFLAGS                     ON
+PDLFS_GLOG                       ON
+PDLFS_MARGO_RPC                  OFF  ## <--- this should be OFF
+PDLFS_MERCURY_RPC                ON
+PDLFS_RADOS                      OFF  ## <--- this should be OFF
+PDLFS_SNAPPY                     ON
+PDLFS_VERBOSE                    0
+```
+
+If everything matches, type 'g' and do `make`.
+
+```bash
+make
+```
+
