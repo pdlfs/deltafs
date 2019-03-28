@@ -112,7 +112,7 @@ ccmake -DDELTAFS_COMMON_INTREE=ON ..
 
 Type 'c' multiple times and choose suitable options. Recommended options are:
 
-```
+```bash
  BUILD_SHARED_LIBS                ON
  BUILD_TESTS                      ON  ## <-- turn this off to skip building tests
  CMAKE_BUILD_TYPE                 RelWithDebInfo
@@ -147,7 +147,7 @@ mpirun -n 2 ./build/src/server/deltafs-srvr -v=1 -logtostderr
 This will start two DeltaFS server instances that store file system metadata in /tmp/deltafs_outputs and file data in /tmp/deltafs_data. Please remove these two folders if they exist before running DeltaFS. The two DeltaFS server instances will begin listening on tcp port 10101 and 10102.
 
 ```bash
-env DELTAFS_MetadataSrvAddrs="127.0.0.1:10101&127.0.0.1:10102" DELTAFS_NumOfMetadataSrvs="2" \
+env "DELTAFS_MetadataSrvAddrs=127.0.0.1:10101&127.0.0.1:10102" "DELTAFS_NumOfMetadataSrvs=2" \
     ./build/src/cmds/deltafs-shell -v=1 -logtostderr
 ```
 
