@@ -57,6 +57,8 @@ sudo apt-get install libmpich-dev  # Alternatively, this can also be libopenmpi-
 sudo apt-get install mpich
 ```
 
+For Mac OS, see [README.mac.md](README.mac.md) for instuctions.
+
 ## Object store
 
 DeltaFS assumes an underlying object storage service to store file system metadata and file data. This underlying object store may just be a shared parallel file system such as Lustre, GPFS, PanFS, and HDFS. However, a scalable object storage service is suggested to ensure high performance and currently DeltaFS supports Ceph RADOS.
@@ -83,10 +85,16 @@ git clone http://git.mcs.anl.gov/bmi.git && cd bmi
 ./prepare && ./configure --enable-shared --enable-bmi-only
 make && sudo make install
 
+# OpenPA -- when in the absence of <stdatomic.h> 
+git clone https://github.com/pmodels/openpa.git && cd openpa
+./autogen.sh && ./configure --enable-shared
+make && sudo make install
+
 # Mercury
-git clone https://github.com/mercury-hpc/mercury.git && cd mercury
+git clone --recurse-submodules https://github.com/mercury-hpc/mercury.git && cd mercury
 mkdir build && cd build
-cmake ..
+cmake -DBUILD_SHARED_LIBS=ON \
+-DMERCURY_USE_CHECKSUMS=OFF -DNA_USE_BMI=ON ..
 make && sudo make install
 ```
 
@@ -106,20 +114,20 @@ Type 'c' multiple times and choose suitable options. Recommended options are:
 
 ```
  BUILD_SHARED_LIBS                ON
- BUILD_TESTS                      ON
+ BUILD_TESTS                      ON  ## <-- turn this off to skip building tests
  CMAKE_BUILD_TYPE                 RelWithDebInfo
  CMAKE_INSTALL_PREFIX             /usr/local
- CMAKE_PREFIX_PATH
+ CMAKE_PREFIX_PATH                ## <-- this can be empty
  DELTAFS_BENCHMARKS               OFF
- DELTAFS_COMMON_INTREE            ON
- DELTAFS_MPI                      ON
+ DELTAFS_COMMON_INTREE            ON  ## <-- this must be ON
+ DELTAFS_MPI                      ON  ## <-- this must be ON
  PDLFS_GFLAGS                     ON
  PDLFS_GLOG                       ON
  PDLFS_MARGO_RPC                  OFF
  PDLFS_MERCURY_RPC                ON
- PDLFS_RADOS                      OFF
+ PDLFS_RADOS                      ON  ## <-- only if deltafs needs to run on rados
  PDLFS_SNAPPY                     ON
- PDLFS_VERBOSE                    0
+ PDLFS_VERBOSE                    1
 ```
 
 Once you exit the CMake configuration screen and are ready to build the targets, do:
@@ -133,7 +141,7 @@ make
 To test DeltaFS on a local machine using the local file system to store file system metadata and file data, we can run two DeltaFS server instances and then use a DeltaFS shell to access the namespace.
 
 ```bash
-mpirun -n 2 ./build/src/server/deltafs-srvr -- -v=1 -logtostderr
+mpirun -n 2 ./build/src/server/deltafs-srvr -v=1 -logtostderr
 ```
 
 This will start two DeltaFS server instances that store file system metadata in /tmp/deltafs_outputs and file data in /tmp/deltafs_data. Please remove these two folders if they exist before running DeltaFS. The two DeltaFS server instances will begin listening on tcp port 10101 and 10102.
