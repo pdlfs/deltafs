@@ -138,7 +138,7 @@ make
 
 ## Local testing
 
-To test DeltaFS on a local machine using the local file system to store file system metadata and file data, we can run two DeltaFS server instances and then use a DeltaFS shell to access the namespace.
+To test DeltaFS on a local machine using the local file system to store file system metadata and file data, we can run two DeltaFS server instances and then use a DeltaFS shell to access the namespace. See [README.rados.md](README.rados.md) for testing DeltaFS agaist Ceph RADOS.
 
 ```bash
 mpirun -n 2 ./build/src/server/deltafs-srvr -v=1 -logtostderr
