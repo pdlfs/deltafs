@@ -9,8 +9,8 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio_filter.h"
-#include "deltafs_plfsio_types.h"
+#include "filter.h"
+#include "types.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/histogram.h"

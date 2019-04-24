@@ -11,9 +11,9 @@
 
 #pragma once
 
-#include "deltafs_plfsio_builder.h"
-#include "deltafs_plfsio_doublebuf.h"
-#include "deltafs_plfsio_filter.h"
+#include "builder.h"
+#include "doublebuf.h"
+#include "filter.h"
 
 namespace pdlfs {
 namespace plfsio {

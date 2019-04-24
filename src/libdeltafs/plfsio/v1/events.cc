@@ -9,4 +9,12 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio.h"
+#include "events.h"
+
+namespace pdlfs {
+namespace plfsio {
+
+EventListener::~EventListener() {}
+
+}  // namespace plfsio
+}  // namespace pdlfs

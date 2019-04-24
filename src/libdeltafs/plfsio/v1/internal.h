@@ -11,11 +11,11 @@
 
 #pragma once
 
-#include "deltafs_plfsio_builder.h"
-#include "deltafs_plfsio_format.h"
-#include "deltafs_plfsio_io.h"
-#include "deltafs_plfsio_recov.h"
-#include "deltafs_plfsio_types.h"
+#include "builder.h"
+#include "format.h"
+#include "io.h"
+#include "recov.h"
+#include "types.h"
 
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/port.h"

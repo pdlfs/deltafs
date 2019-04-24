@@ -28,31 +28,28 @@ set (deltafs-srcs deltafs_api.cc deltafs_client.cc deltafs_conf.cc
         deltafs_mds.cc deltafs_envs.cc mds.cc mds_api.cc
         mds_cli.cc mds_factory.cc mds_srv.cc snap_stor.cc)
 
-set (deltafs-plfsio-srcs plfsio/v1/deltafs_plfsio_v1.cc
-        plfsio/v1/deltafs_plfsio_types.cc
-        plfsio/v1/deltafs_plfsio_internal.cc
-        plfsio/v1/deltafs_plfsio_cuckoo.cc
-        plfsio/v1/deltafs_plfsio_builder.cc
-        plfsio/v1/deltafs_plfsio_filter.cc
-        plfsio/v1/deltafs_plfsio_filterio.cc
-        plfsio/v1/deltafs_plfsio_format.cc
-        plfsio/v1/deltafs_plfsio_recov.cc
-        plfsio/v1/deltafs_plfsio_io.cc
-        plfsio/v1/deltafs_plfsio_doublebuf.cc
-        plfsio/v1/deltafs_plfsio_bufio.cc
-        plfsio/v1/deltafs_plfsio_pdb.cc
-        plfsio/v1/deltafs_plfsio_events.cc
-        plfsio/deltafs_plfsio_util.cc
-        plfsio/deltafs_plfsio_impl.cc
-        plfsio/deltafs_plfsio.cc)
+set (deltafs-plfsio-srcs plfsio/v1/v1.cc
+        plfsio/v1/types.cc
+        plfsio/v1/internal.cc
+        plfsio/v1/cuckoo.cc
+        plfsio/v1/builder.cc
+        plfsio/v1/filter.cc
+        plfsio/v1/filterio.cc
+        plfsio/v1/format.cc
+        plfsio/v1/recov.cc
+        plfsio/v1/io.cc
+        plfsio/v1/doublebuf.cc
+        plfsio/v1/bufio.cc
+        plfsio/v1/pdb.cc
+        plfsio/v1/events.cc)
 
 set (deltafs-tests deltafs_api_test.cc
-        plfsio/v1/deltafs_plfsio_bufio_test.cc
-        plfsio/v1/deltafs_plfsio_cuckoo_test.cc
-        plfsio/v1/deltafs_plfsio_filter_test.cc
-        plfsio/v1/deltafs_plfsio_filterio_test.cc
-        plfsio/v1/deltafs_plfsio_pdb_test.cc
-        plfsio/v1/deltafs_plfsio_test
+        plfsio/v1/bufio_test.cc
+        plfsio/v1/cuckoo_test.cc
+        plfsio/v1/filter_test.cc
+        plfsio/v1/filterio_test.cc
+        plfsio/v1/pdb_test.cc
+        plfsio/v1/v1_test.cc
         mds_api_test.cc
         mds_srv_test.cc)
 

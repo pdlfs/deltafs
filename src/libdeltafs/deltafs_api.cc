@@ -15,11 +15,11 @@
 #include "deltafs_client.h"
 #include "deltafs_envs.h"
 
-#include "plfsio/v1/deltafs_plfsio_bufio.h"
-#include "plfsio/v1/deltafs_plfsio_cuckoo.h"
-#include "plfsio/v1/deltafs_plfsio_pdb.h"
-#include "plfsio/v1/deltafs_plfsio_types.h"
-#include "plfsio/v1/deltafs_plfsio_v1.h"
+#include "plfsio/v1/bufio.h"
+#include "plfsio/v1/cuckoo.h"
+#include "plfsio/v1/pdb.h"
+#include "plfsio/v1/types.h"
+#include "plfsio/v1/v1.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env_files.h"

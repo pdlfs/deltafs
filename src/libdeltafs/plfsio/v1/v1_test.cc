@@ -9,10 +9,10 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio_events.h"
-#include "deltafs_plfsio_filter.h"
-#include "deltafs_plfsio_internal.h"
-#include "deltafs_plfsio_v1.h"
+#include "events.h"
+#include "filter.h"
+#include "internal.h"
+#include "v1.h"
 
 #include "pdlfs-common/histogram.h"
 #include "pdlfs-common/mutexlock.h"

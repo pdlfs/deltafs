@@ -11,8 +11,8 @@
 
 #pragma once
 
-#include "deltafs_plfsio_format.h"
-#include "deltafs_plfsio_types.h"
+#include "format.h"
+#include "types.h"
 
 #include <string>
 

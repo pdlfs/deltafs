@@ -9,13 +9,12 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio_pdb.h"
-#include "deltafs_plfsio_types.h"
+#include "bufio.h"
+#include "types.h"
 
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
-#include "pdlfs-common/xxhash.h"
 
 #if __cplusplus >= 201103
 #define OVERRIDE override
@@ -69,7 +68,7 @@ class EmulatedEnv : public EnvWrapper {
 
 // Measure implementation's bandwidth utilization under
 // different configurations.
-class PdbBench {
+class BufBench {
   static int FromEnv(const char* key, int def) {
     const char* env = getenv(key);
     if (env && env[0]) {
@@ -86,57 +85,51 @@ class PdbBench {
   }
 
  public:
-  PdbBench() {
+  BufBench() {
     mkeys_ = GetOption("MI_KEYS", 4);
-    bf_bits_per_key_ = GetOption("BF_BITS_PER_KEY", 13);
     bytes_per_sec_ = GetOption("BYTES_PER_SEC", 6000000);
-    buf_size_ = GetOption("BUF_SIZE", 4 << 20);
-    n_ = GetOption("NUM_BUFS", 4);
-    thread_pool_ = ThreadPool::NewFixed(n_, true /* eager init */);
-    options_.bf_bits_per_key = bf_bits_per_key_;
+    buf_size_ = GetOption("BUF_SIZE", 2 << 20);
+    thread_pool_ = ThreadPool::NewFixed(2, true /* eager init */);
     options_.compaction_pool = thread_pool_;
-    options_.cuckoo_frac = -1;
   }
 
-  ~PdbBench() {  //
+  ~BufBench() {  //
     delete thread_pool_;
   }
 
   void LogAndApply() {
-    BufferedBlockWriter* pdb = NULL;
+    DirectWriter* writer = NULL;
     WritableFile* dst = NULL;
 
     Env* const env = new EmulatedEnv(bytes_per_sec_);
-    ASSERT_OK(env->NewWritableFile("test.tbl", &dst));
+    ASSERT_OK(env->NewWritableFile("test.bin", &dst));
     options_.allow_env_threads = false;
     options_.value_size = 56;
-    pdb = new BufferedBlockWriter(options_, dst, buf_size_, n_);
+    writer = new DirectWriter(options_, dst, buf_size_);
     const uint64_t start = env->NowMicros();
-    char tmp[8];
-    Slice key(tmp, sizeof(tmp));
-    std::string val(options_.value_size, '\0');
+    std::string kv(options_.key_size + options_.value_size, '\0');
     const size_t num_keys = static_cast<size_t>(mkeys_) << 20;
     size_t i = 0;
     for (; i < num_keys; i++) {
-      if ((i & 0x7FFFu) == 0) fprintf(stderr, "\r%.2f%%", 100.0 * i / num_keys);
-      EncodeFixed64(tmp, i);
-      ASSERT_OK(pdb->Add(key, val));
+      if ((i & 0x7FFFu) == 0) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * i / num_keys);
+      }
+      ASSERT_OK(writer->Append(kv));
     }
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
-    ASSERT_OK(pdb->Finish());
+    ASSERT_OK(writer->Finish());
     uint64_t dura = env->NowMicros() - start;
     Report(dura);
 
-    delete pdb;
+    delete writer;
     delete dst;
     delete env;
   }
 
   void Report(uint64_t dura) {
     const double k = 1000.0, ki = 1024.0;
-    const double d = options_.key_size + options_.value_size +
-                     double(options_.bf_bits_per_key) / 8;
+    const double d = options_.key_size + options_.value_size;
     fprintf(stderr, "-----------------------------------------\n");
     fprintf(stderr, "     Total dura: %.0f sec\n", 1.0 * dura / k / k);
     fprintf(stderr, "          Speed: %.0f bytes per sec\n",
@@ -149,9 +142,7 @@ class PdbBench {
   ThreadPool* thread_pool_;
   DirOptions options_;
   uint64_t bytes_per_sec_;
-  size_t bf_bits_per_key_;
   size_t buf_size_;
-  size_t n_;
   int mkeys_;
 };
 
@@ -167,7 +158,7 @@ class PdbBench {
 
 namespace {
 void BM_Usage() {
-  fprintf(stderr, "Use --bench=pdb to run benchmark.\n");
+  fprintf(stderr, "Use --bench=buf to run benchmark.\n");
   fprintf(stderr, "\n");
 }
 
@@ -185,8 +176,8 @@ void BM_Main(int* argc, char*** argv) {
   } else {
     BM_Usage();
   }
-  if (bench_name == "--bench=pdb") {
-    pdlfs::plfsio::PdbBench bench;
+  if (bench_name == "--bench=buf") {
+    pdlfs::plfsio::BufBench bench;
     bench.LogAndApply();
   } else {
     BM_Usage();

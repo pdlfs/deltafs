@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "deltafs_plfsio_doublebuf.h"
+#include "doublebuf.h"
 
 #include <string>
 

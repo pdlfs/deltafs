@@ -9,8 +9,8 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio_builder.h"
-#include "deltafs_plfsio_recov.h"
+#include "builder.h"
+#include "recov.h"
 
 #include <math.h>
 

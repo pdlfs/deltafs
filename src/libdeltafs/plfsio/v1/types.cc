@@ -9,7 +9,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio_types.h"
+#include "types.h"
 
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/strutil.h"

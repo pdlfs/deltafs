@@ -9,7 +9,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio_filterio.h"
+#include "filterio.h"
 
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/testharness.h"

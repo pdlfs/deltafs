@@ -11,9 +11,9 @@
 
 #include "deltafs/deltafs_api.h"
 
-#include "plfsio/v1/deltafs_plfsio_cuckoo.h"
-#include "plfsio/v1/deltafs_plfsio_filter.h"
-#include "plfsio/v1/deltafs_plfsio_types.h"
+#include "plfsio/v1/cuckoo.h"
+#include "plfsio/v1/filter.h"
+#include "plfsio/v1/types.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/testharness.h"

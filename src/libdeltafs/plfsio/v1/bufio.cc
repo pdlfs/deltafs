@@ -9,8 +9,8 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio_bufio.h"
-#include "deltafs_plfsio_types.h"
+#include "bufio.h"
+#include "types.h"
 
 namespace pdlfs {
 namespace plfsio {

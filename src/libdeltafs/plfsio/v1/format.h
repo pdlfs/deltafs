@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "deltafs_plfsio_types.h"
+#include "types.h"
 
 #include "pdlfs-common/leveldb/block.h"
 #include "pdlfs-common/leveldb/block_builder.h"

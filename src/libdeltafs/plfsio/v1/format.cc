@@ -9,7 +9,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "deltafs_plfsio_format.h"
+#include "format.h"
 
 #include <stdio.h>
 #include <string.h>

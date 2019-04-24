@@ -18,8 +18,8 @@
 #include "deltafs_client.h"
 #include "deltafs_conf_loader.h"
 
-#include "plfsio/v1/deltafs_plfsio_types.h"
-#include "plfsio/v1/deltafs_plfsio_v1.h"
+#include "plfsio/v1/types.h"
+#include "plfsio/v1/v1.h"
 
 #include "pdlfs-common/blkdb.h"
 #include "pdlfs-common/env_lazy.h"
