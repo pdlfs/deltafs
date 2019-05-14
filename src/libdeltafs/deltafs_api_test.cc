@@ -203,13 +203,19 @@ TEST(PlfsDirTest, PdbRw) {
 }
 
 class PlfsWiscBench {
-  static int GetOptions(const char* key, int defval) {
+  static int FromEnv(const char* key, int def) {
     const char* env = getenv(key);
-    if (!env || !env[0]) {
-      return defval;
-    } else {
+    if (env && env[0]) {
       return atoi(env);
+    } else {
+      return def;
     }
+  }
+
+  static inline int GetOptions(const char* key, int def) {
+    int opt = FromEnv(key, def);
+    fprintf(stderr, "%s=%d\n", key, opt);
+    return opt;
   }
 
   void GetCompressionOptions() {
@@ -263,11 +269,10 @@ class PlfsWiscBench {
     GetMemTableOptions();
     GetBlkOptions();
     GetIoOptions();
-
+    mfiles_ = GetOptions("MI_FILES", 1);
+    kranks_ = GetOptions("KI_RANKS", 1);
     value_size_ = 40;
-    unordered_ = 0;
-    mfiles_ = 1;
-    kranks_ = 1;
+    unordered_ = 1;
   }
 
   ~PlfsWiscBench() {
@@ -289,29 +294,22 @@ class PlfsWiscBench {
     char tmp2[12];
     uint32_t num_files = mfiles_ << 20;
     uint32_t comm_sz = kranks_ << 10;
-    uint32_t k = 0;
     fprintf(stderr, "Inserting data...\n");
-    for (uint32_t i = 0; i < num_files / comm_sz; i++) {
-      for (uint32_t j = 0; j < comm_sz; j++) {
-        if ((k & 0x7FFFFu) == 0) {
-          fprintf(stderr, "\r%.2f%%", 100.0 * k / num_files);
-        }
-        uint64_t h = xxhash64(&k, sizeof(k), 0);
-        uint32_t f = xxhash32(&h, sizeof(h), 301);
-        uint32_t a = f % comm_sz;
-        EncodeFixed32(tmp1, a);
-        EncodeFixed32(tmp1 + 4, f);
-        uint32_t g = xxhash32(&h, sizeof(h), 103);
-        uint32_t b = g % comm_sz;
-        EncodeFixed32(tmp2, b);
-        uint64_t c = i * comm_sz + h % comm_sz;
-        // c *= value_size_;
-        EncodeFixed64(tmp2 + 4, c);
-        ssize_t rr = deltafs_plfsdir_put(dir_, tmp1, sizeof(tmp1), 0, tmp2,
-                                         sizeof(tmp2));
-        ASSERT_TRUE(rr == sizeof(tmp2));
-        k++;
+    for (uint32_t k = 0; k < num_files; k++) {
+      if ((k & 0x7FFFFu) == 0) {
+        fprintf(stderr, "\r%.2f%%", 100.0 * k / num_files);
       }
+      uint64_t h = xxhash64(&k, sizeof(k), 0);
+      EncodeFixed64(tmp1, h);
+      uint32_t x = xxhash32(&h, sizeof(h), 301);
+      uint32_t r = x % comm_sz;
+      EncodeFixed32(tmp2, r);
+      uint64_t c = k + h % comm_sz;
+      c *= value_size_;
+      EncodeFixed64(tmp2 + 4, c);
+      ssize_t rr =
+          deltafs_plfsdir_put(dir_, tmp1, sizeof(tmp1), 0, tmp2, sizeof(tmp2));
+      ASSERT_TRUE(rr == sizeof(tmp2));
     }
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
@@ -346,17 +344,20 @@ class PlfsWiscBench {
     integer sdb = GETPROP(dir_, "sstable_data_bytes");
     integer sfb = GETPROP(dir_, "sstable_filter_bytes");
     integer sib = GETPROP(dir_, "sstable_index_bytes");
-    fprintf(stderr, "         Breakdown: D=%.2f MiB, F=%.2f MiB, I=%.2f MiB\n",
-            sdb / ki / ki, sfb / ki / ki, sib / ki / ki);
-    fprintf(stderr,
-            "           Per Key: D+=%.2f Bytes, F=%.2f Bytes, I=%.2f Bytes\n",
-            1.0 * sdb / num_files - 8, 1.0 * sfb / num_files,
-            1.0 * sib / num_files);
-    fprintf(stderr, "              Cost: D+=%.2f%%, F=%.2f%%, I=%.2f%%\n",
+    fprintf(stderr, "              Cost: D=%.2f%%, F=%.2f%%, I=%.2f%%\n",
             100.0 * (1.0 * sdb / num_files - 8) / entry_size,
             100.0 * sfb / num_files / entry_size,
             100.0 * sib / num_files / entry_size);
-
+    fprintf(stderr, "         Breakdown: ----\n");
+    fprintf(stderr, "                 D: %.2f MiB\n", sdb / ki / ki);
+    fprintf(stderr, "                 F: %.2f MiB\n", sfb / ki / ki);
+    fprintf(stderr, "                 I: %.2f MiB\n", sib / ki / ki);
+    fprintf(stderr, "           Per Key: ----\n");
+    fprintf(stderr, "                 D: %.2f Bytes + K\n",
+            1.0 * sdb / num_files - 8);
+    fprintf(stderr, "                 F: %.2f Bytes\n", 1.0 * sfb / num_files);
+    fprintf(stderr, "                 I: %.2f Bytes\n", 1.0 * sib / num_files);
+    fprintf(stderr, "        Other Info: ----\n");
     fprintf(stderr, "             Value: %d Bytes\n", value_size_);
     fprintf(stderr, "               Key: 8 Bytes\n");
 #undef GETPROP
