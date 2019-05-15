@@ -432,14 +432,14 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
   case k:                                                 \
     n = CuckooBuildFilter<k>(&num_buckets, &filterdata_); \
     break
-      CASE(1);
-      CASE(2);
-      CASE(4);
-      CASE(8);
-      CASE(12);
-      CASE(16);
-      CASE(24);
       CASE(32);
+      CASE(24);
+      CASE(16);
+      CASE(12);
+      CASE(10);
+      CASE(8);
+      CASE(6);
+      CASE(4);
       default:
         fprintf(stderr, "!! FILTER CONF NOT SUPPORTED\n");
         exit(1);
@@ -521,14 +521,14 @@ class PlfsTableBench : public PlfsCuckoBench {
   case k:                                                             \
     n = CuckooBuildTable<k>(&num_buckets, &num_tables, &filterdata_); \
     break
-      CASE(1);
-      CASE(2);
-      CASE(4);
-      CASE(8);
-      CASE(12);
-      CASE(16);
-      CASE(24);
       CASE(32);
+      CASE(24);
+      CASE(16);
+      CASE(12);
+      CASE(10);
+      CASE(8);
+      CASE(6);
+      CASE(4);
       default:
         fprintf(stderr, "!! FILTER CONF NOT SUPPORTED\n");
         exit(1);

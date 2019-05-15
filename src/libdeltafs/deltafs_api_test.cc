@@ -689,12 +689,6 @@ static void BM_LogAndApply(const char* bm) {
   } else if (strcmp(bm, "bf") == 0) {
     BF_BENCH bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "kv1") == 0) {
-    KV_BENCH(1) bench;
-    bench.LogAndApply();
-  } else if (strcmp(bm, "kv2") == 0) {
-    KV_BENCH(2) bench;
-    bench.LogAndApply();
   } else if (strcmp(bm, "kv4") == 0) {
     KV_BENCH(4) bench;
     bench.LogAndApply();

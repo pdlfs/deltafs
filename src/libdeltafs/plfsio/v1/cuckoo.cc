@@ -498,20 +498,29 @@ class CuckooKeyTester {
   }
 };
 
-#define TEMPLATE(K)                  \
+#define TEMPLATE1(K)                 \
   template class CuckooBlock<K, 32>; \
-  template class CuckooBlock<K, 24>; \
-  template class CuckooBlock<K, 12>; \
   template class CuckooBlock<K, 0>
+TEMPLATE1(32);
+TEMPLATE1(24);
+TEMPLATE1(16);
+TEMPLATE1(12);
+TEMPLATE1(10);
+TEMPLATE1(8);
+TEMPLATE1(6);
+TEMPLATE1(4);
 
-TEMPLATE(32);
-TEMPLATE(24);
-TEMPLATE(16);
-TEMPLATE(12);
-TEMPLATE(8);
-TEMPLATE(4);
-TEMPLATE(2);
-TEMPLATE(1);
+#define TEMPLATE2(V)                \
+  template class CuckooBlock<4, V>; \
+  template class CuckooBlock<8, V>
+TEMPLATE2(24);
+TEMPLATE2(22);
+TEMPLATE2(20);
+TEMPLATE2(18);
+TEMPLATE2(16);
+TEMPLATE2(14);
+TEMPLATE2(12);
+TEMPLATE2(10);
 
 bool CuckooKeyMayMatch(const Slice& key, const Slice& input) {
   return CuckooValues(key, input, NULL);  // Test key existence only
@@ -536,44 +545,10 @@ bool CuckooValues(const Slice& key, const Slice& input,
       CASE(24);
       CASE(16);
       CASE(12);
+      CASE(10);
       CASE(8);
+      CASE(6);
       CASE(4);
-      CASE(2);
-      CASE(1);
-#undef CASE
-      default:
-        return true;
-    }
-  } else if (valbits == 24) {
-    switch (int(keybits)) {
-#define CASE(n) \
-  case n:       \
-    return CuckooKeyTester<n, 24>()(key, input, values)
-      CASE(32);
-      CASE(24);
-      CASE(16);
-      CASE(12);
-      CASE(8);
-      CASE(4);
-      CASE(2);
-      CASE(1);
-#undef CASE
-      default:
-        return true;
-    }
-  } else if (valbits == 12) {
-    switch (int(keybits)) {
-#define CASE(n) \
-  case n:       \
-    return CuckooKeyTester<n, 12>()(key, input, values)
-      CASE(32);
-      CASE(24);
-      CASE(16);
-      CASE(12);
-      CASE(8);
-      CASE(4);
-      CASE(2);
-      CASE(1);
 #undef CASE
       default:
         return true;
@@ -587,10 +562,10 @@ bool CuckooValues(const Slice& key, const Slice& input,
       CASE(24);
       CASE(16);
       CASE(12);
+      CASE(10);
       CASE(8);
+      CASE(6);
       CASE(4);
-      CASE(2);
-      CASE(1);
 #undef CASE
       default:
         return true;
