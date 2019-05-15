@@ -570,6 +570,40 @@ bool CuckooValues(const Slice& key, const Slice& input,
       default:
         return true;
     }
+  } else if (keybits == 8) {
+    switch (int(valbits)) {
+#define CASE(n) \
+  case n:       \
+    return CuckooKeyTester<8, n>()(key, input, values)
+      CASE(24);
+      CASE(22);
+      CASE(20);
+      CASE(18);
+      CASE(16);
+      CASE(14);
+      CASE(12);
+      CASE(10);
+#undef CASE
+      default:
+        return true;
+    }
+  } else if (keybits == 4) {
+    switch (int(valbits)) {
+#define CASE(n) \
+  case n:       \
+    return CuckooKeyTester<4, n>()(key, input, values)
+      CASE(24);
+      CASE(22);
+      CASE(20);
+      CASE(18);
+      CASE(16);
+      CASE(14);
+      CASE(12);
+      CASE(10);
+#undef CASE
+      default:
+        return true;
+    }
   } else {
     return true;
   }
