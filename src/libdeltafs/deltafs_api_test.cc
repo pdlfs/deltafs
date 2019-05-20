@@ -670,10 +670,9 @@ class PlfsFtBenchKv
 #endif
 
 static void BM_Usage() {
-  fprintf(stderr,
-          "Use --bench=[wisc, bf, cf[n], or [a]k[b]v to launch tests.\n");
-  fprintf(stderr, "n = 8,16,24,32.\n");
-  fprintf(stderr, "a = 4,8; b = 24,22,20,18,16,14,12,10.\n");
+  fprintf(stderr, "Use --bench=[wisc, bf, cf[n], or kv[m] to launch tests.\n");
+  fprintf(stderr, "n = 28,26,24,22,20,18,16,14.\n");
+  fprintf(stderr, "m = 24,22,20,18,16,14,12,10.\n");
   fprintf(stderr, "\n");
 }
 
@@ -691,41 +690,53 @@ static void BM_LogAndApply(const char* bm) {
   } else if (strcmp(bm, "bf") == 0) {
     BF_BENCH bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "4k24v") == 0) {
+  } else if (strcmp(bm, "kv24") == 0) {
     KV_BENCH(4, 24) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "4k22v") == 0) {
+  } else if (strcmp(bm, "kv22") == 0) {
     KV_BENCH(4, 22) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "4k20v") == 0) {
+  } else if (strcmp(bm, "kv20") == 0) {
     KV_BENCH(4, 20) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "4k18v") == 0) {
+  } else if (strcmp(bm, "kv18") == 0) {
     KV_BENCH(4, 18) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "4k16v") == 0) {
+  } else if (strcmp(bm, "kv16") == 0) {
     KV_BENCH(4, 16) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "4k14v") == 0) {
+  } else if (strcmp(bm, "kv14") == 0) {
     KV_BENCH(4, 14) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "4k12v") == 0) {
+  } else if (strcmp(bm, "kv12") == 0) {
     KV_BENCH(4, 12) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "4k10v") == 0) {
+  } else if (strcmp(bm, "kv10") == 0) {
     KV_BENCH(4, 10) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "cf8") == 0) {
-    CF_BENCH(8) bench;
+  } else if (strcmp(bm, "cf28") == 0) {
+    CF_BENCH(28) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "cf16") == 0) {
-    CF_BENCH(16) bench;
+  } else if (strcmp(bm, "cf26") == 0) {
+    CF_BENCH(26) bench;
     bench.LogAndApply();
   } else if (strcmp(bm, "cf24") == 0) {
     CF_BENCH(24) bench;
     bench.LogAndApply();
-  } else if (strcmp(bm, "cf32") == 0) {
-    CF_BENCH(32) bench;
+  } else if (strcmp(bm, "cf22") == 0) {
+    CF_BENCH(22) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf20") == 0) {
+    CF_BENCH(20) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf18") == 0) {
+    CF_BENCH(18) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf16") == 0) {
+    CF_BENCH(16) bench;
+    bench.LogAndApply();
+  } else if (strcmp(bm, "cf14") == 0) {
+    CF_BENCH(14) bench;
     bench.LogAndApply();
   } else {
     BM_Usage();

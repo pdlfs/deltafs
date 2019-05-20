@@ -23,9 +23,8 @@ namespace plfsio {
 
 class CuckooTest {
  public:
-  static inline uint32_t KeyFringerprint(uint64_t ha) {
-    return CuckooFingerprint(ha, keybits_);
-  }
+  std::string data_;  // Final filter representation
+  DirOptions options_;
 
   static inline uint64_t KeyHash(uint32_t k) {
     char tmp[4];
@@ -33,11 +32,6 @@ class CuckooTest {
     EncodeFixed32(tmp, k);
     return CuckooHash(key);
   }
-
-  enum { keybits_ = 8 };
-  enum { valbits_ = 24 };
-  std::string data_;  // Final filter representation
-  DirOptions options_;
 };
 
 class CuckooFtTest : public CuckooTest {
@@ -69,9 +63,10 @@ class CuckooFtTest : public CuckooTest {
     return cf_->TEST_AddKey(key);
   }
 
-  void Finish() { data_ = cf_->TEST_Finish(); }
+  enum { keybits = 14 };
+  typedef CuckooBlock<keybits, 0> Filter;
   void Reset(uint32_t num_keys) { cf_->Reset(num_keys); }
-  typedef CuckooBlock<keybits_, 0> Filter;
+  void Finish() { data_ = cf_->TEST_Finish(); }
   Filter* cf_;
 };
 
@@ -91,7 +86,7 @@ TEST(CuckooFtTest, AltIndex) {
     uint32_t k = 0;
     for (; k < num_keys; k++) {
       uint64_t hash = KeyHash(k);
-      uint32_t fp = KeyFringerprint(hash);
+      uint32_t fp = CuckooFingerprint(hash, keybits);
       size_t i1 = hash % num_buckets, i2 = CuckooAlt(i1, fp) % num_buckets;
       size_t i3 = CuckooAlt(i2, fp) % num_buckets;
       ASSERT_TRUE(i1 == i3);
@@ -197,9 +192,11 @@ class CuckooKvTest : public CuckooTest {
     return cf_->TEST_AddKey(key, k);
   }
 
+  enum { keybits = 8 };
+  enum { valbits = 24 };
   void Finish() { data_ = cf_->TEST_Finish(); }
   void Reset(uint32_t num_keys) { cf_->Reset(num_keys); }
-  typedef CuckooBlock<keybits_, valbits_> Filter;
+  typedef CuckooBlock<keybits, valbits> Filter;
   Filter* cf_;
 };
 
@@ -432,14 +429,14 @@ class PlfsCuckoBench : protected PlfsFalsePositiveBench {
   case k:                                                 \
     n = CuckooBuildFilter<k>(&num_buckets, &filterdata_); \
     break
-      CASE(32);
+      CASE(28);
+      CASE(26);
       CASE(24);
+      CASE(22);
+      CASE(20);
+      CASE(18);
       CASE(16);
-      CASE(12);
-      CASE(10);
-      CASE(8);
-      CASE(6);
-      CASE(4);
+      CASE(14);
       default:
         fprintf(stderr, "!! FILTER CONF NOT SUPPORTED\n");
         exit(1);
@@ -521,14 +518,14 @@ class PlfsTableBench : public PlfsCuckoBench {
   case k:                                                             \
     n = CuckooBuildTable<k>(&num_buckets, &num_tables, &filterdata_); \
     break
-      CASE(32);
+      CASE(28);
+      CASE(26);
       CASE(24);
+      CASE(22);
+      CASE(20);
+      CASE(18);
       CASE(16);
-      CASE(12);
-      CASE(10);
-      CASE(8);
-      CASE(6);
-      CASE(4);
+      CASE(14);
       default:
         fprintf(stderr, "!! FILTER CONF NOT SUPPORTED\n");
         exit(1);

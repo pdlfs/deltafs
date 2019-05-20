@@ -501,14 +501,14 @@ class CuckooKeyTester {
 #define TEMPLATE1(K)                 \
   template class CuckooBlock<K, 32>; \
   template class CuckooBlock<K, 0>
-TEMPLATE1(32);
+TEMPLATE1(28);
+TEMPLATE1(26);
 TEMPLATE1(24);
+TEMPLATE1(22);
+TEMPLATE1(20);
+TEMPLATE1(18);
 TEMPLATE1(16);
-TEMPLATE1(12);
-TEMPLATE1(10);
-TEMPLATE1(8);
-TEMPLATE1(6);
-TEMPLATE1(4);
+TEMPLATE1(14);
 
 #define TEMPLATE2(V)                \
   template class CuckooBlock<4, V>; \
@@ -541,14 +541,14 @@ bool CuckooValues(const Slice& key, const Slice& input,
 #define CASE(n) \
   case n:       \
     return CuckooKeyTester<n, 32>()(key, input, values)
-      CASE(32);
+      CASE(28);
+      CASE(26);
       CASE(24);
+      CASE(22);
+      CASE(20);
+      CASE(18);
       CASE(16);
-      CASE(12);
-      CASE(10);
-      CASE(8);
-      CASE(6);
-      CASE(4);
+      CASE(14);
 #undef CASE
       default:
         return true;
@@ -558,14 +558,14 @@ bool CuckooValues(const Slice& key, const Slice& input,
 #define CASE(n) \
   case n:       \
     return CuckooKeyTester<n, 0>()(key, input, values)
-      CASE(32);
+      CASE(28);
+      CASE(26);
       CASE(24);
+      CASE(22);
+      CASE(20);
+      CASE(18);
       CASE(16);
-      CASE(12);
-      CASE(10);
-      CASE(8);
-      CASE(6);
-      CASE(4);
+      CASE(14);
 #undef CASE
       default:
         return true;
