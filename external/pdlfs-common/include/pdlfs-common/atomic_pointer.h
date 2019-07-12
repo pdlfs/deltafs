@@ -63,7 +63,13 @@ namespace port {
 
 // Mac OS
 #elif defined(PDLFS_OS_MACOSX)
-inline void MemoryBarrier() { OSMemoryBarrier(); }
+inline void MemoryBarrier() {
+#if __cplusplus >= 201103L
+  std::atomic_thread_fence(std::memory_order_seq_cst);
+#else
+  OSMemoryBarrier();
+#endif
+}
 #define PLATFORM_HAVE_MEMORY_BARRIER
 
 // Gcc on x86
@@ -184,8 +190,8 @@ class AtomicPointer {
     __asm__ __volatile__(
         "ldx [%[rep_]], %[val] \n\t"
         "membar #LoadLoad|#LoadStore \n\t"
-        : [val] "=r"(val)
-        : [rep_] "r"(&rep_)
+        : [ val ] "=r"(val)
+        : [ rep_ ] "r"(&rep_)
         : "memory");
     return val;
   }
@@ -195,7 +201,7 @@ class AtomicPointer {
         "membar #LoadStore|#StoreStore \n\t"
         "stx %[v], [%[rep_]] \n\t"
         :
-        : [rep_] "r"(&rep_), [v] "r"(v)
+        : [ rep_ ] "r"(&rep_), [ v ] "r"(v)
         : "memory");
   }
 
@@ -218,8 +224,8 @@ class AtomicPointer {
   inline void* Acquire_Load() const {
     void* val;
     __asm__ __volatile__("ld8.acq %[val] = [%[rep_]] \n\t"
-                         : [val] "=r"(val)
-                         : [rep_] "r"(&rep_)
+                         : [ val ] "=r"(val)
+                         : [ rep_ ] "r"(&rep_)
                          : "memory");
     return val;
   }
@@ -227,7 +233,7 @@ class AtomicPointer {
   inline void Release_Store(void* v) {
     __asm__ __volatile__("st8.rel [%[rep_]] = %[v]  \n\t"
                          :
-                         : [rep_] "r"(&rep_), [v] "r"(v)
+                         : [ rep_ ] "r"(&rep_), [ v ] "r"(v)
                          : "memory");
   }
 
