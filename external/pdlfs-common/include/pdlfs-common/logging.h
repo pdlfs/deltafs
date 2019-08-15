@@ -18,9 +18,8 @@
 //  - Warn(__LOG_ARGS__, "format string", va_args)
 //  - Error(__LOG_ARGS__, "format string", va_args)
 //
-// If glog is present, all logging will be implemented by that.
-// Otherwise these log entries will go to stderr.
-//
+// If google-glog is present, all logging activities will go to it.
+// We log to stderr otherwise.
 namespace pdlfs {
 
 #define __LOG_ARGS__ ::pdlfs::Logger::Default(), __FILE__, __LINE__
@@ -28,6 +27,15 @@ namespace pdlfs {
 // Emit a verbose log entry to *info_log if info_log is non-NULL.
 extern void Verbose(Logger* info_log, const char* file, int line, int level,
                     const char* format, ...)
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((__format__(__printf__, 5, 6)))
+#endif
+    ;
+
+// Emit a verbose log entry to *info_log if info_log is non-NULL.
+// This is the same as the Verbose call.
+extern void Log(Logger* info_log, const char* file, int line, int level,
+                const char* format, ...)
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((__format__(__printf__, 5, 6)))
 #endif

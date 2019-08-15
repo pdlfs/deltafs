@@ -108,22 +108,6 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
   }
 }
 
-static void EmitDBLog(Logger* log, const char* fmt, va_list ap) {
-  static const int lv = 3;
-  std::string fmt2 = "DB - ";
-  fmt2 += fmt;
-  log->Logv("pdlfs.xx", 0, 0, lv, fmt2.c_str(), ap);
-}
-
-void Log(Logger* info_log, const char* fmt, ...) {
-  if (info_log != NULL) {
-    va_list ap;
-    va_start(ap, fmt);
-    EmitDBLog(info_log, fmt, ap);
-    va_end(ap);
-  }
-}
-
 static Status DoWriteStringToFile(Env* env, const Slice& data,
                                   const char* fname, bool should_sync) {
   WritableFile* file;

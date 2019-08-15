@@ -28,6 +28,16 @@ void Verbose(Logger* info_log, const char* file, int line, int level,
   }
 }
 
+void Log(Logger* info_log, const char* file, int line, int level,
+         const char* fmt, ...) {
+  if (info_log != NULL) {
+    va_list ap;
+    va_start(ap, fmt);
+    info_log->Logv(file, line, 0, level, fmt, ap);
+    va_end(ap);
+  }
+}
+
 void Info(Logger* info_log, const char* file, int line, const char* fmt, ...) {
   if (info_log != NULL) {
     va_list ap;
