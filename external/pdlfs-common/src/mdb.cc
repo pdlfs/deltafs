@@ -105,7 +105,7 @@ Status MDB::SetIdx(const DirId& id, const DirIndex& idx, Tx* tx) {
     options.sync = options_.sync;
     s = db_->Put(options, key.prefix(), encoding);
   } else {
-    tx->batch.Put(key.prefix(), encoding);
+    tx->bat.Put(key.prefix(), encoding);
   }
   return s;
 }
@@ -120,7 +120,7 @@ Status MDB::SetInfo(const DirId& id, const DirInfo& info, Tx* tx) {
     options.sync = options_.sync;
     s = db_->Put(options, key.prefix(), encoding);
   } else {
-    tx->batch.Put(key.prefix(), encoding);
+    tx->bat.Put(key.prefix(), encoding);
   }
   return s;
 }
@@ -149,7 +149,7 @@ Status MDB::SetNode(const DirId& id, const Slice& hash, const Stat& stat,
     options.sync = options_.sync;
     s = db_->Put(options, key.Encode(), value);
   } else {
-    tx->batch.Put(key.Encode(), value);
+    tx->bat.Put(key.Encode(), value);
   }
   return s;
 }
@@ -162,7 +162,7 @@ Status MDB::DelIdx(const DirId& id, Tx* tx) {
     options.sync = options_.sync;
     s = db_->Delete(options, key.prefix());
   } else {
-    tx->batch.Delete(key.prefix());
+    tx->bat.Delete(key.prefix());
   }
   return s;
 }
@@ -175,7 +175,7 @@ Status MDB::DelInfo(const DirId& id, Tx* tx) {
     options.sync = options_.sync;
     s = db_->Delete(options, key.prefix());
   } else {
-    tx->batch.Delete(key.prefix());
+    tx->bat.Delete(key.prefix());
   }
   return s;
 }
@@ -189,7 +189,7 @@ Status MDB::DelNode(const DirId& id, const Slice& hash, Tx* tx) {
     options.sync = options_.sync;
     s = db_->Delete(options, key.Encode());
   } else {
-    tx->batch.Delete(key.Encode());
+    tx->bat.Delete(key.Encode());
   }
   return s;
 }

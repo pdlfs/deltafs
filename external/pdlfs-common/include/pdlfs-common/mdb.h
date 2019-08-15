@@ -98,7 +98,7 @@ class MDB {
 
   struct Tx {
     const Snapshot* snap;
-    WriteBatch batch;
+    WriteBatch bat;
   };
   Tx* CreateTx(bool with_snapshot = true) {
     Tx* tx = new Tx;
@@ -134,7 +134,7 @@ class MDB {
     if (tx != NULL) {
       WriteOptions options;
       options.sync = options_.sync;
-      return db_->Write(options, &tx->batch);
+      return db_->Write(options, &tx->bat);
     } else {
       return Status::OK();
     }
