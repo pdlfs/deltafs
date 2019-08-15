@@ -2,6 +2,7 @@
 /cmake-bu*/
 /bu*/
 /.idea/
+.DS_Store
 *.dylib
 *.so
 *.a
