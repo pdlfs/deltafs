@@ -19,17 +19,19 @@
 
 namespace pdlfs {
 
+#if defined(DELTAFS) || defined(INDEXFS)
 class DirIndex;  // GIGA index
+#endif
 
 struct DirInfo;
 struct DirId {
-  DirId() {}
+  DirId();
 #if !defined(DELTAFS)
-  DirId(uint64_t ino) : ino(ino) {}
+  explicit DirId(uint64_t ino);
 #endif
-  DirId(const Stat& stat)
+  explicit DirId(const Stat& stat)
       : reg(stat.RegId()), snap(stat.SnapId()), ino(stat.InodeNo()) {}
-  DirId(const LookupStat& stat)
+  explicit DirId(const LookupStat& stat)
       : reg(stat.RegId()), snap(stat.SnapId()), ino(stat.InodeNo()) {}
   DirId(uint64_t reg, uint64_t snap, uint64_t ino)
       : reg(reg), snap(snap), ino(ino) {}
@@ -48,13 +50,8 @@ struct DirId {
 
 inline bool operator==(const DirId& x, const DirId& y) {
 #if defined(DELTAFS)
-  if (x.reg != y.reg) {
-    return false;
-  } else {
-    if (x.snap != y.snap) {
-      return false;
-    }
-  }
+  if (x.reg != y.reg) return false;
+  if (x.snap != y.snap) return false;
 #endif
 
   return (x.ino == y.ino);

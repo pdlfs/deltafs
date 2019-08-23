@@ -16,15 +16,21 @@
 namespace pdlfs {
 
 std::string DirId::DebugString() const {
+#define LLU(x) static_cast<unsigned long long>(x)
   char tmp[30];
 #if defined(DELTAFS)
-  snprintf(tmp, sizeof(tmp), "uuid[%llu:%llu:%llu]", (unsigned long long)reg,
-           (unsigned long long)snap, (unsigned long long)ino);
+  snprintf(tmp, sizeof(tmp), "dirid[%llu:%llu:%llu]", LLU(reg), LLU(snap),
+           LLU(ino));
 #else
-  snprintf(tmp, sizeof(tmp), "uuid[%llu]", (unsigned long long)ino);
+  snprintf(tmp, sizeof(tmp), "dirid[%llu]", LLU(ino));
 #endif
   return tmp;
 }
+
+DirId::DirId() : reg(0), snap(0), ino(0) {}
+#if !defined(DELTAFS)
+DirId::DirId(uint64_t ino) : reg(0), snap(0), ino(ino) {}
+#endif
 
 #if defined(DELTAFS)
 #define KEY_INITIALIZER(id, tp) id.reg, id.snap, id.ino, tp
