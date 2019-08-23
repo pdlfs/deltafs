@@ -32,6 +32,28 @@ DirId::DirId() : reg(0), snap(0), ino(0) {}
 DirId::DirId(uint64_t ino) : reg(0), snap(0), ino(ino) {}
 #endif
 
+namespace {
+int compare64(uint64_t a, uint64_t b) {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+}  // namespace
+int DirId::compare(const DirId& other) const {
+  int r;
+#if defined(DELTAFS)
+  r = compare64(reg, other.reg);
+  if (r != 0) return r;
+  r = compare64(snap, other.snap);
+  if (r != 0) {
+    return r;
+  }
+#endif
+
+  r = compare64(ino, other.ino);
+  return r;
+}
+
 #if defined(DELTAFS)
 #define KEY_INITIALIZER(id, tp) id.reg, id.snap, id.ino, tp
 #else

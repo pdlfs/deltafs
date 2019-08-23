@@ -58,23 +58,7 @@ inline bool operator==(const DirId& x, const DirId& y) {
 }
 
 inline bool operator!=(const DirId& x, const DirId& y) {
-  return !(x == y);  // Works for all file system ports
-}
-
-inline int DirId::compare(const DirId& other) const {
-#if defined(DELTAFS)
-  int r = reg - other.reg;
-  if (r != 0) {
-    return r;
-  } else {
-    r = snap - other.snap;
-    if (r != 0) {
-      return r;
-    }
-  }
-#endif
-
-  return (ino - other.ino);
+  return !(x == y);  // Reuse operator==
 }
 
 struct MDBOptions {
