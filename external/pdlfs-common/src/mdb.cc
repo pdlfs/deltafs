@@ -71,7 +71,7 @@ Status MDB::GetNode(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
   return __Get<Key, Tx, ReadOptions>(id, hash, stat, name, tx);
 }
 
-Status MDB::GetIdx(const DirId& id, DirIndex* idx, Tx* tx) {
+Status MDB::GetDirIdx(const DirId& id, DirIndex* idx, Tx* tx) {
   Status s;
   Key key(KEY_INITIALIZER(id, kDirIdxType));
   std::string tmp;
@@ -113,7 +113,7 @@ Status MDB::SetNode(const DirId& id, const Slice& hash, const Stat& stat,
   return __Set<Key, Tx, WriteOptions>(id, hash, stat, name, tx);
 }
 
-Status MDB::SetIdx(const DirId& id, const DirIndex& idx, Tx* tx) {
+Status MDB::SetDirIdx(const DirId& id, const DirIndex& idx, Tx* tx) {
   Status s;
   Key key(KEY_INITIALIZER(id, kDirIdxType));
   Slice encoding = idx.Encode();
@@ -146,7 +146,7 @@ Status MDB::DelNode(const DirId& id, const Slice& hash, Tx* tx) {
   return __Delete<Key, Tx, WriteOptions>(id, hash, tx);
 }
 
-Status MDB::DelIdx(const DirId& id, Tx* tx) {
+Status MDB::DelDirIdx(const DirId& id, Tx* tx) {
   Status s;
   Key key(KEY_INITIALIZER(id, kDirIdxType));
   if (tx == NULL) {

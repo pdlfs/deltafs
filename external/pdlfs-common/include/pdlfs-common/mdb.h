@@ -300,9 +300,9 @@ class MDB : public MXDB<DB> {
   ~MDB();
 
   struct Tx {
+    Tx() {}  // Note that snap is initialized via Create Tx
     const Snapshot* snap;
     WriteBatch bat;
-    Tx() {}
   };
   Tx* CreateTx(bool snap = true) {  // Start a new Tx
     return __StartTx<Tx>(snap);
@@ -314,9 +314,9 @@ class MDB : public MXDB<DB> {
                  const Slice& name, Tx* tx);
   Status DelNode(const DirId& id, const Slice& hash, Tx* tx);
 
-  Status GetIdx(const DirId& id, DirIndex* idx, Tx* tx);
-  Status SetIdx(const DirId& id, const DirIndex& idx, Tx* tx);
-  Status DelIdx(const DirId& id, Tx* tx);
+  Status GetDirIdx(const DirId& id, DirIndex* idx, Tx* tx);
+  Status SetDirIdx(const DirId& id, const DirIndex& idx, Tx* tx);
+  Status DelDirIdx(const DirId& id, Tx* tx);
 
   Status GetInfo(const DirId& id, DirInfo* info, Tx* tx);
   Status SetInfo(const DirId& id, const DirInfo& info, Tx* tx);

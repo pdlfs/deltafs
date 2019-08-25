@@ -37,7 +37,7 @@ Status MDS::SRV::LoadDir(const DirId& id, DirInfo* info, DirIndex* index) {
 
   // Load directory index. Create if missing...
   if (s.ok()) {
-    s = mdb_->GetIdx(id, index, mdb_tx);
+    s = mdb_->GetDirIdx(id, index, mdb_tx);
     if (s.IsNotFound()) {
       int zserver = PickupServer(id) % giga_.num_virtual_servers;
       DirIndex tmp(zserver, &giga_);
@@ -45,7 +45,7 @@ Status MDS::SRV::LoadDir(const DirId& id, DirInfo* info, DirIndex* index) {
       if (mdb_tx == NULL) {
         mdb_tx = mdb_->CreateTx();
       }
-      s = mdb_->SetIdx(id, tmp, mdb_tx);
+      s = mdb_->SetDirIdx(id, tmp, mdb_tx);
       if (s.ok()) {
         index->Swap(tmp);
       }
