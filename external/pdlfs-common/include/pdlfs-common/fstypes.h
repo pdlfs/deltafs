@@ -52,6 +52,7 @@ class Key {
   Slice hash() const;
   Slice prefix() const;
 
+  void SetSuffix(const Slice& suffix) { SetHash(suffix); }
   Slice Encode() const { return Slice(data(), size()); }
   size_t size() const { return size_; }
   const char* data() const { return rep_; }
