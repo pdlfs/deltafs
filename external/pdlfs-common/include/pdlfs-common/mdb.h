@@ -61,37 +61,26 @@ inline bool operator!=(const DirId& x, const DirId& y) {
   return !(x == y);  // Reuse operator==
 }
 
-template <typename DX = DB>
-struct MXDBOptions {
-  MXDBOptions();
-  // Default: false
-  bool verify_checksums;
-  // Default: false
-  bool sync;
-
-  DX* db;
-};
-
-template <typename DX>
-MXDBOptions<DX>::MXDBOptions()
-    : verify_checksums(false), sync(false), db(NULL) {}
-
-// This is template for access filesystem metadata as KV pairs in a KV-store.
-// Providing this as template allows for DB implementations. The default DB
-// implementation is the LevelDB realization of a LSM-tree.
+// This is a set of templates for access filesystem metadata as KV pairs in a
+// KV-store. Providing this as templates allows for different key types and DB
+// implementations. The default DB implementation is a custom LevelDB
+// realization of a LSM-tree. Examples of DB replacements include the
+// original LevelDB, the RocksDB, and the WiredTiger realization of a LSM-tree.
+// A big assumption is that all these DB implementations have a syntactically
+// equivalent interface exposing functions including Get, Put, Delete, Write,
+// GetIterator, GetSnapshot, and ReleaseSnapshot, and use option
+// structs such as ReadOptions and WriteOptions.
 template <typename DX = DB>
 class MXDB {
  public:
-  explicit MXDB(const MXDBOptions<DX>& opts) : options_(opts), db_(opts.db) {
-    assert(db_ != NULL);
-  }
+  explicit MXDB(DX* dx) : dx_(dx) {}
   ~MXDB();
 
   template <typename TX>
   TX* __StartTx(bool with_snapshot) {
     TX* tx = new TX;
     if (with_snapshot) {
-      tx->snap = db_->GetSnapshot();
+      tx->snap = dx_->GetSnapshot();
     } else {
       tx->snap = NULL;
     }
@@ -100,27 +89,25 @@ class MXDB {
 
   template <typename KX, typename TX, typename OPT>
   Status __Get(const DirId& id, const Slice& suf, Stat* stat, Slice* name,
-               TX* tx);
+               OPT* opt, TX* tx);
   template <typename KX, typename TX, typename OPT>
   Status __Set(const DirId& id, const Slice& suf, const Stat& stat,
-               const Slice& name, TX* tx);
+               const Slice& name, OPT* opt, TX* tx);
   template <typename KX, typename TX, typename OPT>
-  Status __Delete(const DirId& id, const Slice& suf, TX* tx);
+  Status __Delete(const DirId& id, const Slice& suf, OPT* opt, TX* tx);
 
   typedef std::vector<std::string> NameList;
   typedef std::vector<Stat> StatList;
   template <typename KX, typename TX, typename OPT>
-  size_t __List(const DirId& id, StatList* stats, NameList* names, TX* tx,
-                size_t limit);
+  size_t __List(const DirId& id, StatList* stats, NameList* names, OPT* opt,
+                TX* tx, size_t limit);
   template <typename KX, typename TX, typename OPT>
-  bool __Exists(const DirId& id, const Slice& suf, TX* tx);
+  bool __Exists(const DirId& id, const Slice& suf, OPT* opt, TX* tx);
 
   template <typename TX, typename OPT>
-  Status __Commit(TX* tx) {
+  Status __Commit(OPT* opt, TX* tx) {
     if (tx != NULL) {
-      OPT options;
-      options.sync = options_.sync;
-      return db_->Write(options, &tx->bat);
+      return dx_->Write(*opt, &tx->bat);
     } else {
       return Status::OK();
     }
@@ -130,15 +117,14 @@ class MXDB {
   void __Release(TX* tx) {
     if (tx != NULL) {
       if (tx->snap != NULL) {
-        db_->ReleaseSnapshot(tx->snap);
+        dx_->ReleaseSnapshot(tx->snap);
       }
       delete tx;
     }
   }
 
  protected:
-  MXDBOptions<DX> options_;
-  DX* const db_;
+  DX* const dx_;
 };
 
 template <typename DX>
@@ -153,7 +139,7 @@ MXDB<DX>::~MXDB() {}  // Not deleting DB as it is not owned by us
 template <typename DX>
 template <typename KX, typename TX, typename OPT>
 Status MXDB<DX>::__Set(const DirId& id, const Slice& suf, const Stat& stat,
-                       const Slice& name, TX* tx) {
+                       const Slice& name, OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetHash(suf);
@@ -176,9 +162,7 @@ Status MXDB<DX>::__Set(const DirId& id, const Slice& suf, const Stat& stat,
   // If TX is present, write into the TX's internal batch.
   // Otherwise, directly apply to DB.
   if (tx == NULL) {
-    OPT options;
-    options.sync = options_.sync;
-    s = db_->Put(options, key.Encode(), value);
+    s = dx_->Put(*opt, key.Encode(), value);
   } else {
     tx->bat.Put(key.Encode(), value);
   }
@@ -188,17 +172,15 @@ Status MXDB<DX>::__Set(const DirId& id, const Slice& suf, const Stat& stat,
 template <typename DX>
 template <typename KX, typename TX, typename OPT>
 Status MXDB<DX>::__Get(const DirId& id, const Slice& suf, Stat* stat,
-                       Slice* name, TX* tx) {
+                       Slice* name, OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetHash(suf);
   std::string tmp;
-  OPT options;
-  options.verify_checksums = options_.verify_checksums;
   if (tx != NULL) {
-    options.snapshot = tx->snap;
+    opt->snapshot = tx->snap;
   }
-  s = db_->Get(options, key.Encode(), &tmp);
+  s = dx_->Get(*opt, key.Encode(), &tmp);
   if (s.ok()) {
     Slice input(tmp);
     if (!stat->DecodeFrom(&input)) {
@@ -212,14 +194,12 @@ Status MXDB<DX>::__Get(const DirId& id, const Slice& suf, Stat* stat,
 
 template <typename DX>
 template <typename KX, typename TX, typename OPT>
-Status MXDB<DX>::__Delete(const DirId& id, const Slice& suf, TX* tx) {
+Status MXDB<DX>::__Delete(const DirId& id, const Slice& suf, OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetHash(suf);
   if (tx == NULL) {
-    OPT options;
-    options.sync = options_.sync;
-    s = db_->Delete(options, key.Encode());
+    s = dx_->Delete(*opt, key.Encode());
   } else {
     tx->bat.Delete(key.Encode());
   }
@@ -229,16 +209,13 @@ Status MXDB<DX>::__Delete(const DirId& id, const Slice& suf, TX* tx) {
 template <typename DX>
 template <typename KX, typename TX, typename OPT>
 size_t MXDB<DX>::__List(const DirId& id, StatList* stats, NameList* names,
-                        TX* tx, size_t limit) {
+                        OPT* opt, TX* tx, size_t limit) {
   KX key(KEY_INITIALIZER(id, kDirEntType));
-  OPT options;
-  options.verify_checksums = options_.verify_checksums;
-  options.fill_cache = false;
   if (tx != NULL) {
-    options.snapshot = tx->snap;
+    opt->snapshot = tx->snap;
   }
   Slice prefix = key.prefix();
-  Iterator* iter = db_->NewIterator(options);
+  Iterator* iter = dx_->NewIterator(*opt);
   iter->Seek(prefix);
   Slice name;
   Stat stat;
@@ -267,19 +244,16 @@ size_t MXDB<DX>::__List(const DirId& id, StatList* stats, NameList* names,
 
 template <typename DX>
 template <typename KX, typename TX, typename OPT>
-bool MXDB<DX>::__Exists(const DirId& id, const Slice& suf, TX* tx) {
+bool MXDB<DX>::__Exists(const DirId& id, const Slice& suf, OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetHash(suf);
-  OPT options;
-  options.verify_checksums = options_.verify_checksums;
-  options.limit = 0;
   if (tx != NULL) {
-    options.snapshot = tx->snap;
+    opt->snapshot = tx->snap;
   }
   Slice ignored;
   char tmp[1];
-  s = db_->Get(options, key.Encode(), &ignored, tmp, sizeof(tmp));
+  s = dx_->Get(*opt, key.Encode(), &ignored, tmp, sizeof(tmp));
   assert(!s.IsBufferFull());
   if (!s.ok()) {
     return false;
@@ -290,8 +264,19 @@ bool MXDB<DX>::__Exists(const DirId& id, const Slice& suf, TX* tx) {
 
 #undef KEY_INITIALIZER
 
-struct MDBOptions : public MXDBOptions<DB> {
+struct MDBOptions {
   MDBOptions();
+  // Always set fill_cache to the following for all ReadOptions.
+  // Default: false
+  bool fill_cache;
+  // Always set verify_checksums to the following for all ReadOptions.
+  // Default: false
+  bool verify_checksums;
+  // Always set sync to the following for all WriteOptions.
+  // Default: false
+  bool sync;
+  // The underlying KV-store.
+  DB* db;
 };
 
 class MDB : public MXDB<DB> {
@@ -326,13 +311,20 @@ class MDB : public MXDB<DB> {
               size_t limit);
   bool Exists(const DirId& id, const Slice& hash, Tx* tx);
 
-  Status Commit(Tx* tx) {  // Finish a Tx by submitting all its writes
-    return __Commit<Tx, WriteOptions>(tx);
+  // Finish a Tx by submitting all its writes
+  Status Commit(Tx* tx) {
+    WriteOptions options;
+    return __Commit<Tx, WriteOptions>(&options, tx);
   }
 
   void Release(Tx* tx) {  // Discard a Tx
     __Release<Tx>(tx);
   }
+
+ private:
+  MDBOptions options_;
+  void operator=(const MDB&);  // No copying allowed
+  MDB(const MDB&);
 };
 
 }  // namespace pdlfs
