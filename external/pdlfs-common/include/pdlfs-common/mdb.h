@@ -132,7 +132,7 @@ class MXDB {
   size_t __List(const DirId& id, StatList* stats, NameList* names, OPT* opt,
                 TX* tx, size_t limit);
   template <typename KX, typename TX, typename OPT>
-  bool __Exists(const DirId& id, const Slice& suf, OPT* opt, TX* tx);
+  Status __Exists(const DirId& id, const Slice& suf, OPT* opt, TX* tx);
 
   template <typename TX, typename OPT>
   Status __Commit(OPT* opt, TX* tx) {
@@ -393,7 +393,7 @@ size_t MXDB<DX, xslice, xstatus, fmt>::__List(  ////
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
 template <typename KX, typename TX, typename OPT>
-bool MXDB<DX, xslice, xstatus, fmt>::__Exists(  ////
+Status MXDB<DX, xslice, xstatus, fmt>::__Exists(  ////
     const DirId& id, const Slice& suf, OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
@@ -404,7 +404,10 @@ bool MXDB<DX, xslice, xstatus, fmt>::__Exists(  ////
   }
   std::string ignored;
   xstatus st = dx_->Get(*opt, keyenc, &ignored);
-  return (st.ok());
+  if (!st.ok()) {
+    s = XSTATUS(st);
+  }
+  return s;
 }
 
 #undef KEY_INITIALIZER
