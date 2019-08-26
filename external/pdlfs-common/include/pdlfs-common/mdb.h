@@ -115,7 +115,7 @@ class MXDB {
 
   template <typename Iter>
   struct Dir {
-    uint32_t n;  // Number dir entries scanned
+    size_t n;  // Number dir entries scanned
     std::string key_prefix;
     Iter* iter;
   };
@@ -157,9 +157,9 @@ class MXDB {
   DX* const dx_;
 };
 
-template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
-MXDB<DX, xslice, xstatus, fmt>::~MXDB() {}
-
+#define MXDBTEMDECL \
+  template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+#define MXDBTEM MXDB<DX, xslice, xstatus, fmt>
 // Quickly convert a foreign DB status to ours.
 #define XSTATUS(x) Status::IOError(x.ToString())  // Pretty dirty. But works!
 #if defined(DELTAFS)
@@ -167,13 +167,13 @@ MXDB<DX, xslice, xstatus, fmt>::~MXDB() {}
 #else
 #define KEY_INITIALIZER(id, tp) id.ino, tp
 #endif
+MXDBTEMDECL
+MXDBTEM::~MXDB() {}
 
-template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+MXDBTEMDECL
 template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, xslice, xstatus, fmt>::__Set(const DirId& id, const Slice& suf,
-                                             const Stat& stat,
-                                             const Slice& name, OPT* opt,
-                                             TX* tx) {
+Status MXDBTEM::__Set(const DirId& id, const Slice& suf, const Stat& stat,
+                      const Slice& name, OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
@@ -211,11 +211,10 @@ Status MXDB<DX, xslice, xstatus, fmt>::__Set(const DirId& id, const Slice& suf,
   return s;
 }
 
-template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+MXDBTEMDECL
 template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, xslice, xstatus, fmt>::__Get(const DirId& id, const Slice& suf,
-                                             Stat* stat, Slice* name, OPT* opt,
-                                             TX* tx) {
+Status MXDBTEM::__Get(const DirId& id, const Slice& suf, Stat* stat,
+                      Slice* name, OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
@@ -242,11 +241,9 @@ Status MXDB<DX, xslice, xstatus, fmt>::__Get(const DirId& id, const Slice& suf,
   return s;
 }
 
-template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+MXDBTEMDECL
 template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, xslice, xstatus, fmt>::__Delete(const DirId& id,
-                                                const Slice& suf, OPT* opt,
-                                                TX* tx) {
+Status MXDBTEM::__Delete(const DirId& id, const Slice& suf, OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
@@ -262,10 +259,10 @@ Status MXDB<DX, xslice, xstatus, fmt>::__Delete(const DirId& id,
   return s;
 }
 
-template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+MXDBTEMDECL
 template <typename Iter, typename KX, typename TX, typename OPT>
-typename MXDB<DX, xslice, xstatus, fmt>::template Dir<Iter>*
-MXDB<DX, xslice, xstatus, fmt>::__OpenDir(const DirId& id, OPT* opt, TX* tx) {
+typename MXDBTEM::template Dir<Iter>* MXDBTEM::__OpenDir(  ////
+    const DirId& id, OPT* opt, TX* tx) {
   KX key_prefix(KEY_INITIALIZER(id, kDirEntType));
   if (tx != NULL) {
     opt->snapshot = tx->snap;
@@ -285,10 +282,9 @@ MXDB<DX, xslice, xstatus, fmt>::__OpenDir(const DirId& id, OPT* opt, TX* tx) {
   return dir;
 }
 
-template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+MXDBTEMDECL
 template <typename Iter>
-Status MXDB<DX, xslice, xstatus, fmt>::__ReadDir(Dir<Iter>* dir, Stat* stat,
-                                                 std::string* name) {
+Status MXDBTEM::__ReadDir(Dir<Iter>* dir, Stat* stat, std::string* name) {
   if (dir == NULL) return Status::NotFound(Slice());
   Iter* const iter = dir->iter;
   if (!iter->Valid()) {  // Either we hit the bottom or an error
@@ -326,20 +322,19 @@ Status MXDB<DX, xslice, xstatus, fmt>::__ReadDir(Dir<Iter>* dir, Stat* stat,
   iter->Next();
 }
 
-template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+MXDBTEMDECL
 template <typename Iter>
-void MXDB<DX, xslice, xstatus, fmt>::__CloseDir(Dir<Iter>* dir) {
+void MXDBTEM::__CloseDir(Dir<Iter>* dir) {
   if (dir != NULL) {
     delete dir->iter;
     delete dir;
   }
 }
 
-template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+MXDBTEMDECL
 template <typename Iter, typename KX, typename TX, typename OPT>
-size_t MXDB<DX, xslice, xstatus, fmt>::__List(const DirId& id, StatList* stats,
-                                              NameList* names, OPT* opt, TX* tx,
-                                              size_t limit) {
+size_t MXDBTEM::__List(const DirId& id, StatList* stats, NameList* names,
+                       OPT* opt, TX* tx, size_t limit) {
   KX prefix_key(KEY_INITIALIZER(id, kDirEntType));
   if (tx != NULL) {
     opt->snapshot = tx->snap;
@@ -382,10 +377,9 @@ size_t MXDB<DX, xslice, xstatus, fmt>::__List(const DirId& id, StatList* stats,
   return num_entries;
 }
 
-template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+MXDBTEMDECL
 template <typename KX, typename TX, typename OPT>
-bool MXDB<DX, xslice, xstatus, fmt>::__Exists(const DirId& id, const Slice& suf,
-                                              OPT* opt, TX* tx) {
+bool MXDBTEM::__Exists(const DirId& id, const Slice& suf, OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
@@ -400,6 +394,8 @@ bool MXDB<DX, xslice, xstatus, fmt>::__Exists(const DirId& id, const Slice& suf,
 
 #undef KEY_INITIALIZER
 #undef XSTATUS
+#undef MXDBTEM
+#undef MXDBTEMDECL
 
 struct MDBOptions {
   MDBOptions();
