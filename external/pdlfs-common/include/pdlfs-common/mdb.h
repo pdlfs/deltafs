@@ -89,12 +89,12 @@ template <typename DX = DB, typename xslice = Slice,  // Foreign slice
               Status,  // Foreign db status type to which we must port
           MXDBFormat fmt = kNameInValue>
 class MXDB {
- public:
+ protected:
   explicit MXDB(DX* dx) : dx_(dx) {}
   ~MXDB();
 
   template <typename TX>
-  TX* __StartTx(bool with_snapshot) {
+  TX* STARTTX(bool with_snapshot) {  // Open Tx
     TX* tx = new TX;
     if (with_snapshot) {
       tx->snap = dx_->GetSnapshot();
@@ -105,13 +105,13 @@ class MXDB {
   }
 
   template <typename KX, typename TX, typename OPT>
-  Status __Get(const DirId& id, const Slice& suf, Stat* stat, Slice* name,
-               OPT* opt, TX* tx);
+  Status GET(const DirId& id, const Slice& suf, Stat* stat, Slice* name,
+             OPT* opt, TX* tx);
   template <typename KX, typename TX, typename OPT>
-  Status __Set(const DirId& id, const Slice& suf, const Stat& stat,
-               const Slice& name, OPT* opt, TX* tx);
+  Status SET(const DirId& id, const Slice& suf, const Stat& stat,
+             const Slice& name, OPT* opt, TX* tx);
   template <typename KX, typename TX, typename OPT>
-  Status __Delete(const DirId& id, const Slice& suf, OPT* opt, TX* tx);
+  Status DELETE(const DirId& id, const Slice& suf, OPT* opt, TX* tx);
 
   template <typename Iter>
   struct Dir {
@@ -120,22 +120,22 @@ class MXDB {
     Iter* iter;
   };
   template <typename Iter, typename KX, typename TX, typename OPT>
-  Dir<Iter>* __OpenDir(const DirId& id, OPT* opt, TX* tx);
+  Dir<Iter>* OPENDIR(const DirId& id, OPT* opt, TX* tx);
   template <typename Iter>
-  Status __ReadDir(Dir<Iter>* dir, Stat* stat, std::string* name);
+  Status READDIR(Dir<Iter>* dir, Stat* stat, std::string* name);
   template <typename Iter>
-  void __CloseDir(Dir<Iter>* dir);
+  void CLOSEDIR(Dir<Iter>* dir);
 
   typedef std::vector<std::string> NameList;
   typedef std::vector<Stat> StatList;
   template <typename Iter, typename KX, typename TX, typename OPT>
-  size_t __List(const DirId& id, StatList* stats, NameList* names, OPT* opt,
-                TX* tx, size_t limit);
+  size_t LIST(const DirId& id, StatList* stats, NameList* names, OPT* opt,
+              TX* tx, size_t limit);
   template <typename KX, typename TX, typename OPT>
-  Status __Exists(const DirId& id, const Slice& suf, OPT* opt, TX* tx);
+  Status EXISTS(const DirId& id, const Slice& suf, OPT* opt, TX* tx);
 
   template <typename TX, typename OPT>
-  Status __Commit(OPT* opt, TX* tx) {
+  Status COMMIT(OPT* opt, TX* tx) {
     if (tx != NULL) {
       return dx_->Write(*opt, &tx->bat);
     } else {
@@ -144,7 +144,7 @@ class MXDB {
   }
 
   template <typename TX>
-  void __Release(TX* tx) {
+  void RELEASE(TX* tx) {
     if (tx != NULL) {
       if (tx->snap != NULL) {
         dx_->ReleaseSnapshot(tx->snap);
@@ -153,7 +153,6 @@ class MXDB {
     }
   }
 
- protected:
   DX* const dx_;
 };
 
@@ -179,7 +178,7 @@ MXDB<DX, xslice, xstatus, fmt>::~MXDB() {  ////
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
 template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, xslice, xstatus, fmt>::__Set(  ////
+Status MXDB<DX, xslice, xstatus, fmt>::SET(  ////
     const DirId& id, const Slice& suf, const Stat& stat, const Slice& name,
     OPT* opt, TX* tx) {
   Status s;
@@ -221,7 +220,7 @@ Status MXDB<DX, xslice, xstatus, fmt>::__Set(  ////
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
 template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, xslice, xstatus, fmt>::__Get(  ////
+Status MXDB<DX, xslice, xstatus, fmt>::GET(  ////
     const DirId& id, const Slice& suf, Stat* stat, Slice* name, OPT* opt,
     TX* tx) {
   Status s;
@@ -252,7 +251,7 @@ Status MXDB<DX, xslice, xstatus, fmt>::__Get(  ////
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
 template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, xslice, xstatus, fmt>::__Delete(  ////
+Status MXDB<DX, xslice, xstatus, fmt>::DELETE(  ////
     const DirId& id, const Slice& suf, OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
@@ -272,7 +271,7 @@ Status MXDB<DX, xslice, xstatus, fmt>::__Delete(  ////
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
 template <typename Iter, typename KX, typename TX, typename OPT>
 typename MXDB<DX, xslice, xstatus, fmt>::template Dir<Iter>*
-MXDB<DX, xslice, xstatus, fmt>::__OpenDir(  ////
+MXDB<DX, xslice, xstatus, fmt>::OPENDIR(  ////
     const DirId& id, OPT* opt, TX* tx) {
   KX key_prefix(KEY_INITIALIZER(id, kDirEntType));
   if (tx != NULL) {
@@ -295,7 +294,7 @@ MXDB<DX, xslice, xstatus, fmt>::__OpenDir(  ////
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
 template <typename Iter>
-Status MXDB<DX, xslice, xstatus, fmt>::__ReadDir(  ////
+Status MXDB<DX, xslice, xstatus, fmt>::READDIR(  ////
     Dir<Iter>* dir, Stat* stat, std::string* name) {
   if (dir == NULL) return Status::NotFound(Slice());
   Iter* const iter = dir->iter;
@@ -336,7 +335,7 @@ Status MXDB<DX, xslice, xstatus, fmt>::__ReadDir(  ////
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
 template <typename Iter>
-void MXDB<DX, xslice, xstatus, fmt>::__CloseDir(  ////
+void MXDB<DX, xslice, xstatus, fmt>::CLOSEDIR(  ////
     Dir<Iter>* dir) {
   if (dir != NULL) {
     delete dir->iter;
@@ -346,7 +345,7 @@ void MXDB<DX, xslice, xstatus, fmt>::__CloseDir(  ////
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
 template <typename Iter, typename KX, typename TX, typename OPT>
-size_t MXDB<DX, xslice, xstatus, fmt>::__List(  ////
+size_t MXDB<DX, xslice, xstatus, fmt>::LIST(  ////
     const DirId& id, StatList* stats, NameList* names, OPT* opt, TX* tx,
     size_t limit) {
   KX prefix_key(KEY_INITIALIZER(id, kDirEntType));
@@ -393,7 +392,7 @@ size_t MXDB<DX, xslice, xstatus, fmt>::__List(  ////
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
 template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, xslice, xstatus, fmt>::__Exists(  ////
+Status MXDB<DX, xslice, xstatus, fmt>::EXISTS(  ////
     const DirId& id, const Slice& suf, OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
@@ -441,7 +440,7 @@ class MDB : public MXDB<> {
     WriteBatch bat;
   };
   Tx* CreateTx(bool snap = true) {  // Start a new Tx
-    return __StartTx<Tx>(snap);
+    return STARTTX<Tx>(snap);
   }
 
   Status GetNode(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
@@ -465,11 +464,11 @@ class MDB : public MXDB<> {
   // Finish a Tx by submitting all its writes
   Status Commit(Tx* tx) {
     WriteOptions options;
-    return __Commit<Tx, WriteOptions>(&options, tx);
+    return COMMIT<Tx, WriteOptions>(&options, tx);
   }
 
   void Release(Tx* tx) {  // Discard a Tx
-    __Release<Tx>(tx);
+    RELEASE<Tx>(tx);
   }
 
  private:

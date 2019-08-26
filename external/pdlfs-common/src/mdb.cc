@@ -72,7 +72,7 @@ Status MDB::GetNode(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
   ReadOptions read_options;
   read_options.verify_checksums = options_.verify_checksums;
   read_options.fill_cache = options_.fill_cache;
-  return __Get<Key>(id, hash, stat, name, &read_options, tx);
+  return GET<Key>(id, hash, stat, name, &read_options, tx);
 }
 
 Status MDB::GetDirIdx(const DirId& id, DirIndex* idx, Tx* tx) {
@@ -118,7 +118,7 @@ Status MDB::SetNode(const DirId& id, const Slice& hash, const Stat& stat,
                     const Slice& name, Tx* tx) {
   WriteOptions write_options;
   write_options.sync = options_.sync;
-  return __Set<Key>(id, hash, stat, name, &write_options, tx);
+  return SET<Key>(id, hash, stat, name, &write_options, tx);
 }
 
 Status MDB::SetDirIdx(const DirId& id, const DirIndex& idx, Tx* tx) {
@@ -152,7 +152,7 @@ Status MDB::SetInfo(const DirId& id, const DirInfo& info, Tx* tx) {
 
 Status MDB::DelNode(const DirId& id, const Slice& hash, Tx* tx) {
   WriteOptions write_options;
-  return __Delete<Key>(id, hash, &write_options, tx);
+  return DELETE<Key>(id, hash, &write_options, tx);
 }
 
 Status MDB::DelDirIdx(const DirId& id, Tx* tx) {
@@ -186,7 +186,7 @@ size_t MDB::List(const DirId& id, StatList* stats, NameList* names, Tx* tx,
   ReadOptions read_options;
   read_options.verify_checksums = options_.verify_checksums;
   read_options.fill_cache = false;
-  return __List<Iterator, Key>(id, stats, names, &read_options, tx, limit);
+  return LIST<Iterator, Key>(id, stats, names, &read_options, tx, limit);
 }
 
 bool MDB::Exists(const DirId& id, const Slice& hash, Tx* tx) {
@@ -195,8 +195,8 @@ bool MDB::Exists(const DirId& id, const Slice& hash, Tx* tx) {
   read_options.fill_cache = options_.fill_cache;
   // No need to read any prefix of the value
   read_options.limit = 0;
-
-  return __Exists<Key>(id, hash, &read_options, tx);
+  Status s = EXISTS<Key>(id, hash, &read_options, tx);
+  return s.ok();
 }
 
 }  // namespace pdlfs
