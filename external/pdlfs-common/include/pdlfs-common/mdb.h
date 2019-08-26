@@ -312,33 +312,40 @@ template <typename DX, MXDBFormat fmt>
 template <typename KX, typename TX, typename OPT>
 size_t MXDB<DX, fmt>::__List(const DirId& id, StatList* stats, NameList* names,
                              OPT* opt, TX* tx, size_t limit) {
-  KX key(KEY_INITIALIZER(id, kDirEntType));
+  KX prefix_key(KEY_INITIALIZER(id, kDirEntType));
   if (tx != NULL) {
     opt->snapshot = tx->snap;
   }
-  Slice prefix = key.prefix();
-  Iterator* iter = dx_->NewIterator(*opt);
+  Slice prefix = prefix_key.prefix();
+  Iterator* const iter = dx_->NewIterator(*opt);
   iter->Seek(prefix);
   Slice name;
   Stat stat;
   size_t num_entries = 0;
   for (; iter->Valid() && num_entries < limit; iter->Next()) {
-    Slice k = iter->key();
-    if (k.starts_with(prefix)) {
-      Slice input = iter->value();
-      if (stat.DecodeFrom(&input) && GetLengthPrefixedSlice(&input, &name)) {
-        if (stats != NULL) {
-          stats->push_back(stat);
-        }
-        if (names != NULL) {
-          names->push_back(name.ToString());
-        }
-        num_entries++;
-      }
-    } else {
+    Slice input = iter->value();
+    Slice key = iter->key();
+    if (!key.starts_with(prefix))  // Hitting end of directory
       break;
+    if (!stat.DecodeFrom(&input)) {
+      break;  // Error
     }
+
+    if (fmt == kNameInKey) {
+      key.remove_prefix(prefix.size());
+      name = key;
+    } else if (!GetLengthPrefixedSlice(&input, &name)) {
+      break;  // Error
+    }
+
+    if (names != NULL) names->push_back(name.ToString());
+    if (stats != NULL) stats->push_back(stat);
+
+    num_entries++;
   }
+
+  // Sorry but we cannot reuse cursor positions.
+  // Use ReadDir instead.
   delete iter;
 
   return num_entries;
