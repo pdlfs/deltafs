@@ -186,7 +186,7 @@ size_t MDB::List(const DirId& id, StatList* stats, NameList* names, Tx* tx,
   ReadOptions read_options;
   read_options.verify_checksums = options_.verify_checksums;
   read_options.fill_cache = false;
-  return __List<Key>(id, stats, names, &read_options, tx, limit);
+  return __List<Iterator, Key>(id, stats, names, &read_options, tx, limit);
 }
 
 bool MDB::Exists(const DirId& id, const Slice& hash, Tx* tx) {

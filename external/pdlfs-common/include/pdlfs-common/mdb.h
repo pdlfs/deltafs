@@ -84,7 +84,10 @@ enum MXDBFormat {
 // equivalent interface exposing operations including Get, Put, Delete, Write,
 // NewIterator, GetSnapshot, and ReleaseSnapshot, using option structs such as
 // ReadOptions and WriteOptions, and using an Iterator object for range queries.
-template <typename DX = DB, MXDBFormat fmt = kNameInValue>
+template <typename DX = DB, typename xslice = Slice,  // Foreign slice
+          typename xstatus =
+              Status,  // Foreign db status type to which we must port
+          MXDBFormat fmt = kNameInValue>
 class MXDB {
  public:
   explicit MXDB(DX* dx) : dx_(dx) {}
@@ -116,7 +119,7 @@ class MXDB {
     std::string key_prefix;
     Iter* iter;
   };
-  template <typename KX, typename TX, typename OPT, typename Iter>
+  template <typename Iter, typename KX, typename TX, typename OPT>
   Dir<Iter>* __OpenDir(const DirId& id, OPT* opt, TX* tx);
   template <typename Iter>
   Status __ReadDir(Dir<Iter>* dir, Stat* stat, std::string* name);
@@ -125,7 +128,7 @@ class MXDB {
 
   typedef std::vector<std::string> NameList;
   typedef std::vector<Stat> StatList;
-  template <typename KX, typename TX, typename OPT>
+  template <typename Iter, typename KX, typename TX, typename OPT>
   size_t __List(const DirId& id, StatList* stats, NameList* names, OPT* opt,
                 TX* tx, size_t limit);
   template <typename KX, typename TX, typename OPT>
@@ -154,63 +157,75 @@ class MXDB {
   DX* const dx_;
 };
 
-template <typename DX, MXDBFormat fmt>
-MXDB<DX, fmt>::~MXDB() {}  // Not deleting DB as it is not owned by us
+template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+MXDB<DX, xslice, xstatus, fmt>::~MXDB() {}
 
+// Quickly convert a foreign DB status to ours.
+#define XSTATUS(x) Status::IOError(x.ToString())  // Pretty dirty. But works!
 #if defined(DELTAFS)
 #define KEY_INITIALIZER(id, tp) id.reg, id.snap, id.ino, tp
 #else
 #define KEY_INITIALIZER(id, tp) id.ino, tp
 #endif
 
-template <typename DX, MXDBFormat fmt>
+template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
 template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, fmt>::__Set(const DirId& id, const Slice& suf, const Stat& stat,
-                            const Slice& name, OPT* opt, TX* tx) {
+Status MXDB<DX, xslice, xstatus, fmt>::__Set(const DirId& id, const Slice& suf,
+                                             const Stat& stat,
+                                             const Slice& name, OPT* opt,
+                                             TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
+  xslice keyenc = xslice(key.data(), key.size());
   // If value size < 200, we use an immediate buf space.
   // Otherwise, we use dynamic mem.
   std::string buf;
   char tmp[200];
-  Slice value;
+  xslice value;
   Slice stat_encoding = stat.EncodeTo(tmp);
   if (fmt == kNameInKey) {
-    value = stat_encoding;
+    value = xslice(stat_encoding.data(), stat_encoding.size());
   } else if (5 + name.size() < sizeof(tmp) - stat_encoding.size()) {
     char* const begin = tmp;
     char* end = begin + stat_encoding.size();
     end = EncodeLengthPrefixedSlice(end, name);
-    value = Slice(begin, end - begin);
+    value = xslice(begin, end - begin);
   } else {
     buf.append(stat_encoding.data(), stat_encoding.size());
     PutLengthPrefixedSlice(&buf, name);
-    value = Slice(buf);
+    value = xslice(buf);
   }
+
   // If TX is present, write into the TX's internal batch.
   // Otherwise, directly apply to DB.
   if (tx == NULL) {
-    s = dx_->Put(*opt, key.Encode(), value);
+    xstatus st = dx_->Put(*opt, keyenc, value);
+    if (!st.ok()) {
+      s = XSTATUS(st);
+    }
   } else {
-    tx->bat.Put(key.Encode(), value);
+    tx->bat.Put(keyenc, value);
   }
+
   return s;
 }
 
-template <typename DX, MXDBFormat fmt>
+template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
 template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, fmt>::__Get(const DirId& id, const Slice& suf, Stat* stat,
-                            Slice* name, OPT* opt, TX* tx) {
+Status MXDB<DX, xslice, xstatus, fmt>::__Get(const DirId& id, const Slice& suf,
+                                             Stat* stat, Slice* name, OPT* opt,
+                                             TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
+  xslice keyenc = xslice(key.data(), key.size());
   std::string tmp;
   if (tx != NULL) {
     opt->snapshot = tx->snap;
   }
-  s = dx_->Get(*opt, key.Encode(), &tmp);
-  if (s.ok()) {
+  xstatus st = dx_->Get(*opt, keyenc, &tmp);
+  if (st.ok()) {
     Slice input(tmp);
     if (!stat->DecodeFrom(&input)) {
       s = Status::Corruption(Slice());
@@ -221,34 +236,41 @@ Status MXDB<DX, fmt>::__Get(const DirId& id, const Slice& suf, Stat* stat,
         s = Status::Corruption(Slice());
       }
     }
+  } else {
+    s = XSTATUS(st);
   }
   return s;
 }
 
-template <typename DX, MXDBFormat fmt>
+template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
 template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, fmt>::__Delete(const DirId& id, const Slice& suf, OPT* opt,
-                               TX* tx) {
+Status MXDB<DX, xslice, xstatus, fmt>::__Delete(const DirId& id,
+                                                const Slice& suf, OPT* opt,
+                                                TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
+  xslice keyenc = xslice(key.data(), key.size());
   if (tx == NULL) {
-    s = dx_->Delete(*opt, key.Encode());
+    xstatus st = dx_->Delete(*opt, keyenc);
+    if (!st.ok()) {
+      s = XSTATUS(st);
+    }
   } else {
-    tx->bat.Delete(key.Encode());
+    tx->bat.Delete(keyenc);
   }
   return s;
 }
 
-template <typename DX, MXDBFormat fmt>
-template <typename KX, typename TX, typename OPT, typename Iter>
-typename MXDB<DX, fmt>::template Dir<Iter>* MXDB<DX, fmt>::__OpenDir(
-    const DirId& id, OPT* opt, TX* tx) {
-  KX key(KEY_INITIALIZER(id, kDirEntType));
+template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+template <typename Iter, typename KX, typename TX, typename OPT>
+typename MXDB<DX, xslice, xstatus, fmt>::template Dir<Iter>*
+MXDB<DX, xslice, xstatus, fmt>::__OpenDir(const DirId& id, OPT* opt, TX* tx) {
+  KX key_prefix(KEY_INITIALIZER(id, kDirEntType));
   if (tx != NULL) {
     opt->snapshot = tx->snap;
   }
-  Slice prefix = key.prefix();
+  xslice prefix = xslice(key_prefix.data(), key_prefix.size());
   Iter* const iter = dx_->NewIterator(*opt);
   if (iter == NULL) {
     return NULL;
@@ -263,21 +285,26 @@ typename MXDB<DX, fmt>::template Dir<Iter>* MXDB<DX, fmt>::__OpenDir(
   return dir;
 }
 
-template <typename DX, MXDBFormat fmt>
+template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
 template <typename Iter>
-Status MXDB<DX, fmt>::__ReadDir(Dir<Iter>* dir, Stat* stat, std::string* name) {
+Status MXDB<DX, xslice, xstatus, fmt>::__ReadDir(Dir<Iter>* dir, Stat* stat,
+                                                 std::string* name) {
   if (dir == NULL) return Status::NotFound(Slice());
   Iter* const iter = dir->iter;
-  if (!iter->Valid()) {
-    if (iter->status().ok()) {
+  if (!iter->Valid()) {  // Either we hit the bottom or an error
+    xstatus st = iter->status();
+    if (st.ok()) {
       return Status::NotFound(Slice());
     } else {
-      //
+      return XSTATUS(st);
     }
   }
 
-  Slice input = iter->value();
-  Slice key = iter->key();
+  xslice xinput = iter->value();
+  xslice xkey = iter->key();
+
+  Slice input = Slice(xinput.data(), xinput.size());
+  Slice key = Slice(xkey.data(), xkey.size());
   if (!key.starts_with(dir->key_prefix))  // Hitting the end of directory
     return Status::NotFound(Slice());
   if (!stat->DecodeFrom(&input)) {
@@ -299,32 +326,36 @@ Status MXDB<DX, fmt>::__ReadDir(Dir<Iter>* dir, Stat* stat, std::string* name) {
   iter->Next();
 }
 
-template <typename DX, MXDBFormat fmt>
+template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
 template <typename Iter>
-void MXDB<DX, fmt>::__CloseDir(Dir<Iter>* dir) {
+void MXDB<DX, xslice, xstatus, fmt>::__CloseDir(Dir<Iter>* dir) {
   if (dir != NULL) {
     delete dir->iter;
     delete dir;
   }
 }
 
-template <typename DX, MXDBFormat fmt>
-template <typename KX, typename TX, typename OPT>
-size_t MXDB<DX, fmt>::__List(const DirId& id, StatList* stats, NameList* names,
-                             OPT* opt, TX* tx, size_t limit) {
+template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
+template <typename Iter, typename KX, typename TX, typename OPT>
+size_t MXDB<DX, xslice, xstatus, fmt>::__List(const DirId& id, StatList* stats,
+                                              NameList* names, OPT* opt, TX* tx,
+                                              size_t limit) {
   KX prefix_key(KEY_INITIALIZER(id, kDirEntType));
   if (tx != NULL) {
     opt->snapshot = tx->snap;
   }
   Slice prefix = prefix_key.prefix();
-  Iterator* const iter = dx_->NewIterator(*opt);
+  Iter* const iter = dx_->NewIterator(*opt);
   iter->Seek(prefix);
   Slice name;
   Stat stat;
   size_t num_entries = 0;
   for (; iter->Valid() && num_entries < limit; iter->Next()) {
-    Slice input = iter->value();
-    Slice key = iter->key();
+    xslice xinput = iter->value();
+    xslice xkey = iter->key();
+
+    Slice input = Slice(xinput.data(), xinput.size());
+    Slice key = Slice(xkey.data(), xkey.size());
     if (!key.starts_with(prefix))  // Hitting end of directory
       break;
     if (!stat.DecodeFrom(&input)) {
@@ -351,22 +382,24 @@ size_t MXDB<DX, fmt>::__List(const DirId& id, StatList* stats, NameList* names,
   return num_entries;
 }
 
-template <typename DX, MXDBFormat fmt>
+template <typename DX, typename xslice, typename xstatus, MXDBFormat fmt>
 template <typename KX, typename TX, typename OPT>
-bool MXDB<DX, fmt>::__Exists(const DirId& id, const Slice& suf, OPT* opt,
-                             TX* tx) {
+bool MXDB<DX, xslice, xstatus, fmt>::__Exists(const DirId& id, const Slice& suf,
+                                              OPT* opt, TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
+  xslice keyenc = xslice(key.data(), key.size());
   if (tx != NULL) {
     opt->snapshot = tx->snap;
   }
   std::string ignored;
-  s = dx_->Get(*opt, key.Encode(), &ignored);
-  return (s.ok());
+  xstatus st = dx_->Get(*opt, keyenc, &ignored);
+  return (st.ok());
 }
 
 #undef KEY_INITIALIZER
+#undef XSTATUS
 
 struct MDBOptions {
   MDBOptions();
@@ -383,7 +416,7 @@ struct MDBOptions {
   DB* db;
 };
 
-class MDB : public MXDB<DB> {
+class MDB : public MXDB<> {
  public:
   explicit MDB(const MDBOptions& opts);
   ~MDB();
