@@ -227,7 +227,7 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
           tx->Ref();
         }
 
-        Slice name;
+        std::string name;
         s = mdb_->GetNode(dir_id, name_hash, &ret->stat, &name, mdb_tx);
 
         if (s.ok() && paranoid_checks_) {
@@ -238,7 +238,7 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
           }
 
           Error(__LOG_ARGS__, "%s/%s: %s", options.dir_id.DebugString().c_str(),
-                name.ToString().c_str(), s.ToString().c_str());
+                name.c_str(), s.ToString().c_str());
         }
 
         mutex_.Lock();
@@ -322,7 +322,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
         MDB::Tx* mdb_tx = tx->rep();
 
         Stat* stat = &ret->stat;
-        Slice name;
+        std::string name;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
 
         if (s.ok() && paranoid_checks_) {
@@ -332,7 +332,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
             s = Status::Corruption("name and hash don't match");
 
             Error(__LOG_ARGS__, "%s/%s: %s",
-                  options.dir_id.DebugString().c_str(), name.ToString().c_str(),
+                  options.dir_id.DebugString().c_str(), name.c_str(),
                   s.ToString().c_str());
           }
         }
@@ -461,7 +461,7 @@ Status MDS::SRV::Unlink(const UnlinkOptions& options, UnlinkRet* ret) {
         MDB::Tx* mdb_tx = tx->rep();
 
         Stat* stat = &ret->stat;
-        Slice name;
+        std::string name;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
 
         if (s.ok() && paranoid_checks_) {
@@ -472,7 +472,7 @@ Status MDS::SRV::Unlink(const UnlinkOptions& options, UnlinkRet* ret) {
           }
 
           Error(__LOG_ARGS__, "%s/%s: %s", options.dir_id.DebugString().c_str(),
-                name.ToString().c_str(), s.ToString().c_str());
+                name.c_str(), s.ToString().c_str());
         }
 
         if (s.ok()) {
@@ -598,7 +598,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         MDB::Tx* mdb_tx = tx->rep();
 
         Stat* stat = &ret->stat;
-        Slice name;
+        std::string name;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
 
         if (s.ok() && paranoid_checks_) {
@@ -608,7 +608,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
             s = Status::Corruption("name and hash don't match");
 
             Error(__LOG_ARGS__, "%s/%s: %s",
-                  options.dir_id.DebugString().c_str(), name.ToString().c_str(),
+                  options.dir_id.DebugString().c_str(), name.c_str(),
                   s.ToString().c_str());
           }
         }
@@ -733,7 +733,7 @@ Status MDS::SRV::Utime(const UtimeOptions& options, UtimeRet* ret) {
         d->tx.Release_Store(tx);
         MDB::Tx* mdb_tx = tx->rep();
 
-        Slice name;
+        std::string name;
         Stat* stat = &ret->stat;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
         // TODO: paranoid checks
@@ -820,7 +820,7 @@ Status MDS::SRV::Trunc(const TruncOptions& options, TruncRet* ret) {
         d->tx.Release_Store(tx);
         MDB::Tx* mdb_tx = tx->rep();
 
-        Slice name;
+        std::string name;
         Stat* stat = &ret->stat;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
         // TODO: paranoid checks
@@ -966,7 +966,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
 
         ret->stat.SetLeaseDue(0);
 
-        Slice name;
+        std::string name;
         Stat stat;
         s = mdb_->GetNode(dir_id, name_hash, &stat, &name, mdb_tx);
         // TODO: paranoid checks
@@ -1106,7 +1106,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
         MDB::Tx* mdb_tx = tx->rep();
 
         Stat* stat = &ret->stat;
-        Slice name;
+        std::string name;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
 
         if (s.ok() && paranoid_checks_) {
@@ -1117,7 +1117,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
           }
 
           Error(__LOG_ARGS__, "%s/%s: %s", options.dir_id.DebugString().c_str(),
-                name.ToString().c_str(), s.ToString().c_str());
+                name.c_str(), s.ToString().c_str());
         }
 
         if (s.ok()) {

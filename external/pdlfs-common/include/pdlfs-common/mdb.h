@@ -105,7 +105,7 @@ class MXDB {
   }
 
   template <typename KX, typename TX, typename OPT>
-  Status GET(const DirId& id, const Slice& suf, Stat* stat, Slice* name,
+  Status GET(const DirId& id, const Slice& suf, Stat* stat, std::string* name,
              OPT* opt, TX* tx);
   template <typename KX, typename TX, typename OPT>
   Status SET(const DirId& id, const Slice& suf, const Stat& stat,
@@ -221,7 +221,7 @@ Status MXDB<DX, xslice, xstatus, fmt>::SET(  ////
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
 template <typename KX, typename TX, typename OPT>
 Status MXDB<DX, xslice, xstatus, fmt>::GET(  ////
-    const DirId& id, const Slice& suf, Stat* stat, Slice* name, OPT* opt,
+    const DirId& id, const Slice& suf, Stat* stat, std::string* name, OPT* opt,
     TX* tx) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
@@ -234,13 +234,16 @@ Status MXDB<DX, xslice, xstatus, fmt>::GET(  ////
   xstatus st = dx_->Get(*opt, keyenc, &tmp);
   if (st.ok()) {
     Slice input(tmp);
+    Slice filename;
     if (!stat->DecodeFrom(&input)) {
       s = Status::Corruption(Slice());
-    } else {
+    } else if (name != NULL) {  // Filename requested
       if (fmt == kNameInKey) {
-        *name = suf;
-      } else if (!GetLengthPrefixedSlice(&input, name)) {
+        *name = suf.ToString();
+      } else if (!GetLengthPrefixedSlice(&input, &filename)) {
         s = Status::Corruption(Slice());
+      } else {
+        *name = filename.ToString();
       }
     }
   } else {
@@ -443,8 +446,8 @@ class MDB : public MXDB<> {
     return STARTTX<Tx>(snap);
   }
 
-  Status GetNode(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
-                 Tx* tx);
+  Status GetNode(const DirId& id, const Slice& hash, Stat* stat,
+                 std::string* name, Tx* tx);
   Status SetNode(const DirId& id, const Slice& hash, const Stat& stat,
                  const Slice& name, Tx* tx);
   Status DelNode(const DirId& id, const Slice& hash, Tx* tx);

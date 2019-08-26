@@ -67,8 +67,8 @@ MDB::~MDB() {}
 #define KEY_INITIALIZER(id, tp) id.ino, tp
 #endif
 
-Status MDB::GetNode(const DirId& id, const Slice& hash, Stat* stat, Slice* name,
-                    Tx* tx) {
+Status MDB::GetNode(const DirId& id, const Slice& hash, Stat* stat,
+                    std::string* name, Tx* tx) {
   ReadOptions read_options;
   read_options.verify_checksums = options_.verify_checksums;
   read_options.fill_cache = options_.fill_cache;
