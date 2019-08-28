@@ -100,7 +100,8 @@ class Stat {
 #endif
 
  public:
-  // scratch[...] should at least have sizeof(Stat) of bytes, although
+  enum { kMaxEncodedLength = 80 };
+  // scratch[...] should at least have kMaxEncodedLength of bytes, although
   // the real size used after encoding may be much smaller.
   Slice EncodeTo(char* scratch) const;
   // Return true if success, false otherwise.

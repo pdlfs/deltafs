@@ -77,53 +77,68 @@ TEST(KeyTest, KeyEncoding) {
   }
 }
 
-class StatTest {};
+class StatTest {
+  // Empty.
+};
 
 TEST(StatTest, StatEncoding) {
   Stat stat;
+#if defined(DELTAFS)
   stat.SetRegId(13);
   stat.SetSnapId(37);
+#endif
   stat.SetInodeNo(12345);
-  stat.SetFileMode(678);
   stat.SetFileSize(90);
+  stat.SetFileMode(678);
+#if defined(DELTAFS) || defined(INDEXFS)
+  stat.SetZerothServer(777);
+#endif
   stat.SetUserId(11);
   stat.SetGroupId(22);
-  stat.SetChangeTime(11223344);
   stat.SetModifyTime(44332211);
-  stat.SetZerothServer(777);
+  stat.SetChangeTime(11223344);
   stat.AssertAllSet();
-  char tmp[sizeof(Stat)];
+  char tmp[100];
+  ASSERT_TRUE(sizeof(tmp) >= Stat::kMaxEncodedLength);
   Slice encoding = stat.EncodeTo(tmp);
   Stat stat2;
   bool r = stat2.DecodeFrom(encoding);
   ASSERT_TRUE(r);
-  char tmp2[sizeof(Stat)];
+  char tmp2[sizeof(tmp)];
   Slice encoding2 = stat2.EncodeTo(tmp2);
   ASSERT_EQ(encoding, encoding2);
 }
 
-class LookupEntryTest {};
+#if defined(DELTAFS) || defined(INDEXFS)
+class LookupEntryTest {
+  // Empty
+};
 
 TEST(LookupEntryTest, EntryEncoding) {
-  LookupStat ent;
-  ent.SetRegId(13);
-  ent.SetSnapId(37);
-  ent.SetInodeNo(12345);
-  ent.SetDirMode(678);
-  ent.SetUserId(11);
-  ent.SetGroupId(22);
-  ent.SetZerothServer(777);
-  ent.SetLeaseDue(55667788);
-  ent.AssertAllSet();
-  char tmp[sizeof(LookupStat)];
-  Slice encoding = ent.EncodeTo(tmp);
-  LookupStat ent2;
-  bool r = ent2.DecodeFrom(encoding);
+  LookupStat stat;
+#if defined(DELTAFS)
+  stat.SetRegId(13);
+  stat.SetSnapId(37);
+#endif
+  stat.SetInodeNo(12345);
+  stat.SetDirMode(678);
+  stat.SetZerothServer(777);
+  stat.SetUserId(11);
+  stat.SetGroupId(22);
+  stat.SetLeaseDue(55667788);
+  stat.AssertAllSet();
+  char tmp[100];
+  ASSERT_TRUE(sizeof(tmp) >= LookupStat::kMaxEncodedLength);
+  Slice encoding = stat.EncodeTo(tmp);
+  LookupStat stat2;
+  bool r = stat2.DecodeFrom(encoding);
   ASSERT_TRUE(r);
-  char tmp2[sizeof(LookupStat)];
-  Slice encoding2 = ent2.EncodeTo(tmp2);
+  char tmp2[sizeof(tmp)];
+  Slice encoding2 = stat2.EncodeTo(tmp2);
   ASSERT_EQ(encoding, encoding2);
 }
+
+#endif
 
 }  // namespace pdlfs
 
