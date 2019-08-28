@@ -165,7 +165,10 @@ Slice Stat::EncodeTo(char* scratch) const {
   p = EncodeVarint64(p, InodeNo());
   p = EncodeVarint64(p, FileSize());
   p = EncodeVarint32(p, FileMode());
+#if defined(DELTAFS) || defined(INDEXFS)
   p = EncodeVarint32(p, ZerothServer());
+#endif
+
   p = EncodeVarint32(p, UserId());
   p = EncodeVarint32(p, GroupId());
   p = EncodeVarint64(p, ModifyTime());
@@ -194,28 +197,40 @@ bool Stat::DecodeFrom(Slice* input) {
   uint64_t ino;
   uint64_t size;
   uint32_t mode;
-  uint32_t zeroth_server;
-  uint32_t uid;
-  uint32_t gid;
-  uint64_t mtime;
-  uint64_t ctime;
   if (!GetVarint64(input, &ino) || !GetVarint64(input, &size) ||
-      !GetVarint32(input, &mode) || !GetVarint32(input, &zeroth_server) ||
-      !GetVarint32(input, &uid) || !GetVarint32(input, &gid) ||
-      !GetVarint64(input, &mtime) || !GetVarint64(input, &ctime)) {
+      !GetVarint32(input, &mode)) {
     return false;
   } else {
     SetInodeNo(ino);
     SetFileSize(size);
     SetFileMode(mode);
+  }
+
+#if defined(DELTAFS) || defined(INDEXFS)
+  uint32_t zeroth_server;
+  if (!GetVarint32(input, &zeroth_server)) {
+    return false;
+  } else {
     SetZerothServer(zeroth_server);
+  }
+#endif
+
+  uint32_t uid;
+  uint32_t gid;
+  uint64_t mtime;
+  uint64_t ctime;
+  if (!GetVarint32(input, &uid) || !GetVarint32(input, &gid) ||
+      !GetVarint64(input, &mtime) || !GetVarint64(input, &ctime)) {
+    return false;
+  } else {
     SetUserId(uid);
     SetGroupId(gid);
     SetModifyTime(mtime);
     SetChangeTime(ctime);
-    AssertAllSet();
-    return true;
   }
+
+  AssertAllSet();
+  return true;
 }
 
 Slice LookupStat::EncodeTo(char* scratch) const {
