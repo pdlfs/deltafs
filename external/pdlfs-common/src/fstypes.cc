@@ -233,6 +233,8 @@ bool Stat::DecodeFrom(Slice* input) {
   return true;
 }
 
+#if defined(DELTAFS) || defined(INDEXFS)
+
 Slice LookupStat::EncodeTo(char* scratch) const {
   char* p = scratch;
 #if defined(DELTAFS)
@@ -301,5 +303,7 @@ void LookupStat::CopyFrom(const Stat& stat) {
   SetUserId(stat.UserId());
   SetGroupId(stat.GroupId());
 }
+
+#endif
 
 }  // namespace pdlfs
