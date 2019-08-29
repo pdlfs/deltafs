@@ -23,6 +23,9 @@
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env_files.h"
+#include "pdlfs-common/leveldb/db/db.h"
+#include "pdlfs-common/leveldb/db/options.h"
+#include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/murmur.h"
 #include "pdlfs-common/mutexlock.h"
