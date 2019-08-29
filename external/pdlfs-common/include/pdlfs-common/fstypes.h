@@ -31,37 +31,89 @@ enum KeyType {
   kInoType = 7  // Dedicated inode entry that can be hard linked (tablefs only)
 };
 
+// Keys used for accessing metadata stored in KV-stores. In general, each key
+// consists of a prefix and suffix. The prefix encodes a parent directory id and
+// the type of the key as specified in KeyType. The suffix is typically either a
+// filename or a hash of it.
 class Key {
  public:
-  Key() {}
+  Key() {}  // Intentionally not initialized for performance.
+  // Initialize a key using a given prefix encoding.
   explicit Key(const Slice& prefix);
-  explicit Key(uint64_t ino, KeyType type);
-  explicit Key(uint64_t snap, uint64_t ino, KeyType type);
-  explicit Key(uint64_t reg, uint64_t snap, uint64_t ino, KeyType type);
-  explicit Key(const Stat& stat, KeyType type);
-  void SetType(KeyType type);
+#if defined(DELTAFS)
+  Key(uint64_t reg, uint64_t snap, uint64_t ino, KeyType type);
+  Key(uint64_t snap, uint64_t ino, KeyType type);
+#endif
+  // Directly initialize a key using a given parent directory inode no.
+  // along with the type of the key.
+  Key(uint64_t ino, KeyType type);
+  // Quickly initialize a key using information
+  // provided by a LookupStat or Stat.
+#if defined(DELTAFS) || defined(INDEXFS)  // Tablefs does not use LookupStat
+  Key(const LookupStat& stat, KeyType type);
+#endif
+  Key(const Stat& stat, KeyType type);
+
+  void SetType(KeyType type);  // Reset the type of a key.
+  // The following functions reset the suffix of
+  // a key in different ways.
+  void SetSuffix(const Slice& suff);
+  void SetIntegerUniquifier(uint64_t uni);
+
+  // Other alternatives for setting suffixes.
   void SetName(const Slice& name);
-  void SetHash(const Slice& hash);
   void SetOffset(uint64_t off);
+#if defined(DELTAFS) || defined(INDEXFS)
+  void SetHash(const Slice& hash);
+#endif
 
-  uint64_t reg_id() const;
-  uint64_t snap_id() const;
-  uint64_t inode() const;
-  uint64_t offset() const;
+  Slice prefix() const;  // Return the prefix encoding of a key in its entirety.
+  // Return the type of a key.
   KeyType type() const;
-  Slice hash() const;
-  Slice prefix() const;
+  // Return the parent inode no. of a key.
+  uint64_t inode() const;
+#if defined(DELTAFS)  // Return reg id and snap id individually.
+  uint64_t snap_id() const;
+  uint64_t reg_id() const;
+#endif
 
-  void SetSuffix(const Slice& suffix) { SetHash(suffix); }
+  // Return the suffix encoding of a key in its entirety.
+  Slice suffix() const;
+  // Return suffix as an integer.
+  uint64_t offset() const;
+#if defined(DELTAFS) || defined(INDEXFS)
+  Slice hash() const;
+#endif
+
+  // Return the complete encoding (prefix + suffix) of key.
   Slice Encode() const { return Slice(data(), size()); }
+
+  // Return the buf space. Deltafs and indexfs use immediate buf spaces.
+#if defined(DELTAFS) || defined(INDEXFS)
   size_t size() const { return size_; }
   const char* data() const { return rep_; }
   char* data() { return rep_; }
 
+  // Tablefs uses std::string.
+#elif defined(TABLEFS)
+  size_t size() const { return rep_.size(); }
+  const char* data() const { return rep_.data(); }
+  char* data() { return rep_.data(); }
+#endif
+
  private:
+  // Deltafs and indexfs keys have fixed max length.
+  // So we use an immediate buf space.
+#if defined(DELTAFS) || defined(INDEXFS)
   // Intentionally copyable
   char rep_[50];
   size_t size_;
+
+  // Tablefs stores filenames in keys, which can
+  // be super lengthy. We use std::string.
+#elif defined(TABLEFS)
+  std::string rep_;
+#endif
 };
 
 // Common inode structure shared by deltafs, indexfs, and tablefs.

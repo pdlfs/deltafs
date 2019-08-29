@@ -17,6 +17,19 @@
 
 namespace pdlfs {
 
+// All keys (regardless of the filesystem type) consist of a prefix component
+// and a suffix component. Tablefs keys have variable length. Their prefixes
+// each encode a parent directory inode no. and the type of the key. They have a
+// fixed length. Their suffixes are typically complete filenames and have
+// variable length. Indexfs keys are similar to those of tablefs except that
+// their suffixes each store the hash of a filename rather than the filename
+// itself. For this reason indexfs keys have a fixed length. Deltafs keys ...
+
+#define TABLEFS_KEY_RESERV 128  // Number of bytes reserved for tablefs keys
+// Deltafs and indexfs store hashes of filenames in key suffixes.
+// Moreover, these suffixes are fixed sized, either 64-bit (8B)
+// or 128-bit (16B) long.
+#if defined(DELTAFS) || defined(INDEXFS)
 void Key::SetName(const Slice& name) {
 #ifndef NDEBUG
   std::string hash;
@@ -38,79 +51,150 @@ void Key::SetOffset(uint64_t off) {
   memcpy(rep_ + size_ - 8, &off, 8);
 }
 
-static Slice PackPrefix(char* dst, uint64_t R, uint64_t S, uint64_t D,
-                        KeyType T) {
-#if !defined(DELTAFS)
-  uint64_t composite = (D << 8) | (T & 0xff);
-  composite = htobe64(composite);
-  memcpy(dst, &composite, 8);
-  char* p = dst + 8;
+void Key::SetSuffix(const Slice& suff) {  // Reuse SetHash.
+  SetHash(suff);
+}
+
+// Tablefs stores full filenames in key suffixes.
+#elif defined(TABLEFS)
+
+void Key::SetName(const Slice& name) {
+  rep_.resize(8);
+  rep_.append(name.data(), name.size());
+}
+
+void Key::SetOffset(uint64_t off) {
+  rep_.resize(8);
+  off = htobe64(off);
+  rep_.append(static_cast<void*>(&off), 8);
+}
+
+void Key::SetSuffix(const Slice& suff) {  // Reuse SetName.
+  SetHash(suff);
+}
+
+#endif
+
+void Key::SetIntegerUniquifier(uint64_t uni) {  // Reuse SetOffset.
+  SetOffset(uni);
+}
+
+void Key::SetType(KeyType type) {
+#if defined(DELTAFS) || defined(INDEXFS)
+  rep_[size_ - 8 - 1] = type;
 #else
+  rep_[7] = type;
+#endif
+}
+
+namespace {
+#if defined(DELTAFS)
+Slice PackPrefix(char* dst, uint64_t R, uint64_t S, uint64_t D, KeyType T) {
   char* p = dst;
   p = EncodeVarint64(p, R);
   p = EncodeVarint64(p, S);
   p = EncodeVarint64(p, D);
   p[0] = T;
   p++;
-#endif
   return Slice(dst, p - dst);
 }
+#else
+Slice PackPrefix(char* dst, uint64_t D, KeyType T) {
+  uint64_t composite = (D << 8) | (T & 0xff);
+  composite = htobe64(composite);
+  memcpy(dst, &composite, 8);
+  return Slice(dst, 8);
+}
+#endif
+}  // namespace
 
-void Key::SetType(KeyType type) { rep_[size_ - 8 - 1] = type; }
-
+#if defined(TABLEFS) || defined(INDEXFS)
 Key::Key(uint64_t dir, KeyType type) {
-  Slice prefix = PackPrefix(rep_, 0, 0, dir, type);
+#if defined(INDEXFS)
+  Slice prefix = PackPrefix(rep_, dir, type);
+  size_ = prefix.size() + 8;
+#else
+  rep_.reserve(TABLEFS_KEY_RESERV);
+  rep_.resize(8);
+  PackPrefix(&rep_[0], dir, type);
+#endif
+}
+#else
+Key::Key(uint64_t reg, uint64_t snap, uint64_t ino, KeyType type) {
+  Slice prefix = PackPrefix(rep_, reg, snap, ino, type);
   size_ = prefix.size() + 8;
 }
 
-Key::Key(uint64_t snap, uint64_t dir, KeyType type) {
-  Slice prefix = PackPrefix(rep_, 0, snap, dir, type);
+Key::Key(uint64_t snap, uint64_t ino, KeyType type) {
+  Slice prefix = PackPrefix(rep_, 0, snap, ino, type);
   size_ = prefix.size() + 8;
 }
 
-Key::Key(uint64_t reg, uint64_t snap, uint64_t dir, KeyType type) {
-  Slice prefix = PackPrefix(rep_, reg, snap, dir, type);
+Key::Key(uint64_t ino, KeyType type) {
+  Slice prefix = PackPrefix(rep_, 0, 0, ino, type);
   size_ = prefix.size() + 8;
 }
+#endif
 
-Key::Key(const Stat& st, KeyType type) {
-  Slice prefix = PackPrefix(rep_, st.RegId(), st.SnapId(), st.InodeNo(), type);
+#if defined(DELTAFS)
+#define PREFIX_INITIALIZER(x, t) x.RegId(), x.SnapId(), x.InodeNo(), t
+#else
+#define PREFIX_INITIALIZER(x, t) x.InodeNo(), t
+#endif
+
+#if defined(DELTAFS) || defined(INDEXFS)
+Key::Key(const LookupStat& stat, KeyType type) {
+  Slice prefix = PackPrefix(rep_, PREFIX_INITIALIZER(stat, type));
   size_ = prefix.size() + 8;
+}
+#endif
+
+Key::Key(const Stat& stat, KeyType type) {
+#if defined(DELTAFS) || defined(INDEXFS)
+  Slice prefix = PackPrefix(rep_, PREFIX_INITIALIZER(stat, type));
+  size_ = prefix.size() + 8;
+#else
+  rep_.reserve(TABLEFS_KEY_RESERV);
+  rep_.resize(8);
+  PackPrefix(&rep_[0], PREFIX_INITIALIZER(stat, type));
+#endif
 }
 
 Key::Key(const Slice& prefix) {
-  memcpy(rep_, prefix.data(), prefix.size());
+#if defined(DELTAFS) || defined(INDEXFS)
+  memcpy(&rep_[0], prefix.data(), prefix.size());
   size_ = prefix.size() + 8;
+#else
+  rep_.reserve(TABLEFS_KEY_RESERV);
+  rep_.append(prefix.data(), prefix.size());
+#endif
 }
 
+#if defined(DELTAFS)
+// Return the registry id of the parent directory.
 uint64_t Key::reg_id() const {
   uint64_t result;
-#if !defined(DELTAFS)
-  result = 0;
-#else
   Slice encoding = Encode();
   GetVarint64(&encoding, &result);
-#endif
   return result;
 }
 
+// Return the snapshot id of the parent directory.
 uint64_t Key::snap_id() const {
   uint64_t result;
-#if !defined(DELTAFS)
-  result = 0;
-#else
   Slice encoding = Encode();
   GetVarint64(&encoding, &result);  // ignored
   GetVarint64(&encoding, &result);
-#endif
   return result;
 }
 
+#endif
+
 uint64_t Key::inode() const {
   uint64_t result;
-#if !defined(DELTAFS)
+#if defined(TABLEFS) || defined(INDEXFS)
   uint64_t composite;
-  memcpy(&composite, rep_, 8);
+  memcpy(&composite, &rep_[0], 8);
   result = be64toh(composite) >> 8;
 #else
   Slice encoding = Encode();
@@ -121,17 +205,11 @@ uint64_t Key::inode() const {
   return result;
 }
 
-uint64_t Key::offset() const {
-  uint64_t off;
-  memcpy(&off, rep_ + size_ - 8, 8);
-  return be64toh(off);
-}
-
 KeyType Key::type() const {
   KeyType result;
-#if !defined(DELTAFS)
+#if defined(TABLEFS) || defined(INDEXFS)
   uint64_t composite;
-  memcpy(&composite, rep_, 8);
+  memcpy(&composite, &rep_[0], 8);
   result = static_cast<KeyType>(be64toh(composite) & 0xff);
 #else
   uint64_t ignored;
@@ -145,13 +223,36 @@ KeyType Key::type() const {
   return result;
 }
 
-Slice Key::hash() const {
-  Slice r = Slice(rep_ + size_ - 8, 8);
+#if defined(DELTAFS) || defined(INDEXFS)
+Slice Key::hash() const { return suffix(); }
+#endif
+
+// Return suffix as an integer number.
+uint64_t Key::offset() const {
+  uint64_t off;
+  Slice r = suffix();
+  assert(r.size() >= 8);  // Additional suffix bytes are ignored
+  memcpy(&off, &r[0], 8);
+  return be64toh(off);
+}
+
+// Return the prefix of a key in its entirety.
+Slice Key::prefix() const {
+#if defined(DELTAFS) || defined(INDEXFS)  // prefix = total - suffix
+  Slice r = Slice(rep_, size_ - 8);
+#else  // sizeof(prefix) is 8
+  Slice r = Slice(&rep_[0], 8);
+#endif
   return r;
 }
 
-Slice Key::prefix() const {
-  Slice r = Slice(rep_, size_ - 8);
+// Return the suffix of a key in its entirety.
+Slice Key::suffix() const {
+#if defined(DELTAFS) || defined(INDEXFS)  // sizeof(suffix) is 8
+  Slice r = Slice(rep_ + size_ - 8, 8);
+#else  // suffix = total - prefix
+  Slice r = Slice(&rep_[0] + 8, rep_.size() - 8);
+#endif
   return r;
 }
 
