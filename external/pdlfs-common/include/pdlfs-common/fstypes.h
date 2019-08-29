@@ -95,7 +95,7 @@ class Key {
   char* data() { return rep_; }
 
   // Tablefs uses std::string.
-#elif defined(TABLEFS)
+#else
   size_t size() const { return rep_.size(); }
   const char* data() const { return rep_.data(); }
   char* data() { return rep_.data(); }
@@ -111,7 +111,7 @@ class Key {
 
   // Tablefs stores filenames in keys, which can
   // be super lengthy. We use std::string.
-#elif defined(TABLEFS)
+#else
   std::string rep_;
 #endif
 };

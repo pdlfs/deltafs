@@ -15,8 +15,6 @@
 
 #include <assert.h>
 
-namespace pdlfs {
-
 // All keys (regardless of the filesystem type) consist of a prefix component
 // and a suffix component. Tablefs keys have variable length. Their prefixes
 // each encode a parent directory inode no. and the type of the key. They have a
@@ -24,6 +22,11 @@ namespace pdlfs {
 // variable length. Indexfs keys are similar to those of tablefs except that
 // their suffixes each store the hash of a filename rather than the filename
 // itself. For this reason indexfs keys have a fixed length. Deltafs keys ...
+namespace pdlfs {
+// Requires one filesystem definition
+#if !defined(DELTAFS) && !defined(INDEXFS) && !defined(TABLEFS)
+#define TABLEFS
+#endif
 
 #define TABLEFS_KEY_RESERV 128  // Number of bytes reserved for tablefs keys
 // Deltafs and indexfs store hashes of filenames in key suffixes.
@@ -56,7 +59,7 @@ void Key::SetSuffix(const Slice& suff) {  // Reuse SetHash.
 }
 
 // Tablefs stores full filenames in key suffixes.
-#elif defined(TABLEFS)
+#else
 
 void Key::SetName(const Slice& name) {
   rep_.resize(8);
@@ -70,7 +73,7 @@ void Key::SetOffset(uint64_t off) {
 }
 
 void Key::SetSuffix(const Slice& suff) {  // Reuse SetName.
-  SetHash(suff);
+  SetName(suff);
 }
 
 #endif
