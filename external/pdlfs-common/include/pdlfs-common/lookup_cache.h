@@ -10,9 +10,9 @@
  */
 #pragma once
 
+#include "pdlfs-common/fsdbx.h"
 #include "pdlfs-common/fstypes.h"
 #include "pdlfs-common/lru.h"
-#include "pdlfs-common/mdb.h"
 #include "pdlfs-common/port.h"
 
 namespace pdlfs {

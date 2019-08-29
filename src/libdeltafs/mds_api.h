@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2019 Carnegie Mellon University,
  * Copyright (c) 2019 Triad National Security, LLC, as operator of
@@ -10,15 +8,16 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+#pragma once
 
 #include <string>
 #include <vector>
 
 #include "deltafs/deltafs_api.h"
+#include "pdlfs-common/fsdbx.h"
 #include "pdlfs-common/fstypes.h"
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/logging.h"
-#include "pdlfs-common/mdb.h"
 #include "pdlfs-common/rpc.h"
 #include "pdlfs-common/strutil.h"
 
