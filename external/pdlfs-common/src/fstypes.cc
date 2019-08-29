@@ -58,8 +58,7 @@ void Key::SetSuffix(const Slice& suff) {  // Reuse SetHash.
   SetHash(suff);
 }
 
-// Tablefs stores full filenames in key suffixes.
-#else
+#else  // Then this is tablefs. Tablefs stores full filenames in key suffixes.
 
 void Key::SetName(const Slice& name) {
   rep_.resize(8);
@@ -122,7 +121,7 @@ Key::Key(uint64_t dir, KeyType type) {
   PackPrefix(&rep_[0], dir, type);
 #endif
 }
-#else
+#else  // Then this is deltafs.
 Key::Key(uint64_t reg, uint64_t snap, uint64_t ino, KeyType type) {
   Slice prefix = PackPrefix(rep_, reg, snap, ino, type);
   size_ = prefix.size() + 8;
