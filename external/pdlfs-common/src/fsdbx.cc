@@ -25,10 +25,25 @@ std::string DirId::DebugString() const {
   return tmp;
 }
 
-DirId::DirId() : reg(0), snap(0), ino(0) {}
-#if !defined(DELTAFS)
+#if defined(DELTAFS)
 DirId::DirId(uint64_t ino) : reg(0), snap(0), ino(ino) {}
+#else
+DirId::DirId(uint64_t ino) : ino(ino) {}
 #endif
+
+#if defined(DELTAFS)
+#define DIR_INITIALIZER(x) reg(x.RegId()), snap(x.SnapId()), ino(x.InodeNo())
+#else
+#define DIR_INITIALIZER(x) ino(x.InodeNo())
+#endif
+
+#if defined(DELTAFS) || defined(INDEXFS)
+DirId::DirId(const LookupStat& stat)  // Initialization via LookupStat
+    : DIR_INITIALIZER(stat) {}
+#endif
+
+DirId::DirId(const Stat& stat)  // Initialization via Stat
+    : DIR_INITIALIZER(stat) {}
 
 namespace {
 int compare64(uint64_t a, uint64_t b) {

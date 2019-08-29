@@ -19,16 +19,17 @@ namespace pdlfs {
 
 struct DirInfo;
 struct DirId {
-  DirId();
-#if !defined(DELTAFS)
-  explicit DirId(uint64_t ino);
-#endif
-  explicit DirId(const Stat& stat)
-      : reg(stat.RegId()), snap(stat.SnapId()), ino(stat.InodeNo()) {}
-  explicit DirId(const LookupStat& stat)
-      : reg(stat.RegId()), snap(stat.SnapId()), ino(stat.InodeNo()) {}
+  DirId() {}  // Intentionally not initialized for performance.
+#if defined(DELTAFS)
   DirId(uint64_t reg, uint64_t snap, uint64_t ino)
       : reg(reg), snap(snap), ino(ino) {}
+#endif
+  explicit DirId(uint64_t ino);  // Direct initialization via inodes.
+  // Initialization via LookupStat or Stat.
+#if defined(DELTAFS) || defined(INDEXFS)  // Tablefs does not use LookupStat.
+  explicit DirId(const LookupStat& stat);
+#endif
+  explicit DirId(const Stat& stat);
 
   // Three-way comparison.  Returns value:
   //   <  0 iff "*this" <  "other",
@@ -37,8 +38,12 @@ struct DirId {
   int compare(const DirId& other) const;
   std::string DebugString() const;
 
+  // Deltafs requires extra fields.
+#if defined(DELTAFS)
   uint64_t reg;
   uint64_t snap;
+#endif
+
   uint64_t ino;
 };
 
