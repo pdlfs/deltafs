@@ -41,6 +41,7 @@
 #     - GFLAGS_INCLUDE_DIR: optional hint for finding gflags/gflags.h
 #     - GFLAGS_LIBRARY_DIR: optional hint for finding gflags lib
 #   -DPDLFS_GLOG=ON                        -- use glog for logging
+#   -DPDLFS_SILT_ECT=ON                    -- include SILT ECT code
 #   -DPDLFS_MARGO_RPC=ON                   -- compile in margo rpc code
 #   -DPDLFS_MERCURY_RPC=ON                 -- compile in mercury rpc code
 #   -DPDLFS_RADOS=ON                       -- compile in RADOS env
@@ -88,6 +89,8 @@ set (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 # require) C++ 11 standard for possible performance improvements due it
 # its move semantics.
 #
+set (PDLFS_DFS_COMMON "ON" CACHE BOOL "Include common DFS code")
+mark_as_advanced(PDLFS_DFS_COMMON)
 set (PDLFS_COMMON_LIBNAME "deltafs-common" CACHE
      STRING "Custom name to install pdlfs-common with")
 set (PDLFS_COMMON_DEFINES "DELTAFS" CACHE
