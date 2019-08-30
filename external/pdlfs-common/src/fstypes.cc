@@ -68,7 +68,7 @@ void Key::SetName(const Slice& name) {
 void Key::SetOffset(uint64_t off) {
   rep_.resize(8);
   off = htobe64(off);
-  rep_.append(reinterpret_cast<void*>(&off), 8);
+  rep_.append(reinterpret_cast<char*>(&off), 8);
 }
 
 void Key::SetSuffix(const Slice& suff) {  // Reuse SetName.

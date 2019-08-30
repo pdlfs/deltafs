@@ -92,13 +92,13 @@ class Key {
 #if defined(DELTAFS) || defined(INDEXFS)
   size_t size() const { return size_; }
   const char* data() const { return rep_; }
-  char* data() { return &rep_[0]; }
+  char* data() { return rep_; }
 
   // Tablefs uses std::string.
 #else
   size_t size() const { return rep_.size(); }
-  const char* data() const { return rep_.data(); }
-  char* data() { return rep_.data(); }
+  const char* data() const { return &rep_[0]; }
+  char* data() { return &rep_[0]; }
 #endif
 
  private:
