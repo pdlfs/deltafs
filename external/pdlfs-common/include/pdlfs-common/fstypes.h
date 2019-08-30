@@ -44,8 +44,8 @@ class Key {
   Key(uint64_t reg, uint64_t snap, uint64_t ino, KeyType type);
   Key(uint64_t snap, uint64_t ino, KeyType type);
 #endif
-  // Directly initialize a key using a given parent directory inode no.
-  // along with the type of the key.
+  // Directly initialize a key using a parent directory inode no.
+  // and a specific key type.
   Key(uint64_t ino, KeyType type);
   // Quickly initialize a key using information
   // provided by a LookupStat or Stat.

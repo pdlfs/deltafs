@@ -40,22 +40,34 @@ TEST(KeyTest, KeyEnc2) {
   memset(zero, 0, sizeof(zero));
   Key k1(0, static_cast<KeyType>(0));
   k1.SetName(Slice());
-  Key k2(0, static_cast<KeyType>(1));
-  k2.SetName(Slice("X"));
-  Key k3(0, static_cast<KeyType>(1));
-  k3.SetName(Slice("Y"));
   ASSERT_EQ(k1.Encode(), Slice(zero, k1.size()));
+  Key k2(1, static_cast<KeyType>(1));
+  k2.SetName(Slice("X"));
+  Key k3(1, static_cast<KeyType>(1));
+  k3.SetName(Slice("Y"));
   ASSERT_EQ(k2.prefix(), k3.prefix());
   ASSERT_NE(k2.Encode(), k3.Encode());
-  Key k4(k3);
-  Key k5 = k3;
-  k4.SetName(Slice("X"));
-  ASSERT_EQ(k4.Encode(), k2.Encode());
-  k5.SetHash(k2.hash());
-  ASSERT_EQ(k5.Encode(), k2.Encode());
 }
 
 TEST(KeyTest, KeyEnc3) {
+  Key k1(99, static_cast<KeyType>(99));
+  k1.SetName(Slice("X"));
+  Key k2(k1);
+  k2.SetName(Slice("YY"));
+  Key k3(k2);
+  k3.SetName(Slice("X"));
+  ASSERT_EQ(k3.Encode(), k1.Encode());
+  Key k4 = k2;
+  k4.SetSuffix(k1.suffix());
+  ASSERT_EQ(k4.Encode(), k1.Encode());
+#if defined(DELTAFS) || defined(INDEXFS)
+  Key k5 = k2;
+  k5.SetHash(k1.hash());
+  ASSERT_EQ(k5.Encode(), k1.Encode());
+#endif
+}
+
+TEST(KeyTest, KeyEnc4) {
   Key k1(31, kDataBlockType);
   Key k2(31, kDataBlockType);
   Key k3(31, kDataBlockType);
@@ -69,7 +81,7 @@ TEST(KeyTest, KeyEnc3) {
   ASSERT_EQ(k3.offset(), 128);
 }
 
-TEST(KeyTest, KeyEnc4) {
+TEST(KeyTest, KeyEnc5) {
   Key k1(31, kDataDesType);
   Key k2(k1.prefix());
   ASSERT_EQ(k1.prefix(), k2.prefix());
