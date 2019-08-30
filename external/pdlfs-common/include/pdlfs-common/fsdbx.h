@@ -335,6 +335,8 @@ Status MXDB<DX, xslice, xstatus, fmt>::READDIR(  ////
   dir->n++;  // +1 entries scanned
   // Seek to the next entry
   iter->Next();
+
+  return Status::OK();
 }
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
