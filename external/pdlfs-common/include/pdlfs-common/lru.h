@@ -25,46 +25,57 @@
 // The following code implements an LRU cache of KV pairs. KV pairs are placed
 // in a reference-counted handle. A user-supplied delete function is invoked
 // when a handle's reference count is decremented to zero. Both the cache and
-// the clients currently holding a handle keep a reference on the handle. A
-// handle may be referenced only by the cache or only by clients. When a handle
-// is only referenced by clients, it is no longer considered "in" the cache.
+// the clients currently holding a handle keep a reference on the handle.
 //
-// Each cache keeps two linked lists of KV pair handles in it. Each handle in
-// the cache (i.e., with a reference from the cache) is in *either* one of the
-// two lists, but never both. KV handles still referenced by clients but not the
-// cache (either because it is erased by a client from the cache or evicted by
-// the cache itself) are in *neither* of the two lists.
+// A handle may be referenced only by the cache or only by clients. When a
+// handle is only referenced by clients, it is no longer considered "in" the
+// cache. A handle is removed from the cache (i.e., from "in" the cache to "out"
+// of the cache) either when it is evicted by the cache automatically or
+// explicitly erased by a client.
 //
-// The lists are:
+// Each cache keeps two linked lists of KV pair handles. Each live handle (i.e.,
+// with one or more references) is in *either* one of the two lists, but
+// *never* both. When a handle loses its last reference, it is removed from the
+// list currently holding it and is deleted.
 //
-// * in-use: contains the KV handles currently referenced by clients and by
-//     the cache itself, in no particular order. Items in this list are
-//     effectively "pinned" in the cache and are not considered for automatic
-//     eviction. Though clients are still able to explicitly erase such items
-//     from the cache.
+// The two lists are:
+//
+// * in-use: contains the KV handles currently referenced by clients and may or
+//     may not be referenced by the cache itself. Items in this list are not
+//     kept in any particular order, and are effectively "pinned" in memory:
+//     they are not considered for automatic eviction by the cache, though
+//     clients are still able to explicitly erase such items from the cache.
+//     Once erased, they may keep in the list until they lose all their
+//     references.
 //
 // * LRU: contains the KV handles currently only referenced by the cache but
 //     not by any client, in LRU order. Items in this list are candidates
 //     for eviction.
-
-// KV handles are moved between the two lists by the Ref() and Unref()
-// methods, when they detect an element in the cache acquiring or losing its
-// first or last external reference. When KV handles are in the LRU list,
-// they are subject to eviction either during Insert() or Prune().
+//
+// KV handles currently "in" the cache are moved between the two lists when they
+// acquire or lose their first or last external references. KV handles "out" of
+// the cache may only be found in the first list. Note also that as long as a KV
+// handle in still "in" the cache, a client can erase it from the cache
+// regardless of the list to which the handle is currently attached.
+//
+// When KV handles are in the "LRU" list, they are subject to eviction during
+// KV insertion and cache pruning operations. When a handle is removed by
+// the "LRU" list, it is immediately deleted.
 namespace pdlfs {
 
 // To manage KV pairs, we place KV pairs in handles that are opaque to clients.
 // Each handle is represented by a cache entry defined below. Each entry is a
-// variable length heap-allocated structure, and is kept simultaneously in a
-// hash table (for fast access) and in a circular doubly linked list (for LRU
-// ordering) as long as the entry is in the cache.
+// variable length heap-allocated structure, and is kept in a hash table (for
+// fast lookups) as long as the entry is "in" the cache. Each entry is
+// additionally put in one circular doubly linked list (either for LRU ordering
+// or for sanity checks) as long as the entry is alive.
 //
-// Each cache entry has an "in_cache" boolean flag indicating whether the cache
-// has a reference on it. The only ways that this flag can become "false"
-// without the entry being passed to its "deleter" are a) via Erase()'ing an
-// entry that still has external references, b) via Insert()'ing an entry that
-// causes an existing entry with the same key that still has external references
-// to be removed from the cache, or c) on destruction of the cache (i.e., on
+// Each cache entry has an "in_cache" boolean flag indicating whether it is "in"
+// the cache. The only ways that this flag can become "False" without causing
+// the entry to be passed to its "deleter" are a) via Erase()'ing an entry that
+// still has external references, b) via Insert()'ing an entry that causes an
+// existing entry with the same key that still has external references to be
+// removed from the cache, or c) on destruction of the cache (i.e., on
 // ~LRUCache()) when there are still entries with external references. The last
 // case is considered problematic as it leaks resources permanently.
 template <typename T = void>
@@ -91,34 +102,35 @@ struct LRUEntry {
   }
 };
 
-// This base LRU cache implementation requires external synchronization. Two
+// This LRU cache implementation requires external synchronization. Two capacity
 // usage numbers are maintained. One only counts entries currently "in" the
 // cache. The other also considers entries not "in" the cache. These are entries
-// only referenced by clients but not the cache.
+// only referenced by clients but not by the cache.
 template <typename E>
 class LRUCache {
  private:
   // Max cache size.
   size_t capacity_;
-  // Capacity consumption also counting entries not in the cache.
+  // Capacity consumption also counting entries not "in" the cache.
   size_t total_usage_;
   // Current capacity consumption.
   size_t usage_;
 
   // Dummy head of the "in-use" list.
-  // Entries currently in use by clients, in addition to being referenced by the
-  // cache itself. They all have "refs >= 2" and "in_cache == true".
+  // Entries currently in use by clients. They may or may not be referenced by
+  // the cache itself (i.e., "in" the cache). They all have "refs >= 2" when
+  // "in_cache == true". Otherwise, they have "refs >= 1".
   E in_use_;
 
-  // Dummy head of the LRU list.
+  // Dummy head of the "LRU" list.
   // Entries currently only referenced by the cache but not by any client.
-  // Only entries here are eligible for eviction. These entries all
-  // have "refs == 1" and "in_cache == true". lru_.prev is the newest entry.
+  // These are the only entries eligible for eviction. They all have "refs == 1"
+  // and "in_cache == true". lru_.prev is the newest entry.
   // lru_.next is the oldest entry.
   E lru_;
 
-  // In addition to in_use_ or lru_, each entry "in" the cache
-  // is also put here for fast lookups.
+  // In addition to one of the two lists above, each entry currently "in"
+  // the cache is put here for fast lookups and presence checks.
   HashTable<E> table_;
 
   // No copying allowed
@@ -128,21 +140,21 @@ class LRUCache {
   // They are removed from the cache and deleted as follows:
   //
   // * This tier removes     Erase()  Insert()  Prune()
-  //   entries from                 \    |     /
+  //   entries from table_.         \    |     /
   //   table_.                       \   |    /
   //                                  \  |   /
-  // * This tier handles               \ |  /
-  //   in_use_, lru_, usage_,         Remove()
-  //   and in_cache_.                    |    ~LRUCache()
-  //                           Release() |   /
-  // * This tier performs              \ |  /
-  //   the eventual                    Unref()
-  //   deletion.
+  // * This tier handles              Remove()
+  //   usage_ and in_cache_.             |     ~LRUCache()
+  //                         Release()   |    /
+  // * This tier handles              \  |   /
+  //   lru_, in_use_, total_usage_,    \ |  /
+  //   and deletion.                   Unref()
   //
   // Add a reference to a given entry. Promote the entry to the "in_use_" list
-  // when it gains its first external reference. Note that we only maintain LRU
-  // order for entries in the "lru_" list. Entries in the "in_use_" list are
-  // regarded as "unordered".
+  // when it is "in" the cache and is about to gain its first external
+  // reference. Note that we only maintain LRU order for entries in the "lru_"
+  // list. Entries in the "in_use_" list are effectively regarded as
+  // "unordered".
   void Ref(E* const e) {
     if (e->refs == 1 && e->in_cache) {
       // If *e is on lru_, move to the in_use_ list.
@@ -152,22 +164,24 @@ class LRUCache {
     e->refs++;
   }
 
-  // Remove a reference from a given entry. Demote the entry from the "in_use_"
-  // list when it loses its last external reference. Delete the entry when it
-  // loses its final reference. Note that we only maintain LRU order for entries
-  // in the "lru_" list. Entries in the "in_use_" list are deemed "unordered".
+  // Withdraw a reference from a given entry. Demote the entry from the
+  // "in_use_" list when it is still "in" the cache but just loses its last
+  // external reference. Delete the entry when it loses its final reference.
+  // Note that we only maintain LRU order for entries in the "lru_" list.
+  // Entries in the "in_use_" list are deemed "unordered".
   // REQUIRES: when *e is about to lose its final reference, it must have been
   // marked as removed from the cache (e->in_cache is False).
   void Unref(E* const e) {
     assert(e->refs > 0);
     e->refs--;
-    if (e->refs == 0) {  // Deallocate.
+    if (e->refs == 0) {
+      LRU_Remove(e);  // This can either be in_use_ or lru_
       total_usage_ -= e->charge;
       assert(!e->in_cache);
       (*e->deleter)(e->key(), e->value);
       free(e);
     } else if (e->in_cache && e->refs == 1) {
-      // No longer in use; move to the lru_ list.
+      // No longer in use; move to lru_
       LRU_Remove(e);
       LRU_Append(&lru_, e);
     }
@@ -193,7 +207,6 @@ class LRUCache {
   // REQUIRES: *e has been removed from table_.
   void Remove(E* const e) {
     assert(e && e->in_cache);
-    LRU_Remove(e);
     e->in_cache = false;
     usage_ -= e->charge;
     Unref(e);
@@ -215,7 +228,7 @@ class LRUCache {
            &in_use_);  // Error if caller has an unreleased handle
     for (E* e = lru_.next; e != &lru_;) {
       E* const next = e->next;
-      assert(e->refs == 1);  // Invariant of the lru_ list
+      assert(e->refs == 1);  // Invariants of the lru_ list
       assert(e->in_cache);
       // Mark *e as removed from cache as if
       // Remove() has been called
@@ -249,18 +262,18 @@ class LRUCache {
     e->in_cache = false;
     e->refs = 1;  // This is for the handle to be returned to the client
     memcpy(e->key_data, key.data(), key.size());
+    LRU_Append(&in_use_, e);
+    total_usage_ += charge;
 
-    if (capacity_ > 0) {
+    if (capacity_ >= charge) {
       e->refs++;  // This is for the cache itself
       e->in_cache = true;
-      LRU_Append(&in_use_, e);
-      total_usage_ += charge;
       usage_ += charge;
       E* const old = table_.Insert(e);
       // Evicting the old entry from the cache if there is one. The old entry
-      // must be in the cache because it was ejected from the hash table and all
-      // entries in the hash table is in the cache. Because the old entry is in
-      // the cache, we must remove it from cache.
+      // must be "in" the cache because it was just ejected from table_ and all
+      // entries in table_ is "in" the cache. Because the old entry is "in"
+      // the cache, we can and must remove it from cache.
       if (old) {
         Remove(old);
       }
@@ -269,10 +282,10 @@ class LRUCache {
       e->next = NULL;
     }
     while (usage_ > capacity_ && lru_.next != &lru_) {
-      E* const old = lru_.next;  // This is the least recently used
-      assert(old->refs == 1);
-      E* const victim = table_.Remove(old->key(), old->hash);
-      assert(old == victim);
+      E* const v = lru_.next;  // This is the least recently used
+      assert(v->refs == 1);
+      E* const victim = table_.Remove(v->key(), v->hash);
+      assert(v == victim);
       Remove(victim);
     }
 
@@ -303,7 +316,7 @@ class LRUCache {
   }
 
   // Immediately kicking out a key from the cache if it is present in the cache.
-  // A key is removed regardless if it is currently in in_use_ or lru_.
+  // A key can be removed regardless if it is currently in in_use_ or lru_.
   void Erase(const Slice& key, uint32_t hash) {
     E* const e = table_.Remove(key, hash);
     if (e != NULL) {
@@ -313,8 +326,8 @@ class LRUCache {
 
   // Return True iff the cache is empty.
   bool Empty() const {
-    return (in_use_.next == &in_use_) && (in_use_.prev == &in_use_) &&
-           (lru_.next == &lru_) && (lru_.prev == &lru_);
+    // An entry is "in" the cache iff it is in table_
+    return (table_.Empty());
   }
 
   // Return True if key is present in the cache. This operation does not change
@@ -323,8 +336,8 @@ class LRUCache {
     return *table_.FindPointer(key, hash) != NULL;
   }
 
-  // Remove an external reference on a given entry potentially
-  // adjusting its LRU order.
+  // Remove an external reference on a given entry potentially adjusting
+  // its LRU order or causing it to be deleted.
   void Release(E* e) {
     // Must not use *e hereafter
     Unref(e);
