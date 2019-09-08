@@ -141,8 +141,7 @@ class LRUCache {
   //
   // * This tier removes     Erase()  Insert()  Prune()
   //   entries from table_.         \    |     /
-  //   table_.                       \   |    /
-  //                                  \  |   /
+  //                                 \   |    /
   // * This tier handles              Remove()
   //   usage_ and in_cache_.             |     ~LRUCache()
   //                         Release()   |    /
@@ -150,20 +149,6 @@ class LRUCache {
   //   lru_, in_use_, total_usage_,    \ |  /
   //   and deletion.                   Unref()
   //
-  // Add a reference to a given entry. Promote the entry to the "in_use_" list
-  // when it is "in" the cache and is about to gain its first external
-  // reference. Note that we only maintain LRU order for entries in the "lru_"
-  // list. Entries in the "in_use_" list are effectively regarded as
-  // "unordered".
-  void Ref(E* const e) {
-    if (e->refs == 1 && e->in_cache) {
-      // If *e is on lru_, move it to the "in_use_" list.
-      LRU_Remove(e);
-      LRU_Append(&in_use_, e);
-    }
-    e->refs++;
-  }
-
   // Withdraw a reference from a given entry. Demote the entry from the
   // "in_use_" list when it is still "in" the cache but just loses its last
   // external reference. Delete the entry when it loses its final reference.
@@ -321,9 +306,10 @@ class LRUCache {
   // Kick out a key from the cache decrementing its reference count and reducing
   // usage_. Removing a key that is not in the cache has no effect. A key can be
   // removed regardless if it is currently in in_use_ or lru_. Once a key is
-  // removed from the cache, it can no longer be Lookup()'d from the cache and
-  // its reference count can only decrease. If a key is removed from the "lru_"
-  // list, it will be deleted immediately.
+  // removed from the cache, it can no longer be Lookup()'d from the cache. Nor
+  // can it be re-added into the cache. It stays in the "in_use_" list for the
+  // rest of its life. If a key is removed from the "lru_" list, it will be
+  // deleted immediately.
   void Erase(const Slice& key, uint32_t hash) {
     E* const e = table_.Remove(key, hash);
     if (e != NULL) {
@@ -349,6 +335,20 @@ class LRUCache {
   void Release(E* e) {
     // Must not use *e hereafter
     Unref(e);
+  }
+
+  // Add an external reference to a given entry. Promote the entry to the
+  // "in_use_" list when it is "in" the cache and is about to gain its first
+  // external reference. Note that we only maintain LRU order for entries in the
+  // "lru_" list. Entries in the "in_use_" list are effectively regarded as
+  // "unordered".
+  void Ref(E* const e) {
+    if (e->refs == 1 && e->in_cache) {
+      // If *e is on lru_, move it to the "in_use_" list.
+      LRU_Remove(e);
+      LRU_Append(&in_use_, e);
+    }
+    e->refs++;
   }
 };
 
