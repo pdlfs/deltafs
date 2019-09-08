@@ -54,7 +54,7 @@
 // "no-replacing" semantic does not save clients from performing the "expensive"
 // operation (reading an SSTable data block or opening an SSTable file).
 //
-// To ensure that "expensive" operations are performed only once by one client
+// To ensure that "expensive" operations are only performed once by one client
 // thread (this is not always necessary though), the client code will have to
 // use locks outside of the cache. Thus only the first client thread does the
 // expensive operation, and the other concurrent threads wait for the first to
