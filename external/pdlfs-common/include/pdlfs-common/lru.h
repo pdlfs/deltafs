@@ -27,27 +27,30 @@
 // when a handle's reference count is decremented to zero. Both the cache and
 // the clients currently holding a handle keep a reference on the handle. A
 // handle may be referenced only by the cache or only by clients. When a handle
-// is only referenced by clients, it is not considered "in" the cache.
+// is only referenced by clients, it is no longer considered "in" the cache.
 //
-// A cache keeps two linked lists of KV pair handles in the cache. Each handle
-// in the cache (i.e., currently referenced by the cache) is in *either* one of
-// the two lists, but never both. KV handles still referenced by clients but
-// erased (if removed by a client) or evicted (if removed by the cache itself)
-// from the cache are in *neither* of the two lists.
+// Each cache keeps two linked lists of KV pair handles in it. Each handle in
+// the cache (i.e., with a reference from the cache) is in *either* one of the
+// two lists, but never both. KV handles still referenced by clients but not the
+// cache (either because it is erased by a client from the cache or evicted by
+// the cache itself) are in *neither* of the two lists.
 //
 // The lists are:
 //
 // * in-use: contains the KV handles currently referenced by clients and by
 //     the cache itself, in no particular order. Items in this list are
-//     effectively "pinned" in the cache and are not considered for eviction.
+//     effectively "pinned" in the cache and are not considered for automatic
+//     eviction. Though clients are still able to explicitly erase such items
+//     from the cache.
 //
 // * LRU: contains the KV handles currently only referenced by the cache but
 //     not by any client, in LRU order. Items in this list are candidates
 //     for eviction.
-//
+
 // KV handles are moved between the two lists by the Ref() and Unref()
 // methods, when they detect an element in the cache acquiring or losing its
-// first or last external reference.
+// first or last external reference. When KV handles are in the LRU list,
+// they are subject to eviction either during Insert() or Prune().
 namespace pdlfs {
 
 // To manage KV pairs, we place KV pairs in handles that are opaque to clients.
@@ -109,18 +112,33 @@ class LRUCache {
 
   // Dummy head of the LRU list.
   // Entries currently only referenced by the cache but not by any client.
-  // Only entries here are eligible for eviction.
-  // lru_.prev is the newest entry; lru_.next is the oldest entry.
+  // Only entries here are eligible for eviction. These entries all
+  // have "refs == 1" and "in_cache == true". lru_.prev is the newest entry.
+  // lru_.next is the oldest entry.
   E lru_;
 
   // In addition to in_use_ or lru_, each entry "in" the cache
-  // is put in table_ for fast lookups.
+  // is also put here for fast lookups.
   HashTable<E> table_;
 
   // No copying allowed
   void operator=(const LRUCache&);
   LRUCache(const LRUCache&);
-
+  // Cache entries are created and inserted into the cache during Insert().
+  // They are removed from the cache and deleted as follows:
+  //
+  // * This tier removes     Erase()  Insert()  Prune()
+  //   entries from                 \    |     /
+  //   table_.                       \   |    /
+  //                                  \  |   /
+  // * This tier handles               \ |  /
+  //   in_use_, lru_, usage_,         Remove()
+  //   and in_cache_.                    |    ~LRUCache()
+  //                           Release() |   /
+  // * This tier performs              \ |  /
+  //   the eventual                    Unref()
+  //   deletion.
+  //
   // Add a reference to a given entry. Promote the entry to the "in_use_" list
   // when it gains its first external reference. Note that we only maintain LRU
   // order for entries in the "lru_" list. Entries in the "in_use_" list are
