@@ -157,7 +157,7 @@ class LRUCache {
   // "unordered".
   void Ref(E* const e) {
     if (e->refs == 1 && e->in_cache) {
-      // If *e is on lru_, move to the in_use_ list.
+      // If *e is on lru_, move it to the "in_use_" list.
       LRU_Remove(e);
       LRU_Append(&in_use_, e);
     }
@@ -175,7 +175,7 @@ class LRUCache {
     assert(e->refs > 0);
     e->refs--;
     if (e->refs == 0) {
-      LRU_Remove(e);  // This can either be in_use_ or lru_
+      LRU_Remove(e);  // This can be either in_use_ or lru_
       total_usage_ -= e->charge;
       assert(!e->in_cache);
       (*e->deleter)(e->key(), e->value);
@@ -262,40 +262,43 @@ class LRUCache {
     e->in_cache = false;
     e->refs = 1;  // This is for the handle to be returned to the client
     memcpy(e->key_data, key.data(), key.size());
-    LRU_Append(&in_use_, e);
+    LRU_Append(&in_use_, e);  // It has an outstanding reference from the client
     total_usage_ += charge;
-
-    if (capacity_ >= charge) {
-      e->refs++;  // This is for the cache itself
-      e->in_cache = true;
-      usage_ += charge;
-      E* const old = table_.Insert(e);
-      // Evicting the old entry from the cache if there is one. The old entry
-      // must be "in" the cache because it was just ejected from table_ and all
-      // entries in table_ is "in" the cache. Because the old entry is "in"
-      // the cache, we can and must remove it from cache.
-      if (old) {
-        Remove(old);
-      }
-    } else {  // Don't cache; caching is effectively turned off when !capacity_
-      // next is read by key() in an assert; it must be set
-      e->next = NULL;
+    // Don't cache; quickly handle a common special case in which
+    // caching is effectively turned off via !capacity_.
+    if (!capacity_) {
+      return e;
     }
+    e->refs++;  // This is for the cache itself
+    e->in_cache = true;
+    usage_ += charge;
+    E* const old = table_.Insert(e);
+    // Evicting the old entry from the cache if there is one.
+    if (old) {
+      Remove(old);
+    }
+    // Make room for the new entry.
     while (usage_ > capacity_ && lru_.next != &lru_) {
-      E* const v = lru_.next;  // This is the least recently used
-      assert(v->refs == 1);
-      E* const victim = table_.Remove(v->key(), v->hash);
-      assert(v == victim);
+      E* const a = lru_.next;  // This is the least recently used
+      assert(a->refs == 1);
+      E* const victim = table_.Remove(a->key(), a->hash);
+      assert(a == victim);
+      Remove(victim);
+    }
+    // Don't cache me if we turn out to have run out of room.
+    if (usage_ > capacity_) {
+      E* const victim = table_.Remove(key, hash);
+      assert(e == victim);
       Remove(victim);
     }
 
     return e;
   }
 
-  // Retrieve a key from the cache incrementing its reference count and making
-  // sure it is moved to the in_use_ list when the requested key is present in
-  // the cache, Return NULL otherwise. Entries in the in_use_ list are not
-  // automatically evicted.
+  // Retrieve a key from the cache incrementing its reference count and moving
+  // it to the "in_use_" list if it is not already there. Return NULL if the
+  // specified key is not present in the cache. Entries in the "in_use_" list
+  // won't be automatically evicted.
   E* Lookup(const Slice& key, uint32_t hash) {
     E* const e = *table_.FindPointer(key, hash);
     if (e != NULL) {
@@ -304,7 +307,7 @@ class LRUCache {
     return e;
   }
 
-  // Empty the lru_ list.
+  // Empty the "lru_" list reducing usage_.
   void Prune() {
     while (lru_.next != &lru_) {
       E* const e = lru_.next;
@@ -315,8 +318,12 @@ class LRUCache {
     }
   }
 
-  // Immediately kicking out a key from the cache if it is present in the cache.
-  // A key can be removed regardless if it is currently in in_use_ or lru_.
+  // Kick out a key from the cache decrementing its reference count and reducing
+  // usage_. Removing a key that is not in the cache has no effect. A key can be
+  // removed regardless if it is currently in in_use_ or lru_. Once a key is
+  // removed from the cache, it can no longer be Lookup()'d from the cache and
+  // its reference count can only decrease. If a key is removed from the "lru_"
+  // list, it will be deleted immediately.
   void Erase(const Slice& key, uint32_t hash) {
     E* const e = table_.Remove(key, hash);
     if (e != NULL) {
@@ -324,14 +331,15 @@ class LRUCache {
     }
   }
 
-  // Return True iff the cache is empty.
+  // Return True iff the cache is empty. This does not count entries
+  // "out" of the cache.
   bool Empty() const {
     // An entry is "in" the cache iff it is in table_
     return (table_.Empty());
   }
 
   // Return True if key is present in the cache. This operation does not change
-  // the order of the entry in the cache.
+  // the LRU order of the entry in the cache.
   bool Exists(const Slice& key, uint32_t hash) const {
     return *table_.FindPointer(key, hash) != NULL;
   }
