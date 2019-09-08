@@ -107,9 +107,6 @@ Lease::Ref* LeaseTable::Insert(const DirId& pid, const Slice& nhash,
   if (lru_.Exists(key, hash)) {
     error = true;
     err = EEXIST;
-  } else if (!lru_.Compact()) {
-    error = true;
-    err = ENOBUFS;
   } else {
     r = lru_.Insert(key, hash, lease, 1, DeleteLease);
   }

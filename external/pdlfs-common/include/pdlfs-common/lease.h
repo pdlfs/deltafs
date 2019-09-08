@@ -81,6 +81,7 @@ struct LeaseEntry {
   size_t key_length;
   uint32_t refs;
   uint32_t hash;  // Hash of key(); used for fast partitioning and comparisons
+  bool in_cache;
   char key_data[1];  // Beginning of key
 
   bool is_pinned() const;

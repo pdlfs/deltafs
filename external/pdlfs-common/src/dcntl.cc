@@ -121,9 +121,6 @@ Dir::Ref* DirTable::Insert(const DirId& id, Dir* dir) {
   if (lru_.Exists(key, hash)) {
     error = true;
     err = EEXIST;
-  } else if (!lru_.Compact()) {
-    error = true;
-    err = ENOBUFS;
   } else {
     r = lru_.Insert(key, hash, dir, 1, DeleteDir);
   }
