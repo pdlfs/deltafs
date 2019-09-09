@@ -30,44 +30,45 @@
 // A handle may be referenced only by the cache or only by clients. When a
 // handle is only referenced by clients, it is no longer considered "in" the
 // cache. A handle is removed from the cache (i.e., from "in" the cache to "out"
-// of the cache) either when it is evicted by the cache automatically or
-// explicitly erased by a client.
+// of the cache) when it is evicted by the cache making room for new KV pairs.
+// In addition, a client may also explicitly erase a key from a cache.
 //
 // Each cache keeps two linked lists of KV pair handles. Each live handle (i.e.,
 // with one or more references) is in *either* one of the two lists, but
 // *never* both. When a handle loses its last reference, it is removed from the
-// list currently holding it and is deleted.
+// list currently holding it and then sent to its "deleter".
 //
 // The two lists are:
 //
-// * in-use: contains the KV handles currently referenced by clients and may or
-//     may not be referenced by the cache itself. Items in this list are not
-//     kept in any particular order, and are effectively "pinned" in memory:
-//     they are not considered for automatic eviction by the cache, though
-//     clients are still able to explicitly erase such items from the cache.
-//     Once erased, they may keep in the list until they lose all their
-//     references.
+// * in-use: contains the KV handles that are currently referenced by clients
+//     and may or may not be referenced by the cache itself. Items in this list
+//     are not kept in any particular order. In addition, items in this list
+//     that are also "in" the cache are effectively "pinned" in the cache: they
+//     are not considered for automatic eviction by the cache, though clients
+//     are still able to erase such items from the cache explicitly. Once
+//     erased, they may keep in the "in-use" list until they lose all their
+//     external references.
 //
 // * LRU: contains the KV handles currently only referenced by the cache but
-//     not by any client, in LRU order. Items in this list are candidates
-//     for eviction.
+//     not by any client, in LRU order. Items in this list are considered "idle"
+//     and candidates for eviction.
 //
 // KV handles currently "in" the cache are moved between the two lists when they
 // acquire or lose their first or last external references. KV handles "out" of
-// the cache may only be found in the first list. Note also that as long as a KV
-// handle in still "in" the cache, a client can erase it from the cache
-// regardless of the list to which the handle is currently attached.
+// the cache may only be found in the first list. Note also that as long as a
+// KV handle is still "in" the cache, a client may erase it from the cache
+// regardless of which list is currently holding the handle.
 //
 // When KV handles are in the "LRU" list, they are subject to eviction during
-// KV insertion and cache pruning operations. When a handle is removed by
-// the "LRU" list, it is immediately deleted.
+// KV insertion and cache pruning operations. Because handles in the "LRU" list
+// are only referenced by the cache, they are immediately deleted once evicted.
 namespace pdlfs {
 
 // To manage KV pairs, we place KV pairs in handles that are opaque to clients.
 // Each handle is represented by a cache entry defined below. Each entry is a
 // variable length heap-allocated structure, and is kept in a hash table (for
 // fast lookups) as long as the entry is "in" the cache. Each entry is
-// additionally put in one circular doubly linked list (either for LRU ordering
+// additionally put in a circular doubly linked list (either for LRU ordering
 // or for sanity checks) as long as the entry is alive.
 //
 // Each cache entry has an "in_cache" boolean flag indicating whether it is "in"
@@ -105,7 +106,23 @@ struct LRUEntry {
 // This LRU cache implementation requires external synchronization. Two capacity
 // usage numbers are maintained. One only counts entries currently "in" the
 // cache. The other also considers entries not "in" the cache. These are entries
-// only referenced by clients but not by the cache.
+// only referenced by clients but not by the cache itself.
+//
+// * total_usage_: overall capacity consumption covering all cache entries
+//     including those no longer "in" the cache. This usage number reflects
+//     overall resource footprint for which the cache instance is not fully
+//     responsible.
+//
+// * usage_: capacity consumption of entries "in" the cache. Cache is
+//     responsible for keeping this below a specific threshold by evicting
+//     "idle" entries in the cache. If inserting an entry would cause
+//     usage to grow beyond a given threshold even after evicting all
+//     "idle" entries, the insertion will be rejected such that the
+//     returned cache handle is only referenced by the client but not by
+//     the cache: the cache cannot be responsible for its usage.
+//
+// To keep *overall* capacity consumption below a certain limit, the client code
+// must take action to achieve that rather than completely relying on the cache.
 template <typename E>
 class LRUCache {
  private:
@@ -198,8 +215,8 @@ class LRUCache {
   }
 
  public:
-  LRUCache(size_t capacity =
-               0)  // Setting capacity_ to 0 effectively disables caching
+  // Setting capacity_ to 0 disables caching effectively
+  explicit LRUCache(size_t capacity = 0)
       : capacity_(capacity), total_usage_(0), usage_(0) {
     // Make empty circular linked lists
     in_use_.next = &in_use_;
@@ -233,7 +250,7 @@ class LRUCache {
   // the cache, the old entry will be kicked out as a side effect of the
   // insertion. After inserting the new entry, one or more entries in the lru_
   // list may be evicted to bring usage_ back below a specific threshold. In
-  // extreme cases, the newly inserted entry will be evicted canceling the very
+  // extreme cases, the newly inserted entry will be ejected canceling the very
   // insertion of it we just performed.
   template <typename T>
   E* Insert(const Slice& key, uint32_t hash, T* value, size_t charge,
@@ -249,7 +266,7 @@ class LRUCache {
     memcpy(e->key_data, key.data(), key.size());
     LRU_Append(&in_use_, e);  // It has an outstanding reference from the client
     total_usage_ += charge;
-    // Don't cache; quickly handle a common special case in which
+    // Fast path for a special case in which
     // caching is effectively turned off via !capacity_.
     if (!capacity_) {
       return e;
@@ -262,7 +279,7 @@ class LRUCache {
     if (old) {
       Remove(old);
     }
-    // Make room for the new entry.
+    // Make room for the incoming entry.
     while (usage_ > capacity_ && lru_.next != &lru_) {
       E* const a = lru_.next;  // This is the least recently used
       assert(a->refs == 1);
@@ -270,13 +287,14 @@ class LRUCache {
       assert(a == victim);
       Remove(victim);
     }
-    // Don't cache me if we turn out to have run out of room.
+    // Don't cache the incoming entry if we turn out to have run out of room.
     if (usage_ > capacity_) {
       E* const victim = table_.Remove(key, hash);
       assert(e == victim);
       Remove(victim);
     }
 
+    assert(usage_ <= capacity_);  // Invariant of the cache
     return e;
   }
 
