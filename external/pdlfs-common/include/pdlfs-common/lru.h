@@ -240,6 +240,21 @@ class LRUCache {
     }
   }
 
+  size_t total_usage() const {
+    // Return the total usage of the cache.
+    // Total usage includes entries both "in" and "out" of the cache.
+    return total_usage_;
+  }
+
+  size_t usage() const {
+    // Return the current usage of the cache
+    return usage_;
+  }
+
+  size_t capacity() const {  // Return the configured capacity of the cache
+    return capacity_;
+  }
+
   void SetCapacity(size_t c) {
     // Separate from constructor so caller can easily
     // make an array of LRUCache
