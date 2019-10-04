@@ -28,14 +28,18 @@
 namespace pdlfs {
 
 RPCOptions::RPCOptions()
-    : impl(kMercuryRPC),
-      mode(kServerClient),
+    : impl(rpc::kMercuryRPC),
+      mode(rpc::kServerClient),
       rpc_timeout(5000000),
       num_io_threads(1),
       extra_workers(NULL),
       addr_cache_size(128),
       env(NULL),
       fs(NULL) {}
+
+Status RPC::status() const {  ///
+  return Status::OK();
+}
 
 RPC::~RPC() {}
 
@@ -136,7 +140,7 @@ class MercuryRPCImpl : public RPC {
   virtual Status Start() { return looper_->Start(); }
   virtual Status Stop() { return looper_->Stop(); }
 
-  virtual If* OpenClientFor(const std::string& addr) {
+  virtual If* OpenStubFor(const std::string& addr) {
     return new MercuryRPC::Client(rpc_, addr);
   }
 
@@ -158,7 +162,7 @@ class MercuryRPCImpl : public RPC {
 
 RPC* RPC::Open(const RPCOptions& raw_options) {
   assert(raw_options.uri.size() != 0);
-  assert(raw_options.mode != kServerClient || raw_options.fs != NULL);
+  assert(raw_options.mode != rpc::kServerClient || raw_options.fs != NULL);
   RPCOptions options(raw_options);
   if (options.env == NULL) {
     options.env = Env::Default();
@@ -180,7 +184,7 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
   }
 #endif
 #if defined(PDLFS_MERCURY_RPC)
-  if (options.impl == kMercuryRPC) {
+  if (options.impl == rpc::kMercuryRPC) {
     rpc = new rpc::MercuryRPCImpl(options);
   }
 #endif
