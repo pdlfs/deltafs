@@ -29,7 +29,7 @@ class MercuryServer : public If {
     RPCOptions options;
     options.env = env_;
     options.extra_workers = pool_;
-    options.num_io_threads = 2;
+    options.num_rpc_threads = 2;
     options.uri = kProto;
     options.fs = this;
     bool listen = true;

@@ -61,7 +61,7 @@ struct RPCOptions {
   // RPC callback functions. RPC implementation may choose to dedicate
   // some of them to only drive RPC work and the rest to
   // execute RPC callback functions.
-  int num_io_threads;  // Default: 1
+  int num_rpc_threads;  // Default: 1
 
   // If not NULL, RPC callback functions will be redirected to
   // the pool instead of I/O threads for execution.
