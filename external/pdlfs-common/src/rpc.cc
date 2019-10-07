@@ -52,25 +52,18 @@ Status RPC::status() const {  ///
 RPC::~RPC() {}
 
 namespace {
-
 class SocketRPC {
  public:
-  SocketRPC(bool listening, const RPCOptions& rpcopts)
-      : listening_(listening), if_(rpcopts.fs), env_(rpcopts.env), fd_(-1) {}
-
+  explicit SocketRPC(const RPCOptions& options);
+  ~SocketRPC();
   class ThreadedLooper;
   class Client;
   class Addr;
 
-  // Bind to a requested address. This address may be a wildcard address.
-  // Return OK on success, or a non-OK status on errors.
-  Status Bind(const Addr& addr);
-
-  ~SocketRPC() {
-    if (fd_ != -1) {
-      close(fd_);
-    }
-  }
+  friend class RPCImpl;
+  Status Start();  // Start the server and bg progressing
+  // Stop bg progressing
+  Status Stop();
 
  private:
   struct CallState {
@@ -80,15 +73,20 @@ class SocketRPC {
     char msg[1];
   };
   void HandleIncomingCall(CallState* call);
+  // Open a new socket and bind it to addr_. Return OK on success, or a non-OK
+  // status on errors. The returned status is also remembered in status_,
+  // preventing future socket operations on errors.
+  Status OpenAndBind();
 
   // No copying allowed
   void operator=(const SocketRPC& rpc);
   SocketRPC(const SocketRPC&);
 
-  bool const listening_;
   rpc::If* const if_;
   Env* const env_;
+  Addr* addr_;
   port::Mutex mutex_;
+  ThreadedLooper* looper_;
   Status status_;
   int fd_;
 };
@@ -106,19 +104,21 @@ void SocketRPC::HandleIncomingCall(CallState* const call) {
 
 class SocketRPC::Addr {
  public:
-  explicit Addr(int port = 0) {
+  explicit Addr(const RPCOptions& options) {
     memset(&addr, 0, sizeof(struct sockaddr_in));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    if (port < 0) {  // Have the OS select a port for us
+  }
+
+  void SetPort(int port) {
+    if (port < 0) {  // Have the OS pick up a port for us
       port = 0;
     }
     addr.sin_port = htons(port);
   }
-
-  // Translate an address string into a socket address to which we can
+  // Translate an address string into a binary socket address to which we can
   // bind or connect. Return OK on success, or a non-OK status on errors.
-  Status Resolve(const std::string& host, bool is_host_numeric);
+  Status Resolv(const char* host, bool is_numeric);
+  Status ResolvUri(const std::string& uri);
   const struct sockaddr_in* rep() const { return &addr; }
   struct sockaddr_in* rep() {
     return &addr;
@@ -130,23 +130,29 @@ class SocketRPC::Addr {
   // Copyable
 };
 
-Status SocketRPC::Addr::Resolve(const std::string& host, bool is_host_numeric) {
-  if (host.empty() || strncmp("0.0.0.0", host.c_str(), host.size()) == 0) {
+Status SocketRPC::Addr::ResolvUri(const std::string& uri) {
+  Resolv(NULL, false);
+}
+
+Status SocketRPC::Addr::Resolv(const char* host, bool is_numeric) {
+  // First, quickly handle empty strings and strings that are known to be
+  // numeric like 127.0.0.1
+  if (!host || !host[0]) {
     addr.sin_addr.s_addr = INADDR_ANY;
-  } else if (is_host_numeric) {
-    in_addr_t in_addr = inet_addr(host.c_str());
+  } else if (is_numeric) {
+    in_addr_t in_addr = inet_addr(host);
     if (in_addr == INADDR_NONE) {
-      return Status::InvalidArgument("ip addr", host.c_str());
+      return Status::InvalidArgument("ip addr", host);
     } else {
       addr.sin_addr.s_addr = in_addr;
     }
-  } else {
+  } else {  // Likely lengthy resolution inevitable...
     struct addrinfo *ai, hints;
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = PF_INET;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_protocol = 0;
-    int ret = getaddrinfo(host.c_str(), NULL, &hints, &ai);
+    int ret = getaddrinfo(host, NULL, &hints, &ai);
     if (ret != 0) {
       return Status::IOError("getaddrinfo", gai_strerror(ret));
     } else {
@@ -171,7 +177,7 @@ class SocketRPC::ThreadedLooper {
         bg_id_(0) {}
 
   void Start() {
-    MutexLock ml(&rpc_->mutex_);
+    rpc_->mutex_.AssertHeld();
     while (bg_threads_ < num_threads_) {
       rpc_->env_->StartThread(BGLoopWrapper, this);
       ++bg_threads_;
@@ -179,7 +185,7 @@ class SocketRPC::ThreadedLooper {
   }
 
   void Stop() {
-    MutexLock ml(&rpc_->mutex_);
+    rpc_->mutex_.AssertHeld();
     shutting_down_.Release_Store(this);
     while (bg_threads_) {
       bg_cv_.Wait();
@@ -195,7 +201,7 @@ class SocketRPC::ThreadedLooper {
   void BGLoop();
 
   // Constant after construction
-  int const num_threads_;  // Total num of threads to create
+  int const num_threads_;  // Total num of progressing threads to create
   size_t const max_msgsz_;
   SocketRPC* const rpc_;
 
@@ -259,10 +265,10 @@ void SocketRPC::ThreadedLooper::BGLoop() {
 
 class SocketRPC::Client : public rpc::If {
  public:
-  explicit Client(const RPCOptions& rpcopts)
-      : rpc_timeout_(rpcopts.rpc_timeout),
+  explicit Client(const RPCOptions& options)
+      : rpc_timeout_(options.rpc_timeout),
         max_msgsz_(1432),
-        env_(rpcopts.env),
+        env_(options.env),
         fd_(-1) {}
 
   virtual ~Client() {
@@ -274,19 +280,20 @@ class SocketRPC::Client : public rpc::If {
   // REQUIRES: Connect() has been called successfully.
   virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
 
-  // Connect to the specified destination. This destination must not be a
-  // wildcard address. Return OK on success, or a non-OK status on errors.
-  Status Connect(const Addr& addr);
+  // Connect to a specified remote destination. This destination must not be a
+  // wildcard address. Return OK on success, or a non-OK status on errors. The
+  // returned status is also cached in status_, preventing future Call()
+  // operations on errors.
+  Status OpenAndConnect(const Addr& addr);
 
  private:
   // No copying allowed
   void operator=(const Client&);
   Client(const Client&);
-
   const uint64_t rpc_timeout_;  // In microseconds
   const size_t max_msgsz_;
   Env* const env_;
-
+  Status status_;
   int fd_;
 };
 
@@ -294,71 +301,169 @@ class SocketRPC::Client : public rpc::If {
 // so that we can easily check timeouts without waiting for the data
 // indefinitely. We use a timed poll to check data availability.
 Status SocketRPC::Client::Call(Message& in, Message& out) RPCNOEXCEPT {
-  Status status;
+  if (!status_.ok()) {
+    return status_;
+  }
   int nret = send(fd_, in.contents.data(), in.contents.size(), 0);
   if (nret != in.contents.size()) {
-    status = Status::IOError("send", strerror(errno));
-  } else {
-    const uint64_t start = env_->NowMicros();
-    std::string& buf = out.extra_buf;
-    buf.reserve(max_msgsz_);
-    buf.resize(1);
-    struct pollfd po;
-    memset(&po, 0, sizeof(struct pollfd));
-    po.events = POLLIN;
-    po.fd = fd_;
-    while (true) {
-      nret = recv(fd_, &buf[0], max_msgsz_, MSG_DONTWAIT);
-      if (nret > 0) {
-        out.contents = Slice(buf.data(), nret);
-        break;
-      } else if (nret == 0) {  // Is this really possible though?
-        out.contents = Slice();
-        break;
-      } else if (errno == EWOULDBLOCK) {
-        // We wait for 0.2 second and therefore timeouts are only checked
-        // roughly every that amount of time.
-        nret = poll(&po, 1, 200);
-      }
+    status_ = Status::IOError("send", strerror(errno));
+    return status_;
+  }
+  const uint64_t start = env_->NowMicros();
+  std::string& buf = out.extra_buf;
+  buf.reserve(max_msgsz_);
+  buf.resize(1);
+  struct pollfd po;
+  memset(&po, 0, sizeof(struct pollfd));
+  po.events = POLLIN;
+  po.fd = fd_;
+  while (true) {
+    nret = recv(fd_, &buf[0], max_msgsz_, MSG_DONTWAIT);
+    if (nret > 0) {
+      out.contents = Slice(&buf[0], nret);
+      break;
+    } else if (nret == 0) {  // Is this really possible though?
+      out.contents = Slice();
+      break;
+    } else if (errno == EWOULDBLOCK) {
+      // We wait for 0.2 second and therefore timeouts are only checked
+      // roughly every that amount of time.
+      nret = poll(&po, 1, 200);
+    }
 
-      // Either recv or poll may have returned errors
-      if (nret == -1) {
-        status = Status::IOError("recv or poll", strerror(errno));
-        break;
-      } else if (env_->NowMicros() - start >= rpc_timeout_) {
-        status = Status::Disconnected("timeout");
-        break;
-      }
+    // Either recv or poll may have returned errors
+    if (nret == -1) {
+      status_ = Status::IOError("recv or poll", strerror(errno));
+      break;
+    } else if (env_->NowMicros() - start >= rpc_timeout_) {
+      status_ = Status::Disconnected("timeout");
+      break;
     }
   }
 
-  return status;
+  return status_;
 }
 
-Status SocketRPC::Client::Connect(const Addr& addr) {
-  if ((fd_ = socket(PF_INET, SOCK_DGRAM, 0)) == -1)
-    return Status::IOError(strerror(errno));
-  int ret = connect(fd_, reinterpret_cast<const struct sockaddr*>(addr.rep()),
-                    sizeof(struct sockaddr_in));
-  if (ret == -1) {
-    return Status::IOError(strerror(errno));
+Status SocketRPC::Client::OpenAndConnect(const Addr& addr) {
+  if ((fd_ = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
+    status_ = Status::IOError(strerror(errno));
+  } else {
+    int ret = connect(fd_, reinterpret_cast<const struct sockaddr*>(addr.rep()),
+                      sizeof(struct sockaddr_in));
+    if (ret == -1) {
+      status_ = Status::IOError(strerror(errno));
+    }
   }
-  return Status::OK();
+  return status_;
 }
 
-Status SocketRPC::Bind(const Addr& addr) {
-  if ((fd_ = socket(PF_INET, SOCK_DGRAM, 0)) == -1)
-    return Status::IOError(strerror(errno));
-  int ret = bind(fd_, reinterpret_cast<const struct sockaddr*>(addr.rep()),
-                 sizeof(struct sockaddr_in));
-  if (ret == -1) {
-    return Status::IOError(strerror(errno));
-  }
-  return Status::OK();
+SocketRPC::SocketRPC(const pdlfs::RPCOptions& options)
+    : if_(options.fs), env_(options.env), addr_(new Addr(options)), fd_(-1) {
+  looper_ = new ThreadedLooper(this, options);
+  status_ = addr_->ResolvUri(options.uri);
 }
+
+SocketRPC::~SocketRPC() {
+  mutex_.Lock();
+  delete looper_;
+  mutex_.Unlock();
+  delete addr_;
+}
+
+Status SocketRPC::Stop() {
+  MutexLock ml(&mutex_);
+  looper_->Stop();
+  return status_;
+}
+
+Status SocketRPC::Start() {
+  MutexLock ml(&mutex_);
+  if (status_.ok() && fd_ == -1) {
+    OpenAndBind();  // Access addr_, update fd_ and status_
+    if (status_.ok()) {
+      looper_->Start();
+    }
+  }
+  return status_;
+}
+
+Status SocketRPC::OpenAndBind() {
+  mutex_.AssertHeld();
+  if ((fd_ = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
+    status_ = Status::IOError(strerror(errno));
+  } else {
+    int ret = bind(fd_, reinterpret_cast<const struct sockaddr*>(addr_->rep()),
+                   sizeof(struct sockaddr_in));
+    if (ret == -1) {
+      status_ = Status::IOError(strerror(errno));
+    }
+  }
+  return status_;
+}
+
+// A dummy structure for error propagation.
+class Err : public rpc::If {
+ public:
+  explicit Err(const Status& err) : status_(err) {}
+
+  virtual Status Call(Message& in, Message& out) RPCNOEXCEPT { return status_; }
+
+ private:
+  Status status_;
+
+  // Copyable
+};
 
 class RPCImpl : public RPC {
  public:
+  explicit RPCImpl(const RPCOptions& options) : options_(options), rpc_(NULL) {
+    if (options_.mode == rpc::kServerClient) {
+      rpc_ = new SocketRPC(options);
+    }
+  }
+
+  virtual rpc::If* OpenStubFor(const std::string& uri) {
+    SocketRPC::Addr addr(options_);
+    Status status = addr.ResolvUri(uri);
+    if (status.ok()) {
+      SocketRPC::Client* cli = new SocketRPC::Client(options_);
+      cli->OpenAndConnect(addr);
+      return cli;
+    } else {
+      return new Err(status);
+    }
+  }
+
+  virtual Status status() const {
+    if (rpc_) {
+      MutexLock ml(&rpc_->mutex_);
+      return rpc_->status_;
+    } else {
+      return Status::OK();
+    }
+  }
+
+  virtual Status Start() {
+    if (rpc_) return rpc_->Start();
+    return Status::OK();
+  }
+
+  virtual Status Stop() {
+    if (rpc_) return rpc_->Stop();
+    return Status::OK();
+  }
+
+  virtual ~RPCImpl() {  ///
+    delete rpc_;
+  }
+
+ private:
+  RPCOptions const options_;
+  SocketRPC* rpc_;
+
+  // No copying allowed
+  void operator=(const RPCImpl& impl);
+  RPCImpl(const RPCImpl&);
 };
 
 }  // namespace
