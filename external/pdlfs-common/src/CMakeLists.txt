@@ -34,7 +34,7 @@ set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c/crc32c.cc
      xxhash.cc xxhash_impl.cc)
 set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
      crc32c/crc32c_test.cc env_test.cc fstypes_test.cc
-     hash_test.cc log_test.cc random_test.cc
+     hash_test.cc log_test.cc random_test.cc rpc_test.cc
      strutil_test.cc)
 
 # leveldb sources and tests

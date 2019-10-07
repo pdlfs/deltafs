@@ -36,7 +36,7 @@
 namespace pdlfs {
 
 RPCOptions::RPCOptions()
-    : impl(rpc::kMercuryRPC),
+    : impl(rpc::kSocketRPC),
       mode(rpc::kServerClient),
       rpc_timeout(5000000),
       num_rpc_threads(1),
@@ -54,6 +54,8 @@ RPC::~RPC() {}
 namespace {
 class SocketRPC {
  public:
+  // Server address is resolved immediately at the constructor,
+  // but won't be opened until Start() is called.
   explicit SocketRPC(const RPCOptions& options);
   ~SocketRPC();
   class ThreadedLooper;
@@ -61,22 +63,22 @@ class SocketRPC {
   class Addr;
 
   friend class RPCImpl;
-  Status Start();  // Start the server and bg progressing
-  // Stop bg progressing
+  // Open a new socket in fd_, try binding it to addr_, and start background
+  // progressing. Return OK on success, or a non-OK status on errors. The
+  // returned status is also remembered in status_, preventing future
+  // operations on errors.
+  Status Start();
+  // Stop background progressing.
   Status Stop();
 
  private:
   struct CallState {
-    struct sockaddr addr;  // Location of the caller
+    struct sockaddr_in addr;  // Location of the caller
     socklen_t addrlen;
     size_t msgsz;  // Payload size
     char msg[1];
   };
   void HandleIncomingCall(CallState* call);
-  // Open a new socket and bind it to addr_. Return OK on success, or a non-OK
-  // status on errors. The returned status is also remembered in status_,
-  // preventing future socket operations on errors.
-  Status OpenAndBind();
 
   // No copying allowed
   void operator=(const SocketRPC& rpc);
@@ -95,8 +97,9 @@ void SocketRPC::HandleIncomingCall(CallState* const call) {
   rpc::If::Message in, out;
   in.contents = Slice(call->msg, call->msgsz);
   if_->Call(in, out);
-  int nbytes = sendto(fd_, out.contents.data(), out.contents.size(), 0,
-                      &call->addr, call->addrlen);
+  int nbytes =
+      sendto(fd_, out.contents.data(), out.contents.size(), 0,
+             reinterpret_cast<struct sockaddr*>(&call->addr), call->addrlen);
   if (nbytes != out.contents.size()) {
     //
   }
@@ -109,14 +112,18 @@ class SocketRPC::Addr {
     addr.sin_family = AF_INET;
   }
 
-  void SetPort(int port) {
-    if (port < 0) {  // Have the OS pick up a port for us
+  void SetPort(const char* p) {
+    int port = -1;
+    if (p && p[0]) port = atoi(p);
+    if (port < 0) {
+      // Have the OS pick up a port for us
       port = 0;
     }
     addr.sin_port = htons(port);
   }
-  // Translate an address string into a binary socket address to which we can
-  // bind or connect. Return OK on success, or a non-OK status on errors.
+  // Translate a human-readable address string into a binary socket address to
+  // which we can bind or connect. Return OK on success, or a non-OK status
+  // on errors.
   Status Resolv(const char* host, bool is_numeric);
   Status ResolvUri(const std::string& uri);
   const struct sockaddr_in* rep() const { return &addr; }
@@ -131,12 +138,30 @@ class SocketRPC::Addr {
 };
 
 Status SocketRPC::Addr::ResolvUri(const std::string& uri) {
-  Resolv(NULL, false);
+  std::string host, port;
+  // E.g.: uri = "ignored://127.0.0.1:22222", "127.0.0.1", ":22222"
+  //                     |  |        |         |            |
+  //                     |  |        |         |            |
+  //                     a  b        c         b           b,c
+  size_t a = uri.find("://");  // Ignore protocol definition
+  size_t b = (a == std::string::npos) ? 0 : a + 3;
+  size_t c = uri.find(':', b);
+  if (c != std::string::npos) {
+    host = uri.substr(b, c - b);
+    port = uri.substr(c + 1);
+  } else {
+    host = uri.substr(b);
+  }
+  Status status = Resolv(host.c_str(), false);
+  if (status.ok()) {
+    SetPort(port.c_str());
+  }
+  return status;
 }
 
 Status SocketRPC::Addr::Resolv(const char* host, bool is_numeric) {
   // First, quickly handle empty strings and strings that are known to be
-  // numeric like 127.0.0.1
+  // numeric like "127.0.0.1"
   if (!host || !host[0]) {
     addr.sin_addr.s_addr = INADDR_ANY;
   } else if (is_numeric) {
@@ -146,7 +171,7 @@ Status SocketRPC::Addr::Resolv(const char* host, bool is_numeric) {
     } else {
       addr.sin_addr.s_addr = in_addr;
     }
-  } else {  // Likely lengthy resolution inevitable...
+  } else {  // Likely lengthy name resolution inevitable...
     struct addrinfo *ai, hints;
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = PF_INET;
@@ -243,7 +268,9 @@ void SocketRPC::ThreadedLooper::BGLoop() {
       break;
     }
 
-    int nret = recvfrom(po.fd, call->msg, max_msgsz_, MSG_DONTWAIT, &call->addr,
+    call->addrlen = sizeof(struct sockaddr_in);
+    int nret = recvfrom(po.fd, call->msg, max_msgsz_, MSG_DONTWAIT,
+                        reinterpret_cast<struct sockaddr*>(&call->addr),
                         &call->addrlen);
     if (nret > 0) {
       call->msgsz = nret;
@@ -277,7 +304,7 @@ class SocketRPC::Client : public rpc::If {
     }
   }
 
-  // REQUIRES: Connect() has been called successfully.
+  // REQUIRES: OpenAndConnect() has been successfully called.
   virtual Status Call(Message& in, Message& out) RPCNOEXCEPT;
 
   // Connect to a specified remote destination. This destination must not be a
@@ -357,29 +384,35 @@ Status SocketRPC::Client::OpenAndConnect(const Addr& addr) {
   return status_;
 }
 
-SocketRPC::SocketRPC(const pdlfs::RPCOptions& options)
+SocketRPC::SocketRPC(const RPCOptions& options)
     : if_(options.fs), env_(options.env), addr_(new Addr(options)), fd_(-1) {
   looper_ = new ThreadedLooper(this, options);
   status_ = addr_->ResolvUri(options.uri);
 }
 
 SocketRPC::~SocketRPC() {
-  mutex_.Lock();
+  mutex_.Lock();  // Lock required for stopping bg progressing
   delete looper_;
   mutex_.Unlock();
   delete addr_;
-}
-
-Status SocketRPC::Stop() {
-  MutexLock ml(&mutex_);
-  looper_->Stop();
-  return status_;
+  if (fd_ != -1) {
+    close(fd_);
+  }
 }
 
 Status SocketRPC::Start() {
   MutexLock ml(&mutex_);
   if (status_.ok() && fd_ == -1) {
-    OpenAndBind();  // Access addr_, update fd_ and status_
+    if ((fd_ = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
+      status_ = Status::IOError(strerror(errno));
+    } else {
+      int ret =
+          bind(fd_, reinterpret_cast<const struct sockaddr*>(addr_->rep()),
+               sizeof(struct sockaddr_in));
+      if (ret == -1) {
+        status_ = Status::IOError(strerror(errno));
+      }
+    }
     if (status_.ok()) {
       looper_->Start();
     }
@@ -387,17 +420,9 @@ Status SocketRPC::Start() {
   return status_;
 }
 
-Status SocketRPC::OpenAndBind() {
-  mutex_.AssertHeld();
-  if ((fd_ = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
-    status_ = Status::IOError(strerror(errno));
-  } else {
-    int ret = bind(fd_, reinterpret_cast<const struct sockaddr*>(addr_->rep()),
-                   sizeof(struct sockaddr_in));
-    if (ret == -1) {
-      status_ = Status::IOError(strerror(errno));
-    }
-  }
+Status SocketRPC::Stop() {
+  MutexLock ml(&mutex_);
+  looper_->Stop();
   return status_;
 }
 
@@ -458,12 +483,12 @@ class RPCImpl : public RPC {
   }
 
  private:
-  RPCOptions const options_;
-  SocketRPC* rpc_;
-
   // No copying allowed
   void operator=(const RPCImpl& impl);
   RPCImpl(const RPCImpl&);
+
+  const RPCOptions options_;
+  SocketRPC* rpc_;
 };
 
 }  // namespace
@@ -613,9 +638,12 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
     rpc = new rpc::MercuryRPCImpl(options);
   }
 #endif
+  if (options.impl == rpc::kSocketRPC) {
+    rpc = new RPCImpl(options);
+  }
   if (rpc == NULL) {
 #ifndef NDEBUG
-    char msg[] = "No rpc implementation is available\n";
+    char msg[] = "The requested rpc impl is unavailable\n";
     fwrite(msg, 1, sizeof(msg), stderr);
     abort();
 #else
