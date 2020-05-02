@@ -10,11 +10,10 @@
  */
 
 #include "deltafs/deltafs_api.h"
-#include "deltafs/deltafs_config.h"
 
+#include "deltafs/deltafs_config.h"
 #include "deltafs_client.h"
 #include "deltafs_envs.h"
-
 #include "plfsio/v1/bufio.h"
 #include "plfsio/v1/cuckoo.h"
 #include "plfsio/v1/pdb.h"
@@ -22,10 +21,11 @@
 #include "plfsio/v1/v1.h"
 
 #include "pdlfs-common/coding.h"
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/env_files.h"
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/options.h"
+#include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
+#include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/murmur.h"
 #include "pdlfs-common/mutexlock.h"
@@ -38,7 +38,6 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include <string>
 
 #ifndef EHOSTUNREACH
@@ -678,7 +677,7 @@ inline DirMode DefaultDirMode() {  // Assuming unique keys
 // Default system env.
 inline pdlfs::Env* DefaultDirEnv() {
 #if defined(PDLFS_PLATFORM_POSIX)
-  return pdlfs::port::PosixGetUnBufferedIOEnv();  // Avoid double-buffering
+  return pdlfs::Env::GetUnBufferedIoEnv();  // Avoid double-buffering
 #else
   return pdlfs::Env::Default();
 #endif
@@ -978,16 +977,16 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
       pdlfs::Status status;
       uint64_t io_start = 0;
       EnvLock l(lck_);
-      if (maxbw_ != 0) io_start = env_->NowMicros();
+      if (maxbw_ != 0) io_start = pdlfs::CurrentMicros();
       if (!drop_ && base_ != NULL) {  // Write data to the real destination
         status = base_->Append(data);
       }
       if (maxbw_ != 0 && status.ok()) {
         uint64_t delay = data.size() * 1000 * 1000 / maxbw_;
-        uint64_t now = env_->NowMicros();
+        uint64_t now = pdlfs::CurrentMicros();
         if (delay > 10 && now - io_start < delay - 10) {
           int sleep = static_cast<int>(delay + io_start - now - 10);
-          env_->SleepForMicroseconds(sleep);
+          pdlfs::SleepForMicroseconds(sleep);
         }
       }
       return status;

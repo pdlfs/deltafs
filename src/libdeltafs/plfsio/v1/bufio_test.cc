@@ -38,7 +38,7 @@ class EmulatedWritableFile : public WritableFileWrapper {
     if (!buf.empty()) {
       const int micros_to_delay =
           static_cast<int>(1000 * 1000 * buf.size() / bytes_per_sec_);
-      Env::Default()->SleepForMicroseconds(micros_to_delay);
+      SleepForMicroseconds(micros_to_delay);
     }
     return Status::OK();
   }
@@ -106,7 +106,7 @@ class BufBench {
     options_.allow_env_threads = false;
     options_.value_size = 56;
     writer = new DirectWriter(options_, dst, buf_size_);
-    const uint64_t start = env->NowMicros();
+    const uint64_t start = CurrentMicros();
     std::string kv(options_.key_size + options_.value_size, '\0');
     const size_t num_keys = static_cast<size_t>(mkeys_) << 20;
     size_t i = 0;
@@ -119,7 +119,7 @@ class BufBench {
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
     ASSERT_OK(writer->Finish());
-    uint64_t dura = env->NowMicros() - start;
+    uint64_t dura = CurrentMicros()- start;
     Report(dura);
 
     delete writer;

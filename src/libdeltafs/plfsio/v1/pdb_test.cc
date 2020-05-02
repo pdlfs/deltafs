@@ -39,7 +39,7 @@ class EmulatedWritableFile : public WritableFileWrapper {
     if (!buf.empty()) {
       const int micros_to_delay =
           static_cast<int>(1000 * 1000 * buf.size() / bytes_per_sec_);
-      Env::Default()->SleepForMicroseconds(micros_to_delay);
+      SleepForMicroseconds(micros_to_delay);
     }
     return Status::OK();
   }
@@ -111,7 +111,7 @@ class PdbBench {
     options_.allow_env_threads = false;
     options_.value_size = 56;
     pdb = new BufferedBlockWriter(options_, dst, buf_size_, n_);
-    const uint64_t start = env->NowMicros();
+    const uint64_t start = CurrentMicros();
     char tmp[8];
     Slice key(tmp, sizeof(tmp));
     std::string val(options_.value_size, '\0');
@@ -125,7 +125,7 @@ class PdbBench {
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
     ASSERT_OK(pdb->Finish());
-    uint64_t dura = env->NowMicros() - start;
+    uint64_t dura = CurrentMicros() - start;
     Report(dura);
 
     delete pdb;

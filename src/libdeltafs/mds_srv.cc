@@ -9,15 +9,15 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
+#include "mds_srv.h"
 
 #include "pdlfs-common/dirlock.h"
 #include "pdlfs-common/mutexlock.h"
 
-#include "mds_srv.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 namespace pdlfs {
 
@@ -30,7 +30,7 @@ Status MDS::SRV::LoadDir(const DirId& id, DirInfo* info, DirIndex* index) {
   s = mdb_->GetInfo(id, info, mdb_tx);
   if (s.IsNotFound()) {
     mdb_tx = mdb_->CreateTx();
-    info->mtime = NowMicros();
+    info->mtime = CurrentMicros();
     info->size = 0;
     s = mdb_->SetInfo(id, *info, mdb_tx);
   }
@@ -311,7 +311,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
       }
       if (s.ok()) {
         bool entry_exists = false;
-        uint64_t my_time = NowMicros();
+        uint64_t my_time = CurrentMicros();
         uint64_t my_ino = NextIno();
         mutex_.Unlock();
 
@@ -451,7 +451,7 @@ Status MDS::SRV::Unlink(const UnlinkOptions& options, UnlinkRet* ret) {
       }
       if (s.ok()) {
         bool entry_exists = false;
-        uint64_t my_time = NowMicros();
+        uint64_t my_time = CurrentMicros();
         mutex_.Unlock();
 
         tx = new Dir::Tx(mdb_);
@@ -586,7 +586,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
       }
       if (s.ok()) {
         bool entry_exists = false;
-        uint64_t my_time = NowMicros();
+        uint64_t my_time = CurrentMicros();
         uint64_t my_ino = NextIno();
         DirId my_id(reg_id_, snap_id_, my_ino);
         mutex_.Unlock();
@@ -724,7 +724,7 @@ Status MDS::SRV::Utime(const UtimeOptions& options, UtimeRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_time = NowMicros();
+        uint64_t my_time = CurrentMicros();
         mutex_.Unlock();
 
         tx = new Dir::Tx(mdb_);
@@ -811,7 +811,7 @@ Status MDS::SRV::Trunc(const TruncOptions& options, TruncRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_time = NowMicros();
+        uint64_t my_time = CurrentMicros();
         mutex_.Unlock();
 
         tx = new Dir::Tx(mdb_);
@@ -953,7 +953,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_start = NowMicros();
+        uint64_t my_start = CurrentMicros();
         uint64_t my_seq = d->seq;
         mutex_.Unlock();
 
@@ -981,7 +981,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
         }
 
         mutex_.Lock();
-        uint64_t my_end = NowMicros();
+        uint64_t my_end = CurrentMicros();
         // No lease either we timeout or have a negative result, otherwise...
         if (s.ok() && (my_end - my_start) < (lease_duration_ - 10)) {
           Lease::Ref* lref = leases_->Lookup(dir_id, name_hash);
@@ -1096,7 +1096,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_start = NowMicros();
+        uint64_t my_start = CurrentMicros();
         mutex_.Unlock();
 
         tx = new Dir::Tx(mdb_);
@@ -1147,7 +1147,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
         }
 
         mutex_.Lock();
-        uint64_t my_end = NowMicros();
+        uint64_t my_end = CurrentMicros();
         // Wait until lease expiration if the target is a directory
         if (s.ok() && S_ISDIR(stat->FileMode())) {
           Lease::Ref* lease_ref = leases_->Lookup(dir_id, name_hash);
@@ -1173,7 +1173,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
                 mutex_.Unlock();
                 SleepForMicroseconds(lease_duration_ + 10);
                 mutex_.Lock();
-                my_end = NowMicros();
+                my_end = CurrentMicros();
               }
             }
             d->num_leases++;
@@ -1189,7 +1189,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
             // Wait past lease due
             SleepForMicroseconds(diff);
             mutex_.Lock();
-            my_end = NowMicros();
+            my_end = CurrentMicros();
           }
           assert(lease->parent == d);
           d->seq = 1 + d->seq;

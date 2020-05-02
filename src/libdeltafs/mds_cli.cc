@@ -9,15 +9,15 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <set>
+#include "mds_cli.h"
 
 #include "pdlfs-common/mutexlock.h"
 
-#include "mds_cli.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <set>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 namespace pdlfs {
 
@@ -64,7 +64,7 @@ Status MDS::CLI::Lookup(const DirId& pid, const Slice& name, int zserver,
   Slice nhash = DirIndex::Hash(name, tmp);
   mutex_.AssertHeld();
 
-  uint64_t now = Env::Default()->NowMicros();
+  uint64_t now = CurrentMicros();
   LookupHandle* h = lookup_cache_->Lookup(pid, nhash);
 
   // Ask for a new lookup state lease only if
@@ -320,8 +320,9 @@ Status MDS::CLI::ResolvePath(const Slice& path, PathInfo* result,
 
   } else {
     Verbose(__LOG_ARGS__, MDS_OP_VERBOSE_LEVEL, "%s (at pid=%s) %s: %s",
-            __func__, at != NULL ? at->pid.DebugString().c_str()
-                                 : DirId(0, 0, 0).DebugString().c_str(),
+            __func__,
+            at != NULL ? at->pid.DebugString().c_str()
+                       : DirId(0, 0, 0).DebugString().c_str(),
             path.c_str(), s.ToString().c_str());
   }
 #endif
@@ -732,7 +733,7 @@ Status MDS::CLI::Mkdir(
                 mode & ~DELTAFS_DIR_MASK,  // avoid special directory modes
                 NULL, true,  // recursively creating missing parents
                 false        // okay if exists
-                );
+      );
       if (s.ok()) {
         s = Mkdir(p, mode, ent, true,  // retry the original request
                   error_if_exists);

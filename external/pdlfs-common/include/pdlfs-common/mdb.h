@@ -39,6 +39,22 @@ struct MDBOptions {
   DB* db;
 };
 
+struct MDBStats {
+  MDBStats();
+  // Total amount of key bytes pushed to db.
+  uint64_t putkeybytes;
+  // Total amount of val bytes pushed to db.
+  uint64_t putbytes;
+  // Total number of put operations.
+  uint64_t puts;
+  // Total number of key bytes read out of db.
+  uint64_t getkeybytes;
+  // Total number of val bytes read out of db.
+  uint64_t getbytes;
+  // Total number of get operations.
+  uint64_t gets;
+};
+
 class MDB : public MXDB<> {
  public:
   explicit MDB(const MDBOptions& opts);

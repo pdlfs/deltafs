@@ -10,6 +10,7 @@
  */
 
 #include "pdlfs-common/mdb.h"
+
 #include "pdlfs-common/dcntl.h"
 #include "pdlfs-common/gigaplus.h"
 
@@ -18,6 +19,14 @@ namespace pdlfs {
 #if defined(DELTAFS) || defined(INDEXFS)
 MDBOptions::MDBOptions()
     : fill_cache(false), verify_checksums(false), sync(false), db(NULL) {}
+
+MDBStats::MDBStats()
+    : putkeybytes(0),
+      putbytes(0),
+      puts(0),
+      getkeybytes(0),
+      getbytes(0),
+      gets(0) {}
 
 MDB::MDB(const MDBOptions& opts) : MXDB(opts.db) {}
 
@@ -34,7 +43,7 @@ Status MDB::GetNode(const DirId& id, const Slice& hash, Stat* stat,
   ReadOptions read_options;
   read_options.verify_checksums = options_.verify_checksums;
   read_options.fill_cache = options_.fill_cache;
-  return GET<Key>(id, hash, stat, name, &read_options, tx);
+  return GET<Key>(id, hash, stat, name, &read_options, tx, (MDBStats*)NULL);
 }
 
 Status MDB::GetDirIdx(const DirId& id, DirIndex* idx, Tx* tx) {
@@ -80,7 +89,7 @@ Status MDB::SetNode(const DirId& id, const Slice& hash, const Stat& stat,
                     const Slice& name, Tx* tx) {
   WriteOptions write_options;
   write_options.sync = options_.sync;
-  return SET<Key>(id, hash, stat, name, &write_options, tx);
+  return PUT<Key>(id, hash, stat, name, &write_options, tx, (MDBStats*)NULL);
 }
 
 Status MDB::SetDirIdx(const DirId& id, const DirIndex& idx, Tx* tx) {

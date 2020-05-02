@@ -514,7 +514,7 @@ class EmulatedWritableFile : public WritableFileWrapper {
   virtual ~EmulatedWritableFile() {}
 
   void EmulateWrite(const Slice& data) {
-    const uint64_t now_micros = Env::Default()->NowMicros();
+    const uint64_t now_micros = CurrentMicros();
     if (hist_ != NULL && prev_write_micros_ != 0) {
       hist_->Add(now_micros - prev_write_micros_);
     }
@@ -527,11 +527,11 @@ class EmulatedWritableFile : public WritableFileWrapper {
     }
     const int micros_to_delay =
         static_cast<int>(1000 * 1000 * data.size() / bytes_ps_);
-    Env::Default()->SleepForMicroseconds(micros_to_delay);
+    SleepForMicroseconds(micros_to_delay);
     if (lis_ != NULL) {
       IoEvent event;
       event.type = kIoEnd;
-      event.micros = Env::Default()->NowMicros();
+      event.micros = CurrentMicros();
       lis_->OnEvent(event.type, &event);
     }
   }
@@ -675,7 +675,7 @@ class PlfsIoBench {
 
   class EventPrinter : public EventListener {
    public:
-    EventPrinter() : base_time_(Env::Default()->NowMicros()) {
+    EventPrinter() : base_time_(CurrentMicros()) {
       events_.reserve(1024);
       iops_.reserve(1024);
     }
@@ -990,13 +990,13 @@ class PlfsIoBench {
     options_.env = env_;
     Status s = DirWriter::Open(options_, home_, &writer_);
     ASSERT_OK(s) << "Cannot open dir";
-    Env::Default()->SleepForMicroseconds(1000);
+    SleepForMicroseconds(1000);
 #ifdef PDLFS_PLATFORM_POSIX
     struct rusage tmp_usage;
     int r0 = getrusage(RUSAGE_SELF, &tmp_usage);
     ASSERT_EQ(r0, 0);
 #endif
-    const uint64_t start = env_->NowMicros();
+    const uint64_t start = CurrentMicros();
     fprintf(stderr, "Inserting data...\n");
     const int num_files = (mfiles_ << 20);
     BigBatch batch(options_, keys_, 0, num_files);
@@ -1023,7 +1023,7 @@ class PlfsIoBench {
     ASSERT_OK(s) << "Cannot finish";
 
     fprintf(stderr, "Done!\n");
-    const uint64_t end = env_->NowMicros();
+    const uint64_t end = CurrentMicros();
     const uint64_t dura = end - start;
 #ifdef PDLFS_PLATFORM_POSIX
     PrintStats(tmp_usage, dura, owns_env);
@@ -1454,7 +1454,7 @@ class PlfsQuBench : protected PlfsIoBench {
     Status s = DirReader::Open(options_, home_, &reader_);
     ASSERT_OK(s) << "Cannot open dir";
     fprintf(stderr, "Reading dir...\n");
-    const uint64_t start = env_->NowMicros();
+    const uint64_t start = CurrentMicros();
     const int num_files = (mfiles_ << 20);
     BigBatch batch(options_, keys_, 0, num_files);
     batch.Seek(0);
@@ -1495,7 +1495,7 @@ class PlfsQuBench : protected PlfsIoBench {
     fprintf(stderr, "\r100.00%%\n");
     fprintf(stderr, "Done!\n");
 
-    uint64_t dura = env_->NowMicros() - start;
+    uint64_t dura = CurrentMicros() - start;
 
     Report(dura);
 

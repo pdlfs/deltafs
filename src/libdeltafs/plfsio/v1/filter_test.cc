@@ -407,11 +407,11 @@ class PlfsFilterQueryBench : public PlfsFilterBench<T> {
     std::random_shuffle(this->keys_.begin(), it);
     fprintf(stderr, "Done!\n");
     fprintf(stderr, "Testing ...\n");
-    const uint64_t start = Env::Default()->NowMicros();
+    const uint64_t start = CurrentMicros();
     it = this->keys_.begin();
     RunQueries(num_keys, it, contents);
     fprintf(stderr, "Done!\n");
-    uint64_t dura = Env::Default()->NowMicros() - start;
+    uint64_t dura = CurrentMicros() - start;
     fprintf(stderr, "----------------------------------------\n");
     fprintf(stderr, "             Total Time: %.3f s\n", dura / k / k);
     fprintf(stderr, " Avg. Latency Per Query: %.3f us\n",

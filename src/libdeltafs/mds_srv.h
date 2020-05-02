@@ -52,10 +52,6 @@ class MDS::SRV : public MDS {
 
   // Constant after construction
   MDSEnv* mds_env_;
-  uint64_t NowMicros() { return mds_env_->env->NowMicros(); }
-  void SleepForMicroseconds(int micros) {
-    mds_env_->env->SleepForMicroseconds(micros);
-  }
   MDB* mdb_;
   typedef DirIndexOptions GIGA;
   GIGA giga_;
