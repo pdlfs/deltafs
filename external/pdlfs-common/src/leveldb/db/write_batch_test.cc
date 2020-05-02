@@ -18,8 +18,8 @@
 #include "write_batch_internal.h"
 
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/strutil.h"
 #include "pdlfs-common/testharness.h"
 

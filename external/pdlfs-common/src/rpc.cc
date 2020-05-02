@@ -26,11 +26,11 @@
 #include <vector>
 
 #if defined(PDLFS_MARGO_RPC)
-#include "margo_rpc.h"
+#include "margo/margo_rpc.h"
 #endif
 
 #if defined(PDLFS_MERCURY_RPC)
-#include "mercury_rpc.h"
+#include "mercury/mercury_rpc.h"
 #endif
 
 namespace pdlfs {
@@ -336,7 +336,7 @@ Status SocketRPC::Client::Call(Message& in, Message& out) RPCNOEXCEPT {
     status_ = Status::IOError("send", strerror(errno));
     return status_;
   }
-  const uint64_t start = env_->NowMicros();
+  const uint64_t start = CurrentMicros();
   std::string& buf = out.extra_buf;
   buf.reserve(max_msgsz_);
   buf.resize(1);
@@ -362,7 +362,7 @@ Status SocketRPC::Client::Call(Message& in, Message& out) RPCNOEXCEPT {
     if (nret == -1) {
       status_ = Status::IOError("recv or poll", strerror(errno));
       break;
-    } else if (env_->NowMicros() - start >= rpc_timeout_) {
+    } else if (CurrentMicros() - start >= rpc_timeout_) {
       status_ = Status::Disconnected("timeout");
       break;
     }

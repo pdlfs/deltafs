@@ -27,7 +27,7 @@ bool Lease::busy() const {
   if (state == kLeaseLocked) {
     return true;
   } else {
-    return Env::Default()->NowMicros() < due;
+    return CurrentMicros() < due;
   }
 }
 
@@ -36,7 +36,7 @@ bool LeaseEntry::is_pinned() const { return value->busy(); }
 LeaseTable::~LeaseTable() {
 #ifndef NDEBUG
   // Wait for all leases to expire
-  Env::Default()->SleepForMicroseconds(10 + options_.max_lease_duration);
+  SleepForMicroseconds(10 + options_.max_lease_duration);
   lru_.Prune();
   assert(lru_.Empty());
 #endif

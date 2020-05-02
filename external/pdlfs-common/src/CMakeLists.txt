@@ -25,44 +25,45 @@
 
 # main directory sources and tests
 set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c/crc32c.cc
-     crc32c/crc32c_internal.cc crc32c/crc32c_sse42.cc env.cc
+     crc32c/crc32c_sw.cc crc32c/crc32c_sse42.cc env.cc
      env_files.cc fsdbx.cc fstypes.cc hash.cc histogram.cc
      log_reader.cc log_writer.cc logging.cc murmur.cc
-     port_posix.cc posix_env.cc posix_logger.cc posix_netdev.cc
-     random.cc slice.cc spooky.cc spooky_impl.cc
+     port_posix.cc posix/posix_bgrun.cc posix/posix_filecopy.cc
+     posix/posix_env.cc posix/posix_fastcopy.cc posix/posix_logger.cc
+     posix/posix_mmap.cc posix/posix_net.cc
+     random.cc slice.cc spooky/SpookyV2.cpp spooky.cc
      status.cc strutil.cc testharness.cc testutil.cc
-     xxhash.cc xxhash_impl.cc)
+     xxhash/xxhash.c xxhash.cc)
 set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
-     crc32c/crc32c_test.cc env_test.cc fstypes_test.cc
-     hash_test.cc log_test.cc random_test.cc rpc_test.cc
+     crc32c/crc32c_test.cc env_test.cc fsdbx_test.cc
+     fstypes_test.cc hash_test.cc log_test.cc random_test.cc
      strutil_test.cc)
 
 # leveldb sources and tests
-set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc comparator.cc
-     db/builder.cc db/columnar_db.cc db/columnar_impl.cc
-     db/db.cc db/db_impl.cc db/db_iter.cc db/dbformat.cc
-     db/memtable.cc db/options.cc db/readonly.cc db/readonly_impl.cc
-     db/repair.cc db/table_cache.cc db/version_edit.cc
-     db/version_set.cc db/write_batch.cc dbfiles.cc filter_block.cc
-     filter_policy.cc format.cc index_block.cc iterator.cc merger.cc
+set (pdlfs-leveldb-srcs block.cc block_builder.cc bloom.cc
+     comparator.cc db/builder.cc db/db.cc db/db_impl.cc db/db_iter.cc
+     db/internal_types.cc db/memtable.cc db/options.cc db/readonly.cc
+     db/readonly_impl.cc db/repair.cc db/table_cache.cc
+     db/version_edit.cc db/version_set.cc db/write_batch.cc
+     filenames.cc filter_block.cc filter_policy.cc format.cc
+     index_block.cc iterator.cc merger.cc
      table.cc table_builder.cc table_properties.cc
      two_level_iterator.cc)
 set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
      db/bulk_test.cc db/corruption_test.cc db/db_table_test.cc
-     db/db_test.cc db/dbformat_test.cc db/readonly_test.cc
-     db/columnar_test db/version_edit_test.cc db/version_set_test.cc
-     db/write_batch_test.cc dbfiles_test.cc filter_block_test.cc
-     index_block_test.cc skiplist_test.cc
-     table_test.cc)
+     db/db_test.cc db/internal_types_test.cc db/readonly_test.cc
+     db/version_edit_test.cc db/version_set_test.cc
+     db/write_batch_test.cc filenames_test.cc filter_block_test.cc
+     skiplist_test.cc table_test.cc)
 
 # common dfs sources and tests
 if (PDLFS_DFS_COMMON)
     set (pdlfs-dfs-srcs blkdb.cc dcntl.cc fio.cc gigaplus.cc
             index_cache.cc lease.cc lookup_cache.cc mdb.cc
-            osd.cc ofs.cc ofs_impl.cc posix_fio.cc
+            osd.cc ofs.cc ofs_impl.cc posix/posix_fio.cc
             rpc.cc)
     set (pdlfs-dfs-tests blkdb_test.cc fio_test.cc gigaplus_test.cc
-            ofs_test.cc osd_test.cc)
+            ofs_test.cc osd_test.cc rpc_test.cc)
 endif ()
 
 # ECT sources and tests
@@ -72,22 +73,23 @@ if (PDLFS_SILT_ECT)
     set (pdlfs-ect-tests ect_test.cc)
 endif ()
 
-# mercury (note that margo uses the mercury rpc class)
+# Add mercury srcs (note that margo uses the mercury rpc class)
+# if user has requested it and mercury is found
 if (PDLFS_MERCURY_RPC OR PDLFS_MARGO_RPC)
-    set (pdlfs-mercury-srcs mercury_rpc.cc)
-    if (PDLFS_MERCURY_RPC)
-        set (pdlfs-mercury-tests mercury_test.cc)
+    if (TARGET mercury)
+        set (pdlfs-mercury-srcs mercury/mercury_rpc.cc)
+        set (pdlfs-mercury-tests mercury/mercury_test.cc)
     endif ()
 endif ()
 
-# margo
-if (PDLFS_MARGO_RPC)
-    set (pdlfs-margo-srcs margo_rpc.cc)
-    set (pdlfs-margo-tests margo_test.cc)
+# Add margo srcs if user has requested it and margo is found
+if (TARGET margo AND PDLFS_MARGO_RPC)
+    set (pdlfs-margo-srcs margo/margo_rpc.cc)
+    set (pdlfs-margo-tests margo/margo_test.cc)
 endif ()
 
-# rados directory and tests
-if (PDLFS_RADOS)
+# Add rados srcs if user has requested it and rados is found
+if (TARGET rados AND PDLFS_RADOS)
     set (pdlfs-rados-srcs rados_common.cc rados_conn.cc rados_env.cc
          rados_fio.cc rados_ld.cc rados_osd.cc)
     set (pdlfs-rados-tests rados_env_test.cc rados_fio_test.cc)

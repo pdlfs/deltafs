@@ -13,9 +13,10 @@
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/fsdbx.h"
 #include "pdlfs-common/fstypes.h"
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/snapshot.h"
-#include "pdlfs-common/leveldb/db/write_batch.h"
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/readonly.h"
+#include "pdlfs-common/leveldb/snapshot.h"
+#include "pdlfs-common/leveldb/write_batch.h"
 #include "pdlfs-common/status.h"
 
 namespace pdlfs {

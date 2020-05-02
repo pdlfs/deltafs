@@ -45,7 +45,7 @@ TEST(RPCTest, SendAndRecv) {
   RPC* rpc = RPC::Open(options_);
   ASSERT_TRUE(rpc != NULL);
   ASSERT_OK(rpc->Start());
-  Env::Default()->SleepForMicroseconds(1 * 1000 * 1000);
+  SleepForMicroseconds(1 * 1000 * 1000);
   rpc::If* client = rpc->OpenStubFor("127.0.0.1:22222");
   ASSERT_TRUE(client != NULL);
   rpc::If::Message in, out;
@@ -119,7 +119,7 @@ class RPCBenchServer : public RPCBench, public rpc::If {
       return;
     }
     while (!shutting_down_.Acquire_Load() && status.ok()) {
-      Env::Default()->SleepForMicroseconds(1000 * 1000);
+      SleepForMicroseconds(1000 * 1000);
       status = r->status();
     }
     if (status.ok()) {

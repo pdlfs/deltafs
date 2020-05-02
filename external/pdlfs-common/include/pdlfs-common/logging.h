@@ -21,9 +21,9 @@
 // If google-glog is present, all logging activities will go to it.
 // We log to stderr otherwise.
 namespace pdlfs {
-
-#define __LOG_ARGS__ ::pdlfs::Logger::Default(), __FILE__, __LINE__
-
+#define DEF_LOGGER ::pdlfs::Logger::Default()
+#define __LOG_ARGS__ DEF_LOGGER, __FILE__, __LINE__
+#define Log0v(lvl, ...) Error(DEF_LOGGER, __FILE__, __LINE__, lvl, __VA_ARGS__)
 // Emit a verbose log entry to *info_log if info_log is non-NULL.
 extern void Verbose(Logger* info_log, const char* file, int line, int level,
                     const char* format, ...)
@@ -31,16 +31,7 @@ extern void Verbose(Logger* info_log, const char* file, int line, int level,
     __attribute__((__format__(__printf__, 5, 6)))
 #endif
     ;
-
-// Emit a verbose log entry to *info_log if info_log is non-NULL.
-// This is the same as the Verbose call.
-extern void Log(Logger* info_log, const char* file, int line, int level,
-                const char* format, ...)
-#if defined(__GNUC__) || defined(__clang__)
-    __attribute__((__format__(__printf__, 5, 6)))
-#endif
-    ;
-
+#define Log0(...) Info(DEF_LOGGER, __FILE__, __LINE__, __VA_ARGS__)
 // Emit an info log entry to *info_log if info_log is non-NULL.
 extern void Info(Logger* info_log, const char* file, int line,
                  const char* format, ...)
@@ -48,7 +39,7 @@ extern void Info(Logger* info_log, const char* file, int line,
     __attribute__((__format__(__printf__, 4, 5)))
 #endif
     ;
-
+#define Log1(...) Warn(DEF_LOGGER, __FILE__, __LINE__, __VA_ARGS__)
 // Emit a warning log entry to *info_log if info_log is non-NULL.
 extern void Warn(Logger* info_log, const char* file, int line,
                  const char* format, ...)
@@ -56,7 +47,7 @@ extern void Warn(Logger* info_log, const char* file, int line,
     __attribute__((__format__(__printf__, 4, 5)))
 #endif
     ;
-
+#define Log2(...) Error(DEF_LOGGER, __FILE__, __LINE__, __VA_ARGS__)
 // Emit an error log entry to *info_log if info_log is non-NULL.
 extern void Error(Logger* info_log, const char* file, int line,
                   const char* format, ...)

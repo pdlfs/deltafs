@@ -297,7 +297,7 @@ Status BlkDB::WriteTo(Stream* stream, const Fentry& fentry, const Slice& data,
       delete stream->iter;
       stream->iter = NULL;
     }
-    uint64_t mtime = Env::Default()->NowMicros();
+    uint64_t mtime = CurrentMicros();
     if (mtime > stream->mtime) {
       stream->mtime = mtime;
     }

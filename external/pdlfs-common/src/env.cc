@@ -28,7 +28,8 @@
 #endif
 
 #if defined(PDLFS_PLATFORM_POSIX)
-#include "posix_logger.h"
+#include "posix/posix_env.h"
+#include "posix/posix_logger.h"
 #endif
 
 #if defined(PDLFS_GLOG)
@@ -80,22 +81,10 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
     return (Env*)PDLFS_Load_rados_env(env_conf.c_str());
   }
 #endif
-// POSIX
-#if defined(PDLFS_PLATFORM_POSIX)
-  if (env_name == "posix" || env_name == "posix.default") {
+  if (env_name == "unbufferedio") {
     *is_system = true;
-    return port::PosixGetDefaultEnv();
-  } else if (env_name == "posix.devnull") {
-    *is_system = true;
-    return port::PosixGetDevNullEnv();
-  } else if (env_name == "posix.unbufferedio") {
-    *is_system = true;
-    return port::PosixGetUnBufferedIOEnv();
-  } else if (env_name == "posix.directio") {
-    *is_system = true;
-    return port::PosixGetDirectIOEnv();
+    return Env::GetUnBufferedIoEnv();
   }
-#endif
   if (env_name.empty()) {
     Warn(__LOG_ARGS__, "Open env without specifying a name...");
   }

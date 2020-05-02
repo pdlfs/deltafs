@@ -22,6 +22,12 @@ TEST(KeyTest, KeyEnc1) {
   Key k1(7, static_cast<KeyType>(1));
   ASSERT_EQ(k1.inode(), 7);
   ASSERT_EQ(int(k1.type()), 1);
+#if defined(DELTAFS_PROTO)
+  Key k2(9, 7, static_cast<KeyType>(2));
+  ASSERT_EQ(k2.dnode(), 9);
+  ASSERT_EQ(k2.inode(), 7);
+  ASSERT_EQ(int(k2.type()), 2);
+#endif
 #if defined(DELTAFS)
   Key k2(29, 12345, static_cast<KeyType>(127));
   ASSERT_EQ(k2.snap_id(), 29);
@@ -36,6 +42,32 @@ TEST(KeyTest, KeyEnc1) {
 }
 
 TEST(KeyTest, KeyEnc2) {
+  Stat stat1;
+#if defined(DELTAFS_PROTO)
+  stat1.SetDnodeNo(2);
+#endif
+  stat1.SetInodeNo(3);
+  Key k1(stat1, static_cast<KeyType>(5));
+#if defined(DELTAFS_PROTO)
+  ASSERT_EQ(k1.dnode(), 2);
+#endif
+  ASSERT_EQ(k1.inode(), 3);
+
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
+  LookupStat stat2;
+#if defined(DELTAFS_PROTO)
+  stat2.SetDnodeNo(2);
+#endif
+  stat2.SetInodeNo(3);
+  Key k2(stat2, static_cast<KeyType>(5));
+#if defined(DELTAFS_PROTO)
+  ASSERT_EQ(k2.dnode(), 2);
+#endif
+  ASSERT_EQ(k2.inode(), 3);
+#endif
+}
+
+TEST(KeyTest, KeyEnc3) {
   char zero[50];
   memset(zero, 0, sizeof(zero));
   Key k1(0, static_cast<KeyType>(0));
@@ -43,13 +75,18 @@ TEST(KeyTest, KeyEnc2) {
   ASSERT_EQ(k1.Encode(), Slice(zero, k1.size()));
   Key k2(1, static_cast<KeyType>(1));
   k2.SetName(Slice("X"));
+#if !defined(DELTAFS) && !defined(INDEXFS)
+  ASSERT_EQ(k2.suffix(), Slice("X"));
+#endif
   Key k3(1, static_cast<KeyType>(1));
   k3.SetName(Slice("Y"));
+#if !defined(DELTAFS) && !defined(INDEXFS)
+  ASSERT_EQ(k3.suffix(), Slice("Y"));
+#endif
   ASSERT_EQ(k2.prefix(), k3.prefix());
-  ASSERT_NE(k2.Encode(), k3.Encode());
 }
 
-TEST(KeyTest, KeyEnc3) {
+TEST(KeyTest, KeyEnc4) {
   Key k1(99, static_cast<KeyType>(99));
   k1.SetName(Slice("X"));
   Key k2(k1);
@@ -67,7 +104,7 @@ TEST(KeyTest, KeyEnc3) {
 #endif
 }
 
-TEST(KeyTest, KeyEnc4) {
+TEST(KeyTest, KeyEnc5) {
   Key k1(31, kDataBlockType);
   Key k2(31, kDataBlockType);
   Key k3(31, kDataBlockType);
@@ -81,7 +118,7 @@ TEST(KeyTest, KeyEnc4) {
   ASSERT_EQ(k3.offset(), 128);
 }
 
-TEST(KeyTest, KeyEnc5) {
+TEST(KeyTest, KeyEnc6) {
   Key k1(31, kDataDesType);
   Key k2(k1.prefix());
   ASSERT_EQ(k1.prefix(), k2.prefix());
@@ -96,6 +133,9 @@ class StatTest {
 
 TEST(StatTest, StatEncoding) {
   Stat stat;
+#if defined(DELTAFS_PROTO)
+  stat.SetDnodeNo(21);
+#endif
 #if defined(DELTAFS)
   stat.SetRegId(13);
   stat.SetSnapId(37);
@@ -103,7 +143,7 @@ TEST(StatTest, StatEncoding) {
   stat.SetInodeNo(12345);
   stat.SetFileSize(90);
   stat.SetFileMode(678);
-#if defined(DELTAFS) || defined(INDEXFS)
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
   stat.SetZerothServer(777);
 #endif
   stat.SetUserId(11);
@@ -122,13 +162,16 @@ TEST(StatTest, StatEncoding) {
   ASSERT_EQ(encoding, encoding2);
 }
 
-#if defined(DELTAFS) || defined(INDEXFS)
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
 class LookupEntryTest {
   // Empty
 };
 
 TEST(LookupEntryTest, EntryEncoding) {
   LookupStat stat;
+#if defined(DELTAFS_PROTO)
+  stat.SetDnodeNo(21);
+#endif
 #if defined(DELTAFS)
   stat.SetRegId(13);
   stat.SetSnapId(37);

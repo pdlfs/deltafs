@@ -14,11 +14,11 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found at https://github.com/google/leveldb.
  */
-#include "options_internal.h"
 
+#include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/leveldb/comparator.h"
-#include "pdlfs-common/leveldb/dbfiles.h"
-#include "pdlfs-common/leveldb/filter_policy.h"
+#include "pdlfs-common/leveldb/filenames.h"
+#include "pdlfs-common/leveldb/internal_types.h"
 
 #include "pdlfs-common/cache.h"
 #include "pdlfs-common/env.h"
@@ -37,7 +37,6 @@ DBOptions::DBOptions()
       table_cache(NULL),
       block_cache(NULL),
       block_size(4096),
-      index_type(kMultiwaySearchTree),
       block_restart_interval(16),
       index_block_restart_interval(1),
       compression(kSnappyCompression),

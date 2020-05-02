@@ -16,7 +16,7 @@
  */
 #include "pdlfs-common/leveldb/format.h"
 #include "pdlfs-common/leveldb/block.h"
-#include "pdlfs-common/leveldb/db/options.h"
+#include "pdlfs-common/leveldb/options.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/crc32c.h"

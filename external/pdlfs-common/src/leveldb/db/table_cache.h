@@ -17,7 +17,7 @@
 #pragma once
 
 #include "pdlfs-common/cache.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/leveldb/iterator.h"
 #include "pdlfs-common/leveldb/table.h"
 #include "pdlfs-common/port.h"

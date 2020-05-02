@@ -16,9 +16,8 @@
  */
 #include "builder.h"
 #include "table_cache.h"
-#include "version_edit.h"
 
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/iterator.h"
 #include "pdlfs-common/leveldb/table_builder.h"
 #include "pdlfs-common/leveldb/table_properties.h"

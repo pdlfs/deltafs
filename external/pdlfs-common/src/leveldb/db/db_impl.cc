@@ -22,22 +22,22 @@
 #include "version_set.h"
 
 #include "../merger.h"
-#include "../table_stats.h"
 #include "../two_level_iterator.h"
 
 #include "pdlfs-common/leveldb/block.h"
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/filenames.h"
+#include "pdlfs-common/leveldb/infolog.h"
+#include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/leveldb/iterator_wrapper.h"
 #include "pdlfs-common/leveldb/table.h"
 #include "pdlfs-common/leveldb/table_builder.h"
+#include "pdlfs-common/leveldb/table_properties.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/log_reader.h"
 #include "pdlfs-common/log_writer.h"
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
@@ -155,7 +155,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
 DBImpl::~DBImpl() {
   // Wait for background work to finish
   mutex_.Lock();
-  Log(__LOG_ARGS__, 3, "Shutting down ...");
+  Log(options_.info_log, 3, "Shutting down ...");
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
   while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
     bg_cv_.Wait();
@@ -262,7 +262,7 @@ void DBImpl::MaybeIgnoreError(Status* s) const {
   if (s->ok() || options_.paranoid_checks) {
     // No change needed
   } else {
-    Log(__LOG_ARGS__, 3, "Ignoring error %s", s->ToString().c_str());
+    Log(options_.info_log, 3, "Ignoring error %s", s->ToString().c_str());
     *s = Status::OK();
   }
 }
@@ -314,10 +314,10 @@ void DBImpl::DeleteObsoleteFiles() {
         if (type == kTableFile) {
           table_cache_->Evict(number);
         }
-        Log(__LOG_ARGS__, 3, "Delete type=%d #%llu\n", int(type),
+        Log(options_.info_log, 3, "Delete type=%d #%llu", int(type),
             static_cast<unsigned long long>(number));
         if (!options_.gc_skip_deletion) {
-          Log(__LOG_ARGS__, 3, "Remove %s", filenames[i].c_str());
+          Log(options_.info_log, 3, "Remove %s", filenames[i].c_str());
           std::string fname = dbname_ + "/" + filenames[i];
           env_->DeleteFile(fname.c_str());
         }
@@ -428,7 +428,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
     const char* fname;
     Status* status;  // NULL if options_.paranoid_checks==false
     virtual void Corruption(size_t bytes, const Status& s) {
-      Log(__LOG_ARGS__, 3, "%s%s: dropping %d bytes; %s",
+      Log(info_log, 3, "%s%s: dropping %d bytes; %s",
           (this->status == NULL ? "(ignoring error) " : ""), fname,
           static_cast<int>(bytes), s.ToString().c_str());
       if (this->status != NULL && this->status->ok()) *this->status = s;
@@ -457,7 +457,8 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
   // to be skipped instead of propagating bad information (like overly
   // large sequence numbers).
   log::Reader reader(file, &reporter, true /*checksum*/, 0 /*initial_offset*/);
-  Log(__LOG_ARGS__, 3, "Recovering log #%llu", (unsigned long long)log_number);
+  Log(options_.info_log, 3, "Recovering log #%llu",
+      (unsigned long long)log_number);
 
   // Read all the records and add to a memtable
   std::string scratch;
@@ -527,11 +528,11 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
                                 Version* base, SequenceNumber* min_seq,
                                 SequenceNumber* max_seq, bool force_level0) {
   mutex_.AssertHeld();
-  const uint64_t start_micros = env_->NowMicros();
+  const uint64_t start_micros = CurrentMicros();
   FileMetaData meta;
   meta.number = versions_->NewFileNumber();
   pending_outputs_.insert(meta.number);
-  Log(__LOG_ARGS__, 3, "Level-0 table #%llu: started",
+  Log(options_.info_log, 3, "Level-0 table #%llu: started",
       (unsigned long long)meta.number);
 
   Status s;
@@ -542,7 +543,7 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
     mutex_.Lock();
   }
 
-  Log(__LOG_ARGS__, 3, "Level-0 table #%llu: %lld bytes %s",
+  Log(options_.info_log, 3, "Level-0 table #%llu: %lld bytes %s",
       (unsigned long long)meta.number, (unsigned long long)meta.file_size,
       s.ToString().c_str());
   pending_outputs_.erase(meta.number);
@@ -567,7 +568,7 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
   }
 
   CompactionStats stats;
-  stats.micros = env_->NowMicros() - start_micros;
+  stats.micros = CurrentMicros() - start_micros;
   stats.bytes_written = meta.file_size;
   stats_[level].Add(stats);
   return s;
@@ -761,8 +762,8 @@ void DBImpl::BackgroundCompaction() {
     if (c != NULL) {
       manual_end = c->input(0, c->num_input_files(0) - 1)->largest;
     }
-    Log(__LOG_ARGS__, 3,
-        "Manual compaction at level-%d from %s .. %s; will stop at %s\n",
+    Log(options_.info_log, 3,
+        "Manual compaction at level-%d from %s .. %s; will stop at %s",
         m->level, (m->begin ? m->begin->DebugString().c_str() : "(begin)"),
         (m->end ? m->end->DebugString().c_str() : "(end)"),
         (m->done ? "(end)" : manual_end.DebugString().c_str()));
@@ -787,7 +788,7 @@ void DBImpl::BackgroundCompaction() {
       RecordBackgroundError(status);
     }
     VersionSet::LevelSummaryStorage tmp;
-    Log(__LOG_ARGS__, 3, "Moved #%lld to level-%d %lld bytes %s: %s\n",
+    Log(options_.info_log, 3, "Moved #%lld to level-%d %lld bytes %s: %s",
         static_cast<unsigned long long>(f->number), c->level() + 1,
         static_cast<unsigned long long>(f->file_size),
         status.ToString().c_str(), versions_->LevelSummary(&tmp));
@@ -808,7 +809,8 @@ void DBImpl::BackgroundCompaction() {
   } else if (shutting_down_.Acquire_Load()) {
     // Ignore compaction errors found during shutting down
   } else {
-    Log(__LOG_ARGS__, 3, "Compaction error: %s", status.ToString().c_str());
+    Log(options_.info_log, 3, "Compaction error: %s",
+        status.ToString().c_str());
   }
 
   if (is_manual) {
@@ -914,7 +916,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
     s = iter->status();
     delete iter;
     if (s.ok()) {
-      Log(__LOG_ARGS__, 3, "Generated table #%llu: %lld keys, %lld bytes",
+      Log(options_.info_log, 3, "Generated table #%llu: %lld keys, %lld bytes",
           (unsigned long long)output_number,
           (unsigned long long)current_entries,
           (unsigned long long)current_bytes);
@@ -925,7 +927,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
 Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   mutex_.AssertHeld();
-  Log(__LOG_ARGS__, 3, "Compacted %d@%d + %d@%d files => %lld bytes",
+  Log(options_.info_log, 3, "Compacted %d@%d + %d@%d files => %lld bytes",
       compact->compaction->num_input_files(0), compact->compaction->level(),
       compact->compaction->num_input_files(1), compact->compaction->level() + 1,
       static_cast<long long>(compact->total_bytes));
@@ -943,10 +945,10 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 }
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
-  const uint64_t start_micros = env_->NowMicros();
+  const uint64_t start_micros = CurrentMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
-  Log(__LOG_ARGS__, 3, "Compacting %d@%d + %d@%d files",
+  Log(options_.info_log, 3, "Compacting %d@%d + %d@%d files",
       compact->compaction->num_input_files(0), compact->compaction->level(),
       compact->compaction->num_input_files(1),
       compact->compaction->level() + 1);
@@ -973,14 +975,14 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   for (; input->Valid() && !shutting_down_.Acquire_Load();) {
     // Prioritize immutable compaction work
     if (has_imm_.NoBarrier_Load() != NULL) {
-      const uint64_t imm_start = env_->NowMicros();
+      const uint64_t imm_start = CurrentMicros();
       mutex_.Lock();
       if (imm_ != NULL) {
         CompactMemTable();
         bg_cv_.SignalAll();  // Wakeup MakeRoomForWrite() if necessary
       }
       mutex_.Unlock();
-      imm_micros += (env_->NowMicros() - imm_start);
+      imm_micros += (CurrentMicros() - imm_start);
     }
 
     Slice key = input->key();
@@ -1074,7 +1076,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   input = NULL;
 
   CompactionStats stats;
-  stats.micros = env_->NowMicros() - start_micros - imm_micros;
+  stats.micros = CurrentMicros() - start_micros - imm_micros;
   for (int which = 0; which < 2; which++) {
     for (int i = 0; i < compact->compaction->num_input_files(which); i++) {
       stats.bytes_read += compact->compaction->input(which, i)->file_size;
@@ -1094,7 +1096,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     RecordBackgroundError(status);
   }
   VersionSet::LevelSummaryStorage tmp;
-  Log(__LOG_ARGS__, 3, "compacted to: %s", versions_->LevelSummary(&tmp));
+  Log(options_.info_log, 3, "Compacted to: %s", versions_->LevelSummary(&tmp));
   return status;
 }
 
@@ -1251,14 +1253,14 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
 
 Status DBImpl::Get(const ReadOptions& options, const Slice& key,
                    std::string* value) {
-  buffer::StringBuf buf(value);
+  db::StringBuf buf(value);
   Status s = Get(options, key, &buf);
   return s;
 }
 
 Status DBImpl::Get(const ReadOptions& options, const Slice& key, Slice* value,
                    char* scratch, size_t scratch_size) {
-  buffer::DirectBuf buf(scratch, scratch_size);
+  db::DirectBuf buf(scratch, scratch_size);
   Status s = Get(options, key, &buf);
   if (s.ok()) {
     *value = buf.Read();
@@ -1526,7 +1528,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // this delay hands over some CPU to the compaction thread in
       // case it is sharing the same core as the writer.
       mutex_.Unlock();
-      env_->SleepForMicroseconds(1000);
+      SleepForMicroseconds(1000);
       allow_delay = false;  // Do not delay a single write more than once
       mutex_.Lock();
     } else if (!force && mem_ != NULL &&
@@ -1536,12 +1538,12 @@ Status DBImpl::MakeRoomForWrite(bool force) {
     } else if (imm_ != NULL) {
       // We have filled up the current memtable, but the previous
       // one is still being compacted, so we wait.
-      Log(__LOG_ARGS__, 3, "Current memtable full; waiting...\n");
+      Log(options_.info_log, 3, "Current memtable full; waiting...");
       bg_cv_.Wait();
     } else if (!options_.disable_compaction &&
                versions_->NumLevelFiles(0) >= options_.l0_hard_limit) {
       // There are too many level-0 files.
-      Log(__LOG_ARGS__, 3, "Too many L0 files; waiting...\n");
+      Log(options_.info_log, 3, "Too many L0 files; waiting...");
       bg_cv_.Wait();
     } else if (!options_.no_memtable) {
       // Close the current log file and open a new one
@@ -1703,14 +1705,14 @@ static Status FetchFirstKey(Table* table, Iterator* iter, InternalKey* result,
     }
   } else {
     result->DecodeFrom(iter->key());
-    const bool has_stats = TableStats::HasStats(table);
-    if (has_stats && options.paranoid_checks) {
+    const TableProperties* const props = table->GetProperties();
+    if (props != NULL && options.paranoid_checks) {
       ParsedInternalKey parsed;
       if (!ParseInternalKey(result->Encode(), &parsed)) {
         s = Status::Corruption("First key corrupted");
       } else {
-        Slice reported = TableStats::FirstKey(table);
-        const InternalKeyComparator* icmp =
+        Slice reported = props->first_key();
+        const InternalKeyComparator* const icmp =
             reinterpret_cast<const InternalKeyComparator*>(options.comparator);
         if (icmp->Compare(result->Encode(), reported) != 0) {
           s = Status::Corruption("First key corrupted");
@@ -1732,14 +1734,14 @@ static Status FetchLastKey(Table* table, Iterator* iter, InternalKey* result,
     }
   } else {
     result->DecodeFrom(iter->key());
-    const bool has_stats = TableStats::HasStats(table);
-    if (has_stats && options.paranoid_checks) {
+    const TableProperties* const props = table->GetProperties();
+    if (props != NULL && options.paranoid_checks) {
       ParsedInternalKey parsed;
       if (!ParseInternalKey(result->Encode(), &parsed)) {
         s = Status::Corruption("Last key corrupted");
       } else {
-        Slice reported = TableStats::LastKey(table);
-        const InternalKeyComparator* icmp =
+        Slice reported = props->last_key();
+        const InternalKeyComparator* const icmp =
             reinterpret_cast<const InternalKeyComparator*>(options.comparator);
         if (icmp->Compare(result->Encode(), reported) != 0) {
           s = Status::Corruption("Last key corrupted");
@@ -1763,13 +1765,13 @@ Status DBImpl::LoadLevel0Table(InsertionState* insert) {
   s = it->status();
   if (s.ok()) {
     assert(table != NULL);
-    const bool has_stats = TableStats::HasStats(table);
+    const TableProperties* const props = table->GetProperties();
     if (!insert->options->no_seq_adjustment) {
-      if (!has_stats) {
+      if (props == NULL) {
         s = Status::NotFound("Missing table stats");
       } else {
-        info->min_seq = TableStats::MinSeq(table);
-        info->max_seq = TableStats::MaxSeq(table);
+        info->min_seq = props->min_seq();
+        info->max_seq = props->max_seq();
         if (info->min_seq > info->max_seq) {
           s = Status::Corruption("Min seq > Max seq?");
         }
@@ -1802,7 +1804,7 @@ Status DBImpl::MigrateLevel0Table(InsertionState* insert,
 
   mutex_.Unlock();
   std::string dst = TableFileName(dbname_, file_number);
-  Log(__LOG_ARGS__, 3, "Insert #%llu: %s -> %s",
+  Log(options_.info_log, 3, "Insert #%llu: %s -> %s",
       (unsigned long long)file_number, source.c_str(), dst.c_str());
 
   Status s;
@@ -1827,7 +1829,7 @@ Status DBImpl::MigrateLevel0Table(InsertionState* insert,
     }
   }
 
-  Log(options_.info_log, "Insert #%llu: %llu bytes %s",
+  Log(options_.info_log, 3, "Insert #%llu: %llu bytes %s",
       (unsigned long long)file_number, (unsigned long long)file_size,
       s.ToString().c_str());
 

@@ -17,9 +17,10 @@
 #include "memtable.h"
 #include "write_batch_internal.h"
 
+#include "pdlfs-common/leveldb/internal_types.h"
+#include "pdlfs-common/leveldb/write_batch.h"
+
 #include "pdlfs-common/coding.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
-#include "pdlfs-common/leveldb/db/write_batch.h"
 
 // WriteBatch::rep_ :=
 //    sequence: fixed64

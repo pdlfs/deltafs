@@ -79,19 +79,20 @@ class Table {
   Rep* rep_;
 
   explicit Table(Rep* rep) { rep_ = rep; }
-  static Iterator* BlockReader(void*, const ReadOptions&, const Slice&);
+  static Iterator* BlockReader(void* table, const ReadOptions& options,
+                               const Slice& block_handle);
 
   // Calls (*handle_result)(arg, ...) with the entry found after a call
   // to Seek(key).  May not make such a call if filter policy says
   // that key is not present.
   friend class TableCache;
-  Status InternalGet(const ReadOptions&, const Slice& key, void* arg,
+  Status InternalGet(const ReadOptions& options, const Slice& key, void* arg,
                      void (*handle_result)(void* arg, const Slice& k,
                                            const Slice& v));
 
   void ReadMeta(const Footer& footer);
+  void ReadProperties(const Slice& props_handle_value);
   void ReadFilter(const Slice& filter_handle_value);
-  void ReadProps(const Slice& props_handle_value);
 
   // No copying allowed
   void operator=(const Table&);

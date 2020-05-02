@@ -20,13 +20,17 @@ namespace pdlfs {
 struct DirInfo;
 struct DirId {
   DirId() {}  // Intentionally not initialized for performance.
+#if defined(DELTAFS_PROTO)
+  DirId(uint64_t dno, uint64_t ino) : dno(dno), ino(ino) {}
+#endif
 #if defined(DELTAFS)
   DirId(uint64_t reg, uint64_t snap, uint64_t ino)
       : reg(reg), snap(snap), ino(ino) {}
 #endif
   explicit DirId(uint64_t ino);  // Direct initialization via inodes.
   // Initialization via LookupStat or Stat.
-#if defined(DELTAFS) || defined(INDEXFS)  // Tablefs does not use LookupStat.
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || \
+    defined(INDEXFS)  // Tablefs does not use LookupStat.
   explicit DirId(const LookupStat& stat);
 #endif
   explicit DirId(const Stat& stat);
@@ -39,6 +43,9 @@ struct DirId {
   std::string DebugString() const;
 
   // Deltafs requires extra fields.
+#if defined(DELTAFS_PROTO)
+  uint64_t dno;
+#endif
 #if defined(DELTAFS)
   uint64_t reg;
   uint64_t snap;
@@ -48,6 +55,11 @@ struct DirId {
 };
 
 inline bool operator==(const DirId& x, const DirId& y) {
+#if defined(DELTAFS_PROTO)
+  if (x.dno != y.dno) {
+    return false;
+  }
+#endif
 #if defined(DELTAFS)
   if (x.reg != y.reg) return false;
   if (x.snap != y.snap) return false;
@@ -90,7 +102,7 @@ template <typename DX = DB, typename xslice = Slice,  // Foreign slice
               Status,  // Foreign db status type to which we must port
           MXDBFormat fmt = kNameInValue>
 class MXDB {
- protected:
+ public:
   explicit MXDB(DX* dx) : dx_(dx) {}
   ~MXDB();
 
@@ -105,12 +117,12 @@ class MXDB {
     return tx;
   }
 
-  template <typename KX, typename TX, typename OPT>
+  template <typename KX, typename TX, typename OPT, typename PERF>
   Status GET(const DirId& id, const Slice& suf, Stat* stat, std::string* name,
-             OPT* opt, TX* tx);
-  template <typename KX, typename TX, typename OPT>
-  Status SET(const DirId& id, const Slice& suf, const Stat& stat,
-             const Slice& name, OPT* opt, TX* tx);
+             OPT* opt, TX* tx, PERF* perf);
+  template <typename KX, typename TX, typename OPT, typename PERF>
+  Status PUT(const DirId& id, const Slice& suf, const Stat& stat,
+             const Slice& name, OPT* opt, TX* tx, PERF* perf);
   template <typename KX, typename TX, typename OPT>
   Status DELETE(const DirId& id, const Slice& suf, OPT* opt, TX* tx);
 
@@ -171,17 +183,19 @@ MXDB<DX, xslice, xstatus, fmt>::~MXDB() {  ////
   (x.IsNotFound()                  \
        ? Status::NotFound(Slice()) \
        : Status::IOError(x.ToString()))  // Pretty dirty. But works!
-#if defined(DELTAFS)
+#if defined(DELTAFS_PROTO)
+#define KEY_INITIALIZER(id, tp) id.dno, id.ino, tp
+#elif defined(DELTAFS)
 #define KEY_INITIALIZER(id, tp) id.reg, id.snap, id.ino, tp
 #else
 #define KEY_INITIALIZER(id, tp) id.ino, tp
 #endif
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
-template <typename KX, typename TX, typename OPT>
-Status MXDB<DX, xslice, xstatus, fmt>::SET(  ////
+template <typename KX, typename TX, typename OPT, typename PERF>
+Status MXDB<DX, xslice, xstatus, fmt>::PUT(  ////
     const DirId& id, const Slice& suf, const Stat& stat, const Slice& name,
-    OPT* opt, TX* tx) {
+    OPT* opt, TX* tx, PERF* perf) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
@@ -216,14 +230,21 @@ Status MXDB<DX, xslice, xstatus, fmt>::SET(  ////
     tx->bat.Put(keyenc, value);
   }
 
+  // Collect performance stats
+  if (perf != NULL) {
+    perf->putkeybytes += keyenc.size();
+    perf->putbytes += value.size();
+    perf->puts++;
+  }
+
   return s;
 }
 
 MXDBTEMDECL(DX, xslice, xstatus, fmt)
-template <typename KX, typename TX, typename OPT>
+template <typename KX, typename TX, typename OPT, typename PERF>
 Status MXDB<DX, xslice, xstatus, fmt>::GET(  ////
     const DirId& id, const Slice& suf, Stat* stat, std::string* name, OPT* opt,
-    TX* tx) {
+    TX* tx, PERF* perf) {
   Status s;
   KX key(KEY_INITIALIZER(id, kDirEntType));
   key.SetSuffix(suf);
@@ -250,6 +271,14 @@ Status MXDB<DX, xslice, xstatus, fmt>::GET(  ////
   } else {
     s = XSTATUS(st);
   }
+
+  // Collect performance stats
+  if (perf != NULL) {
+    perf->getkeybytes += keyenc.size();
+    perf->getbytes += tmp.size();
+    perf->gets++;
+  }
+
   return s;
 }
 

@@ -191,7 +191,7 @@ static void MakeSnapshot(std::string* result, FileSet* fset, HashSet* garbage) {
   v.type = FileSet::kTryDelFile;
   garbage->VisitAll(&v);
 
-  uint64_t time = Env::Default()->NowMicros();
+  uint64_t time = CurrentMicros();
   EncodeFixed64(&(*result)[0], time);
   EncodeFixed32(&(*result)[8], num_ops);
 }

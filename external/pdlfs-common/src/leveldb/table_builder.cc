@@ -15,14 +15,14 @@
  * found at https://github.com/google/leveldb.
  */
 #include "filter_block.h"
+#include "index_block.h"
 
 #include "pdlfs-common/leveldb/block_builder.h"
 #include "pdlfs-common/leveldb/comparator.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
-#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/format.h"
-#include "pdlfs-common/leveldb/index_block.h"
+#include "pdlfs-common/leveldb/internal_types.h"
+#include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/leveldb/table_builder.h"
 #include "pdlfs-common/leveldb/table_properties.h"
 
@@ -40,7 +40,7 @@ struct TableBuilder::Rep {
   uint64_t offset;
   Status status;
   BlockBuilder data_block;
-  IndexBuilder* index_block;
+  IndexBlockBuilder index_block;
   std::string last_key;
   int64_t num_entries;
   int64_t num_blocks;
@@ -67,7 +67,7 @@ struct TableBuilder::Rep {
         file(f),
         offset(0),
         data_block(options.block_restart_interval, options.comparator),
-        index_block(IndexBuilder::Create(&options)),
+        index_block(options.index_block_restart_interval, options.comparator),
         num_entries(0),
         num_blocks(0),
         closed(false),
@@ -91,10 +91,6 @@ const TableProperties* TableBuilder::properties() const {
   return &rep_->props_;
 }
 
-const IndexBuilder* TableBuilder::index_builder() const {
-  return rep_->index_block;
-}
-
 TableBuilder::TableBuilder(const Options& options, WritableFile* file)
     : rep_(new Rep(options, file)) {
   if (rep_->filter_block != NULL) {
@@ -105,7 +101,6 @@ TableBuilder::TableBuilder(const Options& options, WritableFile* file)
 TableBuilder::~TableBuilder() {
   assert(rep_->closed);  // Catch errors where caller forgot to call Finish()
   delete rep_->filter_block;
-  delete rep_->index_block;
   delete rep_;
 }
 
@@ -119,7 +114,8 @@ Status TableBuilder::ChangeOptions(const Options& options) {
 
   rep_->options = options;
   rep_->data_block.ChangeRestartInterval(rep_->options.block_restart_interval);
-  rep_->index_block->ChangeOptions(&rep_->options);
+  rep_->index_block.ChangeRestartInterval(
+      rep_->options.index_block_restart_interval);
   return Status::OK();
 }
 
@@ -142,7 +138,7 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
 
   if (r->pending_index_entry) {
     assert(r->data_block.empty());
-    r->index_block->AddIndexEntry(&r->last_key, &key, r->pending_handle);
+    r->index_block.AddIndexEntry(&r->last_key, &key, r->pending_handle);
     r->pending_index_entry = false;
   }
 
@@ -152,7 +148,7 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
 
   r->last_key.assign(key.data(), key.size());
   r->num_entries++;
-  r->index_block->OnKeyAdded(key);
+  r->index_block.OnKeyAdded(key);
 
   r->data_block.Add(key, value);
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
@@ -291,10 +287,10 @@ Status TableBuilder::Finish() {
   // Write index block
   if (ok()) {
     if (r->pending_index_entry) {
-      r->index_block->AddIndexEntry(&r->last_key, NULL, r->pending_handle);
+      r->index_block.AddIndexEntry(&r->last_key, NULL, r->pending_handle);
       r->pending_index_entry = false;
     }
-    WriteBlock(r->index_block->Finish(), &index_block_handle);
+    WriteBlock(r->index_block.Finish(), &index_block_handle);
   }
 
   // Write footer

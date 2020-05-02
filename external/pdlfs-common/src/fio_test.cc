@@ -19,13 +19,19 @@ class FioTest {};
 TEST(FioTest, EncodeDecode) {
   Fentry entry1;
   Fentry entry2;
+#if defined(DELTAFS)
   entry1.pid = DirId(1, 2, 3);
+#else
+  entry1.pid = DirId(3);
+#endif
   entry1.nhash = "xyz";
   entry1.zserver = 4;
   Stat* stat1 = &entry1.stat;
   stat1->SetInodeNo(5);
+#if defined(DELTAFS)
   stat1->SetSnapId(6);
   stat1->SetRegId(7);
+#endif
   stat1->SetFileSize(8);
   stat1->SetFileMode(9);
   stat1->SetUserId(10);

@@ -11,9 +11,10 @@
 
 #pragma once
 
+#include "pdlfs-common/leveldb/db.h"
+
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/fio.h"
-#include "pdlfs-common/leveldb/db/db.h"
 #include "pdlfs-common/status.h"
 
 namespace pdlfs {

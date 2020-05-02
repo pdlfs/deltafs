@@ -50,11 +50,17 @@ class BlkDBTest {
 
   File* Open(int id, bool ocreat = false) {
     Fentry fentry;
+#if defined(DELTAFS)
     fentry.pid = DirId(0, 0, 0);
+#else
+    fentry.pid = DirId(0);
+#endif
     DirIndex::PutHash(&fentry.nhash, Name(id));
     fentry.zserver = 0;
+#if defined(DELTAFS)
     fentry.stat.SetRegId(0);
     fentry.stat.SetSnapId(0);
+#endif
     fentry.stat.SetInodeNo(id);
     uint64_t ignored_mtime;
     uint64_t ignored_size;

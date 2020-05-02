@@ -15,16 +15,15 @@
  * found at https://github.com/google/leveldb.
  */
 #include "filter_block.h"
-#include "table_stats.h"
+#include "index_block.h"
 #include "two_level_iterator.h"
 
 #include "pdlfs-common/leveldb/block.h"
 #include "pdlfs-common/leveldb/comparator.h"
-#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/format.h"
-#include "pdlfs-common/leveldb/index_block.h"
 #include "pdlfs-common/leveldb/iterator.h"
+#include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/leveldb/table.h"
 #include "pdlfs-common/leveldb/table_properties.h"
 
@@ -43,12 +42,12 @@ struct Table::Rep {
   const char* filter_data;
 
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
-  IndexReader* index_block;
+  IndexBlockReader* index_block;
 
   TableProperties props;  // All properties embedded in the table
   bool props_valid;
+  Rep() {}
 
-  explicit Rep() {}
   ~Rep() {
     delete filter;
     delete[] filter_data;
@@ -63,30 +62,27 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
     return Status::Corruption("file is too short to be an sstable");
   }
 
+  // Read the footer
   char footer_space[Footer::kEncodedLength];
   Slice footer_input;
   Status s = file->Read(size - Footer::kEncodedLength, Footer::kEncodedLength,
                         &footer_input, footer_space);
-  if (!s.ok()) return s;
-
+  if (!s.ok()) {
+    return s;
+  }
   Footer footer;
   s = footer.DecodeFrom(&footer_input);
-  if (!s.ok()) return s;
+  if (!s.ok()) {
+    return s;
+  }
 
   // Read the index block
   BlockContents contents;
-  IndexReader* index_block = NULL;
-  if (s.ok()) {
-    ReadOptions opt;
-    if (options.paranoid_checks) {
-      opt.verify_checksums = true;
-    }
-    s = ReadBlock(file, opt, footer.index_handle(), &contents);
-    if (s.ok()) {
-      index_block = IndexReader::Create(contents, &options);
-    }
+  ReadOptions opt;
+  if (options.paranoid_checks) {
+    opt.verify_checksums = true;
   }
-
+  s = ReadBlock(file, opt, footer.index_handle(), &contents);
   if (s.ok()) {
     // We've successfully read the footer and the index block: we're
     // ready to serve requests.
@@ -94,16 +90,14 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
     rep->options = options;
     rep->file = file;
     rep->metaindex_handle = footer.metaindex_handle();
-    rep->index_block = index_block;
     rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
+    rep->index_block = new IndexBlockReader(contents);
     rep->filter_data = NULL;
     rep->filter = NULL;
     rep->props_valid = false;
 
     *table = new Table(rep);
     (*table)->ReadMeta(footer);
-  } else {
-    if (index_block) delete index_block;
   }
 
   return s;
@@ -128,7 +122,7 @@ void Table::ReadMeta(const Footer& footer) {
   Slice props_key("table.properties");
   iter->Seek(props_key);
   if (iter->Valid() && iter->key() == props_key) {
-    ReadProps(iter->value());
+    ReadProperties(iter->value());
   }
 
   if (r->options.filter_policy != NULL) {
@@ -168,9 +162,9 @@ void Table::ReadFilter(const Slice& handle_value) {
   }
 }
 
-void Table::ReadProps(const Slice& handle_value) {
+void Table::ReadProperties(const Slice& props_handle_value) {
   Rep* r = rep_;
-  Slice v = handle_value;
+  Slice v = props_handle_value;
   BlockHandle handle;
   if (!handle.DecodeFrom(&v).ok()) {
     return;
@@ -265,15 +259,15 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
 }
 
 Iterator* Table::NewIterator(const ReadOptions& options) const {
-  return NewTwoLevelIterator(rep_->index_block->NewIterator(),
-                             &Table::BlockReader, const_cast<Table*>(this),
-                             options);
+  return NewTwoLevelIterator(
+      rep_->index_block->NewIterator(rep_->options.comparator),
+      &Table::BlockReader, const_cast<Table*>(this), options);
 }
 
 Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
                           void (*saver)(void*, const Slice&, const Slice&)) {
   Status s;
-  Iterator* iiter = rep_->index_block->NewIterator();
+  Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
   iiter->Seek(k);
   if (iiter->Valid()) {
     Slice handle_value = iiter->value();
@@ -301,7 +295,8 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
 }
 
 uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
-  Iterator* index_iter = rep_->index_block->NewIterator();
+  Iterator* index_iter =
+      rep_->index_block->NewIterator(rep_->options.comparator);
   index_iter->Seek(key);
   uint64_t result;
   if (index_iter->Valid()) {

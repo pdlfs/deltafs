@@ -16,7 +16,9 @@ namespace pdlfs {
 std::string DirId::DebugString() const {
 #define LLU(x) static_cast<unsigned long long>(x)
   char tmp[30];
-#if defined(DELTAFS)
+#if defined(DELTAFS_PROTO)
+  snprintf(tmp, sizeof(tmp), "dirid[%llu:%llu]", LLU(dno), LLU(ino));
+#elif defined(DELTAFS)
   snprintf(tmp, sizeof(tmp), "dirid[%llu:%llu:%llu]", LLU(reg), LLU(snap),
            LLU(ino));
 #else
@@ -25,19 +27,23 @@ std::string DirId::DebugString() const {
   return tmp;
 }
 
-#if defined(DELTAFS)
+#if defined(DELTAFS_PROTO)
+DirId::DirId(uint64_t ino) : dno(0), ino(ino) {}
+#elif defined(DELTAFS)
 DirId::DirId(uint64_t ino) : reg(0), snap(0), ino(ino) {}
 #else
 DirId::DirId(uint64_t ino) : ino(ino) {}
 #endif
 
-#if defined(DELTAFS)
+#if defined(DELTAFS_PROTO)
+#define DIR_INITIALIZER(x) dno(x.DnodeNo()), ino(x.InodeNo())
+#elif defined(DELTAFS)
 #define DIR_INITIALIZER(x) reg(x.RegId()), snap(x.SnapId()), ino(x.InodeNo())
 #else
 #define DIR_INITIALIZER(x) ino(x.InodeNo())
 #endif
 
-#if defined(DELTAFS) || defined(INDEXFS)
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
 DirId::DirId(const LookupStat& stat)  // Initialization via LookupStat
     : DIR_INITIALIZER(stat) {}
 #endif
@@ -54,6 +60,10 @@ int compare64(uint64_t a, uint64_t b) {
 }  // namespace
 int DirId::compare(const DirId& other) const {
   int r;
+#if defined(DELTAFS_PROTO)
+  r = compare64(dno, other.dno);
+  if (r != 0) return r;
+#endif
 #if defined(DELTAFS)
   r = compare64(reg, other.reg);
   if (r != 0) return r;

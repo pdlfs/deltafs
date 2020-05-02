@@ -199,7 +199,7 @@ inline std::string FileSet::LogRecord(const Slice& fname,
   size_t max_record_size = 8 + 4 + 1 + 4 + fname.size();
   std::string record;
   record.reserve(max_record_size);
-  PutFixed64(&record, Env::Default()->NowMicros());
+  PutFixed64(&record, CurrentMicros());
   PutFixed32(&record, 1);
   PutOp(&record, fname, type);
   return record;

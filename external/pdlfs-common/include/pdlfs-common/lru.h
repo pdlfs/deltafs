@@ -325,7 +325,7 @@ class LRUCache {
     return e;
   }
 
-  // Empty the "lru_" list reducing usage_.
+  // Empty the "lru_" list reducing the cache's usage_.
   void Prune() {
     while (lru_.next != &lru_) {
       E* const e = lru_.next;
@@ -337,23 +337,33 @@ class LRUCache {
   }
 
   // Kick out a key from the cache decrementing its reference count and reducing
-  // usage_. Removing a key that is not in the cache has no effect. A key can be
-  // removed regardless if it is currently in in_use_ or lru_. Once a key is
-  // removed from the cache, it can no longer be Lookup()'d from the cache. Nor
-  // can it be re-added into the cache. It stays in the "in_use_" list for the
-  // rest of its life. If a key is removed from the "lru_" list, it will be
-  // deleted immediately.
-  void Erase(const Slice& key, uint32_t hash) {
+  // usage_. Erasing a key that is not in the cache has no effect. A key can be
+  // erased as long as it is "in_cache" regardless if it is currently in the
+  // "in_use_" list or in the "lru_" list. Once a key is erased, it will no
+  // longer be Lookup()'d from the cache. If a key is erased from the "lru_"
+  // list, it will be immediately deleted. Return the erased entry. Return NULL
+  // if nothing has been erased.
+  E* Erase(const Slice& key, uint32_t hash) {
     E* const e = table_.Remove(key, hash);
     if (e != NULL) {
       Remove(e);
     }
+    return e;
   }
 
-  // Return True iff the cache is empty. This does not count entries
+  // Erase an entry from the cache. No effect if the entry is not in the cache.
+  // Return the entry if it has been removed. Return NULL otherwise.
+  E* Erase(E* e) {
+    e = table_.Remove(e);
+    if (e != NULL) {
+      Remove(e);
+    }
+    return e;
+  }
+
+  // Return True if the cache is empty. This does not count entries that are
   // "out" of the cache.
-  bool Empty() const {
-    // An entry is "in" the cache iff it is in table_
+  bool Empty() const {  // An entry is "in" the cache if it is "in" table_
     return (table_.Empty());
   }
 

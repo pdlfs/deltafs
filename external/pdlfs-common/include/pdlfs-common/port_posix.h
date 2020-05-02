@@ -183,34 +183,11 @@ inline bool Snappy_Uncompress(const char* input, size_t length, char* output) {
 #endif
 }
 
-inline bool GetHeapProfile(void (*func)(void*, const char*, int), void* arg) {
+inline bool GetHeapProfile(void (*)(void*, const char*, int), void*) {
   return false;
 }
 
 extern void PthreadCall(const char* label, int result);
-
-// API specific to posix
-
-// Return a special posix-based Env instance that redirects all I/O to dev null.
-// Result of the call belong to the system.
-// Caller should not delete the result.
-extern Env* PosixGetDevNullEnv();
-
-// Return a special posix-based Env instance that performs direct I/O.
-// Result of the call belong to the system.
-// Caller should not delete the result.
-// Return NULL if direct I/O is not supported.
-extern Env* PosixGetDirectIOEnv();
-
-// Return a special posix-based Env instance that avoids buffered I/O.
-// Result of the call belong to the system.
-// Caller should not delete the result.
-extern Env* PosixGetUnBufferedIOEnv();
-
-// Return a regular posix-base Env instance.
-// Result of the call belong to the system.
-// Caller should not delete the result.
-extern Env* PosixGetDefaultEnv();
 
 }  // namespace port
 }  // namespace pdlfs

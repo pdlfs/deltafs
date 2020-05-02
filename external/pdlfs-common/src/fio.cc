@@ -21,7 +21,7 @@
 #endif
 
 #if defined(PDLFS_PLATFORM_POSIX)
-#include "posix_fio.h"
+#include "posix/posix_fio.h"
 #endif
 
 namespace pdlfs {
@@ -119,11 +119,17 @@ bool Fentry::DecodeFrom(Slice* input) {
       !GetVarint64(input, &mtime)) {
     return false;
   } else {
+#if defined(DELTAFS)
     pid = DirId(parent_reg, parent_snap, parent_ino);
+#else
+    pid = DirId(parent_ino);
+#endif
     nhash = my_nhash.ToString();
     zserver = parent_zserver;
+#if defined(DELTAFS)
     stat.SetRegId(my_reg);
     stat.SetSnapId(my_snap);
+#endif
     stat.SetInodeNo(my_ino);
     stat.SetFileSize(size);
     stat.SetFileMode(mode);
