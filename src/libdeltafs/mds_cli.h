@@ -11,11 +11,11 @@
 #pragma once
 
 #include "mds_api.h"
+#include "util/guard.h"
 #include "util/index_cache.h"
 #include "util/lookup_cache.h"
 
 #include "pdlfs-common/fio.h"
-#include "pdlfs-common/guard.h"
 #include "pdlfs-common/port.h"
 
 namespace pdlfs {

@@ -10,10 +10,10 @@
  */
 #pragma once
 
+#include "guard.h"
 #include "mdb.h"
 
 #include "pdlfs-common/gigaplus.h"
-#include "pdlfs-common/guard.h"
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/port.h"
 
