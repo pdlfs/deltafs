@@ -295,8 +295,8 @@ class Logger {
   Logger() {}
   virtual ~Logger();
 
-  // Return the global logger that is shared by the entire process.
-  // The result of Default() belongs to the system and cannot be deleted.
+  // Return a global logger that is shared by the entire process. The result of
+  // Default() belongs to the system and shall not be deleted.
   static Logger* Default();
 
   // Write an entry to the log file with the specified format.
@@ -305,9 +305,18 @@ class Logger {
 
  private:
   // No copying allowed
-  void operator=(const Logger&);
+  void operator=(const Logger& lgr);
   Logger(const Logger&);
 };
+
+#define Log(info_log, lvl, ...) \
+  Log0v(info_log, __FILE__, __LINE__, lvl, __VA_ARGS__)
+extern void Log0v(Logger* logger, const char* srcfile, int srcln, int loglvl,
+                  const char* fmt, ...)
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((__format__(__printf__, 5, 6)))
+#endif
+    ;
 
 // Identifies a locked file.
 class FileLock {

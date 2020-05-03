@@ -9,5 +9,4 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 #pragma once
-#define Log(info_log, lvl, ...) (void)0
-// #define Log(info_log, lvl, ...) Verbose(info_log, __FILE__, __LINE__, lvl, __VA_ARGS__)
+#include "pdlfs-common/env.h"
