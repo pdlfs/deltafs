@@ -966,8 +966,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
           ignore_sync_(wrapper->ignore_sync_),
           drop_(wrapper->drop_),
           lck_(wrapper->lck_),
-          base_(base),
-          env_(wrapper) {}
+          base_(base) {}
 
     virtual ~TrafficControlledWritableFile() {
       delete base_;  // Owned by us
@@ -1029,7 +1028,6 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
     const bool drop_;
     pdlfs::Lockable* const lck_;
     WritableFile* const base_;  // May be NULL
-    Env* const env_;
   };
 };
 
