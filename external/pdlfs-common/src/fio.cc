@@ -11,7 +11,6 @@
 
 #include "pdlfs-common/fio.h"
 #include "pdlfs-common/coding.h"
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/strutil.h"
 
@@ -41,7 +40,7 @@ static std::string FetchRoot(const char* input) {
     }
   }
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "fio.posix.root -> %s", root.c_str());
+  // Verbose(__LOG_ARGS__, 2, "fio.posix.root -> %s", root.c_str());
 #endif
   return root;
 }
@@ -51,8 +50,8 @@ Fio* Fio::Open(const char* name, const char* conf) {
   if (conf == NULL) conf = "";
   Slice fio_name(name), fio_conf(conf);
 #if VERBOSE >= 1
-  Verbose(__LOG_ARGS__, 1, "fio.name -> %s", fio_name.c_str());
-  Verbose(__LOG_ARGS__, 1, "fio.conf -> %s", fio_conf.c_str());
+  // Verbose(__LOG_ARGS__, 1, "fio.name -> %s", fio_name.c_str());
+  // Verbose(__LOG_ARGS__, 1, "fio.conf -> %s", fio_conf.c_str());
 #endif
 #if defined(PDLFS_RADOS)
   if (fio_name == "rados") {

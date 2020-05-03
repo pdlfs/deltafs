@@ -8,9 +8,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "pdlfs-common/rpc.h"
-#include "pdlfs-common/logging.h"
+
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
@@ -618,14 +617,14 @@ RPC* RPC::Open(const RPCOptions& raw_options) {
     options.env = Env::Default();
   }
 #if VERBOSE >= 1
-  Verbose(__LOG_ARGS__, 1, "rpc.uri -> %s", options.uri.c_str());
-  Verbose(__LOG_ARGS__, 1, "rpc.timeout -> %llu (microseconds)",
-          (unsigned long long)options.rpc_timeout);
-  Verbose(__LOG_ARGS__, 1, "rpc.num_io_threads -> %d", options.num_rpc_threads);
-  Verbose(__LOG_ARGS__, 1, "rpc.extra_workers -> [%s]",
-          options.extra_workers != NULL
-              ? options.extra_workers->ToDebugString().c_str()
-              : "NULL");
+//  Verbose(__LOG_ARGS__, 1, "rpc.uri -> %s", options.uri.c_str());
+//  Verbose(__LOG_ARGS__, 1, "rpc.timeout -> %llu (microseconds)",
+//          (unsigned long long)options.rpc_timeout);
+//  Verbose(__LOG_ARGS__, 1, "rpc.num_io_threads -> %d", options.num_rpc_threads);
+//  Verbose(__LOG_ARGS__, 1, "rpc.extra_workers -> [%s]",
+//          options.extra_workers != NULL
+//              ? options.extra_workers->ToDebugString().c_str()
+//              : "NULL");
 #endif
   RPC* rpc = NULL;
 #if defined(PDLFS_MARGO_RPC)

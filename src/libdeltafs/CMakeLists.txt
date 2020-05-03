@@ -29,7 +29,7 @@ set (deltafs-srcs deltafs_api.cc deltafs_client.cc deltafs_conf.cc
         mds_cli.cc mds_factory.cc mds_srv.cc snap_stor.cc
         util/blkdb.cc util/dcntl.cc util/index_cache.cc
         util/lease.cc util/lookup_cache.cc
-        util/mdb.cc)
+        util/logging.cc util/mdb.cc)
 
 set (deltafs-plfsio-srcs plfsio/v1/v1.cc
         plfsio/v1/types.cc

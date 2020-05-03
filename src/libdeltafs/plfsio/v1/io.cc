@@ -10,10 +10,11 @@
  */
 
 #include "io.h"
+
+#include "../../util/logging.h"
 #include "format.h"
 #include "types.h"
 
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/strutil.h"
 
 #include <algorithm>

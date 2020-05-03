@@ -10,16 +10,17 @@
  */
 
 #include "internal.h"
+
+#include "../../util/logging.h"
 #include "events.h"
 #include "filter.h"
 
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/strutil.h"
 
+#include <algorithm>
 #include <assert.h>
 #include <math.h>
-#include <algorithm>
 
 namespace pdlfs {
 extern const char* GetLengthPrefixedSlice(const char* p, const char* limit,

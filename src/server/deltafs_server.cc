@@ -8,11 +8,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "../libdeltafs/deltafs_mds.h"
+#include "../libdeltafs/util/logging.h"
 #include "deltafs/deltafs_config.h"
 
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/pdlfs_platform.h"
 #include "pdlfs-common/port.h"

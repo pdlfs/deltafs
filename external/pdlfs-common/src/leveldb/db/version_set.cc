@@ -29,7 +29,6 @@
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/log_reader.h"
 #include "pdlfs-common/log_writer.h"
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/strutil.h"
 
 #include <stdio.h>

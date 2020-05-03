@@ -8,13 +8,12 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "deltafs_mds.h"
 
 #include "deltafs_conf_loader.h"
 #include "mds_factory.h"
+#include "util/logging.h"
 
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
 
 #include <map>

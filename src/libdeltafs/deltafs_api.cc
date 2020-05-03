@@ -19,6 +19,7 @@
 #include "plfsio/v1/pdb.h"
 #include "plfsio/v1/types.h"
 #include "plfsio/v1/v1.h"
+#include "util/logging.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
@@ -26,7 +27,6 @@
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/options.h"
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/murmur.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/pdlfs_config.h"
