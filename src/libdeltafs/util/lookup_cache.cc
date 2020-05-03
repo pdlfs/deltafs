@@ -8,57 +8,59 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+#include "lookup_cache.h"
 
-#include "pdlfs-common/index_cache.h"
 #include "pdlfs-common/coding.h"
 
 #include <assert.h>
 #include <errno.h>
+#include <stddef.h>
 
 namespace pdlfs {
 
-static void (*Deleter)(const Slice&, DirIndex*) = LRUValueDeleter<DirIndex>;
+static void (*Deleter)(const Slice&, LookupStat*) = LRUValueDeleter<LookupStat>;
 
-IndexCache::~IndexCache() {
+LookupCache::~LookupCache() {
 #ifndef NDEBUG
   lru_.Prune();
   assert(lru_.Empty());
 #endif
 }
 
-IndexCache::IndexCache(size_t capacity, port::Mutex* mu)
+LookupCache::LookupCache(size_t capacity, port::Mutex* mu)
     : lru_(capacity), mu_(mu) {}
 
-void IndexCache::Release(Handle* handle) {
+void LookupCache::Release(Handle* handle) {
   if (mu_ != NULL) {
     mu_->Lock();
   }
-  lru_.Release(reinterpret_cast<IndexEntry*>(handle));
+  lru_.Release(reinterpret_cast<LookupEntry*>(handle));
   if (mu_ != NULL) {
     mu_->Unlock();
   }
 }
 
-const DirIndex* IndexCache::Value(Handle* handle) {
-  return reinterpret_cast<IndexEntry*>(handle)->value;
+LookupStat* LookupCache::Value(Handle* handle) {
+  return reinterpret_cast<LookupEntry*>(handle)->value;
 }
 
-Slice IndexCache::LRUKey(const DirId& id, char* scratch) {
+Slice LookupCache::LRUKey(const DirId& pid, const Slice& nhash, char* scratch) {
   char* p = scratch;
 #if !defined(DELTAFS)
-  EncodeFixed64(p, id.ino);
+  EncodeFixed64(p, pid.ino);
   p += 8;
 #else
-  p = EncodeVarint64(p, id.reg);
-  p = EncodeVarint64(p, id.snap);
-  p = EncodeVarint64(p, id.ino);
+  p = EncodeVarint64(p, pid.reg);
+  p = EncodeVarint64(p, pid.snap);
+  p = EncodeVarint64(p, pid.ino);
 #endif
-  return Slice(scratch, p - scratch);
+  memcpy(p, nhash.data(), nhash.size());
+  return Slice(scratch, p - scratch + nhash.size());
 }
 
-IndexCache::Handle* IndexCache::Lookup(const DirId& id) {
-  char tmp[30];
-  Slice key = LRUKey(id, tmp);
+LookupCache::Handle* LookupCache::Lookup(const DirId& pid, const Slice& nhash) {
+  char tmp[50];
+  Slice key = LRUKey(pid, nhash, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {
@@ -71,25 +73,26 @@ IndexCache::Handle* IndexCache::Lookup(const DirId& id) {
   return h;
 }
 
-IndexCache::Handle* IndexCache::Insert(const DirId& id, DirIndex* index) {
-  char tmp[30];
-  Slice key = LRUKey(id, tmp);
+LookupCache::Handle* LookupCache::Insert(const DirId& pid, const Slice& nhash,
+                                         LookupStat* stat) {
+  char tmp[50];
+  Slice key = LRUKey(pid, nhash, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {
     mu_->Lock();
   }
   Handle* h =
-      reinterpret_cast<Handle*>(lru_.Insert(key, hash, index, 1, Deleter));
+      reinterpret_cast<Handle*>(lru_.Insert(key, hash, stat, 1, Deleter));
   if (mu_ != NULL) {
     mu_->Unlock();
   }
   return h;
 }
 
-void IndexCache::Erase(const DirId& id) {
-  char tmp[30];
-  Slice key = LRUKey(id, tmp);
+void LookupCache::Erase(const DirId& pid, const Slice& nhash) {
+  char tmp[50];
+  Slice key = LRUKey(pid, nhash, tmp);
   uint32_t hash = Hash(key.data(), key.size(), 0);
 
   if (mu_ != NULL) {

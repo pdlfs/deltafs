@@ -10,7 +10,8 @@
  */
 #pragma once
 
-#include "pdlfs-common/dcntl.h"
+#include "dcntl.h"
+
 #include "pdlfs-common/lru.h"
 #include "pdlfs-common/port.h"
 

@@ -8,10 +8,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+#include "mdb.h"
 
-#include "pdlfs-common/mdb.h"
+#include "dcntl.h"
 
-#include "pdlfs-common/dcntl.h"
 #include "pdlfs-common/gigaplus.h"
 
 namespace pdlfs {

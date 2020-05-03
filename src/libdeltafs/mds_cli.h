@@ -1,5 +1,3 @@
-#pragma once
-
 /*
  * Copyright (c) 2019 Carnegie Mellon University,
  * Copyright (c) 2019 Triad National Security, LLC, as operator of
@@ -10,12 +8,14 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+#pragma once
 
 #include "mds_api.h"
+#include "util/index_cache.h"
+#include "util/lookup_cache.h"
+
 #include "pdlfs-common/fio.h"
 #include "pdlfs-common/guard.h"
-#include "pdlfs-common/index_cache.h"
-#include "pdlfs-common/lookup_cache.h"
 #include "pdlfs-common/port.h"
 
 namespace pdlfs {

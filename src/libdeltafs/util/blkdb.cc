@@ -8,8 +8,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+#include "blkdb.h"
 
-#include "pdlfs-common/blkdb.h"
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
@@ -371,7 +371,7 @@ bool BlkInfo::ParseFrom(const Slice& k, const Slice& v) {
     return true;
   }
 }
-}
+}  // namespace
 
 // REQUIRES: mutex_ has been locked.
 Status BlkDB::ReadFrom(Stream* stream, const Fentry& fentry, Slice* result,

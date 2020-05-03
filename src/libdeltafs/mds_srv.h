@@ -8,14 +8,13 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #pragma once
 
 #include "mds_api.h"
+#include "util/dcntl.h"
+#include "util/lease.h"
 
-#include "pdlfs-common/dcntl.h"
 #include "pdlfs-common/hashmap.h"
-#include "pdlfs-common/lease.h"
 #include "pdlfs-common/port.h"
 
 namespace pdlfs {

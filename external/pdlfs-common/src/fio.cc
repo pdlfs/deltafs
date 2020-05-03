@@ -10,7 +10,6 @@
  */
 
 #include "pdlfs-common/fio.h"
-#include "pdlfs-common/blkdb.h"
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"

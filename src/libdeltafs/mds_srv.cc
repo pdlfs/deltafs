@@ -8,10 +8,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "mds_srv.h"
 
-#include "pdlfs-common/dirlock.h"
+#include "util/dirlock.h"
+
 #include "pdlfs-common/mutexlock.h"
 
 #include <errno.h>

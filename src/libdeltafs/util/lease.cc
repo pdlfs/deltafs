@@ -8,8 +8,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+#include "lease.h"
 
-#include "pdlfs-common/lease.h"
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"

@@ -58,12 +58,12 @@ set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
 
 # common dfs sources and tests
 if (PDLFS_DFS_COMMON)
-    set (pdlfs-dfs-srcs blkdb.cc dcntl.cc fio.cc gigaplus.cc
-            index_cache.cc lease.cc lookup_cache.cc mdb.cc
-            osd.cc ofs.cc ofs_impl.cc posix/posix_fio.cc
+    set (pdlfs-dfs-srcs gigaplus.cc fio.cc osd.cc
+            ofs.cc ofs_impl.cc posix/posix_fio.cc
             rpc.cc)
-    set (pdlfs-dfs-tests blkdb_test.cc fio_test.cc gigaplus_test.cc
-            ofs_test.cc osd_test.cc rpc_test.cc)
+    set (pdlfs-dfs-tests gigaplus_test.cc fio_test.cc
+            ofs_test.cc osd_test.cc
+            rpc_test.cc)
 endif ()
 
 # ECT sources and tests
