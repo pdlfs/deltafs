@@ -24,7 +24,6 @@
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/filenames.h"
-#include "pdlfs-common/leveldb/infolog.h"
 #include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/leveldb/table_builder.h"
 

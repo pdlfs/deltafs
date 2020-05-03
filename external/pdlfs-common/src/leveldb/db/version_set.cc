@@ -15,15 +15,12 @@
  * found at https://github.com/google/leveldb.
  */
 #include "version_set.h"
-#include "memtable.h"
 #include "table_cache.h"
 
 #include "../merger.h"
 #include "../two_level_iterator.h"
 
 #include "pdlfs-common/leveldb/filenames.h"
-#include "pdlfs-common/leveldb/infolog.h"
-#include "pdlfs-common/leveldb/table_builder.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
