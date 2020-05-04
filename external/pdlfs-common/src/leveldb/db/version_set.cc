@@ -15,6 +15,7 @@
  * found at https://github.com/google/leveldb.
  */
 #include "version_set.h"
+
 #include "table_cache.h"
 
 #include "../merger.h"
@@ -28,8 +29,8 @@
 #include "pdlfs-common/log_writer.h"
 #include "pdlfs-common/strutil.h"
 
-#include <stdio.h>
 #include <algorithm>
+#include <stdio.h>
 
 namespace pdlfs {
 
@@ -917,7 +918,9 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
         s = descriptor_file_->Sync();
       }
       if (!s.ok()) {
+#if VERBOSE >= 3
         Log(options_->info_log, 3, "MANIFEST write: %s", s.ToString().c_str());
+#endif
       }
     }
 
@@ -933,7 +936,9 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
         names[0] = DescriptorFileName(dbname_, 3 - manifest_file_number_);
         names[1] = CurrentFileName(dbname_);
         for (size_t i = 0; i < 2; i++) {
-          Log(options_->info_log, 3, "Delete %s", names[i].c_str());
+#if VERBOSE >= 2
+          Log(options_->info_log, 2, "Delete %s", names[i].c_str());
+#endif
           env_->DeleteFile(names[i].c_str());
         }
       }
@@ -1000,7 +1005,9 @@ Status VersionSet::Recover() {
       }
     }
     if (!s.ok()) {
-      Log(options_->info_log, 3, "CURRENT read: %s", s.ToString().c_str());
+#if VERBOSE >= 3
+      Log(options_->info_log, 3, "CURRENT file read: %s", s.ToString().c_str());
+#endif
       if (status.ok()) {
         status = s;
       }
@@ -1116,7 +1123,9 @@ Status VersionSet::Recover() {
       }
 
       if (!s.ok()) {
+#if VERBOSE >= 3
         Log(options_->info_log, 3, "MANIFEST read: %s", s.ToString().c_str());
+#endif
         if (status.ok()) {
           status = s;
         }
@@ -1470,11 +1479,13 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
       current_->GetOverlappingInputs(level + 1, &new_start, &new_limit,
                                      &expanded1);
       if (expanded1.size() == c->inputs_[1].size()) {
-        Log(options_->info_log, 3,
+#if VERBOSE >= 4
+        Log(options_->info_log, 4,
             "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)",
             level, int(c->inputs_[0].size()), int(c->inputs_[1].size()),
             long(inputs0_size), long(inputs1_size), int(expanded0.size()),
             int(expanded1.size()), long(expanded0_size), long(inputs1_size));
+#endif
         smallest = new_start;
         largest = new_limit;
         c->inputs_[0] = expanded0;
