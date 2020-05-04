@@ -875,6 +875,10 @@ void DBImpl::CleanupCompaction(CompactionState* compact) {
 Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
   assert(compact != NULL);
   assert(compact->builder == NULL);
+#if VERBOSE >= 3
+  Log(options_.info_log, 3, "Building L%d table ...",
+      compact->compaction->level() + 1);
+#endif
   uint64_t file_number;
   {
     mutex_.Lock();
