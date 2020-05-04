@@ -754,8 +754,8 @@ void DBImpl::BackgroundCall() {
     // No more background work when shutting down.
   } else if (!bg_error_.ok()) {
     // No more background work after a background error.
-  } else if (bulk_insert_in_progress_) {
-    // Yield to bulk insertion
+  } else if (bg_compaction_paused_) {
+    // Abort
   } else {
     BackgroundCompaction();
   }
