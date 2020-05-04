@@ -320,9 +320,7 @@ void DBImpl::DeleteObsoleteFiles() {
 #endif
         } else {
 #if VERBOSE >= 3
-          Log(options_.info_log, 3, "Delete file: %s (type=%d #%llu)",
-              filenames[i].c_str(), int(type),
-              static_cast<unsigned long long>(number));
+          Log(options_.info_log, 3, "Delete file: %s", filenames[i].c_str());
 #endif
         }
         if (!options_.gc_skip_deletion) {
@@ -558,7 +556,7 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
   }
 #if VERBOSE >= 2
   if (s.ok()) {
-    Log(options_.info_log, 2, "Built L0 table #%llu => %llu bytes",
+    Log(options_.info_log, 2, "L0 table #%llu => %llu bytes",
         static_cast<unsigned long long>(meta.number),
         static_cast<unsigned long long>(meta.file_size));
   }
@@ -621,8 +619,7 @@ void DBImpl::CompactMemTable() {
     DeleteObsoleteFiles();
 #if VERBOSE >= 1
     VersionSet::LevelSummaryStorage tmp;
-    Log(options_.info_log, 1,
-        "Compaction done: 1 memtable compacted, db becomes %s",
+    Log(options_.info_log, 1, "Compaction done: RAM->L0, db => %s",
         versions_->LevelSummary(&tmp));
 #endif
   } else {
@@ -948,8 +945,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
     delete iter;
 #if VERBOSE >= 2
     if (s.ok()) {
-      Log(options_.info_log, 2,
-          "Built L%d table #%llu => %llu keys, %llu bytes",
+      Log(options_.info_log, 2, "L%d table #%llu => %llu keys, %llu bytes",
           compact->compaction->level() + 1,
           static_cast<unsigned long long>(output_number),
           static_cast<unsigned long long>(current_entries),
@@ -1133,8 +1129,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   }
 #if VERBOSE >= 1
   VersionSet::LevelSummaryStorage tmp;
-  Log(options_.info_log, 1, "Compaction done: L%d compacted, db becomes %s",
-      compact->compaction->level(), versions_->LevelSummary(&tmp));
+  Log(options_.info_log, 1, "Compaction done: L%d->L%d, db => %s",
+      compact->compaction->level(), compact->compaction->level() + 1,
+      versions_->LevelSummary(&tmp));
 #endif
   return status;
 }
@@ -1881,7 +1878,7 @@ Status DBImpl::MigrateLevel0Table(InsertionState* insert,
     Log(options_.info_log, 0, "Insertion error: %s", s.ToString().c_str());
   } else {
 #if VERBOSE >= 2
-    Log(options_.info_log, 2, "Inserted L0 table #%llu => %llu bytes",
+    Log(options_.info_log, 2, "L0 table #%llu => %llu bytes",
         static_cast<unsigned long long>(file_number),
         static_cast<unsigned long long>(file_size));
 #endif

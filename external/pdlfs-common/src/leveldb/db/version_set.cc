@@ -1485,6 +1485,9 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
             level, int(c->inputs_[0].size()), int(c->inputs_[1].size()),
             long(inputs0_size), long(inputs1_size), int(expanded0.size()),
             int(expanded1.size()), long(expanded0_size), long(inputs1_size));
+#else
+        // Suppress compiler warnings
+        (void)inputs0_size;
 #endif
         smallest = new_start;
         largest = new_limit;
