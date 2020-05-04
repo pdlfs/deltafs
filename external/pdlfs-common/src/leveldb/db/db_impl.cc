@@ -15,6 +15,7 @@
  * found at https://github.com/google/leveldb.
  */
 #include "db_impl.h"
+
 #include "builder.h"
 #include "db_iter.h"
 #include "memtable.h"
@@ -22,7 +23,6 @@
 #include "version_set.h"
 
 #include "../merger.h"
-#include "../two_level_iterator.h"
 
 #include "pdlfs-common/leveldb/block.h"
 #include "pdlfs-common/leveldb/db.h"
@@ -41,10 +41,10 @@
 #include "pdlfs-common/status.h"
 #include "pdlfs-common/strutil.h"
 
-#include <stdint.h>
-#include <stdio.h>
 #include <algorithm>
 #include <set>
+#include <stdint.h>
+#include <stdio.h>
 #include <string>
 #include <vector>
 
@@ -153,7 +153,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
 DBImpl::~DBImpl() {
   // Wait for background work to finish
   mutex_.Lock();
-  Log(options_.info_log, 3, "Shutting down ...");
+  Log(options_.info_log, 0, "Shutting down ...");
   shutting_down_.Release_Store(this);  // Any non-NULL value is ok
   while (bg_compaction_scheduled_ || bulk_insert_in_progress_) {
     bg_cv_.Wait();
@@ -206,6 +206,7 @@ Status DBImpl::NewDB() {
   }
   delete file;
   if (s.ok()) {
+    Log(options_.info_log, 0, "Started a new db");
     if (!options_.rotating_manifest) {
       // Make "CURRENT" file that points to the new manifest file.
       s = SetCurrentFile(env_, dbname_, num);
@@ -260,7 +261,9 @@ void DBImpl::MaybeIgnoreError(Status* s) const {
   if (s->ok() || options_.paranoid_checks) {
     // No change needed
   } else {
-    Log(options_.info_log, 3, "Ignoring error %s", s->ToString().c_str());
+#if VERBOSE >= 1
+    Log(options_.info_log, 1, "Ignoring error %s", s->ToString().c_str());
+#endif
     *s = Status::OK();
   }
 }
@@ -311,11 +314,18 @@ void DBImpl::DeleteObsoleteFiles() {
       if (!keep) {
         if (type == kTableFile) {
           table_cache_->Evict(number);
+#if VERBOSE >= 2
+          Log(options_.info_log, 2, "Delete table #%llu",
+              static_cast<unsigned long long>(number));
+#endif
+        } else {
+#if VERBOSE >= 3
+          Log(options_.info_log, 3, "Delete file: %s (type=%d #%llu)",
+              filenames[i].c_str(), int(type),
+              static_cast<unsigned long long>(number));
+#endif
         }
-        Log(options_.info_log, 3, "Delete type=%d #%llu", int(type),
-            static_cast<unsigned long long>(number));
         if (!options_.gc_skip_deletion) {
-          Log(options_.info_log, 3, "Remove %s", filenames[i].c_str());
           std::string fname = dbname_ + "/" + filenames[i];
           env_->DeleteFile(fname.c_str());
         }
@@ -426,10 +436,14 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
     const char* fname;
     Status* status;  // NULL if options_.paranoid_checks==false
     virtual void Corruption(size_t bytes, const Status& s) {
-      Log(info_log, 3, "%s%s: dropping %d bytes; %s",
+#if VERBOSE >= 1
+      Log(info_log, 1, "%s%s: dropping %d bytes; %s",
           (this->status == NULL ? "(ignoring error) " : ""), fname,
           static_cast<int>(bytes), s.ToString().c_str());
-      if (this->status != NULL && this->status->ok()) *this->status = s;
+#endif
+      if (this->status != NULL && this->status->ok()) {
+        *this->status = s;
+      }
     }
   };
 
@@ -455,8 +469,9 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, VersionEdit* edit,
   // to be skipped instead of propagating bad information (like overly
   // large sequence numbers).
   log::Reader reader(file, &reporter, true /*checksum*/, 0 /*initial_offset*/);
-  Log(options_.info_log, 3, "Recovering log #%llu",
-      (unsigned long long)log_number);
+#if VERBOSE >= 1
+  Log(options_.info_log, 1, "Recovering log: %s", fname.c_str());
+#endif
 
   // Read all the records and add to a memtable
   std::string scratch;
@@ -530,8 +545,9 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
   FileMetaData meta;
   meta.number = versions_->NewFileNumber();
   pending_outputs_.insert(meta.number);
-  Log(options_.info_log, 3, "Level-0 table #%llu: started",
-      (unsigned long long)meta.number);
+#if VERBOSE >= 3
+  Log(options_.info_log, 3, "Building L0 table ...");
+#endif
 
   Status s;
   {
@@ -540,12 +556,15 @@ Status DBImpl::WriteLevel0Table(Iterator* iter, VersionEdit* edit,
                    max_seq, &meta);
     mutex_.Lock();
   }
+#if VERBOSE >= 2
+  if (s.ok()) {
+    Log(options_.info_log, 2, "Built L0 table #%llu => %llu bytes",
+        static_cast<unsigned long long>(meta.number),
+        static_cast<unsigned long long>(meta.file_size));
+  }
+#endif
 
-  Log(options_.info_log, 3, "Level-0 table #%llu: %lld bytes %s",
-      (unsigned long long)meta.number, (unsigned long long)meta.file_size,
-      s.ToString().c_str());
   pending_outputs_.erase(meta.number);
-
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
   int level = 0;
@@ -600,6 +619,12 @@ void DBImpl::CompactMemTable() {
     imm_ = NULL;
     has_imm_.Release_Store(NULL);
     DeleteObsoleteFiles();
+#if VERBOSE >= 1
+    VersionSet::LevelSummaryStorage tmp;
+    Log(options_.info_log, 1,
+        "Compaction done: 1 memtable compacted, db becomes %s",
+        versions_->LevelSummary(&tmp));
+#endif
   } else {
     RecordBackgroundError(s);
   }
@@ -760,11 +785,13 @@ void DBImpl::BackgroundCompaction() {
     if (c != NULL) {
       manual_end = c->input(0, c->num_input_files(0) - 1)->largest;
     }
-    Log(options_.info_log, 3,
+#if VERBOSE >= 1
+    Log(options_.info_log, 1,
         "Manual compaction at level-%d from %s .. %s; will stop at %s",
         m->level, (m->begin ? m->begin->DebugString().c_str() : "(begin)"),
         (m->end ? m->end->DebugString().c_str() : "(end)"),
         (m->done ? "(end)" : manual_end.DebugString().c_str()));
+#endif
   } else if (!options_.disable_compaction) {
     c = versions_->PickCompaction(!options_.disable_seek_compaction);
   } else {
@@ -785,11 +812,13 @@ void DBImpl::BackgroundCompaction() {
     if (!status.ok()) {
       RecordBackgroundError(status);
     }
+#if VERBOSE >= 3
     VersionSet::LevelSummaryStorage tmp;
     Log(options_.info_log, 3, "Moved #%lld to level-%d %lld bytes %s: %s",
         static_cast<unsigned long long>(f->number), c->level() + 1,
         static_cast<unsigned long long>(f->file_size),
         status.ToString().c_str(), versions_->LevelSummary(&tmp));
+#endif
   } else {
     CompactionState* compact = new CompactionState(c);
     status = DoCompactionWork(compact);
@@ -807,7 +836,7 @@ void DBImpl::BackgroundCompaction() {
   } else if (shutting_down_.Acquire_Load()) {
     // Ignore compaction errors found during shutting down
   } else {
-    Log(options_.info_log, 3, "Compaction error: %s",
+    Log(options_.info_log, 0, "Compaction error: %s",
         status.ToString().c_str());
   }
 
@@ -913,23 +942,28 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
                                                current_bytes, off);
     s = iter->status();
     delete iter;
+#if VERBOSE >= 2
     if (s.ok()) {
-      Log(options_.info_log, 3, "Generated table #%llu: %lld keys, %lld bytes",
-          (unsigned long long)output_number,
-          (unsigned long long)current_entries,
-          (unsigned long long)current_bytes);
+      Log(options_.info_log, 2,
+          "Built L%d table #%llu => %llu keys, %llu bytes",
+          compact->compaction->level() + 1,
+          static_cast<unsigned long long>(output_number),
+          static_cast<unsigned long long>(current_entries),
+          static_cast<unsigned long long>(current_bytes));
     }
+#endif
   }
   return s;
 }
 
 Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   mutex_.AssertHeld();
-  Log(options_.info_log, 3, "Compacted %d@%d + %d@%d files => %lld bytes",
+#if VERBOSE >= 4
+  Log(options_.info_log, 4, "Compacted %d@%d + %d@%d files => %lld bytes",
       compact->compaction->num_input_files(0), compact->compaction->level(),
       compact->compaction->num_input_files(1), compact->compaction->level() + 1,
       static_cast<long long>(compact->total_bytes));
-
+#endif
   // Add compaction outputs
   compact->compaction->AddInputDeletions(compact->compaction->edit());
   const int level = compact->compaction->level();
@@ -945,12 +979,12 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
   const uint64_t start_micros = CurrentMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
-
-  Log(options_.info_log, 3, "Compacting %d@%d + %d@%d files",
+#if VERBOSE >= 4
+  Log(options_.info_log, 4, "Compacting %d@%d + %d@%d files ...",
       compact->compaction->num_input_files(0), compact->compaction->level(),
       compact->compaction->num_input_files(1),
       compact->compaction->level() + 1);
-
+#endif
   assert(versions_->NumLevelFiles(compact->compaction->level()) > 0);
   assert(compact->builder == NULL);
   assert(compact->outfile == NULL);
@@ -1093,8 +1127,11 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   if (!status.ok()) {
     RecordBackgroundError(status);
   }
+#if VERBOSE >= 1
   VersionSet::LevelSummaryStorage tmp;
-  Log(options_.info_log, 3, "Compacted to: %s", versions_->LevelSummary(&tmp));
+  Log(options_.info_log, 1, "Compaction done: L%d compacted, db becomes %s",
+      compact->compaction->level(), versions_->LevelSummary(&tmp));
+#endif
   return status;
 }
 
@@ -1536,12 +1573,16 @@ Status DBImpl::MakeRoomForWrite(bool force) {
     } else if (imm_ != NULL) {
       // We have filled up the current memtable, but the previous
       // one is still being compacted, so we wait.
-      Log(options_.info_log, 3, "Current memtable full; waiting...");
+#if VERBOSE >= 5
+      Log(options_.info_log, 5, "Current memtable full; waiting...");
+#endif
       bg_cv_.Wait();
     } else if (!options_.disable_compaction &&
                versions_->NumLevelFiles(0) >= options_.l0_hard_limit) {
       // There are too many level-0 files.
-      Log(options_.info_log, 3, "Too many L0 files; waiting...");
+#if VERBOSE >= 5
+      Log(options_.info_log, 5, "Too many L0 files; waiting...");
+#endif
       bg_cv_.Wait();
     } else if (!options_.no_memtable) {
       // Close the current log file and open a new one
@@ -1802,8 +1843,10 @@ Status DBImpl::MigrateLevel0Table(InsertionState* insert,
 
   mutex_.Unlock();
   std::string dst = TableFileName(dbname_, file_number);
-  Log(options_.info_log, 3, "Insert #%llu: %s -> %s",
-      (unsigned long long)file_number, source.c_str(), dst.c_str());
+#if VERBOSE >= 3
+  Log(options_.info_log, 3, "Inserting L0 table: %s -> %s", source.c_str(),
+      dst.c_str());
+#endif
 
   Status s;
   uint64_t file_size;
@@ -1827,14 +1870,17 @@ Status DBImpl::MigrateLevel0Table(InsertionState* insert,
     }
   }
 
-  Log(options_.info_log, 3, "Insert #%llu: %llu bytes %s",
-      (unsigned long long)file_number, (unsigned long long)file_size,
-      s.ToString().c_str());
-
   mutex_.Lock();
 
   if (!s.ok()) {
     versions_->ReuseFileNumber(file_number);
+    Log(options_.info_log, 0, "Insertion error: %s", s.ToString().c_str());
+  } else {
+#if VERBOSE >= 2
+    Log(options_.info_log, 2, "Inserted L0 table #%llu => %llu bytes",
+        static_cast<unsigned long long>(file_number),
+        static_cast<unsigned long long>(file_size));
+#endif
   }
   return s;
 }
