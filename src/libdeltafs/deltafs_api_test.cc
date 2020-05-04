@@ -588,15 +588,16 @@ class PlfsFtBench {
   int mkeys_;
 };
 
-namespace {
+namespace test {
 bool DummyFilterTester(const Slice& key, const Slice& input) {
   // For template instantiation
   return false;
 }
-}  // namespace
+}  // namespace test
 template <size_t K, size_t V, int N = 10240>
 class PlfsFtBenchKv
-    : public PlfsFtBench<plfsio::CuckooBlock<K, V>, DummyFilterTester, N> {
+    : public PlfsFtBench<  ///
+          plfsio::CuckooBlock<K, V>, test::DummyFilterTester, N> {
  public:
   void LogAndApply() {
     plfsio::CuckooBlock<K, V>* const ft =
