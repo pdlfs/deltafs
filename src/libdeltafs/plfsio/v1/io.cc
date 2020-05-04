@@ -310,7 +310,7 @@ Status LogSink::Open(const LogOptions& opts, const std::string& prefix,
   WritableFile* file;
   // Link to external stats for I/O monitoring
   if (opts.stats != NULL) {
-    file = new MeasuredWritableFile(opts.stats, base);
+    file = new MonitoredWritableFile(opts.stats, base);
   } else {
     file = base;
   }
@@ -381,7 +381,7 @@ static Status OpenWithEagerSeqReads(
 
   SequentialFile* file = base;
   if (stats != NULL) {
-    file = new MeasuredSequentialFile(stats, base);
+    file = new MonitoredSequentialFile(stats, base);
   }
   WholeFileBufferedRandomAccessFile* cached_file =
       new WholeFileBufferedRandomAccessFile(file, size, io_size);
@@ -417,7 +417,7 @@ static Status RandomAccessOpen(
 
   RandomAccessFile* file = base;
   if (stats != NULL) {
-    file = new MeasuredRandomAccessFile(stats, base);
+    file = new MonitoredRandomAccessFile(stats, base);
   }
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Reading from %s (random access), size=%s",

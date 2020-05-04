@@ -1038,7 +1038,7 @@ pdlfs::Status DirEnvWrapper::NewSequentialFile(const char* f,
   if (s.ok()) {
     pdlfs::MutexLock ml(&mu_);
     pdlfs::SequentialFileStats* stats = new pdlfs::SequentialFileStats;
-    *r = new pdlfs::MeasuredSequentialFile(stats, file);
+    *r = new pdlfs::MonitoredSequentialFile(stats, file);
     sequentialfile_repo_.push_back(stats);
   } else {
     *r = NULL;
@@ -1053,7 +1053,7 @@ pdlfs::Status DirEnvWrapper::NewRandomAccessFile(const char* f,
   if (s.ok()) {
     pdlfs::MutexLock ml(&mu_);
     pdlfs::RandomAccessFileStats* stats = new pdlfs::RandomAccessFileStats;
-    *r = new pdlfs::MeasuredRandomAccessFile(stats, file);
+    *r = new pdlfs::MonitoredRandomAccessFile(stats, file);
     randomaccessfile_repo_.push_back(stats);
   } else {
     *r = NULL;
@@ -1069,7 +1069,7 @@ pdlfs::Status DirEnvWrapper::NewWritableFile(const char* f,
     pdlfs::MutexLock ml(&mu_);
     pdlfs::WritableFile* tc = new TrafficControlledWritableFile(this, file);
     pdlfs::WritableFileStats* stats = new pdlfs::WritableFileStats;
-    *r = new pdlfs::MeasuredWritableFile(stats, tc);
+    *r = new pdlfs::MonitoredWritableFile(stats, tc);
     writablefile_repo_.push_back(stats);
   } else {
     *r = NULL;
