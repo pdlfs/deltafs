@@ -41,7 +41,8 @@ set (deltafs-plfsio-srcs plfsio/v1/v1.cc
         plfsio/v1/doublebuf.cc
         plfsio/v1/bufio.cc
         plfsio/v1/pdb.cc
-        plfsio/v1/events.cc)
+        plfsio/v1/events.cc
+        plfsio/v1/range_writer.cc)
 
 set (deltafs-tests deltafs_api_test.cc
         plfsio/v1/bufio_test.cc
