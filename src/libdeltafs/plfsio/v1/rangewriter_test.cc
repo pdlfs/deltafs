@@ -88,21 +88,20 @@ class RangeWriterBench {
  public:
   RangeWriterBench() {
     mkeys_ = GetOption("MI_KEYS", 4);
-    bf_bits_per_key_ = GetOption("BF_BITS_PER_KEY", 13);
     bytes_per_sec_ = GetOption("BYTES_PER_SEC", 6000000);
     buf_size_ = GetOption("BUF_SIZE", 4 << 20);
     n_ = GetOption("NUM_BUFS", 4);
-    bool single_threaded = GetOption("SINGLE_THHREADED", 0);
+    int single_threaded = GetOption("SINGLE_THREADED", 0);
     thread_pool_ = single_threaded
                        ? nullptr
                        : ThreadPool::NewFixed(n_, true /* eager init */);
-    options_.bf_bits_per_key = bf_bits_per_key_;
+    options_.bf_bits_per_key = 0;
     options_.compaction_pool = thread_pool_;
     options_.cuckoo_frac = -1;
   }
 
   ~RangeWriterBench() {  //
-    delete thread_pool_;
+    if (thread_pool_) delete thread_pool_;
   }
 
   void LogAndApply() {

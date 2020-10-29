@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include "builder.h"
+//#include "builder.h"
 #include "doublebuf.h"
-//#include "ordered_builder.h"
+#include "ordered_builder.h"
 
 #include <float.h>
 #include <stdint.h>
@@ -164,8 +164,8 @@ class RangeWriter : public DoubleBuffering {
   /* XXX: needs to be atomic if writing is multithreaded */
   uint32_t bucket_idx_ = 0;
 
-  //  typedef OrderedBlockBuilder<float> BlockBuf;
-  typedef ArrayBlockBuilder BlockBuf;
+  typedef OrderedBlockBuilder<float> BlockBuf;
+//  typedef ArrayBlockBuilder BlockBuf;
   typedef ArrayBlock Block;
   const DirOptions& options_;
   WritableFile* const dst_;

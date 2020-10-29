@@ -34,6 +34,8 @@ Slice OrderedBlockBuilder<KeyType>::Finish() {
 
   Table::Iterator iter(memtable_);
   iter.SeekToFirst();
+  assert(iter.Valid());
+  assert(bytes_written_ > 0);
 
   for (; iter.Valid(); iter.Next()) {
     buffer_.append(iter.key(), key_size_ + value_size_);
@@ -60,6 +62,7 @@ void OrderedBlockBuilder<KeyType>::Reset() {
   delete memtable_;
   arena_ = new Arena();
   memtable_ = new Table(comparator_, arena_);
+  bytes_written_ = 0;
   n_ = 0;
   AbstractBlockBuilder::Reset();
 }
