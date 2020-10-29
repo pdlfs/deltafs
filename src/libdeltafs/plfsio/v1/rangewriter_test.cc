@@ -92,7 +92,10 @@ class RangeWriterBench {
     bytes_per_sec_ = GetOption("BYTES_PER_SEC", 6000000);
     buf_size_ = GetOption("BUF_SIZE", 4 << 20);
     n_ = GetOption("NUM_BUFS", 4);
-    thread_pool_ = ThreadPool::NewFixed(n_, true /* eager init */);
+    bool single_threaded = GetOption("SINGLE_THHREADED", 0);
+    thread_pool_ = single_threaded
+                       ? nullptr
+                       : ThreadPool::NewFixed(n_, true /* eager init */);
     options_.bf_bits_per_key = bf_bits_per_key_;
     options_.compaction_pool = thread_pool_;
     options_.cuckoo_frac = -1;

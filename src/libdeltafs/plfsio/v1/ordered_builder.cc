@@ -21,10 +21,10 @@ namespace pdlfs {
 namespace plfsio {
 template <typename KeyType>
 void OrderedBlockBuilder<KeyType>::Add(const Slice& key, const Slice& value) {
-  char* buf = arena_.Allocate(key_size_ + value_size_);
+  char* buf = arena_->Allocate(key_size_ + value_size_);
   memcpy(buf, key.data(), key_size_);
   memcpy(buf + key_size_, value.data(), value_size_);
-  memtable_.Insert(buf);
+  memtable_->Insert(buf);
   bytes_written_ += key_size_ + value_size_;
 }
 
@@ -32,7 +32,7 @@ template <typename KeyType>
 Slice OrderedBlockBuilder<KeyType>::Finish() {
   assert(!finished_);
 
-  Table::Iterator iter(&memtable_);
+  Table::Iterator iter(memtable_);
   iter.SeekToFirst();
 
   for (; iter.Valid(); iter.Next()) {
@@ -56,7 +56,10 @@ size_t OrderedBlockBuilder<KeyType>::CurrentSizeEstimate() const {
 
 template <typename KeyType>
 void OrderedBlockBuilder<KeyType>::Reset() {
-  // TODO: Reset SkipList
+  delete arena_;
+  delete memtable_;
+  arena_ = new Arena();
+  memtable_ = new Table(comparator_, arena_);
   n_ = 0;
   AbstractBlockBuilder::Reset();
 }

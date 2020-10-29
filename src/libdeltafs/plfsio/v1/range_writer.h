@@ -148,14 +148,14 @@ class RangeWriter : public DoubleBuffering {
   ~RangeWriter();
 
  private:
-//  const int rank_;
+  //  const int rank_;
   std::string dirpath_;
   uint32_t memtable_size_;
   uint32_t key_size_;
   uint32_t items_per_flush_;
 
-//  Bucket current_;
-//  Bucket prev_;
+  //  Bucket current_;
+  //  Bucket prev_;
 
   std::string manifest_path_;
   std::string manifest_bin_path_;
@@ -164,9 +164,9 @@ class RangeWriter : public DoubleBuffering {
   /* XXX: needs to be atomic if writing is multithreaded */
   uint32_t bucket_idx_ = 0;
 
-//  typedef OrderedBlockBuilder<float> BlockBuf;
+  //  typedef OrderedBlockBuilder<float> BlockBuf;
   typedef ArrayBlockBuilder BlockBuf;
-    typedef ArrayBlock Block;
+  typedef ArrayBlock Block;
   const DirOptions& options_;
   WritableFile* const dst_;
   port::Mutex mu_;
@@ -181,17 +181,14 @@ class RangeWriter : public DoubleBuffering {
   Status SyncBackend(bool close = false);
   Status Close();
   void ScheduleCompaction(uint32_t seq, void* buf);
-  void Clear(void* buf) {
-    printf("calling reset: %p\n", buf);
-    static_cast<BlockBuf*>(buf)->Reset();
-  }
+  void Clear(void* buf) { static_cast<BlockBuf*>(buf)->Reset(); }
   void AddToBuffer(void* buf, const Slice& k, const Slice& v) {
     static_cast<BlockBuf*>(buf)->Add(k, v);
   }
   bool HasRoom(const void* buf, const Slice& k, const Slice& v) {
     return (static_cast<const BlockBuf*>(buf)->CurrentSizeEstimate() +
-        k.size() + v.size() <=
-        buf_threshold_);
+                k.size() + v.size() <=
+            buf_threshold_);
   }
   bool IsEmpty(const void* buf) {
     return static_cast<const BlockBuf*>(buf)->empty();

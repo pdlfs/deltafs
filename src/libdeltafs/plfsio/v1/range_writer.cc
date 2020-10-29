@@ -297,7 +297,7 @@ RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
     if (i != 0) bufs_.push_back(bbs_[i]);
   }
 
-  membuf_ = bufs_[0];
+  membuf_ = bbs_[0];
 }
 
 RangeWriter::~RangeWriter() {
@@ -354,7 +354,6 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
   mu_.Unlock();  // Unlock as compaction is expensive
   Slice block_contents;
   if (!bb->empty()) {
-    printf("calling finish %p\n", bb);
     block_contents = bb->Finish();
   }
   mu_.Lock();  // All writes are serialized through compac_seq
@@ -372,7 +371,6 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
     status = dst_->Flush();
   }
   mu_.Lock();
-  printf("compacted: %d\n", compac_seq);
   return status;
 }
 
@@ -434,8 +432,6 @@ void RangeWriter::ScheduleCompaction(uint32_t const compac_seq, void* immbuf) {
   s->immbuf = immbuf;
   s->writer = this;
 
-  printf("schedule: %p\n", s->immbuf);
-
   if (options_.compaction_pool) {
     options_.compaction_pool->Schedule(RangeWriter::BGWork, s);
   } else if (options_.allow_env_threads) {
@@ -449,7 +445,6 @@ void RangeWriter::ScheduleCompaction(uint32_t const compac_seq, void* immbuf) {
 void RangeWriter::BGWork(void* arg) {
   State* const s = reinterpret_cast<State*>(arg);
   MutexLock ml(&s->writer->mu_);
-  printf("bgwork: %p\n", s->immbuf);
   s->writer->DoCompaction<RangeWriter>(s->compac_seq, s->immbuf);
   delete s;
 }
