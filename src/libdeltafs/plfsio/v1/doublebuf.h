@@ -206,7 +206,9 @@ Status DoubleBuffering::Prepare(uint32_t* seq, bool force, bool nowait,
       // Attempt to switch to a new write buffer
       force = false;
       TryScheduleCompaction<T>(seq, membuf_);
+      assert(membuf_ != bufs_.back());
       membuf_ = bufs_.back();
+      printf("new membuf: %p (/%zu)\n", membuf_, bufs_.size());
       bufs_.pop_back();
     } else if (!nowait) {
       bg_cv_->Wait();  // Wait for background compactions to finish
@@ -241,6 +243,7 @@ void DoubleBuffering::TryScheduleCompaction(uint32_t* compac_seq,
 template <typename T>
 void DoubleBuffering::DoCompaction(uint32_t seq, void* immbuf) {
   mu_->AssertHeld();
+  printf("do compaction: %p\n", immbuf);
   assert(immbuf);
   Status status = __this->Compact(seq, immbuf);
   ++num_compac_completed_;
