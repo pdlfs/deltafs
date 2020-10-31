@@ -21,10 +21,13 @@ namespace pdlfs {
 namespace plfsio {
 template <typename KeyType>
 void OrderedBlockBuilder<KeyType>::Add(const Slice& key, const Slice& value) {
-  char* buf = arena_->Allocate(key_size_ + value_size_);
-  memcpy(buf, key.data(), key_size_);
-  memcpy(buf + key_size_, value.data(), value_size_);
-  memtable_->Insert(buf);
+  // XXX: Not Endian-Neutral
+  keys_staging_.push_back(
+      key_ptr(*reinterpret_cast<const float*>(key.data()), bytes_written_));
+
+  buffer_staging_.append(key.data(), key_size_);
+  buffer_staging_.append(value.data(), value_size_);
+
   bytes_written_ += key_size_ + value_size_;
 }
 
@@ -32,17 +35,18 @@ template <typename KeyType>
 Slice OrderedBlockBuilder<KeyType>::Finish() {
   assert(!finished_);
 
-  Table::Iterator iter(memtable_);
-  iter.SeekToFirst();
-  assert(iter.Valid());
-  assert(bytes_written_ > 0);
+  std::sort(keys_staging_.begin(), keys_staging_.end(),
+            OrderedBlockBuilder::KeyPtrComparator);
+  const char* rawbuf_staging = buffer_staging_.c_str();
 
-  for (; iter.Valid(); iter.Next()) {
-    buffer_.append(iter.key(), key_size_ + value_size_);
+  for (size_t i = 0; i < keys_staging_.size(); i++) {
+    size_t key_offset = keys_staging_[i].second;
+    buffer_.append(rawbuf_staging + key_offset, key_size_ + value_size_);
   }
 
   PutFixed32(&buffer_, value_size_);
   PutFixed32(&buffer_, key_size_);
+
   return AbstractBlockBuilder::Finish(kNoCompression, false);
 }
 
@@ -58,13 +62,11 @@ size_t OrderedBlockBuilder<KeyType>::CurrentSizeEstimate() const {
 
 template <typename KeyType>
 void OrderedBlockBuilder<KeyType>::Reset() {
-  delete arena_;
-  delete memtable_;
-  arena_ = new Arena();
-  memtable_ = new Table(comparator_, arena_);
-  bytes_written_ = 0;
-  n_ = 0;
   AbstractBlockBuilder::Reset();
+  keys_staging_.clear();
+  buffer_staging_.clear();
+  n_ = 0;
+  bytes_written_ = 0;
 }
 
 /* Make compiler happy */

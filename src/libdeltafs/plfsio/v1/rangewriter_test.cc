@@ -111,17 +111,19 @@ class RangeWriterBench {
     Env* const env = new EmulatedEnv(bytes_per_sec_);
     ASSERT_OK(env->NewWritableFile("test.tbl", &dst));
     options_.allow_env_threads = false;
-    options_.value_size = 56;
+    options_.key_size = 4;
+    options_.value_size = 60;
     rdb = new RangeWriter(options_, dst, buf_size_, n_);
     const uint64_t start = env->NowMicros();
-    char tmp[8];
+    char tmp[4];
     Slice key(tmp, sizeof(tmp));
     std::string val(options_.value_size, '\0');
     const size_t num_keys = static_cast<size_t>(mkeys_) << 20;
     size_t i = 0;
     for (; i < num_keys; i++) {
       if ((i & 0x7FFFu) == 0) fprintf(stderr, "\r%.2f%%", 100.0 * i / num_keys);
-      EncodeFixed64(tmp, i);
+      float f = rand() * 1000.0 / RAND_MAX;
+      memcpy(tmp, reinterpret_cast<char*>(&f), sizeof(f));
       ASSERT_OK(rdb->Add(key, val));
     }
     fprintf(stderr, "\r100.00%%");
