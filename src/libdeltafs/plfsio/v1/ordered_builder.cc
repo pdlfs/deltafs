@@ -16,19 +16,24 @@
  */
 
 #include "ordered_builder.h"
+#include "coding_float.h"
 
 namespace pdlfs {
 namespace plfsio {
 template <typename KeyType>
 void OrderedBlockBuilder<KeyType>::Add(const Slice& key, const Slice& value) {
-  // XXX: Not Endian-Neutral
-  keys_staging_.push_back(
-      key_ptr(*reinterpret_cast<const float*>(key.data()), bytes_written_));
+  KeyType keyNum = DecodeFloat32(key.data());
+  observed_.Extend(keyNum);
+  keys_staging_.push_back(key_ptr(keyNum, bytes_written_));
 
   buffer_staging_.append(key.data(), key_size_);
   buffer_staging_.append(value.data(), value_size_);
 
   bytes_written_ += key_size_ + value_size_;
+  num_items_++;
+  if (not expected_.Inside(keyNum)) {
+    num_items_oob_++;
+  }
 }
 
 template <typename KeyType>
@@ -65,8 +70,11 @@ void OrderedBlockBuilder<KeyType>::Reset() {
   AbstractBlockBuilder::Reset();
   keys_staging_.clear();
   buffer_staging_.clear();
+  observed_.Reset();
   n_ = 0;
   bytes_written_ = 0;
+  num_items_ = 0;
+  num_items_oob_ = 0;
 }
 
 /* Make compiler happy */

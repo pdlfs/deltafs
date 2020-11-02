@@ -21,17 +21,32 @@
 
 #include "pdlfs-common/leveldb/skiplist.h"
 
+#include <float.h>
+
 namespace pdlfs {
 namespace plfsio {
+class PartitionManifestWriter;
 
-template <typename KeyType>
-class TypePrefixedComparator {
- public:
-  int operator()(const char* a, const char* b) const {
-    const KeyType key_a = *reinterpret_cast<const KeyType*>(a);
-    const KeyType key_b = *reinterpret_cast<const KeyType*>(b);
-    // XXX: check
-    return key_a < key_b ? -1 : key_a > key_b;
+struct Range {
+  float range_min = FLT_MAX;
+  float range_max = FLT_MIN;
+
+  Range& operator=(Range& r) {
+    range_min = r.range_min;
+    range_max = r.range_max;
+    return *this;
+  }
+
+  void Reset() {
+    range_min = FLT_MAX;
+    range_max = FLT_MIN;
+  }
+
+  bool Inside(float f) const { return (f >= range_min && f <= range_max); }
+
+  void Extend(float f) {
+    range_min = std::min(range_min, f);
+    range_max = std::max(range_min, f);
   }
 };
 
@@ -43,6 +58,8 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
         value_size_(options.value_size),
         key_size_(options.key_size),
         bytes_written_(0),
+        num_items_(0),
+        num_items_oob_(0),
         n_(0) {
     // TODO: what is this used for again?
     cmp_ = NULL;
@@ -64,17 +81,44 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
   // Return true iff no entries have been added since the last Reset()
   bool empty() const { return bytes_written_ == 0; }
 
- private:
-  typedef SkipList<const char*, TypePrefixedComparator<float>> Table;
+  bool Inside(float prop) { return expected_.Inside(prop); }
 
-  TypePrefixedComparator<KeyType> comparator_;
+  Range GetExpectedRange() { return expected_; }
+
+  Range GetObservedRange() { return observed_; }
+
+  void GetWriteStats(uint32_t& num_items, uint32_t num_oob) const {
+    num_items = num_items_;
+    num_oob = num_items_oob_;
+  }
+
+  void UpdateExpectedRange(Range range) {
+    assert(range.range_min <= range.range_max);
+    expected_ = range;
+  }
+
+  void UpdateExpectedRange(float rmin, float rmax) {
+    assert(rmin <= rmax);
+
+    expected_.range_min = rmin;
+    expected_.range_max = rmax;
+  }
+
+ private:
+  /* Writing properties */
   std::string buffer_staging_;
   typedef std::pair<KeyType, size_t> key_ptr;
   std::vector<key_ptr> keys_staging_;
   const size_t value_size_;
   const size_t key_size_;
-  size_t bytes_written_;
   size_t n_;
+  size_t bytes_written_;
+
+  /* Range properties */
+  Range expected_;
+  Range observed_;
+  uint32_t num_items_ = 0;
+  uint32_t num_items_oob_ = 0;
 
   static bool KeyPtrComparator(const key_ptr& lhs, const key_ptr& rhs) {
     return lhs.first < rhs.first;

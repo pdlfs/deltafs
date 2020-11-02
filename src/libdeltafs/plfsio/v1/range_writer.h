@@ -5,7 +5,7 @@
 #pragma once
 
 //#include "builder.h"
-#include "doublebuf.h"
+#include "multibuf.h"
 #include "ordered_builder.h"
 
 #include <float.h>
@@ -16,30 +16,8 @@
 
 namespace pdlfs {
 namespace plfsio {
-class PartitionManifest;
+class PartitionManifestWriter;
 
-struct Range {
-  float range_min = FLT_MAX;
-  float range_max = FLT_MIN;
-
-  Range& operator=(Range& r) {
-    range_min = r.range_min;
-    range_max = r.range_max;
-    return *this;
-  }
-
-  void Reset() {
-    range_min = FLT_MAX;
-    range_max = FLT_MIN;
-  }
-
-  bool Inside(float f) const { return (f >= range_min && f <= range_max); }
-
-  void Extend(float f) {
-    range_min = std::min(range_min, f);
-    range_max = std::max(range_min, f);
-  }
-};
 
 class Bucket {
  private:
@@ -74,7 +52,7 @@ class Bucket {
 
   void Reset();
 
-  int FlushAndReset(PartitionManifest& manifest);
+  int FlushAndReset(PartitionManifestWriter& manifest);
 
   ~Bucket();
 };
@@ -87,8 +65,13 @@ typedef struct PartitionManifestItem {
   int bucket_idx;
   int rank;
 
-  bool Overlaps(float point) const;
-  bool Overlaps(float range_begin, float range_end) const;
+  bool Overlaps(float point) const {
+    return point >= part_range_begin and point <= part_range_end;
+  }
+  bool Overlaps(float range_begin, float range_end) const {
+    return Overlaps(range_begin) or Overlaps(range_end) or
+        ((range_begin < part_range_begin) and (range_end > part_range_end));
+  }
 } PartitionManifestItem;
 
 typedef struct PartitionManifestMatch {
@@ -97,39 +80,39 @@ typedef struct PartitionManifestMatch {
   uint64_t mass_oob = 0;
 } PartitionManifestMatch;
 
-class PartitionManifest {
+class PartitionManifestWriter {
  private:
   std::vector<PartitionManifestItem> items_;
-  float range_min_ = FLT_MAX;
-  float range_max_ = FLT_MIN;
+  float range_min_;
+  float range_max_;
 
-  uint64_t mass_total_ = 0;
-  uint64_t mass_oob_ = 0;
+  uint64_t mass_total_;
+  uint64_t mass_oob_;
+
+  WritableFile* const dst_;
+  bool finished_;
+  std::string indexes_;
+  uint32_t num_ep_written_;
+  uint64_t off_;
+
+  Slice FinishEpoch();
 
  public:
-  PartitionManifest();
+  explicit PartitionManifestWriter(WritableFile* dst);
   size_t AddItem(float range_begin, float range_end, uint32_t part_count,
                  uint32_t part_oob, int rank = -1);
-  int WriteToDisk(FILE* out_file);
+  Status EpochFlush();
+  Status Finish();
   int GetRange(float& range_min, float& range_max) const;
   int GetMass(uint64_t& mass_total, uint64_t mass_oob) const;
   size_t Size() const;
-  int PopulateFromDisk(const std::string& disk_path, int rank);
   int GetOverLappingEntries(float point, PartitionManifestMatch& match);
   int GetOverLappingEntries(float range_begin, float range_end,
                             PartitionManifestMatch& match);
 };
 
-class RangeWriter : public DoubleBuffering {
+class RangeWriter : public MultiBuffering {
  public:
-  RangeWriter(int rank, const char* dirpath, uint32_t memtable_size,
-              uint32_t key_size);
-  int UpdateBounds(float bound_start, float bound_end);
-  std::string GetManifestDir();
-  int Write(const char* fname, int fname_len, const char* data, int data_len);
-  //  int Finish();
-
-  /* DeltaFS-compliant interface */
   RangeWriter(const DirOptions& options, WritableFile* dst, size_t buf_size,
               size_t n);
 
@@ -147,25 +130,19 @@ class RangeWriter : public DoubleBuffering {
 
   ~RangeWriter();
 
+  int UpdateBounds(const float bound_start, const float bound_end);
+
  private:
-  //  const int rank_;
-  std::string dirpath_;
-  uint32_t memtable_size_;
-  uint32_t key_size_;
-  uint32_t items_per_flush_;
+  typedef OrderedBlockBuilder<float> BlockBuf;
+  BlockBuf* membuf_cur_;
+  BlockBuf* membuf_prev_;
 
-  //  Bucket current_;
-  //  Bucket prev_;
-
-  std::string manifest_path_;
-  std::string manifest_bin_path_;
-  PartitionManifest manifest_;
+  PartitionManifestWriter manifest_;
 
   /* XXX: needs to be atomic if writing is multithreaded */
   uint32_t bucket_idx_ = 0;
 
-  typedef OrderedBlockBuilder<float> BlockBuf;
-//  typedef ArrayBlockBuilder BlockBuf;
+  /* RangeWriter declarations */
   typedef ArrayBlock Block;
   const DirOptions& options_;
   WritableFile* const dst_;
@@ -176,7 +153,6 @@ class RangeWriter : public DoubleBuffering {
   size_t buf_reserv_;
   uint64_t offset_;  // Current write offset
 
-  friend class DoubleBuffering;
   Status Compact(uint32_t seq, void* buf);
   Status SyncBackend(bool close = false);
   Status Close();
@@ -185,7 +161,7 @@ class RangeWriter : public DoubleBuffering {
   void AddToBuffer(void* buf, const Slice& k, const Slice& v) {
     static_cast<BlockBuf*>(buf)->Add(k, v);
   }
-  bool HasRoom(const void* buf, const Slice& k, const Slice& v) {
+  bool HasRoom(const void* buf, const Slice& k, const Slice& v) const {
     return (static_cast<const BlockBuf*>(buf)->CurrentSizeEstimate() +
                 k.size() + v.size() <=
             buf_threshold_);
@@ -199,8 +175,8 @@ class RangeWriter : public DoubleBuffering {
   BlockBuf** bbs_;
   size_t n_;
 
-  int WriteManifestToDisk(const char* path);
-  int FlushAndReset(Bucket& bucket);
+//  int WriteManifestToDisk(const char* path);
+//  int FlushAndReset(Bucket& bucket);
 };
 }  // namespace plfsio
 }  // namespace pdlfs
