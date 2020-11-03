@@ -93,7 +93,6 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
   }
 
   void UpdateExpectedRange(Range range) {
-    assert(range.range_min <= range.range_max);
     expected_ = range;
   }
 

@@ -273,6 +273,7 @@ void MultiBuffering::DoCompaction(uint32_t seq, void* immbuf) {
   bufs_.push_back(immbuf);
   assert(num_bg_compactions_ > 0);
   --num_bg_compactions_;
+
 #if 0
   // Compaction done. New buffer space available.
   // Try scheduling another.

@@ -142,6 +142,8 @@ int PartitionManifestWriter::GetMass(uint64_t& mass_total,
 size_t PartitionManifestWriter::Size() const { return items_.size(); }
 
 int RangeWriter::UpdateBounds(const float bound_start, const float bound_end) {
+  MutexLock ml(&mu_);
+
   /* Strictly, should lock before updating, but this is only for measuring
    * "pollution" - who cares if it's a couple of counters off */
   membuf_prev_->UpdateExpectedRange(membuf_cur_->GetExpectedRange());
@@ -247,8 +249,9 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
   assert(dst_);
   BlockBuf* const bb = static_cast<BlockBuf*>(immbuf);
   // Skip empty buffers
-  if (bb->empty() && compac_seq == num_compac_completed_ + 1)
+  if (bb->empty() && compac_seq == num_compac_completed_ + 1) {
     return Status::OK();
+  }
   mu_.Unlock();  // Unlock as compaction is expensive
   Slice block_contents;
   if (!bb->empty()) {
