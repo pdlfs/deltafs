@@ -16,7 +16,10 @@
  */
 
 #include "ordered_builder.h"
+
 #include "coding_float.h"
+
+#include <algorithm>
 
 namespace pdlfs {
 namespace plfsio {
