@@ -57,10 +57,10 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
       : AbstractBlockBuilder(BytewiseComparator()),
         value_size_(options.value_size),
         key_size_(options.key_size),
+        n_(0),
         bytes_written_(0),
         num_items_(0),
-        num_items_oob_(0),
-        n_(0) {
+        num_items_oob_(0) {
     // TODO: what is this used for again?
     cmp_ = NULL;
     assert(sizeof(KeyType) == key_size_);

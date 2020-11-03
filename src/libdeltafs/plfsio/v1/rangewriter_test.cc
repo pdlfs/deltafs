@@ -153,7 +153,6 @@ class RangeWriterBench {
   ThreadPool* thread_pool_;
   DirOptions options_;
   uint64_t bytes_per_sec_;
-  size_t bf_bits_per_key_;
   size_t buf_size_;
   size_t n_;
   int mkeys_;

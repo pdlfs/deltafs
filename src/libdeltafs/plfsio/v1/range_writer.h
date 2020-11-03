@@ -58,12 +58,12 @@ class Bucket {
 };
 
 typedef struct PartitionManifestItem {
+  uint64_t offset;
   float part_range_begin;
   float part_range_end;
   uint32_t part_item_count;
   uint32_t part_item_oob;
   int bucket_idx;
-  int rank;
 
   bool Overlaps(float point) const {
     return point >= part_range_begin and point <= part_range_end;
@@ -93,14 +93,15 @@ class PartitionManifestWriter {
   bool finished_;
   std::string indexes_;
   uint32_t num_ep_written_;
-  uint64_t off_;
+  // Offset of the previous manifest entry, relative to the Metadata region
+  uint64_t off_prev_;
 
   Slice FinishEpoch();
 
  public:
   explicit PartitionManifestWriter(WritableFile* dst);
-  size_t AddItem(float range_begin, float range_end, uint32_t part_count,
-                 uint32_t part_oob, int rank = -1);
+  size_t AddItem(uint64_t offset, float range_begin, float range_end, uint32_t part_count,
+                 uint32_t part_oob);
   Status EpochFlush();
   Status Finish();
   int GetRange(float& range_min, float& range_max) const;
@@ -134,15 +135,14 @@ class RangeWriter : public MultiBuffering {
 
  private:
   typedef OrderedBlockBuilder<float> BlockBuf;
+  PartitionManifestWriter manifest_;
+
   BlockBuf* membuf_cur_;
   BlockBuf* membuf_prev_;
-
-  PartitionManifestWriter manifest_;
 
   /* XXX: needs to be atomic if writing is multithreaded */
   uint32_t bucket_idx_ = 0;
 
-  /* RangeWriter declarations */
   typedef ArrayBlock Block;
   const DirOptions& options_;
   WritableFile* const dst_;
@@ -153,13 +153,14 @@ class RangeWriter : public MultiBuffering {
   size_t buf_reserv_;
   uint64_t offset_;  // Current write offset
 
+  friend class MultiBuffering;
   Status Compact(uint32_t seq, void* buf);
   Status SyncBackend(bool close = false);
   Status Close();
   void ScheduleCompaction(uint32_t seq, void* buf);
   void Clear(void* buf) { static_cast<BlockBuf*>(buf)->Reset(); }
-  void AddToBuffer(void* buf, const Slice& k, const Slice& v) {
-    static_cast<BlockBuf*>(buf)->Add(k, v);
+  void AddToBuffer(void** buf, const Slice& k, const Slice& v) {
+    static_cast<BlockBuf*>(*buf)->Add(k, v);
   }
   bool HasRoom(const void* buf, const Slice& k, const Slice& v) const {
     return (static_cast<const BlockBuf*>(buf)->CurrentSizeEstimate() +
@@ -174,9 +175,6 @@ class RangeWriter : public MultiBuffering {
 
   BlockBuf** bbs_;
   size_t n_;
-
-//  int WriteManifestToDisk(const char* path);
-//  int FlushAndReset(Bucket& bucket);
 };
 }  // namespace plfsio
 }  // namespace pdlfs

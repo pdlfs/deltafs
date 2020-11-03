@@ -104,7 +104,7 @@ Status MultiBuffering::__Finish() {
   if (finished_)  // __Finish() has already been called.
     return bg_status_;
   else {
-    __Flush<T>(bufs_active_, true);
+    __Flush<T>(true);
   }
 
   // Wait until !num_bg_compactions_

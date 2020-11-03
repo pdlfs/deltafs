@@ -23,17 +23,17 @@ PartitionManifestWriter::PartitionManifestWriter(WritableFile* dst)
       dst_(dst),
       finished_(false),
       num_ep_written_(0),
-      off_(0) {}
+      off_prev_(0) {}
 
-size_t PartitionManifestWriter::AddItem(float range_begin, float range_end,
-                                        uint32_t part_count, uint32_t part_oob,
-                                        int rank) {
+size_t PartitionManifestWriter::AddItem(uint64_t offset, float range_begin,
+                                        float range_end, uint32_t part_count,
+                                        uint32_t part_oob) {
   if (part_count == 0) return SIZE_MAX;
 
   size_t item_idx = items_.size();
 
   items_.push_back(
-      {range_begin, range_end, part_count, part_oob, (int)item_idx, rank});
+      {offset, range_begin, range_end, part_count, part_oob, (int)item_idx});
 
   range_min_ = std::min(range_min_, range_begin);
   range_max_ = std::max(range_max_, range_end);
@@ -50,6 +50,7 @@ Slice PartitionManifestWriter::FinishEpoch() {
   for (size_t i = 0; i < items_.size(); i++) {
     PartitionManifestItem& item = items_[i];
     PutFixed64(&contents, i);
+    PutFixed64(&contents, item.offset);
     PutFloat32(&contents, item.part_range_begin);
     PutFloat32(&contents, item.part_range_end);
     PutFixed32(&contents, item.part_item_count);
@@ -69,21 +70,19 @@ Status PartitionManifestWriter::EpochFlush() {
   if (finished_) {
     return Status::AssertionFailed("Already finished");
   }
-  assert(dst_);
-  Status status;
+
   PutFixed32(&indexes_, num_ep_written_);
-  PutFixed64(&indexes_, off_);
+  PutFixed64(&indexes_, off_prev_);
   ++num_ep_written_;
 
   Slice manifest_contents = FinishEpoch();
   if (!manifest_contents.empty()) {
-    status = dst_->Append(manifest_contents);
+    indexes_.append(manifest_contents.data(), manifest_contents.size());
   }
-  if (status.ok()) {
-    off_ += manifest_contents.size();
-    status = dst_->Flush();
-  }
-  return status;
+
+  off_prev_ += manifest_contents.size() + 12;
+
+  return Status::OK();
 }
 
 Status PartitionManifestWriter::Finish() {
@@ -92,7 +91,7 @@ Status PartitionManifestWriter::Finish() {
   }
   assert(dst_);
   PutFixed32(&indexes_, num_ep_written_);
-  PutFixed64(&indexes_, off_);
+  PutFixed64(&indexes_, off_prev_);
   Status status = dst_->Append(indexes_);
   if (status.ok()) {
     status = dst_->Sync();
@@ -217,10 +216,13 @@ Status RangeWriter::Wait() {
 }
 
 Status RangeWriter::EpochFlush() {
-  Status s = manifest_.EpochFlush();
-  if (s.ok()) {
-    s = Flush();
-  }
+  MutexLock ml(&mu_);
+
+  // flush all data, block until over
+  Status s = __Flush<RangeWriter>(false);
+
+  // flush manifest
+  manifest_.EpochFlush();
 
   return s;
 }
@@ -260,10 +262,12 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
 
   // append the data and metadata atomically, under lock
   Range buf_range = bb->GetObservedRange();
-  uint32_t num_items, num_oob;
+  uint32_t num_items = 0, num_oob = 0;
   bb->GetWriteStats(num_items, num_oob);
-  manifest_.AddItem(buf_range.range_min, buf_range.range_max, num_items,
-                    num_oob);
+  manifest_.AddItem(offset_, buf_range.range_min, buf_range.range_max,
+                    num_items, num_oob);
+  printf("Compacted: %p @ %u (%.3f to %.3f), %u-%u\n", immbuf, offset_,
+         buf_range.range_min, buf_range.range_max, num_items, num_oob);
 
   Status status;
   if (!block_contents.empty()) {
@@ -290,16 +294,8 @@ Status RangeWriter::Close() {
   mu_.AssertHeld();
   assert(dst_);
 
-  // TODO: Dump Manifest
-  Status status = Status::OK();
-  //
-  //  if (status.ok()) {
-  //    std::string footer;
-  //    bloomfilter_handle_.EncodeTo(&footer);
-  //    index_handle_.EncodeTo(&footer);
-  //    footer.resize(2 * BlockHandle::kMaxEncodedLength);
-  //    status = dst_->Append(footer);
-  //  }
+  // Manifest has the footer
+  Status status = manifest_.Finish();
 
   if (status.ok()) {
     status = dst_->Sync();
