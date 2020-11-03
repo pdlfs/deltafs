@@ -124,6 +124,14 @@ class RangeWriterBench {
       if ((i & 0x7FFFu) == 0) fprintf(stderr, "\r%.2f%%", 100.0 * i / num_keys);
       float f = rand() * 1000.0 / RAND_MAX;
       memcpy(tmp, reinterpret_cast<char*>(&f), sizeof(f));
+      if (f > 50 and f < 50.01) {
+        printf("Range update: %zu\n", i);;
+        rdb->UpdateBounds(200, 800);
+      }
+      if ((i > 0) && (i % (num_keys/4) == 0)) {
+        printf("==========NEW EPOCH=========\n");
+        rdb->EpochFlush();
+      }
       ASSERT_OK(rdb->Add(key, val));
     }
     fprintf(stderr, "\r100.00%%");

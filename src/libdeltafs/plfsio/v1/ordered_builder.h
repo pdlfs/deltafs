@@ -83,11 +83,13 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
 
   bool Inside(float prop) { return expected_.Inside(prop); }
 
-  Range GetExpectedRange() { return expected_; }
+  Range GetExpectedRange() {
+    return expected_;
+  }
 
   Range GetObservedRange() { return observed_; }
 
-  void GetWriteStats(uint32_t& num_items, uint32_t num_oob) const {
+  void GetWriteStats(uint32_t& num_items, uint32_t& num_oob) const {
     num_items = num_items_;
     num_oob = num_items_oob_;
   }

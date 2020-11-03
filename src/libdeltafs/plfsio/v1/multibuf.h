@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "ordered_builder.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
@@ -229,8 +230,11 @@ Status MultiBuffering::Prepare(void** membuf, uint32_t* seq, bool force,
     } else if (!bufs_.empty()) {
       // Attempt to switch to a new write buffer
       force = false;
+      // TODO: Fix this ugly hack
+      Range r = ((OrderedBlockBuilder<float>*)(*membuf))->GetExpectedRange();
       TryScheduleCompaction<T>(seq, *membuf);
       *membuf = bufs_.back();
+      ((OrderedBlockBuilder<float>*)(*membuf))->UpdateExpectedRange(r);
       bufs_.pop_back();
     } else if (!nowait) {
       bg_cv_->Wait();  // Wait for background compactions to finish
