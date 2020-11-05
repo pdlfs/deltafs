@@ -163,6 +163,8 @@ int RangeWriter::UpdateBounds(const float bound_start, const float bound_end) {
 RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
                          size_t buf_size, size_t n)
     : MultiBuffering(&mu_, &bg_cv_),
+      logger_(options.env),
+      logging_enabled_(true),
       manifest_(dst),
       membuf_cur_(NULL),
       membuf_prev_(NULL),
@@ -246,6 +248,9 @@ Status RangeWriter::Finish() {
 
 Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
   mu_.AssertHeld();
+
+  if (logging_enabled_) logger_.RegisterCompacBegin(compac_seq);
+
   assert(dst_);
   BlockBuf* const bb = static_cast<BlockBuf*>(immbuf);
   // Skip empty buffers
@@ -257,6 +262,7 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
   if (!bb->empty()) {
     block_contents = bb->Finish();
   }
+
   mu_.Lock();  // All writes are serialized through compac_seq
   assert(num_compac_completed_ < compac_seq);
   while (compac_seq != num_compac_completed_ + 1) {
@@ -269,13 +275,19 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
   bb->GetWriteStats(num_items, num_oob);
   manifest_.AddItem(offset_, buf_range.range_min, buf_range.range_max,
                     num_items, num_oob);
-  printf("Compacted: %p @ %u (%.3f to %.3f), %u-%u\n", immbuf, offset_,
-         buf_range.range_min, buf_range.range_max, num_items, num_oob);
+
+//  printf("Compacted: %p @ %u (%.3f to %.3f), %u-%u\n", immbuf, offset_,
+//         buf_range.range_min, buf_range.range_max, num_items, num_oob);
+
+
+  if (logging_enabled_) logger_.RegisterCompacPreprocess(compac_seq);
 
   Status status;
   if (!block_contents.empty()) {
     status = dst_->Append(block_contents);
   }
+
+  if (logging_enabled_) logger_.RegisterCompacPostprocess(compac_seq);
 
   if (status.ok()) {
     offset_ += block_contents.size();
@@ -286,6 +298,8 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
     status = dst_->Flush();
   }
   mu_.Lock();
+
+  if (logging_enabled_) logger_.RegisterCompacEnd(compac_seq);
 
   return status;
 }
@@ -304,6 +318,8 @@ Status RangeWriter::Close() {
     status = dst_->Sync();
     dst_->Close();
   }
+
+  if (logging_enabled_) logger_.Report();
 
   return status;
 }
@@ -340,6 +356,8 @@ void RangeWriter::ScheduleCompaction(uint32_t const compac_seq, void* immbuf) {
   s->immbuf = immbuf;
   s->writer = this;
 
+  uint64_t sched_begin = options_.env->NowMicros();
+
   if (options_.compaction_pool) {
     options_.compaction_pool->Schedule(RangeWriter::BGWork, s);
   } else if (options_.allow_env_threads) {
@@ -348,6 +366,9 @@ void RangeWriter::ScheduleCompaction(uint32_t const compac_seq, void* immbuf) {
     DoCompaction<RangeWriter>(compac_seq, immbuf);
     delete s;
   }
+
+  uint64_t sched_end = options_.env->NowMicros();
+  printf("\nCompaction Time: %fms\n", (sched_end - sched_begin) * 1e-3);
 }
 
 void RangeWriter::BGWork(void* arg) {

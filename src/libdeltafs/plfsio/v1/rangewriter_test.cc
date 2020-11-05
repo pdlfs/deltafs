@@ -85,6 +85,12 @@ class RangeWriterBench {
     return opt;
   }
 
+  static inline float randf(float scale) { return rand() * scale / RAND_MAX; }
+
+  static inline bool multipleof(size_t x, size_t factor) {
+    return ((x && factor) && !(x % factor));
+  }
+
  public:
   RangeWriterBench() {
     mkeys_ = GetOption("MI_KEYS", 4);
@@ -92,6 +98,8 @@ class RangeWriterBench {
     buf_size_ = GetOption("BUF_SIZE", 4 << 20);
     n_ = GetOption("NUM_BUFS", 4);
     int single_threaded = GetOption("SINGLE_THREADED", 0);
+    epoch_flshcnt_ = GetOption("EPOCH_FLUSH_COUNT", 0);
+    mid_epoch_flshcnt_ = GetOption("MID_EPOCH_FLUSH_COUNT", 0);
     thread_pool_ = single_threaded
                        ? nullptr
                        : ThreadPool::NewFixed(n_, true /* eager init */);
@@ -113,27 +121,41 @@ class RangeWriterBench {
     options_.allow_env_threads = false;
     options_.key_size = 4;
     options_.value_size = 60;
+    options_.env = env;
     rdb = new RangeWriter(options_, dst, buf_size_, n_);
     const uint64_t start = env->NowMicros();
     char tmp[4];
     Slice key(tmp, sizeof(tmp));
     std::string val(options_.value_size, '\0');
     const size_t num_keys = static_cast<size_t>(mkeys_) << 20;
+
+    size_t epoch_size = epoch_flshcnt_ ? num_keys / epoch_flshcnt_ : 0;
+    size_t flush_size = mid_epoch_flshcnt_
+                            ? num_keys / (epoch_flshcnt_ * mid_epoch_flshcnt_)
+                            : 0;
+
     size_t i = 0;
     for (; i < num_keys; i++) {
       if ((i & 0x7FFFu) == 0) fprintf(stderr, "\r%.2f%%", 100.0 * i / num_keys);
-      float f = rand() * 1000.0 / RAND_MAX;
+
+      float f = randf(1000);
       memcpy(tmp, reinterpret_cast<char*>(&f), sizeof(f));
-      if (f > 50 and f < 50.01) {
-        printf("Range update: %zu\n", i);;
-        rdb->UpdateBounds(200, 800);
+
+      if (multipleof(i, flush_size)) {
+        float rand_start = randf(100);
+        float rand_end = randf(1000) + rand_start;
+        printf("\nRange update: %f %f\n", rand_start, rand_end);
+        rdb->UpdateBounds(rand_start, rand_end);
       }
-      if ((i > 0) && (i % (num_keys/4) == 0)) {
+
+      if (multipleof(i, epoch_size)) {
         printf("==========NEW EPOCH=========\n");
         rdb->EpochFlush();
       }
+
       ASSERT_OK(rdb->Add(key, val));
     }
+
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
     ASSERT_OK(rdb->Finish());
@@ -164,6 +186,8 @@ class RangeWriterBench {
   size_t buf_size_;
   size_t n_;
   int mkeys_;
+  size_t epoch_flshcnt_;
+  size_t mid_epoch_flshcnt_;
 };
 
 }  // namespace plfsio

@@ -9,6 +9,7 @@
 #include "ordered_builder.h"
 
 #include <float.h>
+#include <numeric>
 #include <stdint.h>
 #include <stdio.h>
 #include <string>
@@ -17,7 +18,6 @@
 namespace pdlfs {
 namespace plfsio {
 class PartitionManifestWriter;
-
 
 class Bucket {
  private:
@@ -70,7 +70,7 @@ typedef struct PartitionManifestItem {
   }
   bool Overlaps(float range_begin, float range_end) const {
     return Overlaps(range_begin) or Overlaps(range_end) or
-        ((range_begin < part_range_begin) and (range_end > part_range_end));
+           ((range_begin < part_range_begin) and (range_end > part_range_end));
   }
 } PartitionManifestItem;
 
@@ -100,8 +100,8 @@ class PartitionManifestWriter {
 
  public:
   explicit PartitionManifestWriter(WritableFile* dst);
-  size_t AddItem(uint64_t offset, float range_begin, float range_end, uint32_t part_count,
-                 uint32_t part_oob);
+  size_t AddItem(uint64_t offset, float range_begin, float range_end,
+                 uint32_t part_count, uint32_t part_oob);
   Status EpochFlush();
   Status Finish();
   int GetRange(float& range_min, float& range_max) const;
@@ -110,6 +110,62 @@ class PartitionManifestWriter {
   int GetOverLappingEntries(float point, PartitionManifestMatch& match);
   int GetOverLappingEntries(float range_begin, float range_end,
                             PartitionManifestMatch& match);
+};
+
+class RangeWriterPerfLogger {
+ private:
+  typedef struct {
+    uint64_t begin;
+    uint64_t pre;
+    uint64_t post;
+    uint64_t end;
+  } Elem;
+  Env* env_;
+  std::vector<uint32_t> compac_hist_;
+  std::map<uint32_t, Elem> compac_table_;
+
+ private:
+ public:
+  RangeWriterPerfLogger(Env* env) : env_(env){};
+  void RegisterCompacBegin(uint32_t seq) {
+    compac_table_[seq].begin = env_->NowMicros();
+  }
+
+  void RegisterCompacPreprocess(uint32_t seq) {
+    compac_table_[seq].pre = env_->NowMicros();
+  }
+
+  void RegisterCompacPostprocess(uint32_t seq) {
+    compac_table_[seq].post = env_->NowMicros();
+  }
+
+  void RegisterCompacEnd(uint32_t seq) {
+    Elem& e = compac_table_[seq];
+    e.end = env_->NowMicros();
+
+    uint64_t preprocess_time = e.pre - e.begin;
+    uint64_t wait_time = e.post - e.pre;
+    uint64_t postprocess_time = e.end - e.post;
+    uint64_t total_time = e.end - e.begin;
+
+    fprintf(stderr, "\nTime: %.2fms %.2fms %.2fms\n", preprocess_time * 1e-3,
+            wait_time * 1e-3, postprocess_time * 1e-3);
+
+    compac_hist_.push_back(total_time);
+  }
+
+  void Report() {
+    uint64_t max_time =
+        *std::max_element(compac_hist_.begin(), compac_hist_.end());
+    uint64_t min_time =
+        *std::min_element(compac_hist_.begin(), compac_hist_.end());
+    uint64_t sum_time =
+        std::accumulate(compac_hist_.begin(), compac_hist_.end(), 0ull);
+
+    fprintf(stderr, "Stats: %zu items, mean: %.2fms (range: %.2fms-%.2fms)\n",
+            compac_hist_.size(), sum_time * 1e-3 / compac_hist_.size(),
+            min_time * 1e-3, max_time * 1e-3);
+  }
 };
 
 class RangeWriter : public MultiBuffering {
@@ -134,6 +190,9 @@ class RangeWriter : public MultiBuffering {
   int UpdateBounds(const float bound_start, const float bound_end);
 
  private:
+  RangeWriterPerfLogger logger_;
+  bool logging_enabled_;
+
   typedef OrderedBlockBuilder<float> BlockBuf;
   PartitionManifestWriter manifest_;
 
