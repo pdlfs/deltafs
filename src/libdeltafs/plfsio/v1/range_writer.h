@@ -5,6 +5,7 @@
 #pragma once
 
 //#include "builder.h"
+#include "coding_float.h"
 #include "multibuf.h"
 #include "ordered_builder.h"
 
@@ -23,38 +24,69 @@ class Bucket {
  private:
   Range expected_;
   Range observed_;
-  const uint32_t max_size_;
-  const uint32_t size_per_item_;
-  const uint32_t max_items_;
   uint32_t num_items_ = 0;
   uint32_t num_items_oob_ = 0;
 
-  char* data_buffer_;
-  size_t data_buffer_idx_ = 0;
-
-  std::string bucket_dir_;
-  const int rank_;
+  OrderedBlockBuilder<float>* buf_;
 
  public:
-  Bucket(int rank, const char* bucket_dir, const uint32_t max_size,
-         const uint32_t size_per_item);
+  Bucket() : num_items_(0), num_items_oob_(0), buf_(NULL){};
 
-  bool Inside(float prop);
+  Range GetExpectedRange() { return expected_; }
 
-  int Insert(float prop, const char* fname, int fname_len, const char* data,
-             int data_len);
+  Range GetObservedRange() { return observed_; }
 
-  Range GetExpectedRange();
+  void UpdateExpectedRange(Range range) {
+    expected_ = range;
+    assert(expected_.IsValid());
+  }
 
-  void UpdateExpectedRange(Range expected);
+  void Add(const Slice& key, const Slice& value) {
+    float keyNum = DecodeFloat32(key.data());
+    observed_.Extend(keyNum);
+    num_items_++;
+    if (not expected_.Inside(keyNum)) {
+      num_items_oob_++;
+    }
 
-  void UpdateExpectedRange(float bmin, float bmax);
+    buf_->Add(key, value);
+  }
 
-  void Reset();
+  Slice Finish() { return buf_->Finish(); }
 
-  int FlushAndReset(PartitionManifestWriter& manifest);
+  size_t NumEntries() const { return buf_->NumEntries(); }
 
-  ~Bucket();
+  size_t CurrentSizeEstimate() const { return buf_->CurrentSizeEstimate(); }
+
+  void UpdateExpectedRange(float rmin, float rmax) {
+    expected_.range_min = rmin;
+    expected_.range_max = rmax;
+    assert(expected_.IsValid());
+  }
+
+  void Reset() {
+    observed_.Reset();
+    num_items_ = 0;
+    num_items_oob_ = 0;
+  }
+
+  bool empty() const { return buf_->empty(); }
+
+  bool Inside(float prop) { return expected_.Inside(prop); }
+
+  void GetWriteStats(uint32_t& num_items, uint32_t& num_oob) const {
+    num_items = num_items_;
+    num_oob = num_items_oob_;
+  }
+
+  OrderedBlockBuilder<float>* SwapBuf(OrderedBlockBuilder<float>* new_buf) {
+    OrderedBlockBuilder<float>* old_buf = buf_;
+    buf_ = new_buf;
+    old_buf->Reset();
+    return old_buf;
+  }
+
+  ~Bucket() = default;
 };
 
 typedef struct PartitionManifestItem {
@@ -100,8 +132,7 @@ class PartitionManifestWriter {
 
  public:
   explicit PartitionManifestWriter(WritableFile* dst);
-  size_t AddItem(uint64_t offset, float range_begin, float range_end,
-                 uint32_t part_count, uint32_t part_oob);
+  size_t AddItem(uint64_t offset, OrderedBlockBuilder<float>* sst);
   Status EpochFlush();
   Status Finish();
   int GetRange(float& range_min, float& range_max) const;
@@ -148,8 +179,9 @@ class RangeWriterPerfLogger {
     uint64_t postprocess_time = e.end - e.post;
     uint64_t total_time = e.end - e.begin;
 
-    fprintf(stderr, "\nTime: %.2fms %.2fms %.2fms\n", preprocess_time * 1e-3,
-            wait_time * 1e-3, postprocess_time * 1e-3);
+    fprintf(stderr, "\nTime: %.2fms %.2fms %.2fms (TID: %p)\n",
+            preprocess_time * 1e-3, wait_time * 1e-3, postprocess_time * 1e-3,
+            pthread_self());
 
     compac_hist_.push_back(total_time);
   }
@@ -199,9 +231,6 @@ class RangeWriter : public MultiBuffering {
   BlockBuf* membuf_cur_;
   BlockBuf* membuf_prev_;
 
-  /* XXX: needs to be atomic if writing is multithreaded */
-  uint32_t bucket_idx_ = 0;
-
   typedef ArrayBlock Block;
   const DirOptions& options_;
   WritableFile* const dst_;
@@ -228,6 +257,13 @@ class RangeWriter : public MultiBuffering {
   }
   bool IsEmpty(const void* buf) {
     return static_cast<const BlockBuf*>(buf)->empty();
+  }
+
+  void CopyBufState(void* buf_prev, void* buf_next) {
+    mu_.AssertHeld();
+    BlockBuf* bb_prev = static_cast<BlockBuf*>(buf_prev);
+    BlockBuf* bb_next = static_cast<BlockBuf*>(buf_next);
+    bb_next->UpdateExpectedRange(bb_prev->GetExpectedRange());
   }
 
   static void BGWork(void*);

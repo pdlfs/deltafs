@@ -230,12 +230,11 @@ Status MultiBuffering::Prepare(void** membuf, uint32_t* seq, bool force,
     } else if (!bufs_.empty()) {
       // Attempt to switch to a new write buffer
       force = false;
-      // TODO: Fix this ugly hack
-      Range r = ((OrderedBlockBuilder<float>*)(*membuf))->GetExpectedRange();
       TryScheduleCompaction<T>(seq, *membuf);
-      *membuf = bufs_.back();
-      ((OrderedBlockBuilder<float>*)(*membuf))->UpdateExpectedRange(r);
+      void* new_buf = bufs_.back();
       bufs_.pop_back();
+      __this->CopyBufState(*membuf, new_buf);
+      *membuf = new_buf;
     } else if (!nowait) {
       bg_cv_->Wait();  // Wait for background compactions to finish
     } else {

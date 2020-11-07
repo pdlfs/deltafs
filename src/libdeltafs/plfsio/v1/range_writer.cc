@@ -25,9 +25,13 @@ PartitionManifestWriter::PartitionManifestWriter(WritableFile* dst)
       num_ep_written_(0),
       off_prev_(0) {}
 
-size_t PartitionManifestWriter::AddItem(uint64_t offset, float range_begin,
-                                        float range_end, uint32_t part_count,
-                                        uint32_t part_oob) {
+size_t PartitionManifestWriter::AddItem(uint64_t offset, OrderedBlockBuilder<float>* sst) {
+  assert(sst);
+
+  uint32_t part_count = 0, part_oob = 0;
+  float range_begin = 0, range_end = 0;
+  sst->GetWriteStats(range_begin, range_end, part_count, part_oob);
+
   if (part_count == 0) return SIZE_MAX;
 
   size_t item_idx = items_.size();
@@ -258,29 +262,25 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
     return Status::OK();
   }
   mu_.Unlock();  // Unlock as compaction is expensive
+
   Slice block_contents;
   if (!bb->empty()) {
     block_contents = bb->Finish();
   }
+
+  if (logging_enabled_) logger_.RegisterCompacPreprocess(compac_seq);
 
   mu_.Lock();  // All writes are serialized through compac_seq
   assert(num_compac_completed_ < compac_seq);
   while (compac_seq != num_compac_completed_ + 1) {
     bg_cv_.Wait();
   }
+  mu_.Unlock();
 
-  // append the data and metadata atomically, under lock
-  Range buf_range = bb->GetObservedRange();
-  uint32_t num_items = 0, num_oob = 0;
-  bb->GetWriteStats(num_items, num_oob);
-  manifest_.AddItem(offset_, buf_range.range_min, buf_range.range_max,
-                    num_items, num_oob);
+  manifest_.AddItem(offset_, bb);
 
-//  printf("Compacted: %p @ %u (%.3f to %.3f), %u-%u\n", immbuf, offset_,
-//         buf_range.range_min, buf_range.range_max, num_items, num_oob);
-
-
-  if (logging_enabled_) logger_.RegisterCompacPreprocess(compac_seq);
+  //  printf("Compacted: %p @ %u (%.3f to %.3f), %u-%u\n", immbuf, offset_,
+  //         buf_range.range_min, buf_range.range_max, num_items, num_oob);
 
   Status status;
   if (!block_contents.empty()) {
@@ -293,7 +293,6 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
     offset_ += block_contents.size();
   }
 
-  mu_.Unlock();
   if (status.ok()) {
     status = dst_->Flush();
   }
@@ -356,8 +355,6 @@ void RangeWriter::ScheduleCompaction(uint32_t const compac_seq, void* immbuf) {
   s->immbuf = immbuf;
   s->writer = this;
 
-  uint64_t sched_begin = options_.env->NowMicros();
-
   if (options_.compaction_pool) {
     options_.compaction_pool->Schedule(RangeWriter::BGWork, s);
   } else if (options_.allow_env_threads) {
@@ -366,9 +363,6 @@ void RangeWriter::ScheduleCompaction(uint32_t const compac_seq, void* immbuf) {
     DoCompaction<RangeWriter>(compac_seq, immbuf);
     delete s;
   }
-
-  uint64_t sched_end = options_.env->NowMicros();
-  printf("\nCompaction Time: %fms\n", (sched_end - sched_begin) * 1e-3);
 }
 
 void RangeWriter::BGWork(void* arg) {

@@ -16,7 +16,6 @@
  */
 
 #include "ordered_builder.h"
-
 #include "coding_float.h"
 
 #include <algorithm>
@@ -68,6 +67,7 @@ size_t OrderedBlockBuilder<KeyType>::CurrentSizeEstimate() const {
   }
 }
 
+// Does not reset copyable state, in this case, member var expected_
 template <typename KeyType>
 void OrderedBlockBuilder<KeyType>::Reset() {
   AbstractBlockBuilder::Reset();

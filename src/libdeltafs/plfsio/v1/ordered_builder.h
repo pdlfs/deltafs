@@ -44,6 +44,11 @@ struct Range {
 
   bool Inside(float f) const { return (f >= range_min && f <= range_max); }
 
+  bool IsValid() const {
+    return ((range_min == FLT_MAX && range_max == FLT_MIN) or
+            (range_min < range_max));
+  }
+
   void Extend(float f) {
     range_min = std::min(range_min, f);
     range_max = std::max(range_min, f);
@@ -83,20 +88,19 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
 
   bool Inside(float prop) { return expected_.Inside(prop); }
 
-  Range GetExpectedRange() {
-    return expected_;
-  }
+  Range GetExpectedRange() { return expected_; }
 
   Range GetObservedRange() { return observed_; }
 
-  void GetWriteStats(uint32_t& num_items, uint32_t& num_oob) const {
+  void GetWriteStats(KeyType& range_min, KeyType& range_max,
+                     uint32_t& num_items, uint32_t& num_oob) const {
+    range_min = expected_.range_min;
+    range_max = expected_.range_max;
     num_items = num_items_;
     num_oob = num_items_oob_;
   }
 
-  void UpdateExpectedRange(Range range) {
-    expected_ = range;
-  }
+  void UpdateExpectedRange(Range range) { expected_ = range; }
 
   void UpdateExpectedRange(float rmin, float rmax) {
     assert(rmin <= rmax);
