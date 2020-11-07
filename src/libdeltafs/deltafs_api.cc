@@ -2056,6 +2056,21 @@ int deltafs_plfsdir_filter_finish(deltafs_plfsdir_t* __dir) {
   }
 }
 
+int deltafs_plfsdir_range_update(deltafs_plfsdir_t* __dir, float rbeg, float rend) {
+  pdlfs::Status s;
+  if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+    s = __dir->range_writer_->UpdateBounds(rbeg, rend);
+  } else {
+    s = BadArgs();
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
 int deltafs_plfsdir_io_open(deltafs_plfsdir_t* __dir, const char* __name) {
   pdlfs::Status s;
 

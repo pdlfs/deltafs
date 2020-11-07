@@ -219,7 +219,7 @@ class RangeWriter : public MultiBuffering {
 
   ~RangeWriter();
 
-  int UpdateBounds(const float bound_start, const float bound_end);
+  Status UpdateBounds(const float bound_start, const float bound_end);
 
  private:
   RangeWriterPerfLogger logger_;

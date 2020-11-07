@@ -25,7 +25,8 @@ PartitionManifestWriter::PartitionManifestWriter(WritableFile* dst)
       num_ep_written_(0),
       off_prev_(0) {}
 
-size_t PartitionManifestWriter::AddItem(uint64_t offset, OrderedBlockBuilder<float>* sst) {
+size_t PartitionManifestWriter::AddItem(uint64_t offset,
+                                        OrderedBlockBuilder<float>* sst) {
   assert(sst);
 
   uint32_t part_count = 0, part_oob = 0;
@@ -145,7 +146,7 @@ int PartitionManifestWriter::GetMass(uint64_t& mass_total,
 
 size_t PartitionManifestWriter::Size() const { return items_.size(); }
 
-int RangeWriter::UpdateBounds(const float bound_start, const float bound_end) {
+Status RangeWriter::UpdateBounds(const float bound_start, const float bound_end) {
   MutexLock ml(&mu_);
 
   /* Strictly, should lock before updating, but this is only for measuring
@@ -158,10 +159,10 @@ int RangeWriter::UpdateBounds(const float bound_start, const float bound_end) {
   // without significantly affecting overlaps
   //  Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_prev_),
   //  &ignored_compac_seq);
-  Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_cur_),
-                       &ignored_compac_seq);
+  Status s = Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_cur_),
+                                  &ignored_compac_seq);
 
-  return 0;
+  return s;
 }
 
 RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
