@@ -19,8 +19,6 @@
 
 #include "builder.h"
 
-#include "pdlfs-common/leveldb/skiplist.h"
-
 #include <float.h>
 
 namespace pdlfs {

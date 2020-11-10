@@ -9,6 +9,7 @@
 #include "multibuf.h"
 #include "ordered_builder.h"
 
+#include <algorithm>
 #include <float.h>
 #include <numeric>
 #include <stdint.h>
