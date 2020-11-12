@@ -169,7 +169,7 @@ RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
                          size_t buf_size, size_t n)
     : MultiBuffering(&mu_, &bg_cv_),
       logger_(options.env),
-      logging_enabled_(true),
+      logging_enabled_(false),
       manifest_(dst),
       membuf_cur_(NULL),
       membuf_prev_(NULL),

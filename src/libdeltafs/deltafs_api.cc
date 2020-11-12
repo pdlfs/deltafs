@@ -1746,7 +1746,7 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
       s = OpenAsLevelDb(__dir, __name);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = OpenAsPdb(__dir, __name);
-    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
       s = OpenAsRdb(__dir, __name);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_NOTHING) {
       s = OpenDirEnv(__dir);
@@ -1785,7 +1785,7 @@ ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
       s = __dir->writer->Add(k, v, __epoch);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->Add(k, v);
-    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
       s = __dir->range_writer_->Add(k, v);
     } else {
       s = LevelDbPut(__dir, k, v);
@@ -1809,7 +1809,7 @@ ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
     s = BadArgs();
   } else if (!__fname) {
     s = BadArgs();
-  } else if (__fname[0] == 0) {
+  } else if (__fname[0] == 0 && __dir->io_engine != DELTAFS_PLFSDIR_RANGEDB) {
     s = BadArgs();
   } else {
     char tmp[16];
@@ -1825,7 +1825,7 @@ ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
       s = __dir->writer->Add(k, v, __ep);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->Add(k, v);
-    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
       s = __dir->range_writer_->Add(k, v);
     } else {
       s = LevelDbPut(__dir, k, v);
@@ -1851,7 +1851,7 @@ int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch) {
       s = __dir->writer->EpochFlush(__epoch);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->EpochFlush();
-    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
       s = __dir->range_writer_->EpochFlush();
     } else {
       s = LevelDbEpochFlush(__dir);
@@ -1877,7 +1877,7 @@ int deltafs_plfsdir_flush(deltafs_plfsdir_t* __dir, int __epoch) {
       s = __dir->writer->Flush(__epoch);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->Flush();
-    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
       s = __dir->range_writer_->Flush();
     } else {
       s = LevelDbFlush(__dir);
@@ -1903,7 +1903,7 @@ int deltafs_plfsdir_wait(deltafs_plfsdir_t* __dir) {
       s = __dir->writer->Wait();
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->Wait();
-    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
       s = __dir->range_writer_->Wait();
     } else {
       s = LevelDbWait(__dir);
@@ -1929,7 +1929,7 @@ int deltafs_plfsdir_sync(deltafs_plfsdir_t* __dir) {
       s = __dir->writer->Sync();
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->Sync();
-    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
       s = __dir->range_writer_->Sync();
     } else {
       s = LevelDbSync(__dir);
@@ -1955,7 +1955,7 @@ int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
       s = __dir->writer->Finish();
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->Finish();
-    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
       s = __dir->range_writer_->Finish();
     } else {
       s = LevelDbFin(__dir);
@@ -2058,7 +2058,7 @@ int deltafs_plfsdir_filter_finish(deltafs_plfsdir_t* __dir) {
 
 int deltafs_plfsdir_range_update(deltafs_plfsdir_t* __dir, float rbeg, float rend) {
   pdlfs::Status s;
-  if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+  if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
     s = __dir->range_writer_->UpdateBounds(rbeg, rend);
   } else {
     s = BadArgs();
@@ -2287,7 +2287,7 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
       s = __dir->reader->Read(op, pdlfs::Slice(__key, __keylen), &dst);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_reader_->Get(pdlfs::Slice(__key, __keylen), &dst);
-    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
       s = BadArgs(); // Read path not implemented
     } else {
       s = DbGet(__dir, pdlfs::Slice(__key, __keylen), &dst);
@@ -2340,7 +2340,7 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
       s = __dir->reader->Read(op, k, &dst);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_reader_->Get(k, &dst);
-    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGE) {
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
       s = BadArgs(); // Read path not implemented
     } else {
       s = DbGet(__dir, k, &dst);
