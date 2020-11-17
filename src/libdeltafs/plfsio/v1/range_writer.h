@@ -129,7 +129,7 @@ class PartitionManifestWriter {
   // Offset of the previous manifest entry, relative to the Metadata region
   uint64_t off_prev_;
 
-  Slice FinishEpoch();
+  std::string FinishEpoch();
 
  public:
   explicit PartitionManifestWriter(WritableFile* dst);

@@ -49,7 +49,7 @@ size_t PartitionManifestWriter::AddItem(uint64_t offset,
   return item_idx;
 }
 
-Slice PartitionManifestWriter::FinishEpoch() {
+std::string PartitionManifestWriter::FinishEpoch() {
   std::string contents;
 
   for (size_t i = 0; i < items_.size(); i++) {
@@ -76,13 +76,14 @@ Status PartitionManifestWriter::EpochFlush() {
     return Status::AssertionFailed("Already finished");
   }
 
+
   PutFixed32(&indexes_, num_ep_written_);
   PutFixed64(&indexes_, off_prev_);
   ++num_ep_written_;
 
-  Slice manifest_contents = FinishEpoch();
+  std::string manifest_contents = FinishEpoch();
   if (!manifest_contents.empty()) {
-    indexes_.append(manifest_contents.data(), manifest_contents.size());
+    indexes_.append(manifest_contents, manifest_contents.size());
   }
 
   off_prev_ += manifest_contents.size() + 12;
