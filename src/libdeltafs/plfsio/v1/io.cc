@@ -10,11 +10,10 @@
  */
 
 #include "io.h"
-
-#include "../../util/logging.h"
 #include "format.h"
 #include "types.h"
 
+#include "pdlfs-common/logging.h"
 #include "pdlfs-common/strutil.h"
 
 #include <algorithm>
@@ -310,7 +309,7 @@ Status LogSink::Open(const LogOptions& opts, const std::string& prefix,
   WritableFile* file;
   // Link to external stats for I/O monitoring
   if (opts.stats != NULL) {
-    file = new MonitoredWritableFile(opts.stats, base);
+    file = new MeasuredWritableFile(opts.stats, base);
   } else {
     file = base;
   }
@@ -381,7 +380,7 @@ static Status OpenWithEagerSeqReads(
 
   SequentialFile* file = base;
   if (stats != NULL) {
-    file = new MonitoredSequentialFile(stats, base);
+    file = new MeasuredSequentialFile(stats, base);
   }
   WholeFileBufferedRandomAccessFile* cached_file =
       new WholeFileBufferedRandomAccessFile(file, size, io_size);
@@ -417,7 +416,7 @@ static Status RandomAccessOpen(
 
   RandomAccessFile* file = base;
   if (stats != NULL) {
-    file = new MonitoredRandomAccessFile(stats, base);
+    file = new MeasuredRandomAccessFile(stats, base);
   }
 #if VERBOSE >= 3
   Verbose(__LOG_ARGS__, 3, "Reading from %s (random access), size=%s",

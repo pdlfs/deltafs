@@ -16,7 +16,7 @@
  */
 #pragma once
 
-#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/db/db.h"
 
 namespace pdlfs {
 

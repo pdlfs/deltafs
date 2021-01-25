@@ -14,187 +14,116 @@
 
 namespace pdlfs {
 
-class KeyTest {
-  // Empty.
-};
+class KeyTest {};
 
-TEST(KeyTest, KeyEnc1) {
-  Key k1(7, static_cast<KeyType>(1));
-  ASSERT_EQ(k1.inode(), 7);
-  ASSERT_EQ(int(k1.type()), 1);
-#if defined(DELTAFS_PROTO)
-  Key k2(9, 7, static_cast<KeyType>(2));
-  ASSERT_EQ(k2.dnode(), 9);
-  ASSERT_EQ(k2.inode(), 7);
-  ASSERT_EQ(int(k2.type()), 2);
-#endif
+TEST(KeyTest, KeyEncoding) {
+  {
+    Key k1(0, static_cast<KeyType>(1));
+    Key k2(29, 12345, static_cast<KeyType>(127));
+    Key k3(13, 37, 67890, static_cast<KeyType>(255));
+    ASSERT_EQ(k1.inode(), 0);
+    ASSERT_EQ(int(k1.type()), 1);
 #if defined(DELTAFS)
-  Key k2(29, 12345, static_cast<KeyType>(127));
-  ASSERT_EQ(k2.snap_id(), 29);
-  ASSERT_EQ(k2.inode(), 12345);
-  ASSERT_EQ(int(k2.type()), 127);
-  Key k3(13, 37, 67890, static_cast<KeyType>(255));
-  ASSERT_EQ(k3.reg_id(), 13);
-  ASSERT_EQ(k3.snap_id(), 37);
-  ASSERT_EQ(k3.inode(), 67890);
-  ASSERT_EQ(int(k3.type()), 255);
+    ASSERT_EQ(k2.snap_id(), 29);
 #endif
+    ASSERT_EQ(k2.inode(), 12345);
+    ASSERT_EQ(int(k2.type()), 127);
+#if defined(DELTAFS)
+    ASSERT_EQ(k3.reg_id(), 13);
+    ASSERT_EQ(k3.snap_id(), 37);
+#endif
+    ASSERT_EQ(k3.inode(), 67890);
+    ASSERT_EQ(int(k3.type()), 255);
+  }
+  {
+    char zero[50];
+    memset(zero, 0, sizeof(zero));
+    Key k1(0, static_cast<KeyType>(0));
+    k1.SetName(Slice());
+    Key k2(0, static_cast<KeyType>(1));
+    k2.SetName(Slice("X"));
+    Key k3(0, static_cast<KeyType>(1));
+    k3.SetName(Slice("Y"));
+    ASSERT_EQ(k1.Encode(), Slice(zero, k1.size()));
+    ASSERT_EQ(k2.prefix(), k3.prefix());
+    ASSERT_NE(k2.Encode(), k3.Encode());
+    Key k4(k3);
+    Key k5 = k3;
+    k4.SetName(Slice("X"));
+    ASSERT_EQ(k4.Encode(), k2.Encode());
+    k5.SetHash(k2.hash());
+    ASSERT_EQ(k5.Encode(), k2.Encode());
+  }
+  {
+    Key k1(31, kDataBlockType);
+    Key k2(31, kDataBlockType);
+    Key k3(31, kDataBlockType);
+    k1.SetOffset(0);
+    k2.SetOffset(32);
+    k3.SetOffset(128);
+    ASSERT_LT(k1.Encode(), k2.Encode());
+    ASSERT_LT(k2.Encode(), k3.Encode());
+    ASSERT_EQ(k1.offset(), 0);
+    ASSERT_EQ(k2.offset(), 32);
+    ASSERT_EQ(k3.offset(), 128);
+  }
+  {
+    Key k1(31, kDataDesType);
+    Key k2(k1.prefix());
+    ASSERT_EQ(k1.prefix(), k2.prefix());
+    Key k3(31, kDataBlockType);
+    k3.SetType(kDataDesType);
+    ASSERT_EQ(k1.prefix(), k3.prefix());
+  }
 }
 
-TEST(KeyTest, KeyEnc2) {
-  Stat stat1;
-#if defined(DELTAFS_PROTO)
-  stat1.SetDnodeNo(2);
-#endif
-  stat1.SetInodeNo(3);
-  Key k1(stat1, static_cast<KeyType>(5));
-#if defined(DELTAFS_PROTO)
-  ASSERT_EQ(k1.dnode(), 2);
-#endif
-  ASSERT_EQ(k1.inode(), 3);
-
-#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
-  LookupStat stat2;
-#if defined(DELTAFS_PROTO)
-  stat2.SetDnodeNo(2);
-#endif
-  stat2.SetInodeNo(3);
-  Key k2(stat2, static_cast<KeyType>(5));
-#if defined(DELTAFS_PROTO)
-  ASSERT_EQ(k2.dnode(), 2);
-#endif
-  ASSERT_EQ(k2.inode(), 3);
-#endif
-}
-
-TEST(KeyTest, KeyEnc3) {
-  char zero[50];
-  memset(zero, 0, sizeof(zero));
-  Key k1(0, static_cast<KeyType>(0));
-  k1.SetName(Slice());
-  ASSERT_EQ(k1.Encode(), Slice(zero, k1.size()));
-  Key k2(1, static_cast<KeyType>(1));
-  k2.SetName(Slice("X"));
-#if !defined(DELTAFS) && !defined(INDEXFS)
-  ASSERT_EQ(k2.suffix(), Slice("X"));
-#endif
-  Key k3(1, static_cast<KeyType>(1));
-  k3.SetName(Slice("Y"));
-#if !defined(DELTAFS) && !defined(INDEXFS)
-  ASSERT_EQ(k3.suffix(), Slice("Y"));
-#endif
-  ASSERT_EQ(k2.prefix(), k3.prefix());
-}
-
-TEST(KeyTest, KeyEnc4) {
-  Key k1(99, static_cast<KeyType>(99));
-  k1.SetName(Slice("X"));
-  Key k2(k1);
-  k2.SetName(Slice("YY"));
-  Key k3(k2);
-  k3.SetName(Slice("X"));
-  ASSERT_EQ(k3.Encode(), k1.Encode());
-  Key k4 = k2;
-  k4.SetSuffix(k1.suffix());
-  ASSERT_EQ(k4.Encode(), k1.Encode());
-#if defined(DELTAFS) || defined(INDEXFS)
-  Key k5 = k2;
-  k5.SetHash(k1.hash());
-  ASSERT_EQ(k5.Encode(), k1.Encode());
-#endif
-}
-
-TEST(KeyTest, KeyEnc5) {
-  Key k1(31, kDataBlockType);
-  Key k2(31, kDataBlockType);
-  Key k3(31, kDataBlockType);
-  k1.SetOffset(0);
-  k2.SetOffset(32);
-  k3.SetOffset(128);
-  ASSERT_LT(k1.Encode(), k2.Encode());
-  ASSERT_LT(k2.Encode(), k3.Encode());
-  ASSERT_EQ(k1.offset(), 0);
-  ASSERT_EQ(k2.offset(), 32);
-  ASSERT_EQ(k3.offset(), 128);
-}
-
-TEST(KeyTest, KeyEnc6) {
-  Key k1(31, kDataDesType);
-  Key k2(k1.prefix());
-  ASSERT_EQ(k1.prefix(), k2.prefix());
-  Key k3(31, kDataBlockType);
-  k3.SetType(kDataDesType);
-  ASSERT_EQ(k1.prefix(), k3.prefix());
-}
-
-class StatTest {
-  // Empty.
-};
+class StatTest {};
 
 TEST(StatTest, StatEncoding) {
   Stat stat;
-#if defined(DELTAFS_PROTO)
-  stat.SetDnodeNo(21);
-#endif
-#if defined(DELTAFS)
   stat.SetRegId(13);
   stat.SetSnapId(37);
-#endif
   stat.SetInodeNo(12345);
-  stat.SetFileSize(90);
   stat.SetFileMode(678);
-#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
-  stat.SetZerothServer(777);
-#endif
+  stat.SetFileSize(90);
   stat.SetUserId(11);
   stat.SetGroupId(22);
-  stat.SetModifyTime(44332211);
   stat.SetChangeTime(11223344);
+  stat.SetModifyTime(44332211);
+  stat.SetZerothServer(777);
   stat.AssertAllSet();
-  char tmp[100];
-  ASSERT_TRUE(sizeof(tmp) >= Stat::kMaxEncodedLength);
+  char tmp[sizeof(Stat)];
   Slice encoding = stat.EncodeTo(tmp);
   Stat stat2;
   bool r = stat2.DecodeFrom(encoding);
   ASSERT_TRUE(r);
-  char tmp2[sizeof(tmp)];
+  char tmp2[sizeof(Stat)];
   Slice encoding2 = stat2.EncodeTo(tmp2);
   ASSERT_EQ(encoding, encoding2);
 }
 
-#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
-class LookupEntryTest {
-  // Empty
-};
+class LookupEntryTest {};
 
 TEST(LookupEntryTest, EntryEncoding) {
-  LookupStat stat;
-#if defined(DELTAFS_PROTO)
-  stat.SetDnodeNo(21);
-#endif
-#if defined(DELTAFS)
-  stat.SetRegId(13);
-  stat.SetSnapId(37);
-#endif
-  stat.SetInodeNo(12345);
-  stat.SetDirMode(678);
-  stat.SetZerothServer(777);
-  stat.SetUserId(11);
-  stat.SetGroupId(22);
-  stat.SetLeaseDue(55667788);
-  stat.AssertAllSet();
-  char tmp[100];
-  ASSERT_TRUE(sizeof(tmp) >= LookupStat::kMaxEncodedLength);
-  Slice encoding = stat.EncodeTo(tmp);
-  LookupStat stat2;
-  bool r = stat2.DecodeFrom(encoding);
+  LookupStat ent;
+  ent.SetRegId(13);
+  ent.SetSnapId(37);
+  ent.SetInodeNo(12345);
+  ent.SetDirMode(678);
+  ent.SetUserId(11);
+  ent.SetGroupId(22);
+  ent.SetZerothServer(777);
+  ent.SetLeaseDue(55667788);
+  ent.AssertAllSet();
+  char tmp[sizeof(LookupStat)];
+  Slice encoding = ent.EncodeTo(tmp);
+  LookupStat ent2;
+  bool r = ent2.DecodeFrom(encoding);
   ASSERT_TRUE(r);
-  char tmp2[sizeof(tmp)];
-  Slice encoding2 = stat2.EncodeTo(tmp2);
+  char tmp2[sizeof(LookupStat)];
+  Slice encoding2 = ent2.EncodeTo(tmp2);
   ASSERT_EQ(encoding, encoding2);
 }
-
-#endif
 
 }  // namespace pdlfs
 

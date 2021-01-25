@@ -8,12 +8,11 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-#include "deltafs_mds.h"
 
+#include "deltafs_mds.h"
 #include "deltafs_conf_loader.h"
 #include "mds_factory.h"
-#include "util/logging.h"
-
+#include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
 
 #include <map>
@@ -89,7 +88,7 @@ void MetadataServer::PrintStatus(const Status& status, const MDSMonitor* mon) {
        mon->Get_Mkdir_count(),     //
        mon->Get_Fstat_count(),     //
        mon->Get_Lookup_count()     //
-  );
+       );
 }
 
 Status MetadataServer::RunTillInterruptionOrError() {
@@ -196,7 +195,7 @@ static void PrintLocalUriInfo(const char* ip, int score) {
 
 static std::string GetLocalUri(int srv_id) {
   std::vector<std::string> ips;
-  Status s = FetchHostIPAddrs(&ips);
+  Status s = Env::Default()->FetchHostIPAddrs(&ips);
   if (s.ok() && !ips.empty()) {
     std::map<std::string, int> unique_ips;
     const std::string* ip = NULL;

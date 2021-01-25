@@ -16,18 +16,16 @@
  */
 #include "table_cache.h"
 
-#include "pdlfs-common/leveldb/filenames.h"
-#include "pdlfs-common/leveldb/options.h"
+#include "pdlfs-common/leveldb/db/options.h"
+#include "pdlfs-common/leveldb/dbfiles.h"
 #include "pdlfs-common/leveldb/table.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
 
 namespace pdlfs {
-namespace config {  // If ".sst" table extension should be checked in addition
-                    // to ".ldb"
-static const bool kCheckOldTableName = false;
-}
+
+static const bool kCheckOldTableName = true;
 
 struct TableAndFile {
   SequenceOff off;
@@ -66,7 +64,7 @@ Status TableCache::LoadTable(uint64_t fnum, uint64_t fsize, Table** table,
   std::string fname = TableFileName(dbname_, fnum);
   s = env_->NewRandomAccessFile(fname.c_str(), file);
   if (s.IsNotFound()) {
-    if (config::kCheckOldTableName) {
+    if (kCheckOldTableName) {
       std::string old_fname = SSTTableFileName(dbname_, fnum);
       if (env_->NewRandomAccessFile(old_fname.c_str(), file).ok()) {
         s = Status::OK();

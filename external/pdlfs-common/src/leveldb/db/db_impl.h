@@ -16,12 +16,13 @@
  */
 #pragma once
 
+#include "options_internal.h"
 #include "write_batch_internal.h"
 
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/leveldb/db.h"
-#include "pdlfs-common/leveldb/internal_types.h"
-#include "pdlfs-common/leveldb/snapshot.h"
+#include "pdlfs-common/leveldb/db/db.h"
+#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db/snapshot.h"
 #include "pdlfs-common/log_writer.h"
 #include "pdlfs-common/port.h"
 
@@ -29,16 +30,8 @@
 #include <set>
 
 namespace pdlfs {
-// Sanitize db options. The caller should delete result.info_log if it is not
-// equal to raw_options.info_log. The caller should also delete
-// result.block_cache if it is not equal to raw_options.block_cache. Finally,
-// the caller should delete result.table_cache if it is not equal to
-// raw_options.table_cache.
-extern DBOptions SanitizeOptions(const std::string& dbname,
-                                 const InternalKeyComparator* icmp,
-                                 const InternalFilterPolicy* ipolicy,
-                                 const DBOptions& raw_options,
-                                 bool create_infolog);
+
+class ColumnImpl;
 class MemTable;
 class TableCache;
 class Version;
@@ -95,6 +88,7 @@ class DBImpl : public DB {
 
  protected:
   friend class DB;
+  friend class ColumnImpl;
   struct CompactionState;
   struct InsertionState;
   struct Writer;

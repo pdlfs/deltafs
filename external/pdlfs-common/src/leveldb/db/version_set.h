@@ -16,11 +16,10 @@
  */
 #pragma once
 
-#include "version_edit.h"
-
-#include "pdlfs-common/leveldb/internal_types.h"
-#include "pdlfs-common/leveldb/options.h"
+#include "options_internal.h"
+#include "pdlfs-common/leveldb/db/dbformat.h"
 #include "pdlfs-common/port.h"
+#include "version_edit.h"
 
 #include <map>
 #include <set>

@@ -32,6 +32,7 @@ namespace pdlfs {
 
 class BlockBuilder;
 class BlockHandle;
+class IndexBuilder;
 class WritableFile;
 class TableProperties;
 
@@ -65,6 +66,9 @@ class TableBuilder {
   // the same data block.  Most clients should not need to use this method.
   // REQUIRES: Finish(), Abandon() have not been called
   void Flush();
+
+  // Return a reference to the embedded index builder.
+  const IndexBuilder* index_builder() const;
 
   // Return the properties of the table being built.
   const TableProperties* properties() const;

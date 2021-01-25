@@ -15,13 +15,14 @@
  * found at https://github.com/google/leveldb.
  */
 #include "version_set.h"
-
+#include "memtable.h"
 #include "table_cache.h"
 
 #include "../merger.h"
 #include "../two_level_iterator.h"
 
-#include "pdlfs-common/leveldb/filenames.h"
+#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/table_builder.h"
 
 #include "pdlfs-common/coding.h"
 #include "pdlfs-common/env.h"
@@ -29,8 +30,8 @@
 #include "pdlfs-common/log_writer.h"
 #include "pdlfs-common/strutil.h"
 
-#include <algorithm>
 #include <stdio.h>
+#include <algorithm>
 
 namespace pdlfs {
 
@@ -918,9 +919,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
         s = descriptor_file_->Sync();
       }
       if (!s.ok()) {
-#if VERBOSE >= 3
-        Log(options_->info_log, 3, "MANIFEST write: %s", s.ToString().c_str());
-#endif
+        Log(options_->info_log, "MANIFEST write: %s", s.ToString().c_str());
       }
     }
 
@@ -936,9 +935,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
         names[0] = DescriptorFileName(dbname_, 3 - manifest_file_number_);
         names[1] = CurrentFileName(dbname_);
         for (size_t i = 0; i < 2; i++) {
-#if VERBOSE >= 2
-          Log(options_->info_log, 2, "Delete %s", names[i].c_str());
-#endif
+          Log(options_->info_log, "Delete %s", names[i].c_str());
           env_->DeleteFile(names[i].c_str());
         }
       }
@@ -1005,9 +1002,7 @@ Status VersionSet::Recover() {
       }
     }
     if (!s.ok()) {
-#if VERBOSE >= 3
-      Log(options_->info_log, 3, "CURRENT file read: %s", s.ToString().c_str());
-#endif
+      Log(options_->info_log, "CURRENT read: %s", s.ToString().c_str());
       if (status.ok()) {
         status = s;
       }
@@ -1123,9 +1118,7 @@ Status VersionSet::Recover() {
       }
 
       if (!s.ok()) {
-#if VERBOSE >= 3
-        Log(options_->info_log, 3, "MANIFEST read: %s", s.ToString().c_str());
-#endif
+        Log(options_->info_log, "MANIFEST read: %s", s.ToString().c_str());
         if (status.ok()) {
           status = s;
         }
@@ -1479,16 +1472,11 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
       current_->GetOverlappingInputs(level + 1, &new_start, &new_limit,
                                      &expanded1);
       if (expanded1.size() == c->inputs_[1].size()) {
-#if VERBOSE >= 4
-        Log(options_->info_log, 4,
-            "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)",
+        Log(options_->info_log,
+            "Expanding@%d %d+%d (%ld+%ld bytes) to %d+%d (%ld+%ld bytes)\n",
             level, int(c->inputs_[0].size()), int(c->inputs_[1].size()),
             long(inputs0_size), long(inputs1_size), int(expanded0.size()),
             int(expanded1.size()), long(expanded0_size), long(inputs1_size));
-#else
-        // Suppress compiler warnings
-        (void)inputs0_size;
-#endif
         smallest = new_start;
         largest = new_limit;
         c->inputs_[0] = expanded0;
@@ -1503,6 +1491,11 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   if (level + 2 < config::kNumLevels) {
     current_->GetOverlappingInputs(level + 2, &all_start, &all_limit,
                                    &c->grandparents_);
+  }
+
+  if (false) {
+    Log(options_->info_log, "Compacting %d '%s' .. '%s'", level,
+        smallest.DebugString().c_str(), largest.DebugString().c_str());
   }
 
   // Update the place where we will do the next compaction for this level.

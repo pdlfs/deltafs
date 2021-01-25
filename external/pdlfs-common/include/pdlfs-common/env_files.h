@@ -140,25 +140,19 @@ class MinMaxBufferedWritableFile : public SynchronizableFile {
   std::string buf_;
 };
 
-// Performance stats collected by a MonitoredWritableFile.
+// Measurements used by a MeasuredWritableFile.
 class WritableFileStats {
  public:
   WritableFileStats() { Reset(); }
 
-  // Return the total number of flush operations invoked.
-  uint32_t TotalFlushOps() const { return num_flushes_; }
-
-  // Return the total number of sync operation invoked.
-  uint32_t TotalSyncs() const { return num_syncs_; }
-
-  // Return the total number of bytes written out.
+  // Total number of bytes written out.
   uint64_t TotalBytes() const { return bytes_; }
 
-  // Return the total number of write operations witnessed.
+  // Total number of write operations witnessed.
   uint64_t TotalOps() const { return ops_; }
 
  private:
-  friend class MonitoredWritableFile;
+  friend class MeasuredWritableFile;
   void Reset();
 
   uint32_t num_syncs_;
@@ -167,18 +161,19 @@ class WritableFileStats {
   uint64_t ops_;
 };
 
-// A WritableFile wrapper implementation that collects write performance stats
-// in an external WritableFileStats object. Implementation is not thread safe.
-// External synchronization is needed for use by multiple threads.
-class MonitoredWritableFile : public WritableFile {
+// Measure the I/O activity accessing an underlying writable file and store the
+// results in an external stats object.
+// Implementation is not thread-safe and requires external synchronization for
+// use by multiple threads.
+class MeasuredWritableFile : public WritableFile {
  public:
-  // REQUIRES: *base must remain alive during the lifetime of this object. *base
-  // is closed and deleted when the destructor of this class is called.
-  MonitoredWritableFile(WritableFileStats* stats, WritableFile* base)
+  // *base must remain alive during the lifetime of this class and will be
+  // closed and deleted when the destructor of this class is called.
+  MeasuredWritableFile(WritableFileStats* stats, WritableFile* base)
       : stats_(stats) {
     Reset(base);
   }
-  virtual ~MonitoredWritableFile() {
+  virtual ~MeasuredWritableFile() {
     if (base_ != NULL) {
       base_->Close();
       delete base_;
@@ -188,7 +183,7 @@ class MonitoredWritableFile : public WritableFile {
   // REQUIRES: External synchronization.
   virtual Status Flush() {
     if (base_ == NULL) {
-      return Status::AssertionFailed("base_ is empty");
+      return Status::Disconnected(Slice());
     } else {
       Status status = base_->Flush();
       if (status.ok()) {
@@ -201,7 +196,7 @@ class MonitoredWritableFile : public WritableFile {
   // REQUIRES: External synchronization.
   virtual Status Sync() {
     if (base_ == NULL) {
-      return Status::AssertionFailed("base_ is empty");
+      return Status::Disconnected(Slice());
     } else {
       Status status = base_->Sync();
       if (status.ok()) {
@@ -248,7 +243,7 @@ class MonitoredWritableFile : public WritableFile {
   WritableFile* base_;
 };
 
-// Performance stats collected by a MonitoredSequentialFile.
+// Measurements used by a MeasuredSequentialFile.
 class SequentialFileStats {
  public:
   SequentialFileStats() { Reset(); }
@@ -260,28 +255,29 @@ class SequentialFileStats {
   uint64_t TotalOps() const { return ops_; }
 
  private:
-  friend class MonitoredSequentialFile;
+  friend class MeasuredSequentialFile;
   void Reset();
 
   uint64_t bytes_;
   uint64_t ops_;
 };
 
-// A SequentialFile wrapper implementation that collects read performance stats
-// in an external SequentialFileStats object. Implementation is not thread safe.
-// External synchronization is needed for use by multiple threads.
-class MonitoredSequentialFile : public SequentialFile {
+// Measure the I/O activity accessing an underlying sequential readable file and
+// store the results in an external stats object.
+// Implementation is not thread-safe and requires external synchronization for
+// use by multiple threads.
+class MeasuredSequentialFile : public SequentialFile {
  public:
-  MonitoredSequentialFile(SequentialFileStats* stats, SequentialFile* base)
+  MeasuredSequentialFile(SequentialFileStats* stats, SequentialFile* base)
       : stats_(stats) {
     Reset(base);
   }
-  virtual ~MonitoredSequentialFile() { delete base_; }
+  virtual ~MeasuredSequentialFile() { delete base_; }
 
   // REQUIRES: External synchronization.
   virtual Status Read(size_t n, Slice* result, char* scratch) {
     if (base_ == NULL) {
-      return Status::AssertionFailed("base_ is empty");
+      return Status::Disconnected(Slice());
     } else {
       Status status = base_->Read(n, result, scratch);
       if (status.ok()) {
@@ -295,7 +291,7 @@ class MonitoredSequentialFile : public SequentialFile {
   // REQUIRES: External synchronization.
   virtual Status Skip(uint64_t n) {
     if (base_ == NULL) {
-      return Status::AssertionFailed("base_ is empty");
+      return Status::Disconnected(Slice());
     } else {
       return base_->Skip(n);
     }
@@ -312,7 +308,7 @@ class MonitoredSequentialFile : public SequentialFile {
   SequentialFile* base_;
 };
 
-// Performance stats collected by a MonitoredRandomAccessFile.
+// Measurements used by an MeasuredRandomAccessFile.
 class RandomAccessFileStats {
  public:
   RandomAccessFileStats();
@@ -325,7 +321,7 @@ class RandomAccessFileStats {
   uint64_t TotalOps() const;
 
  private:
-  friend class MonitoredRandomAccessFile;
+  friend class MeasuredRandomAccessFile;
   void AcceptRead(uint64_t n);
   void Reset();
 
@@ -333,19 +329,17 @@ class RandomAccessFileStats {
   Rep* rep_;
 };
 
-// A RandomAccessFile wrapper implementation that collects read performance
-// stats in an external RandomAccessFileStats object. Implementation is thread
-// safe. External synchronization is not needed for use by multiple threads.
-class MonitoredRandomAccessFile : public RandomAccessFile {
+// Measure the I/O activity accessing an underlying random access file and store
+// the results in a set of external atomic counters.
+class MeasuredRandomAccessFile : public RandomAccessFile {
  public:
-  MonitoredRandomAccessFile(RandomAccessFileStats* stats,
-                            RandomAccessFile* base)
+  MeasuredRandomAccessFile(RandomAccessFileStats* stats, RandomAccessFile* base)
       : stats_(stats) {
     Reset(base);
   }
-  virtual ~MonitoredRandomAccessFile() { delete base_; }
+  virtual ~MeasuredRandomAccessFile() { delete base_; }
 
-  // Implementation is safe for concurrent use by multiple threads.
+  // Safe for concurrent use by multiple threads.
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
     Status status = base_->Read(offset, n, result, scratch);

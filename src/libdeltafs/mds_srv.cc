@@ -8,16 +8,16 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-#include "mds_srv.h"
-
-#include "util/dirlock.h"
-
-#include "pdlfs-common/mutexlock.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include "pdlfs-common/dirlock.h"
+#include "pdlfs-common/mutexlock.h"
+
+#include "mds_srv.h"
 
 namespace pdlfs {
 
@@ -30,14 +30,14 @@ Status MDS::SRV::LoadDir(const DirId& id, DirInfo* info, DirIndex* index) {
   s = mdb_->GetInfo(id, info, mdb_tx);
   if (s.IsNotFound()) {
     mdb_tx = mdb_->CreateTx();
-    info->mtime = CurrentMicros();
+    info->mtime = NowMicros();
     info->size = 0;
     s = mdb_->SetInfo(id, *info, mdb_tx);
   }
 
   // Load directory index. Create if missing...
   if (s.ok()) {
-    s = mdb_->GetDirIdx(id, index, mdb_tx);
+    s = mdb_->GetIdx(id, index, mdb_tx);
     if (s.IsNotFound()) {
       int zserver = PickupServer(id) % giga_.num_virtual_servers;
       DirIndex tmp(zserver, &giga_);
@@ -45,7 +45,7 @@ Status MDS::SRV::LoadDir(const DirId& id, DirInfo* info, DirIndex* index) {
       if (mdb_tx == NULL) {
         mdb_tx = mdb_->CreateTx();
       }
-      s = mdb_->SetDirIdx(id, tmp, mdb_tx);
+      s = mdb_->SetIdx(id, tmp, mdb_tx);
       if (s.ok()) {
         index->Swap(tmp);
       }
@@ -227,7 +227,7 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
           tx->Ref();
         }
 
-        std::string name;
+        Slice name;
         s = mdb_->GetNode(dir_id, name_hash, &ret->stat, &name, mdb_tx);
 
         if (s.ok() && paranoid_checks_) {
@@ -238,7 +238,7 @@ Status MDS::SRV::Fstat(const FstatOptions& options, FstatRet* ret) {
           }
 
           Error(__LOG_ARGS__, "%s/%s: %s", options.dir_id.DebugString().c_str(),
-                name.c_str(), s.ToString().c_str());
+                name.ToString().c_str(), s.ToString().c_str());
         }
 
         mutex_.Lock();
@@ -311,7 +311,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
       }
       if (s.ok()) {
         bool entry_exists = false;
-        uint64_t my_time = CurrentMicros();
+        uint64_t my_time = NowMicros();
         uint64_t my_ino = NextIno();
         mutex_.Unlock();
 
@@ -322,7 +322,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
         MDB::Tx* mdb_tx = tx->rep();
 
         Stat* stat = &ret->stat;
-        std::string name;
+        Slice name;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
 
         if (s.ok() && paranoid_checks_) {
@@ -332,7 +332,7 @@ Status MDS::SRV::Fcreat(const FcreatOptions& options, FcreatRet* ret) {
             s = Status::Corruption("name and hash don't match");
 
             Error(__LOG_ARGS__, "%s/%s: %s",
-                  options.dir_id.DebugString().c_str(), name.c_str(),
+                  options.dir_id.DebugString().c_str(), name.ToString().c_str(),
                   s.ToString().c_str());
           }
         }
@@ -451,7 +451,7 @@ Status MDS::SRV::Unlink(const UnlinkOptions& options, UnlinkRet* ret) {
       }
       if (s.ok()) {
         bool entry_exists = false;
-        uint64_t my_time = CurrentMicros();
+        uint64_t my_time = NowMicros();
         mutex_.Unlock();
 
         tx = new Dir::Tx(mdb_);
@@ -461,7 +461,7 @@ Status MDS::SRV::Unlink(const UnlinkOptions& options, UnlinkRet* ret) {
         MDB::Tx* mdb_tx = tx->rep();
 
         Stat* stat = &ret->stat;
-        std::string name;
+        Slice name;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
 
         if (s.ok() && paranoid_checks_) {
@@ -472,7 +472,7 @@ Status MDS::SRV::Unlink(const UnlinkOptions& options, UnlinkRet* ret) {
           }
 
           Error(__LOG_ARGS__, "%s/%s: %s", options.dir_id.DebugString().c_str(),
-                name.c_str(), s.ToString().c_str());
+                name.ToString().c_str(), s.ToString().c_str());
         }
 
         if (s.ok()) {
@@ -586,7 +586,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
       }
       if (s.ok()) {
         bool entry_exists = false;
-        uint64_t my_time = CurrentMicros();
+        uint64_t my_time = NowMicros();
         uint64_t my_ino = NextIno();
         DirId my_id(reg_id_, snap_id_, my_ino);
         mutex_.Unlock();
@@ -598,7 +598,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
         MDB::Tx* mdb_tx = tx->rep();
 
         Stat* stat = &ret->stat;
-        std::string name;
+        Slice name;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
 
         if (s.ok() && paranoid_checks_) {
@@ -608,7 +608,7 @@ Status MDS::SRV::Mkdir(const MkdirOptions& options, MkdirRet* ret) {
             s = Status::Corruption("name and hash don't match");
 
             Error(__LOG_ARGS__, "%s/%s: %s",
-                  options.dir_id.DebugString().c_str(), name.c_str(),
+                  options.dir_id.DebugString().c_str(), name.ToString().c_str(),
                   s.ToString().c_str());
           }
         }
@@ -724,7 +724,7 @@ Status MDS::SRV::Utime(const UtimeOptions& options, UtimeRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_time = CurrentMicros();
+        uint64_t my_time = NowMicros();
         mutex_.Unlock();
 
         tx = new Dir::Tx(mdb_);
@@ -733,7 +733,7 @@ Status MDS::SRV::Utime(const UtimeOptions& options, UtimeRet* ret) {
         d->tx.Release_Store(tx);
         MDB::Tx* mdb_tx = tx->rep();
 
-        std::string name;
+        Slice name;
         Stat* stat = &ret->stat;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
         // TODO: paranoid checks
@@ -811,7 +811,7 @@ Status MDS::SRV::Trunc(const TruncOptions& options, TruncRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_time = CurrentMicros();
+        uint64_t my_time = NowMicros();
         mutex_.Unlock();
 
         tx = new Dir::Tx(mdb_);
@@ -820,7 +820,7 @@ Status MDS::SRV::Trunc(const TruncOptions& options, TruncRet* ret) {
         d->tx.Release_Store(tx);
         MDB::Tx* mdb_tx = tx->rep();
 
-        std::string name;
+        Slice name;
         Stat* stat = &ret->stat;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
         // TODO: paranoid checks
@@ -953,7 +953,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_start = CurrentMicros();
+        uint64_t my_start = NowMicros();
         uint64_t my_seq = d->seq;
         mutex_.Unlock();
 
@@ -966,7 +966,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
 
         ret->stat.SetLeaseDue(0);
 
-        std::string name;
+        Slice name;
         Stat stat;
         s = mdb_->GetNode(dir_id, name_hash, &stat, &name, mdb_tx);
         // TODO: paranoid checks
@@ -981,7 +981,7 @@ Status MDS::SRV::Lookup(const LookupOptions& options, LookupRet* ret) {
         }
 
         mutex_.Lock();
-        uint64_t my_end = CurrentMicros();
+        uint64_t my_end = NowMicros();
         // No lease either we timeout or have a negative result, otherwise...
         if (s.ok() && (my_end - my_start) < (lease_duration_ - 10)) {
           Lease::Ref* lref = leases_->Lookup(dir_id, name_hash);
@@ -1096,7 +1096,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
         }
       }
       if (s.ok()) {
-        uint64_t my_start = CurrentMicros();
+        uint64_t my_start = NowMicros();
         mutex_.Unlock();
 
         tx = new Dir::Tx(mdb_);
@@ -1106,7 +1106,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
         MDB::Tx* mdb_tx = tx->rep();
 
         Stat* stat = &ret->stat;
-        std::string name;
+        Slice name;
         s = mdb_->GetNode(dir_id, name_hash, stat, &name, mdb_tx);
 
         if (s.ok() && paranoid_checks_) {
@@ -1117,7 +1117,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
           }
 
           Error(__LOG_ARGS__, "%s/%s: %s", options.dir_id.DebugString().c_str(),
-                name.c_str(), s.ToString().c_str());
+                name.ToString().c_str(), s.ToString().c_str());
         }
 
         if (s.ok()) {
@@ -1147,7 +1147,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
         }
 
         mutex_.Lock();
-        uint64_t my_end = CurrentMicros();
+        uint64_t my_end = NowMicros();
         // Wait until lease expiration if the target is a directory
         if (s.ok() && S_ISDIR(stat->FileMode())) {
           Lease::Ref* lease_ref = leases_->Lookup(dir_id, name_hash);
@@ -1173,7 +1173,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
                 mutex_.Unlock();
                 SleepForMicroseconds(lease_duration_ + 10);
                 mutex_.Lock();
-                my_end = CurrentMicros();
+                my_end = NowMicros();
               }
             }
             d->num_leases++;
@@ -1189,7 +1189,7 @@ Status MDS::SRV::Uperm(const UpermOptions& options, UpermRet* ret) {
             // Wait past lease due
             SleepForMicroseconds(diff);
             mutex_.Lock();
-            my_end = CurrentMicros();
+            my_end = NowMicros();
           }
           assert(lease->parent == d);
           d->seq = 1 + d->seq;
