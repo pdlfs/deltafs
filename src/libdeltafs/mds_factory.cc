@@ -17,7 +17,7 @@ Status MDSFactoryImpl::Init(const MDSTopology& topo) {
   Status s;
   RPCOptions options;
   options.env = env_;  // okay to be NULL
-  options.mode = kClientOnly;
+  options.mode = rpc::kClientOnly;
   options.uri = topo.rpc_proto;  // such as bmi+tcp, mpi
   rpc_ = RPC::Open(options);
   std::string full_uri = options.uri;
@@ -55,7 +55,7 @@ Status MDSFactoryImpl::Stop() {
 void MDSFactoryImpl::AddTarget(const std::string& target_uri, bool trace) {
   StubInfo info;
   assert(rpc_ != NULL);
-  info.stub = rpc_->OpenClientFor(target_uri);
+  info.stub = rpc_->OpenStubFor(target_uri);
   info.wrapper = new MDSWrapper(info.stub);
   if (trace) {
     info.mds = new MDSTracer(target_uri, info.wrapper);

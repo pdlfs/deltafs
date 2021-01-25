@@ -10,13 +10,14 @@
  */
 
 #include "v1.h"
+
+#include "../../util/logging.h"
 #include "filter.h"
 #include "internal.h"
 #include "types.h"
 
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/hash.h"
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/strutil.h"
 

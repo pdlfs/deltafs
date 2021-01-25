@@ -10,9 +10,7 @@
  */
 
 #include "pdlfs-common/fio.h"
-#include "pdlfs-common/blkdb.h"
 #include "pdlfs-common/coding.h"
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/strutil.h"
 
@@ -21,7 +19,7 @@
 #endif
 
 #if defined(PDLFS_PLATFORM_POSIX)
-#include "posix_fio.h"
+#include "posix/posix_fio.h"
 #endif
 
 namespace pdlfs {
@@ -42,7 +40,7 @@ static std::string FetchRoot(const char* input) {
     }
   }
 #if VERBOSE >= 2
-  Verbose(__LOG_ARGS__, 2, "fio.posix.root -> %s", root.c_str());
+  // Verbose(__LOG_ARGS__, 2, "fio.posix.root -> %s", root.c_str());
 #endif
   return root;
 }
@@ -52,8 +50,8 @@ Fio* Fio::Open(const char* name, const char* conf) {
   if (conf == NULL) conf = "";
   Slice fio_name(name), fio_conf(conf);
 #if VERBOSE >= 1
-  Verbose(__LOG_ARGS__, 1, "fio.name -> %s", fio_name.c_str());
-  Verbose(__LOG_ARGS__, 1, "fio.conf -> %s", fio_conf.c_str());
+  // Verbose(__LOG_ARGS__, 1, "fio.name -> %s", fio_name.c_str());
+  // Verbose(__LOG_ARGS__, 1, "fio.conf -> %s", fio_conf.c_str());
 #endif
 #if defined(PDLFS_RADOS)
   if (fio_name == "rados") {
@@ -119,11 +117,17 @@ bool Fentry::DecodeFrom(Slice* input) {
       !GetVarint64(input, &mtime)) {
     return false;
   } else {
+#if defined(DELTAFS)
     pid = DirId(parent_reg, parent_snap, parent_ino);
+#else
+    pid = DirId(parent_ino);
+#endif
     nhash = my_nhash.ToString();
     zserver = parent_zserver;
+#if defined(DELTAFS)
     stat.SetRegId(my_reg);
     stat.SetSnapId(my_snap);
+#endif
     stat.SetInodeNo(my_ino);
     stat.SetFileSize(size);
     stat.SetFileMode(mode);

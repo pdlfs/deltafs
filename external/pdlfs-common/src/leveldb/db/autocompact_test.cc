@@ -17,7 +17,7 @@
 #include "db_impl.h"
 
 #include "pdlfs-common/cache.h"
-#include "pdlfs-common/leveldb/db/db.h"
+#include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 
@@ -102,7 +102,7 @@ void AutoCompactTest::DoReads(int n) {
     }
     delete iter;
     // Wait a little bit to allow any triggered compactions to complete.
-    Env::Default()->SleepForMicroseconds(1000000);
+    SleepForMicroseconds(1000000);
     uint64_t size = Size(Key(0), Key(n));
     fprintf(stderr, "iter %3d => %7.3f MB [other %7.3f MB]\n", read + 1,
             size / 1048576.0, Size(Key(n), Key(kCount)) / 1048576.0);

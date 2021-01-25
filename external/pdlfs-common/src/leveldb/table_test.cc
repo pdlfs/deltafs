@@ -8,14 +8,12 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
-#include "table_stats.h"
-
-#include "pdlfs-common/leveldb/comparator.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
-#include "pdlfs-common/leveldb/db/options.h"
 #include "pdlfs-common/leveldb/table.h"
+#include "pdlfs-common/leveldb/comparator.h"
+#include "pdlfs-common/leveldb/internal_types.h"
+#include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/leveldb/table_builder.h"
+#include "pdlfs-common/leveldb/table_properties.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 
@@ -144,23 +142,27 @@ class TableReader {
   ~TableReader() { delete table_; }
 
   Slice SmallestKey() {
-    ASSERT_TRUE(TableStats::HasStats(table_));
-    return TableStats::FirstKey(table_);
+    const TableProperties* const props = table_->GetProperties();
+    ASSERT_TRUE(props != NULL);
+    return props->first_key();
   }
 
   Slice LargestKey() {
-    ASSERT_TRUE(TableStats::HasStats(table_));
-    return TableStats::LastKey(table_);
+    const TableProperties* const props = table_->GetProperties();
+    ASSERT_TRUE(props != NULL);
+    return props->last_key();
   }
 
   uint64_t MinSeq() {
-    ASSERT_TRUE(TableStats::HasStats(table_));
-    return TableStats::MinSeq(table_);
+    const TableProperties* const props = table_->GetProperties();
+    ASSERT_TRUE(props != NULL);
+    return props->min_seq();
   }
 
   uint64_t MaxSeq() {
-    ASSERT_TRUE(TableStats::HasStats(table_));
-    return TableStats::MaxSeq(table_);
+    const TableProperties* const props = table_->GetProperties();
+    ASSERT_TRUE(props != NULL);
+    return props->max_seq();
   }
 };
 

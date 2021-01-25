@@ -8,14 +8,13 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #pragma once
 
 #include "mds_api.h"
+#include "util/dcntl.h"
+#include "util/lease.h"
 
-#include "pdlfs-common/dcntl.h"
 #include "pdlfs-common/hashmap.h"
-#include "pdlfs-common/lease.h"
 #include "pdlfs-common/port.h"
 
 namespace pdlfs {
@@ -52,10 +51,6 @@ class MDS::SRV : public MDS {
 
   // Constant after construction
   MDSEnv* mds_env_;
-  uint64_t NowMicros() { return mds_env_->env->NowMicros(); }
-  void SleepForMicroseconds(int micros) {
-    mds_env_->env->SleepForMicroseconds(micros);
-  }
   MDB* mdb_;
   typedef DirIndexOptions GIGA;
   GIGA giga_;

@@ -9,7 +9,7 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
-#include "pdlfs-common/leveldb/db/readonly.h"
+#include "pdlfs-common/leveldb/readonly.h"
 
 namespace pdlfs {
 

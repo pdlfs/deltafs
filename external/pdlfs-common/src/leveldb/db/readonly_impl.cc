@@ -10,14 +10,14 @@
  */
 
 #include "readonly_impl.h"
+#include "../merger.h"
+#include "db_impl.h"
 #include "db_iter.h"
 #include "table_cache.h"
 #include "version_set.h"
 
-#include "../merger.h"
-
-#include "pdlfs-common/leveldb/db/snapshot.h"
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/filenames.h"
+#include "pdlfs-common/leveldb/snapshot.h"
 
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"
@@ -158,14 +158,14 @@ Status ReadonlyDBImpl::InternalGet(const ReadOptions& options, const Slice& key,
 
 Status ReadonlyDBImpl::Get(const ReadOptions& options, const Slice& key,
                            std::string* value) {
-  buffer::StringBuf buf(value);
+  db::StringBuf buf(value);
   Status s = InternalGet(options, key, &buf);
   return s;
 }
 
 Status ReadonlyDBImpl::Get(const ReadOptions& options, const Slice& key,
                            Slice* value, char* scratch, size_t scratch_size) {
-  buffer::DirectBuf buf(scratch, scratch_size);
+  db::DirectBuf buf(scratch, scratch_size);
   Status s = InternalGet(options, key, &buf);
   if (s.ok()) {
     *value = buf.Read();

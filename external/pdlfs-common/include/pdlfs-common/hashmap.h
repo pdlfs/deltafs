@@ -96,6 +96,19 @@ class HashTable {
     return Inject(e, ptr);
   }
 
+  // Remove a specific entry from the table. No effect when the entry is not in
+  // the table. Return the entry if it has been removed. Return NULL otherwise.
+  E* Remove(E* e) {
+    E** ptr = FindPointer(e->key(), e->hash);
+    E* curr = *ptr;
+    if (e == curr) {
+      *ptr = e->next_hash;
+      --elems_;
+      return e;
+    }
+    return NULL;
+  }
+
   // Return the removed entry if one exists, NULL otherwise.
   E* Remove(const Slice& key, uint32_t hash) {
     E** ptr = FindPointer(key, hash);
@@ -108,6 +121,9 @@ class HashTable {
   }
 
   bool Empty() const { return elems_ == 0; }
+  uint32_t Size() const {  ///
+    return elems_;
+  }
 
  private:
   // The table consists of an array of buckets where each bucket is

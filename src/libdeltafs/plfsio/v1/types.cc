@@ -11,7 +11,8 @@
 
 #include "types.h"
 
-#include "pdlfs-common/logging.h"
+#include "../../util/logging.h"
+
 #include "pdlfs-common/strutil.h"
 
 #include <string>

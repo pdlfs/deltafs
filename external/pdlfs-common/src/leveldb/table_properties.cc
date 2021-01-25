@@ -10,8 +10,9 @@
  */
 
 #include "pdlfs-common/leveldb/table_properties.h"
+#include "pdlfs-common/leveldb/internal_types.h"
+
 #include "pdlfs-common/coding.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
 
 namespace pdlfs {
 

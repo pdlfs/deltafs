@@ -19,7 +19,7 @@
 #include "../skiplist.h"
 
 #include "pdlfs-common/arena.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/leveldb/iterator.h"
 
 #include <string>

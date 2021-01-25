@@ -17,7 +17,6 @@
 #pragma once
 
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/random.h"
 
 #include <stdio.h>

@@ -9,15 +9,15 @@
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
 
+#include "snap_stor.h"
+
+#include "util/logging.h"
+
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/fio.h"
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/pdlfs_platform.h"
-#include "pdlfs-common/port.h"
 #include "pdlfs-common/strutil.h"
-
-#include "snap_stor.h"
 
 #include <map>
 

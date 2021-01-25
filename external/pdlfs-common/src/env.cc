@@ -15,9 +15,9 @@
  * found at https://github.com/google/leveldb.
  */
 #include "pdlfs-common/env.h"
+
 #include "pdlfs-common/env_files.h"
 #include "pdlfs-common/env_lazy.h"
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/port.h"
 
@@ -28,7 +28,8 @@
 #endif
 
 #if defined(PDLFS_PLATFORM_POSIX)
-#include "posix_logger.h"
+#include "posix/posix_env.h"
+#include "posix/posix_logger.h"
 #endif
 
 #if defined(PDLFS_GLOG)
@@ -71,8 +72,8 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
   if (env_conf.empty()) {
     env_conf_str = "~";
   }
-  Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name_str);
-  Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf_str);
+  // Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name_str);
+  // Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf_str);
 #endif
 // RADOS
 #if defined(PDLFS_RADOS)
@@ -80,24 +81,12 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
     return (Env*)PDLFS_Load_rados_env(env_conf.c_str());
   }
 #endif
-// POSIX
-#if defined(PDLFS_PLATFORM_POSIX)
-  if (env_name == "posix" || env_name == "posix.default") {
+  if (env_name == "unbufferedio") {
     *is_system = true;
-    return port::PosixGetDefaultEnv();
-  } else if (env_name == "posix.devnull") {
-    *is_system = true;
-    return port::PosixGetDevNullEnv();
-  } else if (env_name == "posix.unbufferedio") {
-    *is_system = true;
-    return port::PosixGetUnBufferedIOEnv();
-  } else if (env_name == "posix.directio") {
-    *is_system = true;
-    return port::PosixGetDirectIOEnv();
+    return Env::GetUnBufferedIoEnv();
   }
-#endif
   if (env_name.empty()) {
-    Warn(__LOG_ARGS__, "Open env without specifying a name...");
+    // Warn(__LOG_ARGS__, "Open env without specifying a name...");
   }
   if (env_name.empty() || env_name == "default") {
     *is_system = true;
@@ -105,22 +94,6 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
     return env;
   } else {
     return NULL;
-  }
-}
-
-static void EmitDBLog(Logger* log, const char* fmt, va_list ap) {
-  static const int lv = 3;
-  std::string fmt2 = "DB - ";
-  fmt2 += fmt;
-  log->Logv("pdlfs.xx", 0, 0, lv, fmt2.c_str(), ap);
-}
-
-void Log(Logger* info_log, const char* fmt, ...) {
-  if (info_log != NULL) {
-    va_list ap;
-    va_start(ap, fmt);
-    EmitDBLog(info_log, fmt, ap);
-    va_end(ap);
   }
 }
 
@@ -252,6 +225,16 @@ class NoOpLogger : public Logger {
   }
 };
 }  // namespace
+
+void Log0v(Logger* logger, const char* srcfile, int srcln, int loglvl,
+           const char* fmt, ...) {
+  if (logger) {
+    va_list ap;
+    va_start(ap, fmt);
+    logger->Logv(srcfile, srcln, 0, loglvl, fmt, ap);
+    va_end(ap);
+  }
+}
 
 Logger* Logger::Default() {
 #if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_GLOG)

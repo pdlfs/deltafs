@@ -10,21 +10,24 @@
  */
 
 #include "deltafs/deltafs_api.h"
-#include "deltafs/deltafs_config.h"
 
+#include "deltafs/deltafs_config.h"
 #include "deltafs_client.h"
 #include "deltafs_envs.h"
-
 #include "plfsio/v1/bufio.h"
 #include "plfsio/v1/cuckoo.h"
 #include "plfsio/v1/pdb.h"
 #include "plfsio/v1/range_writer.h"
 #include "plfsio/v1/types.h"
 #include "plfsio/v1/v1.h"
+#include "util/logging.h"
 
 #include "pdlfs-common/coding.h"
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/env_files.h"
-#include "pdlfs-common/logging.h"
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/filter_policy.h"
+#include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/murmur.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/pdlfs_config.h"
@@ -36,7 +39,6 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include <string>
 
 #ifndef EHOSTUNREACH
@@ -676,7 +678,7 @@ inline DirMode DefaultDirMode() {  // Assuming unique keys
 // Default system env.
 inline pdlfs::Env* DefaultDirEnv() {
 #if defined(PDLFS_PLATFORM_POSIX)
-  return pdlfs::port::PosixGetUnBufferedIOEnv();  // Avoid double-buffering
+  return pdlfs::Env::GetUnBufferedIoEnv();  // Avoid double-buffering
 #else
   return pdlfs::Env::Default();
 #endif
@@ -965,8 +967,7 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
           ignore_sync_(wrapper->ignore_sync_),
           drop_(wrapper->drop_),
           lck_(wrapper->lck_),
-          base_(base),
-          env_(wrapper) {}
+          base_(base) {}
 
     virtual ~TrafficControlledWritableFile() {
       delete base_;  // Owned by us
@@ -976,16 +977,16 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
       pdlfs::Status status;
       uint64_t io_start = 0;
       EnvLock l(lck_);
-      if (maxbw_ != 0) io_start = env_->NowMicros();
+      if (maxbw_ != 0) io_start = pdlfs::CurrentMicros();
       if (!drop_ && base_ != NULL) {  // Write data to the real destination
         status = base_->Append(data);
       }
       if (maxbw_ != 0 && status.ok()) {
         uint64_t delay = data.size() * 1000 * 1000 / maxbw_;
-        uint64_t now = env_->NowMicros();
+        uint64_t now = pdlfs::CurrentMicros();
         if (delay > 10 && now - io_start < delay - 10) {
           int sleep = static_cast<int>(delay + io_start - now - 10);
-          env_->SleepForMicroseconds(sleep);
+          pdlfs::SleepForMicroseconds(sleep);
         }
       }
       return status;
@@ -1028,7 +1029,6 @@ class DirEnvWrapper : public pdlfs::EnvWrapper {
     const bool drop_;
     pdlfs::Lockable* const lck_;
     WritableFile* const base_;  // May be NULL
-    Env* const env_;
   };
 };
 
@@ -1039,7 +1039,7 @@ pdlfs::Status DirEnvWrapper::NewSequentialFile(const char* f,
   if (s.ok()) {
     pdlfs::MutexLock ml(&mu_);
     pdlfs::SequentialFileStats* stats = new pdlfs::SequentialFileStats;
-    *r = new pdlfs::MeasuredSequentialFile(stats, file);
+    *r = new pdlfs::MonitoredSequentialFile(stats, file);
     sequentialfile_repo_.push_back(stats);
   } else {
     *r = NULL;
@@ -1054,7 +1054,7 @@ pdlfs::Status DirEnvWrapper::NewRandomAccessFile(const char* f,
   if (s.ok()) {
     pdlfs::MutexLock ml(&mu_);
     pdlfs::RandomAccessFileStats* stats = new pdlfs::RandomAccessFileStats;
-    *r = new pdlfs::MeasuredRandomAccessFile(stats, file);
+    *r = new pdlfs::MonitoredRandomAccessFile(stats, file);
     randomaccessfile_repo_.push_back(stats);
   } else {
     *r = NULL;
@@ -1070,7 +1070,7 @@ pdlfs::Status DirEnvWrapper::NewWritableFile(const char* f,
     pdlfs::MutexLock ml(&mu_);
     pdlfs::WritableFile* tc = new TrafficControlledWritableFile(this, file);
     pdlfs::WritableFileStats* stats = new pdlfs::WritableFileStats;
-    *r = new pdlfs::MeasuredWritableFile(stats, tc);
+    *r = new pdlfs::MonitoredWritableFile(stats, tc);
     writablefile_repo_.push_back(stats);
   } else {
     *r = NULL;

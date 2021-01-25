@@ -22,7 +22,6 @@
 
 #include <fcntl.h>
 #include <stdio.h>
-
 #include <string>
 #include <vector>
 
@@ -513,7 +512,7 @@ class PlfsFtBench {
     uint32_t num_ranks = kranks_ << 10;
     char tmp[12];
     fprintf(stderr, "Querying...\n");
-    const uint64_t start = Env::Default()->NowMicros();
+    const uint64_t start = CurrentMicros();
     for (uint32_t k = 0; k < num_keys; k += qstep_) {
       if ((k & 0x7FFu) == 0) {
         fprintf(stderr, "\r%.2f%%", 100.0 * k / num_keys);
@@ -529,7 +528,7 @@ class PlfsFtBench {
       }
       histo_.Add(n);
     }
-    const uint64_t end = Env::Default()->NowMicros();
+    const uint64_t end = CurrentMicros();
     const uint64_t dura = end - start;
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");
@@ -589,10 +588,16 @@ class PlfsFtBench {
   int mkeys_;
 };
 
+namespace test {
+bool DummyFilterTester(const Slice& key, const Slice& input) {
+  // For template instantiation
+  return false;
+}
+}  // namespace test
 template <size_t K, size_t V, int N = 10240>
 class PlfsFtBenchKv
-    : public PlfsFtBench<plfsio::CuckooBlock<K, V>,
-                         static_cast<plfsio::FilterTester>(NULL), N> {
+    : public PlfsFtBench<  ///
+          plfsio::CuckooBlock<K, V>, test::DummyFilterTester, N> {
  public:
   void LogAndApply() {
     plfsio::CuckooBlock<K, V>* const ft =
@@ -638,7 +643,7 @@ class PlfsFtBenchKv
     char tmp[8];
     Slice key(tmp, sizeof(tmp));
     fprintf(stderr, "Querying...\n");
-    const uint64_t start = Env::Default()->NowMicros();
+    const uint64_t start = CurrentMicros();
     const uint32_t step = this->qstep_;
     for (uint32_t k = 0; k < num_keys; k += step) {
       if ((k & 0x7FFu) == 0) {
@@ -650,7 +655,7 @@ class PlfsFtBenchKv
       this->histo_.Add(ranks.size());
       ranks.resize(0);
     }
-    const uint64_t end = Env::Default()->NowMicros();
+    const uint64_t end = CurrentMicros();
     const uint64_t dura = end - start;
     fprintf(stderr, "\r100.00%%");
     fprintf(stderr, "\n");

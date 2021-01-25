@@ -19,8 +19,8 @@
 #include "version_set.h"
 #include "write_batch_internal.h"
 
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/table.h"
 
@@ -65,8 +65,8 @@ class AtomicCounter {
   }
 };
 
-void DelayMilliseconds(int millis) {
-  Env::Default()->SleepForMicroseconds(millis * 1000);
+inline void DelayMilliseconds(int millis) {
+  SleepForMicroseconds(millis * 1000);
 }
 }  // namespace
 
@@ -1802,7 +1802,7 @@ TEST(DBTest, MissingSSTFile) {
   ASSERT_TRUE(s.ToString().find("issing") != std::string::npos) << s.ToString();
 }
 
-TEST(DBTest, StillReadSST) {
+TEST(DBTest, NoLongerReadSST) {
   ASSERT_OK(Put("foo", "bar"));
   ASSERT_EQ("bar", Get("foo"));
 
@@ -1815,7 +1815,7 @@ TEST(DBTest, StillReadSST) {
   options.paranoid_checks = true;
   Status s = TryReopen(&options);
   ASSERT_TRUE(s.ok());
-  ASSERT_EQ("bar", Get("foo"));
+  ASSERT_EQ("NOT_FOUND", Get("foo"));
 }
 
 TEST(DBTest, FilesDeletedAfterCompaction) {
@@ -2195,8 +2195,6 @@ void BM_LogAndApply(int iters, int num_base_files) {
   delete db;
   db = NULL;
 
-  Env* env = Env::Default();
-
   port::Mutex mu;
   MutexLock l(&mu);
 
@@ -2213,7 +2211,7 @@ void BM_LogAndApply(int iters, int num_base_files) {
   }
   ASSERT_OK(vset.LogAndApply(&vbase, &mu));
 
-  uint64_t start_micros = env->NowMicros();
+  uint64_t start_micros = CurrentMicros();
 
   for (int i = 0; i < iters; i++) {
     VersionEdit vedit;
@@ -2223,7 +2221,7 @@ void BM_LogAndApply(int iters, int num_base_files) {
     vedit.AddFile(2, fnum++, 1 /* file size */, 0, start, limit);
     vset.LogAndApply(&vedit, &mu);
   }
-  uint64_t stop_micros = env->NowMicros();
+  uint64_t stop_micros = CurrentMicros();
   unsigned int us = stop_micros - start_micros;
   char buf[16];
   snprintf(buf, sizeof(buf), "%d", num_base_files);

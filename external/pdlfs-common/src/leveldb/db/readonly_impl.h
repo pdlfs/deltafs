@@ -10,9 +10,9 @@
  */
 #pragma once
 
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
-#include "pdlfs-common/leveldb/db/readonly.h"
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/internal_types.h"
+#include "pdlfs-common/leveldb/readonly.h"
 #include "pdlfs-common/log_reader.h"
 #include "pdlfs-common/port.h"
 

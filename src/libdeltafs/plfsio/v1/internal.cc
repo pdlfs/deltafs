@@ -10,16 +10,17 @@
  */
 
 #include "internal.h"
+
+#include "../../util/logging.h"
 #include "events.h"
 #include "filter.h"
 
-#include "pdlfs-common/logging.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/strutil.h"
 
+#include <algorithm>
 #include <assert.h>
 #include <math.h>
-#include <algorithm>
 
 namespace pdlfs {
 extern const char* GetLengthPrefixedSlice(const char* p, const char* limit,
@@ -67,11 +68,6 @@ Compaction::~Compaction() {
   if (parent_ != NULL) {
     parent_->Unref();
   }
-}
-
-// Return current time in microseconds.
-static inline uint64_t GetCurrentTimeMicros() {
-  return Env::Default()->NowMicros();
 }
 
 // Create a new write buffer and determine an estimated memory usage per
@@ -677,7 +673,7 @@ void DirIndexer::CompactMemtable() {
   assert(ep != NULL);
   DirCompactor* dir = compactor_;
   mu_->Unlock();
-  const uint64_t start = GetCurrentTimeMicros();
+  const uint64_t start = CurrentMicros();
   if (options_.listener != NULL) {
     CompactionEvent event;
     event.type = kCompactionStart;
@@ -719,7 +715,7 @@ void DirIndexer::CompactMemtable() {
     }
   }
 
-  const uint64_t end = GetCurrentTimeMicros();
+  const uint64_t end = CurrentMicros();
   if (options_.listener != NULL) {
     CompactionEvent event;
     event.type = kCompactionEnd;

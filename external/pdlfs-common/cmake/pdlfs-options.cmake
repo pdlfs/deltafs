@@ -37,6 +37,8 @@ include (xpkg-import)
 #     - GFLAGS_INCLUDE_DIR: optional hint for finding gflags/gflags.h
 #     - GFLAGS_LIBRARY_DIR: optional hint for finding gflags lib
 #   -DPDLFS_GLOG=ON                        -- use glog for logging
+#   -DPDLFS_SILT_ECT=ON                    -- include SILT ECT code
+#   -DPDLFS_DFS_COMMON=ON                  -- include common DFS code
 #   -DPDLFS_MARGO_RPC=ON                   -- compile in margo rpc code
 #   -DPDLFS_MERCURY_RPC=ON                 -- compile in mercury rpc code
 #   -DPDLFS_RADOS=ON                       -- compile in RADOS env
@@ -109,18 +111,14 @@ set (PDLFS_COMMON_DEFINES "" CACHE
 # handle third party package configuration
 #
 
-set (PDLFS_GFLAGS "OFF" CACHE
-     BOOL "Use GFLAGS (libgflags-dev) for arg parsing")
-set (PDLFS_GLOG "OFF" CACHE
-     BOOL "Use GLOG (libgoogle-glog-dev) for logging")
-set (PDLFS_MARGO_RPC "OFF" CACHE
-     BOOL "Include Margo/abt-snoozer/argobots RPC interface")
-set (PDLFS_MERCURY_RPC "OFF" CACHE
-     BOOL "Include Mercury RPC interface")
-set (PDLFS_RADOS "OFF" CACHE
-     BOOL "Include RADOS object store")
-set (PDLFS_SNAPPY "OFF" CACHE
-     BOOL "Include (libsnappy-dev) for compression")
+set (PDLFS_DFS_COMMON  "OFF" CACHE BOOL "Include common DFS code")
+set (PDLFS_SILT_ECT    "OFF" CACHE BOOL "Include SILT ECT code")
+set (PDLFS_GFLAGS      "OFF" CACHE BOOL "Use GFLAGS for arg parsing")
+set (PDLFS_GLOG        "OFF" CACHE BOOL "Use GLOG for logging")
+set (PDLFS_MARGO_RPC   "OFF" CACHE BOOL "Use Margo RPC")
+set (PDLFS_MERCURY_RPC "OFF" CACHE BOOL "Use Mercury RPC")
+set (PDLFS_RADOS       "OFF" CACHE BOOL "Use RADOS OSD")
+set (PDLFS_SNAPPY      "OFF" CACHE BOOL "Use Snappy for compression")
 
 #
 # now start pulling the parts in.  currently we set find_package to

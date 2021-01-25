@@ -11,8 +11,8 @@
 
 #pragma once
 
+#include "pdlfs-common/fsdbx.h"
 #include "pdlfs-common/fstypes.h"
-#include "pdlfs-common/mdb.h"
 
 namespace pdlfs {
 #define DELTAFS_FENTRY_BUFSIZE 200 /* Buffer size for fentry encoding */

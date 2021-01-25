@@ -13,7 +13,7 @@
 #include "readonly_impl.h"
 
 #include "pdlfs-common/cache.h"
-#include "pdlfs-common/leveldb/db/readonly.h"
+#include "pdlfs-common/leveldb/readonly.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
 

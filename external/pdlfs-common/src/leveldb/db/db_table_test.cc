@@ -15,20 +15,18 @@
  * found at https://github.com/google/leveldb.
  */
 #include "memtable.h"
-#include "options_internal.h"
 #include "write_batch_internal.h"
 
 #include "pdlfs-common/leveldb/block.h"
 #include "pdlfs-common/leveldb/block_builder.h"
-#include "pdlfs-common/leveldb/db/db.h"
-#include "pdlfs-common/leveldb/db/dbformat.h"
+#include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/format.h"
+#include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/leveldb/iterator.h"
 #include "pdlfs-common/leveldb/table.h"
 #include "pdlfs-common/leveldb/table_builder.h"
 
 #include "pdlfs-common/env.h"
-#include "pdlfs-common/pdlfs_config.h"
 #include "pdlfs-common/random.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
