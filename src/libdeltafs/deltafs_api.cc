@@ -656,7 +656,8 @@ namespace {
 #define PLFSIO_CUCKOO_BITS 12
 typedef pdlfs::plfsio::CuckooBlock<PLFSIO_CUCKOO_KEYBITS, PLFSIO_CUCKOO_BITS>
     Cuckoo;
-#define PLFSIO_HASH_USE_SPOOKY  // Any prefix of a hash is still a hash
+#define PLFSIO_HASH_NO_HASH
+// Disabled: #define PLFSIO_HASH_USE_SPOOKY  // Any prefix of a hash is still a hash
 #define IMPORT(x) typedef pdlfs::plfsio::x x
 IMPORT(DirOptions);
 IMPORT(DirWriter);
@@ -1813,12 +1814,16 @@ ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
     s = BadArgs();
   } else {
     char tmp[16];
-#ifdef PLFSIO_HASH_USE_SPOOKY
+
+#ifdef PLFSIO_HASH_NO_HASH
+    pdlfs::Slice k(__fname, __dir->io_options->key_size);
+#elif PLFSIO_HASH_USE_SPOOKY
     pdlfs::Spooky128(__fname, strlen(__fname), 0, 0, tmp);
+    pdlfs::Slice k(tmp, __dir->io_options->key_size);
 #else
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
-#endif
     pdlfs::Slice k(tmp, __dir->io_options->key_size);
+#endif
     const char* data = static_cast<const char*>(__buf);
     pdlfs::Slice v(data, __sz);
     if (__dir->io_engine == DELTAFS_PLFSDIR_DEFAULT) {
