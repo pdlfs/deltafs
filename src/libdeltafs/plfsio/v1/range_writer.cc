@@ -76,17 +76,18 @@ Status PartitionManifestWriter::EpochFlush() {
     return Status::AssertionFailed("Already finished");
   }
 
+  std::string manifest_contents = FinishEpoch();
+  size_t cur_epoch_sz = manifest_contents.size();
 
   PutFixed32(&indexes_, num_ep_written_);
-  PutFixed64(&indexes_, off_prev_);
+  PutFixed64(&indexes_, cur_epoch_sz);
+
+  off_prev_ += cur_epoch_sz + 12;
   ++num_ep_written_;
 
-  std::string manifest_contents = FinishEpoch();
   if (!manifest_contents.empty()) {
-    indexes_.append(manifest_contents, manifest_contents.size());
+    indexes_.append(manifest_contents);
   }
-
-  off_prev_ += manifest_contents.size() + 12;
 
   return Status::OK();
 }
@@ -98,6 +99,7 @@ Status PartitionManifestWriter::Finish() {
   assert(dst_);
   PutFixed32(&indexes_, num_ep_written_);
   PutFixed64(&indexes_, off_prev_);
+
   Status status = dst_->Append(indexes_);
   if (status.ok()) {
     status = dst_->Sync();
@@ -147,7 +149,8 @@ int PartitionManifestWriter::GetMass(uint64_t& mass_total,
 
 size_t PartitionManifestWriter::Size() const { return items_.size(); }
 
-Status RangeWriter::UpdateBounds(const float bound_start, const float bound_end) {
+Status RangeWriter::UpdateBounds(const float bound_start,
+                                 const float bound_end) {
   MutexLock ml(&mu_);
 
   /* Strictly, should lock before updating, but this is only for measuring
@@ -312,13 +315,21 @@ Status RangeWriter::Close() {
   mu_.AssertHeld();
   assert(dst_);
 
-  // Manifest has the footer
   Status status = manifest_.Finish();
+  if (!status.ok()) return status;
 
-  if (status.ok()) {
-    status = dst_->Sync();
-    dst_->Close();
-  }
+  std::string footer;
+  PutFixed64(&footer, options_.key_size);
+  PutFixed64(&footer, options_.value_size);
+
+  status = dst_->Append(footer);
+  if (!status.ok()) return status;
+
+  status = dst_->Sync();
+  if (!status.ok()) return status;
+
+  status = dst_->Close();
+  if (!status.ok()) return status;
 
   if (logging_enabled_) logger_.Report();
 

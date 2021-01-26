@@ -92,8 +92,8 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
 
   void GetWriteStats(KeyType& range_min, KeyType& range_max,
                      uint32_t& num_items, uint32_t& num_oob) const {
-    range_min = expected_.range_min;
-    range_max = expected_.range_max;
+    range_min = observed_.range_min;
+    range_max = observed_.range_max;
     num_items = num_items_;
     num_oob = num_items_oob_;
   }
