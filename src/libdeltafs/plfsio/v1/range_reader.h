@@ -118,33 +118,112 @@ struct ParsedFooter {
   uint64_t val_sz;
 };
 
+struct KeyPair {
+  float key;
+  std::string value;
+};
+
+struct KeyPairComparator {
+  inline bool operator()(const KeyPair& lhs, const KeyPair& rhs) {
+    return lhs.key < rhs.key;
+  }
+};
+
+class RangeReaderPerfLogger {
+ public:
+  explicit RangeReaderPerfLogger(Env* env) : env_(env){};
+
+  void RegisterBegin(const char* key) { ts_begin_[key] = env_->NowMicros(); }
+
+  void RegisterEnd(const char* key) { ts_end_[key] = env_->NowMicros(); }
+
+  void PrintStats() {
+    std::map<const char*, uint64_t>::iterator it = ts_begin_.begin();
+
+    uint64_t intvl_total = 0;
+
+    for (; it != ts_begin_.end(); it++) {
+      const char* key = it->first;
+      uint64_t intvl_us = ts_end_[key] - ts_begin_[key];
+      intvl_total += intvl_us;
+
+      logf(LOG_INFO, "Event %s: %.2lf ms\n", it->first, intvl_us * 1e-3);
+    }
+    logf(LOG_INFO, "Event TOTAL: %.2lf ms\n", intvl_total * 1e-3);
+  }
+
+ private:
+  Env* const env_;
+  std::map<const char*, uint64_t> ts_begin_;
+  std::map<const char*, uint64_t> ts_end_;
+};
+
 class RangeReader {
  public:
   RangeReader(const DirOptions& options)
-      : options_(options), dir_path_(""), reader_(options.env), num_ranks_(0) {}
+      : options_(options),
+        dir_path_(""),
+        reader_(options.env),
+        num_ranks_(0),
+        logger_(options.env) {}
 
-  void Read(std::string dir_path);
+  Status Read(std::string dir_path);
+
+  Status Query(float rbegin, float rend) {
+    logger_.RegisterBegin("SSTREAD");
+
+    PartitionManifestMatch match_obj;
+    manifest_reader_.GetOverLappingEntries(rbegin, rend, match_obj);
+    logf(LOG_INFO, "Query Match: %llu SSTs found (%llu items)",
+         match_obj.items.size(), match_obj.mass_total);
+
+    Slice slice;
+    std::string scratch;
+    for (uint32_t i = 0; i < match_obj.items.size(); i++) {
+      PartitionManifestItem& item = match_obj.items[i];
+      logf(LOG_DBUG, "Item Rank: %d, Offset: %llu\n", item.rank, item.offset);
+      ReadBlock(item.rank, item.offset, item.part_item_count * 60, slice,
+                scratch);
+    }
+
+    logger_.RegisterEnd("SSTREAD");
+
+    logger_.RegisterBegin("SORT");
+    std::sort(query_results_.begin(), query_results_.end(),
+              KeyPairComparator());
+    logger_.RegisterEnd("SORT");
+
+    logf(LOG_INFO, "Query Results: %zu elements found\n",
+         query_results_.size());
+
+    logger_.PrintStats();
+
+    return Status::OK();
+  }
 
   Status ReadFooter(RandomAccessFile* fh, uint64_t fsz, ParsedFooter& pf);
 
-  void ReadFirstBlock() {
-    Slice s;
-    std::string scratch;
-
-    ReadBlock(0, 4194248, s, scratch);
-
-    for (int i = 0; i < 10; i++) {
-      printf("data-> %f\n", DecodeFloat32(&s[60 * i]));
-    }
-  }
-
-  void ReadBlock(uint64_t offset, uint64_t size, Slice& slice,
-                 std::string& scratch) {
+  void ReadBlock(int rank, uint64_t offset, uint64_t size, Slice& slice,
+                 std::string& scratch, bool preview = true) {
     scratch.resize(size);
     RandomAccessFile* src;
     uint64_t src_sz;
-    reader_.GetFileHandle(0, &src, &src_sz);
+    reader_.GetFileHandle(rank, &src, &src_sz);
     src->Read(offset, size, &slice, &scratch[0]);
+
+    uint64_t num_items = size / 60;
+    uint64_t vec_off = query_results_.size();
+
+    uint64_t block_offset = 0;
+    while (block_offset < size) {
+      KeyPair kp;
+      kp.key = DecodeFloat32(&slice[block_offset]);
+      //      kp.value = std::string(&slice[block_offset + 4], 56);
+      kp.value = "";
+      query_results_.push_back(kp);
+
+      block_offset += 60;
+    }
   }
 
  private:
@@ -153,6 +232,9 @@ class RangeReader {
   CachingDirReader reader_;
   PartitionManifestReader manifest_reader_;
   int num_ranks_;
+  std::vector<KeyPair> query_results_;
+
+  RangeReaderPerfLogger logger_;
 };
 }  // namespace plfsio
 }  // namespace pdlfs

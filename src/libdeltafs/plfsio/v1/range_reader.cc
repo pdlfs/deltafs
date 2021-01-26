@@ -98,7 +98,7 @@ Status CachingDirReader::ReadDirectory(std::string dir, int& num_ranks) {
   uint64_t fsz;
 
   for (int rank = 0;; rank++) {
-    std::string fname = RdbName(dir_, rank + 1);
+    std::string fname = RdbName(dir_, rank);
     bool file_exists = env_->FileExists(fname.c_str());
     if (!file_exists) break;
 
@@ -120,7 +120,9 @@ Status CachingDirReader::ReadDirectory(std::string dir, int& num_ranks) {
   return Status::OK();
 }
 
-void RangeReader::Read(std::string dir_path) {
+Status RangeReader::Read(std::string dir_path) {
+  logger_.RegisterBegin("MFREAD");
+
   dir_path_ = dir_path;
   reader_.ReadDirectory(dir_path_, num_ranks_);
 
@@ -133,7 +135,10 @@ void RangeReader::Read(std::string dir_path) {
     ReadFooter(src, src_sz, pf);
     manifest_reader_.ReadManifest(rank, pf.manifest_data, pf.manifest_sz);
   }
-//    ReadFirstBlock();
+
+  logger_.RegisterEnd("MFREAD");
+
+  return Status::OK();
 }
 
 Status RangeReader::ReadFooter(RandomAccessFile* fh, uint64_t fsz,
