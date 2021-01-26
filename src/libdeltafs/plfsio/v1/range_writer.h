@@ -91,12 +91,12 @@ class Bucket {
 };
 
 typedef struct PartitionManifestItem {
+  int rank;
   uint64_t offset;
   float part_range_begin;
   float part_range_end;
   uint32_t part_item_count;
   uint32_t part_item_oob;
-  int bucket_idx;
 
   bool Overlaps(float point) const {
     return point >= part_range_begin and point <= part_range_end;
