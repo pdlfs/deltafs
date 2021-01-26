@@ -47,7 +47,7 @@ namespace pdlfs {
 namespace plfsio {
 class PartitionManifestReader {
  public:
-  PartitionManifestReader() = default;
+  PartitionManifestReader() : mass_total_(0) {}
 
   Status ReadManifest(int rank, Slice& footer_data, uint64_t footer_sz);
 
@@ -72,6 +72,7 @@ class PartitionManifestReader {
 
  private:
   std::vector<PartitionManifestItem> items_;
+  uint64_t mass_total_;
 };
 
 struct FileCacheEntry {
@@ -218,7 +219,7 @@ class RangeReader {
     while (block_offset < size) {
       KeyPair kp;
       kp.key = DecodeFloat32(&slice[block_offset]);
-      //      kp.value = std::string(&slice[block_offset + 4], 56);
+      //            kp.value = std::string(&slice[block_offset + 4], 56);
       kp.value = "";
       query_results_.push_back(kp);
 

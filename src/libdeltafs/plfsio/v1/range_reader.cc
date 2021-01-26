@@ -45,6 +45,8 @@ void PartitionManifestReader::ReadFooterEpoch(int rank, Slice& data,
 
     items_.push_back(item);
 
+    mass_total_ += item.part_item_count;
+
     cur_offset += item_sz;
   }
 }
@@ -89,6 +91,8 @@ int PartitionManifestReader::GetOverLappingEntries(
       match.mass_oob += items_[i].part_item_oob;
     }
   }
+
+  logf(LOG_INFO, "Query Selectivity: %.4f %%\n", match.mass_total * 1.0 / mass_total_);
 
   return 0;
 }
