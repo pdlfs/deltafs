@@ -53,11 +53,11 @@ class PartitionManifestReader {
 
   int GetOverLappingEntries(float point, PartitionManifestMatch& match);
 
-  int GetOverLappingEntries(float range_begin, float range_end,
+  int GetOverLappingEntries(int epoch, float range_begin, float range_end,
                             PartitionManifestMatch& match);
 
  private:
-  void ReadFooterEpoch(int rank, Slice& data, uint64_t epoch_offset,
+  void ReadFooterEpoch(int epoch, int rank, Slice& data, uint64_t epoch_offset,
                        uint64_t epoch_sz);
 
   static void ComputeInternalOffsets(const size_t entry_sizes[],
@@ -170,11 +170,11 @@ class RangeReader {
 
   Status Read(std::string dir_path);
 
-  Status Query(float rbegin, float rend) {
+  Status Query(int epoch, float rbegin, float rend) {
     logger_.RegisterBegin("SSTREAD");
 
     PartitionManifestMatch match_obj;
-    manifest_reader_.GetOverLappingEntries(rbegin, rend, match_obj);
+    manifest_reader_.GetOverLappingEntries(epoch, rbegin, rend, match_obj);
     logf(LOG_INFO, "Query Match: %llu SSTs found (%llu items)",
          match_obj.items.size(), match_obj.mass_total);
 

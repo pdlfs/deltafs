@@ -7,7 +7,7 @@
 namespace pdlfs {
 namespace plfsio {
 
-void PartitionManifestReader::ReadFooterEpoch(int rank, Slice& data,
+void PartitionManifestReader::ReadFooterEpoch(int epoch, int rank, Slice& data,
                                               const uint64_t epoch_offset,
                                               const uint64_t epoch_sz) {
   /* | ENTRY | ENTRY | ENTRY | ...
@@ -33,6 +33,7 @@ void PartitionManifestReader::ReadFooterEpoch(int rank, Slice& data,
     PartitionManifestItem item;
     assert(i == DecodeFixed64(&data[cur_offset + offsets[0]]));
 
+    item.epoch = epoch;
     item.rank = rank;
     item.offset = DecodeFixed64(&data[cur_offset + offsets[1]]);
     item.part_range_begin = DecodeFloat32(&data[cur_offset + offsets[2]]);
@@ -61,7 +62,8 @@ Status PartitionManifestReader::ReadManifest(int rank, Slice& footer_data,
         DecodeFixed64(&footer_data[epoch_offset + sizeof(uint32_t)]);
     printf("%u %llu\n", num_ep_written, off_prev);
 
-    ReadFooterEpoch(rank, footer_data, epoch_offset + 12, off_prev);
+    ReadFooterEpoch(num_ep_written, rank, footer_data, epoch_offset + 12,
+                    off_prev);
 
     epoch_offset += off_prev + 12;
   }
@@ -83,16 +85,19 @@ int PartitionManifestReader::GetOverLappingEntries(
 }
 
 int PartitionManifestReader::GetOverLappingEntries(
-    float range_begin, float range_end, PartitionManifestMatch& match) {
+    int epoch, float range_begin, float range_end,
+    PartitionManifestMatch& match) {
   for (size_t i = 0; i < items_.size(); i++) {
-    if (items_[i].Overlaps(range_begin, range_end)) {
+    if (items_[i].epoch == epoch &&
+        items_[i].Overlaps(range_begin, range_end)) {
       match.items.push_back(items_[i]);
       match.mass_total += items_[i].part_item_count;
       match.mass_oob += items_[i].part_item_oob;
     }
   }
 
-  logf(LOG_INFO, "Query Selectivity: %.4f %%\n", match.mass_total * 1.0 / mass_total_);
+  logf(LOG_INFO, "Query Selectivity: %.4f %%\n",
+       match.mass_total * 1.0 / mass_total_);
 
   return 0;
 }

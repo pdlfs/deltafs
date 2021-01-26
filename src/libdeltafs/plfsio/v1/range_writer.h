@@ -91,6 +91,7 @@ class Bucket {
 };
 
 typedef struct PartitionManifestItem {
+  int epoch;
   int rank;
   uint64_t offset;
   float part_range_begin;

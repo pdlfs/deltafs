@@ -39,7 +39,7 @@ namespace plfsio{
     options.env = env;
     RangeReader rr(options);
     rr.Read(dpath);
-    rr.Query(0.041, 0.042);
+    rr.Query(0, 0.041, 0.042);
   }
 }
 }

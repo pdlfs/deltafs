@@ -38,7 +38,7 @@ size_t PartitionManifestWriter::AddItem(uint64_t offset,
   size_t item_idx = items_.size();
 
   items_.push_back(
-      {-1, offset, range_begin, range_end, part_count, part_oob});
+      {-1, -1, offset, range_begin, range_end, part_count, part_oob});
 
   range_min_ = std::min(range_min_, range_begin);
   range_max_ = std::max(range_max_, range_end);
