@@ -243,7 +243,11 @@ Status RangeWriter::EpochFlush() {
   MutexLock ml(&mu_);
 
   // flush all data, block until over
-  Status s = __Flush<RangeWriter>(false);
+  // this needs to be synchronous to ensure
+  // that the manifest has data
+  // XXX: consider making things async wrt manifest
+  // metadata if performance bottleneck
+  Status s = __Flush<RangeWriter>(true);
 
   // flush manifest
   manifest_.EpochFlush();
