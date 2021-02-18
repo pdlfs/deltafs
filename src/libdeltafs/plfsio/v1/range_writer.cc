@@ -257,11 +257,17 @@ Status RangeWriter::EpochFlush() {
 
 Status RangeWriter::Sync() {
   MutexLock ml(&mu_);
+  bufs_active_.resize(2);
+  bufs_active_[0] = reinterpret_cast<void**>(&membuf_prev_);
+  bufs_active_[1] = reinterpret_cast<void**>(&membuf_cur_);
   return __Sync<RangeWriter>(false);
 }
 
 Status RangeWriter::Flush() {
   MutexLock ml(&mu_);
+  bufs_active_.resize(2);
+  bufs_active_[0] = reinterpret_cast<void**>(&membuf_prev_);
+  bufs_active_[1] = reinterpret_cast<void**>(&membuf_cur_);
   return __Flush<RangeWriter>(false);
 }
 
