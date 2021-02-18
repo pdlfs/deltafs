@@ -51,9 +51,6 @@ Slice OrderedBlockBuilder<KeyType>::Finish() {
     buffer_.append(rawbuf_staging + key_offset, key_size_ + value_size_);
   }
 
-  PutFixed32(&buffer_, value_size_);
-  PutFixed32(&buffer_, key_size_);
-
   return AbstractBlockBuilder::Finish(kNoCompression, false);
 }
 
