@@ -96,11 +96,22 @@ Status PartitionManifestWriter::Finish() {
   if (finished_) {
     return Status::AssertionFailed("Already finished");
   }
+
+  Status status = Status::OK();
+
+  // EpochFlush is called by clients at the beginning of the next epoch
+  // so the last one needs to be called manually
+  if (Size()) {
+    status = EpochFlush();
+  }
+
+  if (!status.ok()) return status;
+
   assert(dst_);
   PutFixed32(&indexes_, num_ep_written_);
   PutFixed64(&indexes_, off_prev_);
 
-  Status status = dst_->Append(indexes_);
+  status = dst_->Append(indexes_);
   if (status.ok()) {
     status = dst_->Sync();
   }
@@ -275,14 +286,17 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
 
   if (logging_enabled_) logger_.RegisterCompacPreprocess(compac_seq);
 
+  uint64_t offset = 0;
+
   mu_.Lock();  // All writes are serialized through compac_seq
   assert(num_compac_completed_ < compac_seq);
   while (compac_seq != num_compac_completed_ + 1) {
     bg_cv_.Wait();
   }
+  offset = offset_;
   mu_.Unlock();
 
-  manifest_.AddItem(offset_, bb);
+  manifest_.AddItem(offset, bb);
 
   //  printf("Compacted: %p @ %u (%.3f to %.3f), %u-%u\n", immbuf, offset_,
   //         buf_range.range_min, buf_range.range_max, num_items, num_oob);
@@ -294,6 +308,8 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
 
   if (logging_enabled_) logger_.RegisterCompacPostprocess(compac_seq);
 
+  mu_.Lock();
+
   if (status.ok()) {
     offset_ += block_contents.size();
   }
@@ -301,7 +317,6 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
   if (status.ok()) {
     status = dst_->Flush();
   }
-  mu_.Lock();
 
   if (logging_enabled_) logger_.RegisterCompacEnd(compac_seq);
 
