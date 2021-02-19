@@ -26,9 +26,8 @@ template <typename KeyType>
 void OrderedBlockBuilder<KeyType>::Add(const Slice& key, const Slice& value) {
   KeyType keyNum = DecodeFloat32(key.data());
   observed_.Extend(keyNum);
-  keys_staging_.push_back(key_ptr(keyNum, bytes_written_));
+  keys_staging_.push_back(key_ptr(keyNum, num_items_));
 
-  buffer_staging_.append(key.data(), key_size_);
   buffer_staging_.append(value.data(), value_size_);
 
   bytes_written_ += key_size_ + value_size_;
@@ -38,17 +37,30 @@ void OrderedBlockBuilder<KeyType>::Add(const Slice& key, const Slice& value) {
   }
 }
 
-template <typename KeyType>
-Slice OrderedBlockBuilder<KeyType>::Finish() {
+template <>
+Slice OrderedBlockBuilder<float>::Finish() {
   assert(!finished_);
+
+  assert(sizeof(float) == 32u);
 
   std::sort(keys_staging_.begin(), keys_staging_.end(),
             OrderedBlockBuilder::KeyPtrComparator);
   const char* rawbuf_staging = buffer_staging_.c_str();
 
+  assert(buf_.size() = 0u);
+
+  size_t buf_offset = 0u;
+
+  size_t num_keys = keys_staging_.size();
+  for (size_t i = 0; i < num_keys; i++) {
+    float key = keys_staging_[i].first;
+    EncodeFloat32(&buffer_[buf_offset], key);
+    buf_offset += 32u;
+  }
+
   for (size_t i = 0; i < keys_staging_.size(); i++) {
     size_t key_offset = keys_staging_[i].second;
-    buffer_.append(rawbuf_staging + key_offset, key_size_ + value_size_);
+    buffer_.append(rawbuf_staging + key_offset * value_size_, value_size_);
   }
 
   return AbstractBlockBuilder::Finish(kNoCompression, false);
