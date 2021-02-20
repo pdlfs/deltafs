@@ -120,7 +120,7 @@ class RangeWriterBench {
     ASSERT_OK(env->NewWritableFile("test.tbl", &dst));
     options_.allow_env_threads = false;
     options_.key_size = 4;
-    options_.value_size = 60;
+    options_.value_size = 56;
     options_.env = env;
     rdb = new RangeWriter(options_, dst, buf_size_, n_);
     const uint64_t start = env->NowMicros();
@@ -161,6 +161,8 @@ class RangeWriterBench {
     ASSERT_OK(rdb->Finish());
     uint64_t dura = env->NowMicros() - start;
     Report(dura);
+
+    dst->Close();
 
     delete rdb;
     delete dst;
