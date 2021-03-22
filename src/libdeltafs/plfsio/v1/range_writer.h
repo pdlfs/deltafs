@@ -221,7 +221,7 @@ class RangeWriter : public MultiBuffering {
 
   ~RangeWriter();
 
-  Status UpdateBounds(const float bound_start, const float bound_end);
+  Status UpdateBounds(const float rmin, const float rmax);
 
  private:
   RangeWriterPerfLogger logger_;
@@ -232,6 +232,7 @@ class RangeWriter : public MultiBuffering {
 
   BlockBuf* membuf_cur_;
   BlockBuf* membuf_prev_;
+  BlockBuf* membuf_prev2_;
 
   typedef ArrayBlock Block;
   const DirOptions& options_;
@@ -242,6 +243,9 @@ class RangeWriter : public MultiBuffering {
   // Memory pre-reserved for each write buffer
   size_t buf_reserv_;
   uint64_t offset_;  // Current write offset
+
+  BlockBuf** bbs_;  // Array of *ALL* blockbufs, mainly for garbage collection
+  size_t n_;        // size of bbs_ array
 
   friend class MultiBuffering;
   Status Compact(uint32_t seq, void* buf);
@@ -269,9 +273,6 @@ class RangeWriter : public MultiBuffering {
   }
 
   static void BGWork(void*);
-
-  BlockBuf** bbs_;
-  size_t n_;
 };
 }  // namespace plfsio
 }  // namespace pdlfs

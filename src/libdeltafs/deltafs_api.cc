@@ -2061,10 +2061,10 @@ int deltafs_plfsdir_filter_finish(deltafs_plfsdir_t* __dir) {
   }
 }
 
-int deltafs_plfsdir_range_update(deltafs_plfsdir_t* __dir, float rbeg, float rend) {
+int deltafs_plfsdir_range_update(deltafs_plfsdir_t* __dir, float rmin, float rmax) {
   pdlfs::Status s;
   if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
-    s = __dir->range_writer_->UpdateBounds(rbeg, rend);
+    s = __dir->range_writer_->UpdateBounds(rmin, rmax);
   } else {
     s = BadArgs();
   }

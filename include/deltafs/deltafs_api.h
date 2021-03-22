@@ -151,8 +151,8 @@ int deltafs_plfsdir_filter_put(deltafs_plfsdir_t* __dir, const char* __key,
 int deltafs_plfsdir_filter_flush(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_filter_finish(deltafs_plfsdir_t* __dir);
 /* inform CARP backend of repartitioning */
-int deltafs_plfsdir_range_update(deltafs_plfsdir_t* __dir, float rbeg,
-                                 float rend);
+int deltafs_plfsdir_range_update(deltafs_plfsdir_t* __dir, float rmin,
+                                 float rmax);
 int deltafs_plfsdir_io_open(deltafs_plfsdir_t* __dir, const char* __name);
 ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
                                   size_t __sz);

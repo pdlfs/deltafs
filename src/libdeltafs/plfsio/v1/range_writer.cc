@@ -160,22 +160,31 @@ int PartitionManifestWriter::GetMass(uint64_t& mass_total,
 
 size_t PartitionManifestWriter::Size() const { return items_.size(); }
 
-Status RangeWriter::UpdateBounds(const float bound_start,
-                                 const float bound_end) {
+Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
   MutexLock ml(&mu_);
+  Status s = Status::OK();
 
   /* Strictly, should lock before updating, but this is only for measuring
    * "pollution" - who cares if it's a couple of counters off */
+  membuf_prev2_->UpdateExpectedRange(membuf_prev_->GetExpectedRange());
   membuf_prev_->UpdateExpectedRange(membuf_cur_->GetExpectedRange());
-  membuf_cur_->UpdateExpectedRange(bound_start, bound_end);
+  membuf_cur_->UpdateExpectedRange(rmin, rmax);
 
   uint32_t ignored_compac_seq;
-  // XXX: disabled flushing prev_, assuming that it will reduce metadata items
+
+  // XXX: disabled flushing prev2_, assuming that it will reduce metadata items
   // without significantly affecting overlaps
-  //  Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_prev_),
-  //  &ignored_compac_seq);
-  Status s = Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_cur_),
-                                  &ignored_compac_seq);
+
+  //  s = Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_prev2_),
+  //                           &ignored_compac_seq, /* force */ true);
+  //  if (!s.ok()) return s;
+
+  s = Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_prev_),
+                           &ignored_compac_seq, /* force */ true);
+  if (!s.ok()) return s;
+
+  s = Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_cur_),
+                           &ignored_compac_seq, /* force */ true);
 
   return s;
 }
@@ -202,11 +211,12 @@ RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
   for (size_t i = 0; i < n_; i++) {
     bbs_[i] = new BlockBuf(options_);
     bbs_[i]->Reserve(buf_reserv_);
-    if (i > 1) bufs_.push_back(bbs_[i]);
+    if (i > 2) bufs_.push_back(bbs_[i]);
   }
 
   membuf_cur_ = bbs_[0];
   membuf_prev_ = bbs_[1];
+  membuf_prev2_ = bbs_[2];
 }
 
 RangeWriter::~RangeWriter() {
@@ -226,7 +236,9 @@ Status RangeWriter::Add(const Slice& k, const Slice& v) {
   MutexLock ml(&mu_);
   float key_val = DecodeFloat32(k.data());
   BlockBuf** dest_buf =
-      membuf_cur_->Inside(key_val) ? &membuf_cur_ : &membuf_prev_;
+      membuf_cur_->Inside(key_val)
+          ? &membuf_cur_
+          : (membuf_prev_->Inside(key_val) ? &membuf_prev_ : &membuf_prev2_);
   return __Add<RangeWriter>(reinterpret_cast<void**>(dest_buf), k, v, false);
 }
 
@@ -308,8 +320,8 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
 
   manifest_.AddItem(offset, bb);
 
-  //  printf("Compacted: %p @ %u (%.3f to %.3f), %u-%u\n", immbuf, offset_,
-  //         buf_range.range_min, buf_range.range_max, num_items, num_oob);
+  //    printf("Compacted: %p @ %u (%.3f to %.3f), %u-%u\n", immbuf, offset_,
+  //           buf_range.range_min, buf_range.range_max, num_items, num_oob);
 
   Status status;
   if (!block_contents.empty()) {
