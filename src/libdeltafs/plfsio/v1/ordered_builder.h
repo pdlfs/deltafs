@@ -29,7 +29,7 @@ struct Range {
   float range_min = FLT_MAX;
   float range_max = FLT_MIN;
 
-  Range& operator=(Range& r) {
+  Range& operator=(const Range& r) {
     range_min = r.range_min;
     range_max = r.range_max;
     return *this;
@@ -42,6 +42,17 @@ struct Range {
 
   bool Inside(float f) const { return (f >= range_min && f <= range_max); }
 
+  bool IsSet() const { return (range_min != FLT_MAX) and (range_max != FLT_MIN); }
+
+  bool Overlaps(float qr_min, float qr_max) const {
+    if (qr_min > qr_max) return false;
+
+    bool qr_envelops =
+        (qr_min < range_min) and (qr_max > range_max) and IsSet();
+
+    return Inside(qr_min) or Inside(qr_max) or qr_envelops;
+  }
+
   bool IsValid() const {
     return ((range_min == FLT_MAX && range_max == FLT_MIN) or
             (range_min < range_max));
@@ -50,6 +61,13 @@ struct Range {
   void Extend(float f) {
     range_min = std::min(range_min, f);
     range_max = std::max(range_max, f);
+  }
+
+  void Set(float qr_min, float qr_max) {
+    if (qr_min > qr_max) return;
+
+    range_min = qr_min;
+    range_max = qr_max;
   }
 };
 
@@ -62,6 +80,7 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
         key_size_(options.key_size),
         n_(0),
         bytes_written_(0),
+        updcnt_(0),
         num_items_(0),
         num_items_oob_(0) {
     // TODO: what is this used for again?
@@ -90,18 +109,26 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
 
   Range GetObservedRange() { return observed_; }
 
-  void GetWriteStats(KeyType& range_min, KeyType& range_max,
-                     uint32_t& num_items, uint32_t& num_oob) const {
-    range_min = observed_.range_min;
-    range_max = observed_.range_max;
+  uint32_t GetUpdateCount() const { return updcnt_; }
+
+  void GetNumItems(uint32_t& num_items, uint32_t& num_oob) const {
     num_items = num_items_;
     num_oob = num_items_oob_;
   }
 
-  void UpdateExpectedRange(Range range) { expected_ = range; }
+  void CopyFrom(OrderedBlockBuilder* other) {
+    UpdateExpectedRange(other->GetExpectedRange());
+    updcnt_ = other->updcnt_;
+  }
+
+  void UpdateExpectedRange(Range range) {
+    updcnt_++;
+    expected_ = range;
+  }
 
   void UpdateExpectedRange(float rmin, float rmax) {
     assert(rmin <= rmax);
+    updcnt_++;
 
     expected_.range_min = rmin;
     expected_.range_max = rmax;
@@ -120,6 +147,7 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
   /* Range properties */
   Range expected_;
   Range observed_;
+  uint32_t updcnt_;
   uint32_t num_items_ = 0;
   uint32_t num_items_oob_ = 0;
 

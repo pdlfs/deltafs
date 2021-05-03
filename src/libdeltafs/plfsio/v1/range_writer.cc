@@ -30,18 +30,26 @@ size_t PartitionManifestWriter::AddItem(uint64_t offset,
   assert(sst);
 
   uint32_t part_count = 0, part_oob = 0;
-  float range_begin = 0, range_end = 0;
-  sst->GetWriteStats(range_begin, range_end, part_count, part_oob);
+  sst->GetNumItems(part_count, part_oob);
 
   if (part_count == 0) return SIZE_MAX;
 
   size_t item_idx = items_.size();
 
-  items_.push_back(
-      {-1, -1, offset, range_begin, range_end, part_count, part_oob});
+  PartitionManifestItem item;
+  item.epoch = -1;
+  item.rank = -1;
+  item.offset = offset;
+  item.expected = sst->GetExpectedRange();
+  item.observed = sst->GetObservedRange();
+  item.updcnt = sst->GetUpdateCount();
+  item.part_item_count = part_count;
+  item.part_item_oob = part_oob;
 
-  range_min_ = std::min(range_min_, range_begin);
-  range_max_ = std::max(range_max_, range_end);
+  items_.push_back(item);
+
+  range_min_ = std::min(range_min_, item.observed.range_min);
+  range_max_ = std::max(range_max_, item.observed.range_max);
 
   mass_total_ += part_count;
   mass_oob_ += part_oob;
@@ -56,8 +64,11 @@ std::string PartitionManifestWriter::FinishEpoch() {
     PartitionManifestItem& item = items_[i];
     PutFixed64(&contents, i);
     PutFixed64(&contents, item.offset);
-    PutFloat32(&contents, item.part_range_begin);
-    PutFloat32(&contents, item.part_range_end);
+    PutFloat32(&contents, item.expected.range_min);
+    PutFloat32(&contents, item.expected.range_max);
+    PutFloat32(&contents, item.observed.range_min);
+    PutFloat32(&contents, item.observed.range_max);
+    PutFixed32(&contents, item.updcnt);
     PutFixed32(&contents, item.part_item_count);
     PutFixed32(&contents, item.part_item_oob);
   }
@@ -82,6 +93,7 @@ Status PartitionManifestWriter::EpochFlush() {
   PutFixed32(&indexes_, num_ep_written_);
   PutFixed64(&indexes_, cur_epoch_sz);
 
+  // 12 = size of prev two Puts
   off_prev_ += cur_epoch_sz + 12;
   ++num_ep_written_;
 
@@ -172,12 +184,9 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
 
   uint32_t ignored_compac_seq;
 
-  // XXX: disabled flushing prev2_, assuming that it will reduce metadata items
-  // without significantly affecting overlaps
-
-  //  s = Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_prev2_),
-  //                           &ignored_compac_seq, /* force */ true);
-  //  if (!s.ok()) return s;
+  s = Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_prev2_),
+                           &ignored_compac_seq, /* force */ true);
+  if (!s.ok()) return s;
 
   s = Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_prev_),
                            &ignored_compac_seq, /* force */ true);
@@ -197,6 +206,7 @@ RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
       manifest_(dst),
       membuf_cur_(NULL),
       membuf_prev_(NULL),
+      membuf_prev2_(NULL),
       options_(options),
       dst_(dst),
       bg_cv_(&mu_),

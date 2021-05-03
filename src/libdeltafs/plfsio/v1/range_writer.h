@@ -94,17 +94,18 @@ typedef struct PartitionManifestItem {
   int epoch;
   int rank;
   uint64_t offset;
-  float part_range_begin;
-  float part_range_end;
+  Range expected;
+  Range observed;
+  uint32_t updcnt;
   uint32_t part_item_count;
   uint32_t part_item_oob;
 
   bool Overlaps(float point) const {
-    return point >= part_range_begin and point <= part_range_end;
+    return expected.Inside(point);
   }
+
   bool Overlaps(float range_begin, float range_end) const {
-    return Overlaps(range_begin) or Overlaps(range_end) or
-           ((range_begin < part_range_begin) and (range_end > part_range_end));
+    return expected.Overlaps(range_begin, range_end);
   }
 } PartitionManifestItem;
 
@@ -269,7 +270,7 @@ class RangeWriter : public MultiBuffering {
     mu_.AssertHeld();
     BlockBuf* bb_prev = static_cast<BlockBuf*>(buf_prev);
     BlockBuf* bb_next = static_cast<BlockBuf*>(buf_next);
-    bb_next->UpdateExpectedRange(bb_prev->GetExpectedRange());
+    bb_next->CopyFrom(bb_prev);
   }
 
   static void BGWork(void*);
