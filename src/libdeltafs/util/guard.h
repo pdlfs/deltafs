@@ -11,6 +11,7 @@
 #pragma once
 
 #include <assert.h>
+#include <stddef.h>
 
 namespace pdlfs {
 
