@@ -313,7 +313,7 @@ class PlfsFilterBench {
 #if defined(PDLFS_PLATFORM_POSIX)
 #if defined(PDLFS_OS_LINUX)
     const double k = 1000.0;
-    const uint64_t start = Env::Default()->NowMicros();
+    const uint64_t start = CurrentMicros();
 #endif
     struct rusage tmp_usage;
     int r0 = getrusage(RUSAGE_SELF, &tmp_usage);
@@ -332,7 +332,7 @@ class PlfsFilterBench {
     fprintf(stderr, "Done!\n");
 #if defined(PDLFS_PLATFORM_POSIX)
 #if defined(PDLFS_OS_LINUX)
-    const uint64_t end = Env::Default()->NowMicros();
+    const uint64_t end = CurrentMicros();
     const uint64_t dura = end - start;
 #endif
 #endif
