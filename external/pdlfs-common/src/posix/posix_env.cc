@@ -15,6 +15,7 @@
  * found at https://github.com/google/leveldb.
  */
 #include "posix_env.h"
+
 #include "posix_bgrun.h"
 #include "posix_fastcopy.h"
 #include "posix_filecopy.h"
@@ -236,7 +237,7 @@ class PosixEnv : public Env {
   }
 
  private:
-  FixedThreadPool tpool_;
+  PosixThreadPool tpool_;
   LockTable locks_;
 };
 
@@ -360,6 +361,8 @@ Status PosixError(const Slice& err_context, int err_number) {
       return Status::AlreadyExists(err_context);
     case ENOENT:
       return Status::NotFound(err_context);
+    case EACCES:
+      return Status::AccessDenied(err_context);
     default:
       return Status::IOError(err_context, strerror(err_number));
   }

@@ -235,7 +235,7 @@ class HashMap {
     }
   }
 
-  T* Insert(const Slice& key, T* value) {
+  T* Insert(const Slice& key, T* value = NULL) {
     const size_t base = sizeof(E);
     E* e = static_cast<E*>(malloc(base - 1 + key.size()));
     e->value = value;

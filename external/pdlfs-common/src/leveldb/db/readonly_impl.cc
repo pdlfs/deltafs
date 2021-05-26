@@ -10,11 +10,13 @@
  */
 
 #include "readonly_impl.h"
-#include "../merger.h"
+
 #include "db_impl.h"
 #include "db_iter.h"
 #include "table_cache.h"
 #include "version_set.h"
+
+#include "../merger.h"
 
 #include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/snapshot.h"
@@ -53,7 +55,9 @@ ReadonlyDBImpl::~ReadonlyDBImpl() {
   if (owns_cache_) delete options_.block_cache;
   if (owns_table_cache_) delete options_.table_cache;
 
-  env_->DetachDir(dbname_.c_str());
+  if (options_.detach_dir_on_close) {
+    env_->DetachDir(dbname_.c_str());
+  }
 }
 
 Status ReadonlyDBImpl::Load() {
@@ -84,8 +88,11 @@ Status ReadonlyDBImpl::Load() {
   }
 
   if (fname.empty()) {
-    return Status::Corruption(dbname_, "no valid manifest available");
+    return Status::Corruption(dbname_, "No valid manifest available");
   } else {
+#if VERBOSE >= 1
+    Log(options_.info_log, 1, "Fast forwarding db state to %s", fname.c_str());
+#endif
     assert(logfile_ == NULL);
     Status s = env_->NewSequentialFile(fname.c_str(), &logfile_);
     if (s.ok()) {
@@ -271,6 +278,9 @@ Status ReadonlyDB::Open(const Options& options, const std::string& dbname,
   *dbptr = NULL;
 
   ReadonlyDBImpl* impl = new ReadonlyDBImpl(options, dbname);
+#if VERBOSE >= 1
+  Log(options.info_log, 1, "Opening db at %s ...", dbname.c_str());
+#endif
   impl->mutex_.Lock();
   Status s = impl->Load();
   impl->mutex_.Unlock();

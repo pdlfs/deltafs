@@ -18,10 +18,11 @@
 
 #include "write_batch_internal.h"
 
-#include "pdlfs-common/env.h"
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/internal_types.h"
 #include "pdlfs-common/leveldb/snapshot.h"
+
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/log_writer.h"
 #include "pdlfs-common/port.h"
 
@@ -65,11 +66,14 @@ class DBImpl : public DB {
   virtual bool GetProperty(const Slice& property, std::string* value);
   virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes);
   virtual void CompactRange(const Slice* begin, const Slice* end);
-  virtual Status DrainCompactions();
   virtual Status AddL0Tables(const InsertOptions&, const std::string& dir);
   virtual Status Dump(const DumpOptions&, const Range& range,
                       const std::string& dir, SequenceNumber* min_seq,
                       SequenceNumber* max_seq);
+  // Compaction control interface
+  virtual Status ResumeDbCompaction();  // Dynamically resume bg compaction
+  virtual Status FreezeDbCompaction();  // Dynamically pause compaction
+  virtual Status DrainCompactions();
 
   // Extra methods that are not in the public DB interface
 
@@ -124,16 +128,13 @@ class DBImpl : public DB {
   // Compact the in-memory write buffer to disk.  Switches to a new
   // log-file/memtable and writes a new descriptor iff successful.
   // Errors are recorded in bg_error_.
-  //
-  // Subclasses may override the compaction process.
-  virtual void CompactMemTable();
-  virtual Status RecoverLogFile(uint64_t log_number, VersionEdit* edit,
-                                SequenceNumber* max_sequence);
+  void CompactMemTable();
+  Status RecoverLogFile(uint64_t log_number, VersionEdit* edit,
+                        SequenceNumber* max_sequence);
 
-  Status WriteMemTable(MemTable* mem, VersionEdit* edit, Version* base);
+  Status DumpMemTable(MemTable* mem, VersionEdit* edit, Version* base);
   Status WriteLevel0Table(Iterator* iter, VersionEdit* edit, Version* base,
-                          SequenceNumber* min_seq, SequenceNumber* max_seq,
-                          bool force_level0);
+                          SequenceNumber* min_seq, SequenceNumber* max_seq);
 
   Status MakeRoomForWrite(bool force /* compact even if there is room? */);
   WriteBatch* BuildBatchGroup(Writer** last_writer);
@@ -144,6 +145,7 @@ class DBImpl : public DB {
   void MaybeScheduleCompaction();
   static void BGWork(void* db);
   void BackgroundCall();
+  void BackgroundCompactionWrapper();
   void BackgroundCompaction();
   void CleanupCompaction(CompactionState* compact);
   Status DoCompactionWork(CompactionState* compact);
@@ -188,7 +190,13 @@ class DBImpl : public DB {
   std::deque<Writer*> writers_;
   WriteBatch flush_memtable_;  // Dummy batch representing a compaction request
   WriteBatch sync_wal_;        // Dummy batch representing a WAL sync request
+  // Temporary storage for grouping write batches
   WriteBatch tmp_batch_;
+  // Number of time a writer is soft limited, hard limited, or waits for buffer
+  // room
+  uint64_t l0_soft_limits_;
+  uint64_t l0_hard_limits_;
+  uint64_t l0_waits_;
 
   SnapshotList snapshots_;
 
@@ -196,11 +204,18 @@ class DBImpl : public DB {
   // part of ongoing compactions.
   std::set<uint64_t> pending_outputs_;
 
-  // If not zero, will temporarily stop background compactions
+  // If not zero, will disable the scheduling of compactions that are not
+  // memtable compactions or manual compactions
+  unsigned int bg_compaction_disabled_;
+  // If not zero, will stop scheduling any new compactions and will pause the
+  // progress of an ongoing compaction if there is one
   unsigned int bg_compaction_paused_;
-  // Has a background compaction been scheduled or is running?
+  // Has a background compaction been scheduled and not yet completed?
   bool bg_compaction_scheduled_;
-  // Has an outstanding bulk insertion request?
+  // Is there an active background compaction job? Background compaction work
+  // may be paused (inactive) in the middle
+  bool bg_compaction_in_progress_;
+  // Is there an active foreground bulk insertion job?
   bool bulk_insert_in_progress_;
 
   // Information for a manual compaction
@@ -224,13 +239,32 @@ class DBImpl : public DB {
     int64_t micros;
     int64_t bytes_read;
     int64_t bytes_written;
+    // Number of files produced.
+    int64_t files;
+    // Number of files read at the target level of compaction.
+    int64_t in0;
+    // Number of files read at the parent level.
+    int64_t in1;
+    // Number of compactions.
+    int64_t n;
 
-    CompactionStats() : micros(0), bytes_read(0), bytes_written(0) {}
+    CompactionStats()
+        : micros(0),
+          bytes_read(0),
+          bytes_written(0),
+          files(0),
+          in0(0),
+          in1(0),
+          n(0) {}
 
     void Add(const CompactionStats& c) {
       this->micros += c.micros;
       this->bytes_read += c.bytes_read;
       this->bytes_written += c.bytes_written;
+      this->files += c.files;
+      this->in0 += c.in0;
+      this->in1 += c.in1;
+      this->n += c.n;
     }
   };
   CompactionStats stats_[config::kNumLevels];

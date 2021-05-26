@@ -8,19 +8,21 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #pragma once
 
-#include "pdlfs-common/leveldb/dbfiles.h"
+#include "rados_comm.h"
 
-#include "rados_common.h"
-#include "rados_conn.h"
+#include "pdlfs-common/rados/rados_connmgr.h"
+
+#include "pdlfs-common/ofs.h"
+#include "pdlfs-common/port.h"
 
 namespace pdlfs {
 namespace rados {
 
-class RadosEnv : public EnvWrapper {
+class RadosEnv : public Env {
  public:
+  Ofs* TEST_GetOfs() { return ofs_; }
   virtual ~RadosEnv();
   virtual Status NewSequentialFile(const char* f, SequentialFile** r);
   virtual Status NewRandomAccessFile(const char* f, RandomAccessFile** r);
@@ -29,61 +31,39 @@ class RadosEnv : public EnvWrapper {
   virtual Status GetFileSize(const char* f, uint64_t* size);
   virtual Status DeleteFile(const char* f);
   virtual Status CopyFile(const char* src, const char* dst);
-  virtual Status RenameFile(const char* src, const char* dst);
 
+  // The following operations are emulated through file sets.
   virtual Status GetChildren(const char* dir, std::vector<std::string>* r);
   virtual Status CreateDir(const char* dir);
   virtual Status AttachDir(const char* dir);
   virtual Status DeleteDir(const char* dir);
   virtual Status DetachDir(const char* dir);
 
- private:
-  Status MountDir(const char* dir, bool force_create);
-  Status UnmountDir(const char* dir, bool force_delete);
-  Status RenameLocalTmpToRados(const char* tmp, const char* dst);
-  bool PathOnRados(const char* pathname);
-  bool FileOnRados(const char* fname);
+  // The following operations are not supported.
+  virtual Status RenameFile(const char* src, const char* dst);
+  virtual Status LockFile(const char* f, FileLock** l);
+  virtual Status UnlockFile(FileLock* l);
+  virtual void Schedule(void (*f)(void*), void* a);
+  virtual void StartThread(void (*f)(void*), void* a);
+  virtual Status GetTestDirectory(std::string* path);
+  virtual Status NewLogger(const char* fname, Logger** result);
 
-  RadosEnv(Env* e) : EnvWrapper(e) {}
-  friend class RadosConn;
-  size_t wal_buf_size_;
-  std::string rados_root_;
+ private:
+  Status MountDir(const char* dir, bool create_dir);
+  Status UnmountDir(const char* dir, bool also_delete_dir);
+  // No copy allowed
+  void operator=(const RadosEnv& other);
+  RadosEnv(const RadosEnv&);
+  explicit RadosEnv(
+      const RadosEnvOptions&
+          options);  // Full construction is done through RadosConnMgr
+  friend class RadosConnMgr;
+  // Constant after construction
+  RadosEnvOptions options_;
   Ofs* ofs_;
   bool owns_osd_;
   Osd* osd_;
 };
-
-inline FileType TryResolveFileType(const char* fname) {
-  FileType type;
-  uint64_t number;
-  Slice path = fname;
-  // We only interest in the last component of the file path.
-  const char* p = strrchr(fname, '/');
-  if (p != NULL) {
-    path.remove_prefix(static_cast<size_t>(p - fname) + 1);
-  }
-  // Handle foreign files by returning an invalid type code.
-  if (!ParseFileName(path, &number, &type)) {
-    return static_cast<FileType>(kMaxFileType + 1);
-  } else {
-    return type;
-  }
-}
-
-inline bool TypeOnRados(FileType type) {
-  switch (type) {
-    case kTableFile:
-    case kLogFile:
-    case kDescriptorFile:
-    case kCurrentFile:
-      return true;
-    case kDBLockFile:
-    case kTempFile:
-    case kInfoLogFile:
-    default:  // This includes all foreign files
-      return false;
-  }
-}
 
 }  // namespace rados
 }  // namespace pdlfs

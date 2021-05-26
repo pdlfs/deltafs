@@ -8,15 +8,11 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "pdlfs-common/fio.h"
-#include "pdlfs-common/coding.h"
-#include "pdlfs-common/pdlfs_config.h"
-#include "pdlfs-common/strutil.h"
 
-#if defined(PDLFS_RADOS)
-#include "pdlfs-common/rados/rados_ld.h"
-#endif
+#include "pdlfs-common/coding.h"
+#include "pdlfs-common/port.h"
+#include "pdlfs-common/strutil.h"
 
 #if defined(PDLFS_PLATFORM_POSIX)
 #include "posix/posix_fio.h"
@@ -52,11 +48,6 @@ Fio* Fio::Open(const char* name, const char* conf) {
 #if VERBOSE >= 1
   // Verbose(__LOG_ARGS__, 1, "fio.name -> %s", fio_name.c_str());
   // Verbose(__LOG_ARGS__, 1, "fio.conf -> %s", fio_conf.c_str());
-#endif
-#if defined(PDLFS_RADOS)
-  if (fio_name == "rados") {
-    return reinterpret_cast<Fio*>(PDLFS_Load_rados_fio(fio_conf.c_str()));
-  }
 #endif
   if (fio_name == "posix") {
 #if defined(PDLFS_PLATFORM_POSIX)

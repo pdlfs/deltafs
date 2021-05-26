@@ -27,16 +27,15 @@
 set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c/crc32c.cc
      crc32c/crc32c_sw.cc crc32c/crc32c_sse42.cc env.cc
      env_files.cc fsdbx.cc fstypes.cc hash.cc histogram.cc
-     log_reader.cc log_writer.cc murmur.cc port_posix.cc
-     posix/posix_bgrun.cc posix/posix_filecopy.cc
+     log_reader.cc log_writer.cc murmur.cc osd.cc ofs.cc ofs_impl.cc
+     port_posix.cc posix/posix_bgrun.cc posix/posix_filecopy.cc
      posix/posix_env.cc posix/posix_fastcopy.cc posix/posix_logger.cc
-     posix/posix_mmap.cc posix/posix_net.cc
-     random.cc slice.cc spooky/SpookyV2.cpp spooky.cc
-     status.cc strutil.cc testharness.cc testutil.cc
+     posix/posix_mmap.cc random.cc slice.cc spooky/SpookyV2.cpp
+     spooky.cc status.cc strutil.cc testharness.cc testutil.cc
      xxhash/xxhash.c xxhash.cc)
 set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
-     crc32c/crc32c_test.cc env_test.cc fsdbx_test.cc
-     fstypes_test.cc hash_test.cc log_test.cc random_test.cc
+     crc32c/crc32c_test.cc env_test.cc fsdbx_test.cc fstypes_test.cc
+     hash_test.cc log_test.cc ofs_test.cc osd_test.cc random_test.cc
      strutil_test.cc)
 
 # leveldb sources and tests
@@ -58,11 +57,11 @@ set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
 
 # common dfs sources and tests
 if (PDLFS_DFS_COMMON)
-    set (pdlfs-dfs-srcs gigaplus.cc fio.cc osd.cc
-            ofs.cc ofs_impl.cc posix/posix_fio.cc
+    set (pdlfs-dfs-srcs gigaplus.cc fio.cc posix/posix_fio.cc
+            posix/posix_net.cc posix/posix_rpc.cc
+            posix/posix_rpc_tcp.cc posix/posix_rpc_udp.cc
             rpc.cc)
     set (pdlfs-dfs-tests gigaplus_test.cc fio_test.cc
-            ofs_test.cc osd_test.cc
             rpc_test.cc)
 endif ()
 
@@ -90,9 +89,11 @@ endif ()
 
 # Add rados srcs if user has requested it and rados is found
 if (TARGET rados AND PDLFS_RADOS)
-    set (pdlfs-rados-srcs rados_common.cc rados_conn.cc rados_env.cc
-         rados_fio.cc rados_ld.cc rados_osd.cc)
-    set (pdlfs-rados-tests rados_env_test.cc rados_fio_test.cc)
+    set (pdlfs-rados-srcs rados_comm.cc rados_connmgr.cc
+            rados_db_env.cc rados_env.cc rados_osd.cc)
+    set (pdlfs-rados-tests rados_connmgr_test.cc
+            rados_db_env_test.cc rados_bulk_test.cc
+            rados_env_test.cc rados_osd_test.cc)
 endif ()
 
 

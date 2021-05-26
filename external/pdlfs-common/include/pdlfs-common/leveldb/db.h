@@ -177,6 +177,22 @@ class DB {
   // Return OK on success, or a non-OK status on errors.
   virtual Status SyncWAL() = 0;
 
+  // Resume background db compaction. No effect when
+  // DBOptions().disable_compaction has been set to true. Undefined when no
+  // FreezeCompaction() calls have been made before.
+  // Return OK on success, or a non-OK status on errors.
+  // REQUIRES: one or more FreezeCompaction() calls must have been called
+  // before.
+  virtual Status ResumeDbCompaction() = 0;
+
+  // Dynamically pause background db compaction. If multiple FreezeCompaction()
+  // calls have been made, the same amount of ResumeCompaction() calls must be
+  // made to resume compaction. This call does not stop the current compaction
+  // from making progress. Nor does it wait for it to complete. Memtable dumps
+  // and manual compactions are not effected by this call.
+  // Return OK on success, or a non-OK status on errors.
+  virtual Status FreezeDbCompaction() = 0;
+
   // Keep scheduling compactions until no compaction is needed.
   // Wait for all compactions to finish.
   // REQUIRES: db must remain active during this operation.
@@ -202,8 +218,8 @@ class DB {
   DB(const DB&);
 };
 
-// Destroy the contents of the specified database.
-// Be very careful using this method.
+// Destroy the contents of the specified database. Be very careful using this
+// method. If options.env is NULL, Env::Default() will be used.
 Status DestroyDB(const std::string& dbname, const DBOptions& options);
 
 // If a DB cannot be opened, you may attempt to call this method to

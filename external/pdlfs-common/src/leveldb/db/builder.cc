@@ -15,6 +15,7 @@
  * found at https://github.com/google/leveldb.
  */
 #include "builder.h"
+
 #include "table_cache.h"
 
 #include "pdlfs-common/leveldb/filenames.h"
@@ -36,7 +37,7 @@ Status BuildTable(const std::string& dbname, Env* env, const DBOptions& options,
   meta->seq_off = 0;
   iter->SeekToFirst();
 
-  const std::string fname = TableFileName(dbname, meta->number);
+  std::string fname = TableFileName(dbname, meta->number);
   if (iter->Valid()) {
     WritableFile* file;
     s = env->NewWritableFile(fname.c_str(), &file);
@@ -80,7 +81,7 @@ Status BuildTable(const std::string& dbname, Env* env, const DBOptions& options,
     delete file;
     file = NULL;
 
-    if (s.ok()) {
+    if (s.ok() && !options.table_builder_skip_verification) {
       Table* table;
       // Verify that the table is usable
       Iterator* it = table_cache->NewIterator(

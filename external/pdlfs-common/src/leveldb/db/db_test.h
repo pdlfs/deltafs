@@ -56,6 +56,8 @@ class EmptyDB : public DB {
     }
   }
   virtual void CompactRange(const Slice* start, const Slice* end) {}
+  virtual Status ResumeDbCompaction() { return Status::OK(); }
+  virtual Status FreezeDbCompaction() { return Status::OK(); }
   virtual Status DrainCompactions() { return Status::OK(); }
   virtual Status FlushMemTable(const FlushOptions& o) {
     return Status::BufferFull(Slice());

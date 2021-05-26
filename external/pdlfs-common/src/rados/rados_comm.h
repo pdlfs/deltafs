@@ -8,20 +8,26 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #pragma once
 
-#include <rados/librados.h>
-#include "rados_conn.h"
-
 #include "pdlfs-common/coding.h"
-#include "pdlfs-common/logging.h"
+#include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"
-#include "pdlfs-common/ofs.h"
 #include "pdlfs-common/port.h"
+
+#include <rados/librados.h>
 
 namespace pdlfs {
 namespace rados {
+
+// Handle to an open rados cluster connection.
+struct RadosConn {
+  char cluster_fsid[37];
+  RadosConn* prev;
+  RadosConn* next;
+  rados_t cluster;
+  int nrefs;
+};
 
 // Async I/O operation context.
 class RadosOpCtx {
@@ -57,14 +63,15 @@ class RadosOpCtx {
 };
 
 inline Status RadosError(const char* err_ctx, int err_num) {
-  char tmp[100];
-  snprintf(tmp, sizeof(tmp), "%s: %s", err_ctx, strerror(-err_num));
-  if (err_num != -ENOENT && err_num != -EEXIST) {
-    return Status::IOError(tmp);
-  } else if (err_num == -EEXIST) {
-    return Status::AlreadyExists(tmp);
-  } else {
-    return Status::NotFound(tmp);
+  switch (-err_num) {
+    case EEXIST:
+      return Status::AlreadyExists(err_ctx);
+    case ENOENT:
+      return Status::NotFound(err_ctx);
+    case 0:
+      return Status::OK();
+    default:
+      return Status::IOError(err_ctx, strerror(-err_num));
   }
 }
 

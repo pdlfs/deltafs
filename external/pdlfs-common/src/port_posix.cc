@@ -15,7 +15,6 @@
  * found at https://github.com/google/leveldb.
  */
 #include "pdlfs-common/port_posix.h"
-#include "pdlfs-common/pdlfs_platform.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -25,7 +24,8 @@ namespace port {
 
 void PthreadCall(const char* label, int result) {
   if (result != 0) {
-    fprintf(stderr, "pthread %s: %s\n", label, strerror(result));
+    fprintf(stderr, "Error performing %s: %s\n", label, strerror(result));
+    fflush(stderr);
     abort();
   }
 }

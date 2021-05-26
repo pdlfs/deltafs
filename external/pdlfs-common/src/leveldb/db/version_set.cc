@@ -221,18 +221,33 @@ class Version::LevelFileNumIterator : public Iterator {
   mutable char value_buf_[24];
 };
 
-static Iterator* GetFileIterator(void* arg, const ReadOptions& options,
-                                 const Slice& file_value) {
+namespace {
+Iterator* GetPrefetchedFileIterator(void* arg, const ReadOptions& options,
+                                    const Slice& file_value) {
   TableCache* cache = reinterpret_cast<TableCache*>(arg);
   if (file_value.size() != 24) {
     return NewErrorIterator(
-        Status::Corruption("FileReader invoked with unexpected value"));
+        Status::Corruption("Bad file_num/file_size/seq_off encoding"));
   } else {
-    return cache->NewIterator(options, DecodeFixed64(file_value.data()),
-                              DecodeFixed64(file_value.data() + 8),
-                              DecodeFixed64(file_value.data() + 16));
+    return cache->NewDirectIterator(  ///
+        options, true, DecodeFixed64(&file_value[0]),
+        DecodeFixed64(&file_value[8]), DecodeFixed64(&file_value[16]));
   }
 }
+
+Iterator* GetFileIterator(void* arg, const ReadOptions& options,
+                          const Slice& file_value) {
+  TableCache* cache = reinterpret_cast<TableCache*>(arg);
+  if (file_value.size() != 24) {
+    return NewErrorIterator(
+        Status::Corruption("Bad file_num/file_size/seq_off encoding"));
+  } else {
+    return cache->NewIterator(  ///
+        options, DecodeFixed64(&file_value[0]), DecodeFixed64(&file_value[8]),
+        DecodeFixed64(&file_value[16]));
+  }
+}
+}  // namespace
 
 Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
                                             int level) const {
@@ -512,7 +527,7 @@ int Version::PickLevelForMemTableOutput(const Slice& smallest_user_key,
     InternalKey start(smallest_user_key, kMaxSequenceNumber, kValueTypeForSeek);
     InternalKey limit(largest_user_key, 0, static_cast<ValueType>(0));
     std::vector<FileMetaData*> overlaps;
-    while (level < config::kMaxMemCompactLevel) {
+    while (level < vset_->options_->max_mem_compact_level) {
       if (OverlapInLevel(level + 1, &smallest_user_key, &largest_user_key)) {
         break;
       }
@@ -903,6 +918,10 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
       descriptor_log_ = new log::Writer(descriptor_file_);
       s = WriteSnapshot(descriptor_log_);
     }
+#if VERBOSE >= 2
+    Log(options_->info_log, 2, "Writing %s: %s", new_manifest_file.c_str(),
+        s.ToString().c_str());
+#endif
   }
 
   // Unlock during expensive MANIFEST log write
@@ -995,7 +1014,7 @@ Status VersionSet::Recover() {
     s = ReadFileToString(env_, curr.c_str(), &current);
     if (s.ok() && !current.empty()) {
       if (current[current.size() - 1] != '\n') {
-        s = Status::Corruption("CURRENT file does not end with newline");
+        s = Status::Corruption(curr, "CURRENT file does not end with newline");
       } else {
         current.resize(current.size() - 1);
         manifests[2] = dbname_ + "/" + current;
@@ -1038,7 +1057,10 @@ Status VersionSet::Recover() {
         uint64_t log_number = 0;
         uint64_t prev_log_number = 0;
         Builder* builder = new Builder(this, current);
-
+#if VERBOSE >= 1
+        Log(options_->info_log, 1, "Restoring db from %s",
+            manifests[i].c_str());
+#endif
         {
           LogReporter reporter;
           reporter.status = &s;
@@ -1088,11 +1110,14 @@ Status VersionSet::Recover() {
 
         if (s.ok()) {
           if (!have_next_file) {
-            s = Status::Corruption("no next_file entry in descriptor");
+            s = Status::Corruption(manifests[i].c_str(),
+                                   "No next_file entry in descriptor");
           } else if (!have_log_number) {
-            s = Status::Corruption("no log_number entry in descriptor");
+            s = Status::Corruption(manifests[i].c_str(),
+                                   "No log_number entry in descriptor");
           } else if (!have_last_sequence) {
-            s = Status::Corruption("no last_seq_number entry in descriptor");
+            s = Status::Corruption(manifests[i].c_str(),
+                                   "No last_seq_number entry in descriptor");
           }
 
           if (!have_prev_log_number) {
@@ -1135,7 +1160,7 @@ Status VersionSet::Recover() {
 
   if (status.ok()) {
     if (selected == NULL) {
-      status = Status::Corruption(dbname_, "no valid manifest available");
+      status = Status::Corruption(dbname_, "No valid db manifest found");
     } else {
       Version* v = new Version(this);
       selected->SaveTo(v);
@@ -1367,9 +1392,9 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
   options.verify_checksums = options_->paranoid_checks;
   options.fill_cache = false;
 
-  // Level-0 files have to be merged together.  For other levels,
-  // we will make a concatenating iterator per level.
-  // TODO(opt): use concatenating iterator for level-0 if there is no overlap
+  // Level-0 files have to be merged together. For other levels, we will make a
+  // concatenating iterator per level.
+  // XXX: use concatenating iterator for level-0 if there is no overlap
   const int space = (c->level() == 0 ? c->inputs_[0].size() + 1 : 2);
   Iterator** list = new Iterator*[space];
   int num = 0;
@@ -1378,15 +1403,26 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
       if (c->level() + which == 0) {
         const std::vector<FileMetaData*>& files = c->inputs_[which];
         for (size_t i = 0; i < files.size(); i++) {
-          list[num++] =
-              table_cache_->NewIterator(options, files[i]->number,
-                                        files[i]->file_size, files[i]->seq_off);
+          if (!options_->prefetch_compaction_input) {
+            list[num++] = table_cache_->NewIterator(options, files[i]->number,
+                                                    files[i]->file_size,
+                                                    files[i]->seq_off);
+          } else {
+            list[num++] = table_cache_->NewDirectIterator(
+                options, true, files[i]->number, files[i]->file_size,
+                files[i]->seq_off);
+          }
         }
-      } else {
-        // Create concatenating iterator for the files from this level
-        list[num++] = NewTwoLevelIterator(
-            new Version::LevelFileNumIterator(icmp_, &c->inputs_[which]),
-            &GetFileIterator, table_cache_, options);
+      } else {  // Create concatenating iterator for the files from this level
+        if (!options_->prefetch_compaction_input) {
+          list[num++] = NewTwoLevelIterator(
+              new Version::LevelFileNumIterator(icmp_, &c->inputs_[which]),
+              &GetFileIterator, table_cache_, options);
+        } else {
+          list[num++] = NewTwoLevelIterator(
+              new Version::LevelFileNumIterator(icmp_, &c->inputs_[which]),
+              &GetPrefetchedFileIterator, table_cache_, options);
+        }
       }
     }
   }

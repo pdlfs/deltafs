@@ -10,8 +10,13 @@
  */
 #include "rados_env.h"
 
+#include "pdlfs-common/leveldb/db.h"
+#include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/testharness.h"
 
+#include <algorithm>
+#include <stdio.h>
+#include <string.h>
 #include <vector>
 
 // Parameters for opening ceph.
@@ -25,10 +30,11 @@ const char* FLAGS_conf = NULL;  // Use ceph defaults
 namespace pdlfs {
 namespace rados {
 
-class RadosEnvTest {
+class RadosBulkTest {
  public:
-  RadosEnvTest() : working_dir_("/testdir1/testdir2") {
-    bytes_ = "xyzxyzxyz";
+  RadosBulkTest() {
+    working_dir1_ = test::TmpDir() + "/rados_bulk1";
+    working_dir2_ = test::TmpDir() + "/rados_bulk2";
     RadosConnMgrOptions options;
     mgr_ = new RadosConnMgr(options);
     env_ = NULL;
@@ -42,80 +48,71 @@ class RadosEnvTest {
         RadosConnOptions(), &conn));
     ASSERT_OK(mgr_->OpenOsd(conn, FLAGS_pool_name, RadosOptions(), &osd));
     env_ = mgr_->OpenEnv(osd, true, RadosEnvOptions());
-    env_->CreateDir(working_dir_.c_str());
+    DBOptions options = GetRadosDbOptions();
+    options.env = env_;
+    env_->CreateDir(working_dir1_.c_str());
+    DestroyDB(working_dir1_, options);
+    env_->CreateDir(working_dir2_.c_str());
+    DestroyDB(working_dir2_, options);
     mgr_->Release(conn);
   }
 
-  inline std::string TEST_filename(const char* file) {
-    return working_dir_ + "/" + file;
-  }
-
-  Status Delete(
-      const std::string& fname) {  // Caller must have the dir mounted readwrite
-    return env_->DeleteFile(fname.c_str());
-  }
-
-  bool Exists(const std::string& fname) {
-    return env_->FileExists(fname.c_str());
-  }
-
-  ~RadosEnvTest() {
-    env_->DeleteDir(working_dir_.c_str());
+  ~RadosBulkTest() {
+    env_->DetachDir(working_dir2_.c_str());
+    env_->DetachDir(working_dir1_.c_str());
     delete env_;
     delete mgr_;
   }
 
-  std::string bytes_;  // Test file contents
-  std::string working_dir_;
+  // Disable the use of an info log file, a lock file, and a CURRENT file so
+  // that we can run db directly atop a raw rados env.
+  static DBOptions GetRadosDbOptions() {
+    DBOptions options;
+    options.info_log = Logger::Default();
+    options.rotating_manifest = true;
+    options.skip_lock_file = true;
+    return options;
+  }
+
+  std::string GetFromDb(const std::string& key, DB* db) {
+    std::string tmp;
+    Status s = db->Get(ReadOptions(), key, &tmp);
+    if (s.IsNotFound()) {
+      tmp = "NOT_FOUND";
+    } else if (!s.ok()) {
+      tmp = s.ToString();
+    }
+    return tmp;
+  }
+
+  std::string working_dir1_;
+  std::string working_dir2_;
   RadosConnMgr* mgr_;
   Env* env_;
 };
 
-TEST(RadosEnvTest, ReadAndWrite) {
+TEST(RadosBulkTest, BulkIn) {
   Open();
-  std::string fname1 = TEST_filename("f1");
-  std::string fname2 = TEST_filename("f2");
-  ASSERT_OK(WriteStringToFile(env_, bytes_, fname1.c_str()));
-  ASSERT_TRUE(Exists(fname1));
-  std::string tmp;
-  ASSERT_OK(ReadFileToString(env_, fname1.c_str(), &tmp));
-  ASSERT_EQ(Slice(tmp), bytes_);
-  ASSERT_OK(Delete(fname1));
-  ASSERT_FALSE(Exists(fname2));
-}
-
-TEST(RadosEnvTest, ListDir) {
-  Open();
-  std::string fname1 = TEST_filename("f1");
-  std::string fname2 = TEST_filename("f2");
-  ASSERT_OK(WriteStringToFile(env_, bytes_, fname1.c_str()));
-  ASSERT_OK(WriteStringToFile(env_, bytes_, fname2.c_str()));
-  std::vector<std::string> v;
-  ASSERT_OK(env_->GetChildren(working_dir_.c_str(), &v));
-  ASSERT_EQ(v.size(), 2);
-  ASSERT_OK(Delete(fname1));
-  ASSERT_OK(Delete(fname2));
-}
-
-TEST(RadosEnvTest, MountAndUnmount) {
-  Open();
-  std::string fname1 = TEST_filename("f1");
-  std::string fname2 = TEST_filename("f2");
-  ASSERT_OK(WriteStringToFile(env_, bytes_, fname1.c_str()));
-  // Test unmount and re-mount readonly
-  ASSERT_OK(env_->DetachDir(working_dir_.c_str()));
-  ASSERT_OK(env_->AttachDir(working_dir_.c_str()));
-  ASSERT_TRUE(Exists(fname1));
-  ASSERT_ERR(WriteStringToFile(env_, bytes_, fname2.c_str()));
-  ASSERT_FALSE(Exists(fname2));
-  // Test unmount and re-mount readwrite
-  ASSERT_OK(env_->DetachDir(working_dir_.c_str()));
-  ASSERT_OK(env_->CreateDir(working_dir_.c_str()));
-  ASSERT_TRUE(Exists(fname1));
-  ASSERT_OK(WriteStringToFile(env_, bytes_, fname2.c_str()));
-  ASSERT_TRUE(Exists(fname2));
-  ASSERT_OK(Delete(fname1));
-  ASSERT_OK(Delete(fname2));
+  DBOptions options = GetRadosDbOptions();
+  options.detach_dir_on_close = true;
+  options.create_if_missing = true;
+  options.env = env_;
+  DB* db;
+  ASSERT_OK(DB::Open(options, working_dir1_, &db));
+  WriteOptions wo;
+  ASSERT_OK(db->Put(wo, "k1", "v1"));
+  FlushOptions fo;
+  ASSERT_OK(db->FlushMemTable(fo));
+  delete db;  // This will detach working_dir1_
+  options.error_if_exists = false;
+  ASSERT_OK(DB::Open(options, working_dir2_, &db));
+  InsertOptions in;
+  in.attach_dir_on_start = true;
+  in.detach_dir_on_complete = true;
+  in.method = kCopy;
+  ASSERT_OK(db->AddL0Tables(in, working_dir1_));
+  ASSERT_EQ("v1", GetFromDb("k1", db));
+  delete db;  // This will detach working_dir2_
 }
 
 }  // namespace rados

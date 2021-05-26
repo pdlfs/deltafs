@@ -19,7 +19,6 @@
 
 #include "pdlfs-common/leveldb/db.h"
 #include "pdlfs-common/leveldb/filenames.h"
-#include "pdlfs-common/leveldb/table.h"
 #include "pdlfs-common/leveldb/write_batch.h"
 
 #include "pdlfs-common/cache.h"
@@ -28,11 +27,6 @@
 #include "pdlfs-common/strutil.h"
 #include "pdlfs-common/testharness.h"
 #include "pdlfs-common/testutil.h"
-
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 
 namespace pdlfs {
 
@@ -163,7 +157,7 @@ class CorruptionTest {
   void Corrupt(FileType filetype, int offset, int bytes_to_corrupt) {
     // Pick file to corrupt
     std::vector<std::string> filenames;
-    ASSERT_OK(env_.GetChildren(dbname_.c_str(), &filenames));
+    ASSERT_OK(env_.target()->GetChildren(dbname_.c_str(), &filenames));
     uint64_t number;
     FileType type;
     std::string fname;
@@ -177,25 +171,22 @@ class CorruptionTest {
     }
     ASSERT_TRUE(!fname.empty()) << filetype;
 
-    struct stat sbuf;
-    if (stat(fname.c_str(), &sbuf) != 0) {
-      const char* msg = strerror(errno);
-      ASSERT_TRUE(false) << fname << ": " << msg;
-    }
+    uint64_t file_size = 0;
+    ASSERT_OK(env_.target()->GetFileSize(fname.c_str(), &file_size));
 
     if (offset < 0) {
       // Relative to end of file; make it absolute
-      if (-offset > sbuf.st_size) {
+      if (-offset > file_size) {
         offset = 0;
       } else {
-        offset = sbuf.st_size + offset;
+        offset = file_size + offset;
       }
     }
-    if (offset > sbuf.st_size) {
-      offset = sbuf.st_size;
+    if (offset > file_size) {
+      offset = file_size;
     }
-    if (offset + bytes_to_corrupt > sbuf.st_size) {
-      bytes_to_corrupt = sbuf.st_size - offset;
+    if (offset + bytes_to_corrupt > file_size) {
+      bytes_to_corrupt = file_size - offset;
     }
 
     // Do it
@@ -355,7 +346,7 @@ TEST(CorruptionTest, CompactionInputError) {
   Build(10);
   DBImpl* dbi = reinterpret_cast<DBImpl*>(db_);
   dbi->TEST_CompactMemTable();
-  const int last = config::kMaxMemCompactLevel;
+  const int last = options_.max_mem_compact_level;
   ASSERT_EQ(1, Property("leveldb.num-files-at-level" + NumberToString(last)));
 
   Corrupt(kTableFile, 100, 1);

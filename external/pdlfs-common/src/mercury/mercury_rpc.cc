@@ -10,8 +10,7 @@
  */
 #include "mercury_rpc.h"
 
-#include "pdlfs-common/logging.h"
-#include "pdlfs-common/pdlfs_config.h"
+#include <stdio.h>
 
 namespace pdlfs {
 namespace rpc {
@@ -255,7 +254,8 @@ MercuryRPC::MercuryRPC(bool listen, const RPCOptions& options)
   hg_class_ = HG_Init(options.uri.c_str(), (listen) ? HG_TRUE : HG_FALSE);
   if (hg_class_) hg_context_ = HG_Context_create(hg_class_);
   if (hg_class_ == NULL || hg_context_ == NULL) {
-    Error(__LOG_ARGS__, "hg init call failed");
+    char msg[] = "Cannot init hg\n";
+    fwrite(msg, 1, sizeof(msg), stderr);
     abort();
   } else {
     RegisterRPC();
@@ -425,8 +425,8 @@ void MercuryRPC::LocalLooper::BGLoop() {
     }
 
     if (ret != HG_SUCCESS) {
-      Error(__LOG_ARGS__, "error during mercury rpc looping: %s (errno=%d)",
-            HG_Error_to_string(ret), ret);
+      fprintf(stderr, "error during mercury rpc looping: %s (errno=%d)",
+              HG_Error_to_string(ret), ret);
       if (ignore_rpc_error_) {
         ret = HG_SUCCESS;
       }

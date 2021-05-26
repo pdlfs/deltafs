@@ -14,8 +14,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found at https://github.com/google/leveldb.
  */
-
 #include "pdlfs-common/leveldb/db.h"
+
 #include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/options.h"
 #include "pdlfs-common/leveldb/snapshot.h"
@@ -46,7 +46,8 @@ Status DB::Delete(const WriteOptions& opt, const Slice& key) {
 }
 
 Status DestroyDB(const std::string& dbname, const DBOptions& options) {
-  Env* const env = options.env;
+  Env* env = options.env;
+  if (!env) env = Env::Default();
   std::vector<std::string> filenames;
   // Ignore error in case directory does not exist
   env->GetChildren(dbname.c_str(), &filenames);
@@ -54,9 +55,12 @@ Status DestroyDB(const std::string& dbname, const DBOptions& options) {
     return Status::OK();
   }
 
-  FileLock* lock;
-  const std::string lockname = LockFileName(dbname);
-  Status result = env->LockFile(lockname.c_str(), &lock);
+  std::string lockname = LockFileName(dbname);
+  FileLock* lock = NULL;
+  Status result;
+  if (!options.skip_lock_file) {
+    result = env->LockFile(lockname.c_str(), &lock);
+  }
   if (result.ok()) {
     uint64_t number;
     FileType type;
@@ -72,9 +76,10 @@ Status DestroyDB(const std::string& dbname, const DBOptions& options) {
     }
 
     // Ignore error since state is already gone
-    env->UnlockFile(lock);
+    if (lock) {
+      env->UnlockFile(lock);
+    }
     env->DeleteFile(lockname.c_str());
-
     // Ignore error in case dir contains other files
     env->DeleteDir(dbname.c_str());
   }

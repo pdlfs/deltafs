@@ -8,12 +8,16 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "ofs_impl.h"
 
 namespace pdlfs {
 
-Ofs::Ofs(Osd* osd) { impl_ = new Impl(osd); }
+OfsOptions::OfsOptions()
+    : deferred_gc(false), sync_log_on_close(false), info_log(NULL) {}
+
+Ofs::Ofs(const OfsOptions& options, Osd* osd) {
+  impl_ = new Impl(options, osd);
+}
 
 Ofs::~Ofs() { delete impl_; }
 
@@ -98,6 +102,13 @@ Status Ofs::CopyFile(const char* src, const char* dst) {
   return impl_->CopyFile(sfp, dfp);
 }
 
+Status Ofs::Rename(const char* src, const char* dst) {
+  ResolvedPath sfp, dfp;
+  if (!ResolvePath(src, &sfp.mntptr, &sfp.base)) return PathError(src);
+  if (!ResolvePath(dst, &dfp.mntptr, &dfp.base)) return PathError(dst);
+  return impl_->Rename(sfp, dfp);
+}
+
 Status Ofs::MountFileSet(const MountOptions& options, const char* dirname) {
   Slice ignored_parent;
   Slice name;
@@ -108,7 +119,8 @@ Status Ofs::MountFileSet(const MountOptions& options, const char* dirname) {
       return PathError(dirname);
     }
   }
-  FileSet* const fset = new FileSet(options, name);
+  FileSet* const fset =
+      new FileSet(options, name, impl_->options_.sync_log_on_close);
   Status s = impl_->LinkFileSet(dirname, fset);
   if (!s.ok()) delete fset;
   return s;

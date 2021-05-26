@@ -336,6 +336,44 @@ extern Status WriteStringToFile(Env* env, const Slice& data, const char* fname);
 extern Status WriteStringToFileSync(Env* env, const Slice& data,
                                     const char* fname);
 
+// Server-side UDP socket abstraction.
+class ServerUDPSocket {
+ public:
+  ServerUDPSocket() {}
+  virtual ~ServerUDPSocket();
+
+  virtual Status OpenAndBind(const std::string& uri) = 0;
+  virtual Status Recv(Slice* msg, char* scratch, size_t n) = 0;
+
+ private:
+  // No copying allowed
+  void operator=(const ServerUDPSocket& other);
+  ServerUDPSocket(const ServerUDPSocket&);
+};
+
+// UDP socket abstraction.
+class UDPSocket {
+ public:
+  UDPSocket() {}
+  virtual ~UDPSocket();
+
+  virtual Status Connect(const std::string& uri) = 0;
+  virtual Status Send(const Slice& msg) = 0;
+
+ private:
+  // No copy allowed
+  void operator=(const UDPSocket& other);
+  UDPSocket(const UDPSocket&);
+};
+
+// Return a new server-side UDP socket. The returned socket shall be deleted
+// when it is no longer needed.
+extern ServerUDPSocket* CreateServerUDPSocket();
+
+// Return a new UDP socket. The returned socket shall be deleted when it is no
+// longer needed.
+extern UDPSocket* CreateUDPSocket();
+
 // A utility routine: read contents of named file into *data
 extern Status ReadFileToString(Env* env, const char* fname, std::string* data);
 

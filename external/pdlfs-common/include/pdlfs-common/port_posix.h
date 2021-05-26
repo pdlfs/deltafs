@@ -61,14 +61,14 @@
 #ifdef PDLFS_SNAPPY
 #include <snappy.h>
 #endif
+#include "pdlfs-common/atomic_pointer.h"  // Platform-specific atomic pointer
+
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
-
-#include "pdlfs-common/atomic_pointer.h"  // Platform-specific atomic pointer
 
 #ifndef PLATFORM_IS_LITTLE_ENDIAN
 #define PLATFORM_IS_LITTLE_ENDIAN (__BYTE_ORDER == __LITTLE_ENDIAN)
@@ -95,7 +95,9 @@ class Env;
 
 namespace port {
 
-#define PDLFS_HOST_NAME_MAX _POSIX_HOST_NAME_MAX
+#if !defined(HOST_NAME_MAX)
+#define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
+#endif
 static const bool kLittleEndian = PLATFORM_IS_LITTLE_ENDIAN;
 #undef PLATFORM_IS_LITTLE_ENDIAN
 

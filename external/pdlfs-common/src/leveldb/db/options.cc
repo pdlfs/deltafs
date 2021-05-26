@@ -14,8 +14,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found at https://github.com/google/leveldb.
  */
-
 #include "pdlfs-common/leveldb/options.h"
+
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/filenames.h"
 #include "pdlfs-common/leveldb/internal_types.h"
@@ -29,14 +29,15 @@ DBOptions::DBOptions()
     : comparator(BytewiseComparator()),
       create_if_missing(false),
       error_if_exists(false),
+      detach_dir_on_close(false),
       paranoid_checks(false),
       env(Env::Default()),
       info_log(NULL),
       compaction_pool(NULL),
-      write_buffer_size(4 << 20),
+      write_buffer_size(4 * 1048576),
       table_cache(NULL),
       block_cache(NULL),
-      block_size(4096),
+      block_size(4 * 1024),
       block_restart_interval(16),
       index_block_restart_interval(1),
       compression(kSnappyCompression),
@@ -45,10 +46,15 @@ DBOptions::DBOptions()
       gc_skip_deletion(false),
       skip_lock_file(false),
       rotating_manifest(false),
+      sync_log_on_close(false),
       disable_write_ahead_log(false),
       disable_compaction(false),
       disable_seek_compaction(false),
+      table_builder_skip_verification(false),
+      prefetch_compaction_input(false),
+      table_bulk_read_size(256 * 1024),
       table_file_size(2 * 1048576),
+      max_mem_compact_level(2),
       level_factor(10),
       l1_compaction_trigger(5),
       l0_compaction_trigger(4),
@@ -65,10 +71,20 @@ WriteOptions::WriteOptions() : sync(false) {}
 
 FlushOptions::FlushOptions() : force_flush_l0(false), wait(true) {}
 
+InsertOptions::InsertOptions(InsertMethod method)
+    : no_seq_adjustment(false),
+      suggested_max_seq(0),
+      verify_checksums(false),
+      attach_dir_on_start(false),
+      detach_dir_on_complete(false),
+      method(method) {}
+
 InsertOptions::InsertOptions()
     : no_seq_adjustment(false),
       suggested_max_seq(0),
       verify_checksums(false),
+      attach_dir_on_start(false),
+      detach_dir_on_complete(false),
       method(kRename) {}
 
 DumpOptions::DumpOptions() : verify_checksums(false), snapshot(NULL) {}

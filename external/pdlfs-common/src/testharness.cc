@@ -15,6 +15,7 @@
  * found at https://github.com/google/leveldb.
  */
 #include "pdlfs-common/testharness.h"
+
 #include "pdlfs-common/pdlfs_config.h"
 #if defined(PDLFS_GFLAGS)
 #include <gflags/gflags.h>
@@ -24,8 +25,6 @@
 #endif
 
 #include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <string>
 
 namespace pdlfs {

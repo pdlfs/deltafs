@@ -52,6 +52,10 @@ struct DBOptions {
   // Default: false
   bool error_if_exists;
 
+  // Detach the db directory on closing the db.
+  // Default: false
+  bool detach_dir_on_close;
+
   // If true, the implementation will do aggressive checking of the
   // data it is processing and will stop early if it detects any
   // errors.  This may have unforeseen ramifications: for example, a
@@ -177,8 +181,16 @@ struct DBOptions {
   // Default: false
   bool rotating_manifest;
 
+  // Perform an extra sync operation on a write ahead log before closing it.
+  // Write-ahead logs are flushed on every write. This extra sync operation will
+  // force log data to reach storage.
+  // Default: false
+  bool sync_log_on_close;
+
   // Set to true to disable the use of a write-ahead log to protect
   // the data in the current memtable.
+  // Without a write-ahead log, a user must explicitly flush the memtable before
+  // closing a db in order not to lose the data in the memtable.
   // Default: false
   bool disable_write_ahead_log;
 
@@ -196,9 +208,30 @@ struct DBOptions {
   // Default: false
   bool disable_seek_compaction;
 
-  // The targeted size of each Table file before compression.
+  // Do not verify table by immediately opening it after it is built.
+  // Default: false
+  bool table_builder_skip_verification;
+
+  // Bulk read an entire table on table opening during compaction instead of
+  // dynamically reading table blocks using random file access.
+  // Default: false
+  bool prefetch_compaction_input;
+
+  // Read size for bulk reading an table in its entirety.
+  // Default: 256KB
+  size_t table_bulk_read_size;
+
+  // Target table file size before data compression is applied.
   // Default: 2MB
   size_t table_file_size;
+
+  // Maximum level to which a new compacted memtable is pushed if it does not
+  // create overlap.
+  // Default: 2; we try to push to level 2 to avoid relatively expensive level
+  // 0=>1 compactions and to reduce expensive manifest file operations. We do
+  // not push all the way to the largest level since that can generate a lot of
+  // wasted disk space if the same key space is being repeatedly overwritten.
+  int max_mem_compact_level;
 
   // The size ratio between two consecutive levels.
   // Default: 10
@@ -290,11 +323,11 @@ struct FlushOptions {
   FlushOptions();
 };
 
-// During each bulk insertion, a set of table files are injected into
-// the database. The following are possible operations that can be
-// used to achieve this data injection.
+// Performing a bulk insertion requires inserting a set of table files into a
+// db. The following are possible file operations that can be used to accomplish
+// such insertion activities.
 enum InsertMethod {
-  kRename = 0x0,  // May not supported by some underlying storage
+  kRename = 0x0,  // May not be supported by certain underlying storage systems
   kCopy = 0x1
 };
 
@@ -318,11 +351,22 @@ struct InsertOptions {
   // Default: false
   bool verify_checksums;
 
-  // Which file system action should get performed when a
-  // table file is to be bulk inserted into the database.
+  // Attach the bulk insertion dir on start.
+  // Set this to true when the underlying storage requires an explicit mount to
+  // access files in a dir.
+  // Default: false
+  bool attach_dir_on_start;
+
+  // Detach the bulk insertion dir when done.
+  // Default: false
+  bool detach_dir_on_complete;
+
+  // Which file action should be performed in order to be insert a table file
+  // into the db.
   // Default: kRename
   InsertMethod method;
 
+  InsertOptions(InsertMethod method);
   InsertOptions();
 };
 

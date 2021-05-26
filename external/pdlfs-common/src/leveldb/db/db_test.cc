@@ -15,6 +15,7 @@
  * found at https://github.com/google/leveldb.
  */
 #include "db_test.h"
+
 #include "db_impl.h"
 #include "version_set.h"
 #include "write_batch_internal.h"
@@ -1044,6 +1045,30 @@ TEST(DBTest, NoLog) {
   ASSERT_EQ("NOT_FOUND", Get("baz"));
 }
 
+TEST(DBTest, NoLogWithoutDataLoss) {
+  Options options = CurrentOptions();
+  options.disable_write_ahead_log = true;
+  Reopen(&options);
+
+  ASSERT_OK(Put("foo", "v1"));
+  ASSERT_OK(Put("baz", "v5"));
+  ASSERT_OK(dbfull()->TEST_CompactMemTable());
+
+  Reopen(&options);
+  ASSERT_EQ("v1", Get("foo"));
+  ASSERT_EQ("v5", Get("baz"));
+  ASSERT_OK(Put("bar", "v2"));
+  ASSERT_OK(Put("foo", "v3"));
+  ASSERT_OK(dbfull()->TEST_CompactMemTable());
+
+  Reopen();
+  ASSERT_EQ("v3", Get("foo"));
+  ASSERT_OK(Put("foo", "v4"));
+  ASSERT_EQ("v4", Get("foo"));
+  ASSERT_EQ("v2", Get("bar"));
+  ASSERT_EQ("v5", Get("baz"));
+}
+
 TEST(DBTest, NoCompaction) {
   Options options = CurrentOptions();
   options.disable_compaction = true;
@@ -1063,7 +1088,8 @@ TEST(DBTest, NoCompaction) {
 }
 
 TEST(DBTest, NoSeekCompaction) {
-  ASSERT_EQ(config::kMaxMemCompactLevel, 2) << "Fix test to match config";
+  ASSERT_EQ(last_options_.max_mem_compact_level, 2)
+      << "Fix test to match config";
 
   Options options = CurrentOptions();
   options.disable_seek_compaction = true;
@@ -1376,7 +1402,7 @@ TEST(DBTest, HiddenValuesAreRemoved) {
 TEST(DBTest, DeletionMarkers1) {
   Put("foo", "v1");
   ASSERT_OK(dbfull()->TEST_CompactMemTable());
-  const int last = config::kMaxMemCompactLevel;
+  const int last = last_options_.max_mem_compact_level;
   ASSERT_EQ(NumTableFilesAtLevel(last), 1);  // foo => v1 is now in last level
 
   // Place a table at level last-1 to prevent merging with preceding mutation
@@ -1405,7 +1431,7 @@ TEST(DBTest, DeletionMarkers1) {
 TEST(DBTest, DeletionMarkers2) {
   Put("foo", "v1");
   ASSERT_OK(dbfull()->TEST_CompactMemTable());
-  const int last = config::kMaxMemCompactLevel;
+  const int last = last_options_.max_mem_compact_level;
   ASSERT_EQ(NumTableFilesAtLevel(last), 1);  // foo => v1 is now in last level
 
   // Place a table at level last-1 to prevent merging with preceding mutation
@@ -1430,7 +1456,8 @@ TEST(DBTest, DeletionMarkers2) {
 
 TEST(DBTest, OverlapInLevel0) {
   do {
-    ASSERT_EQ(config::kMaxMemCompactLevel, 2) << "Fix test to match config";
+    ASSERT_EQ(last_options_.max_mem_compact_level, 2)
+        << "Fix test to match config";
 
     // Fill levels 1 and 2 to disable the pushing of new memtables to levels >
     // 0.
@@ -1593,7 +1620,7 @@ TEST(DBTest, CustomComparator) {
 }
 
 TEST(DBTest, ManualCompaction) {
-  ASSERT_EQ(config::kMaxMemCompactLevel, 2)
+  ASSERT_EQ(last_options_.max_mem_compact_level, 2)
       << "Need to update this test to match kMaxMemCompactLevel";
 
   MakeTables(3, "p", "q");
@@ -1770,7 +1797,7 @@ TEST(DBTest, ManifestWriteError) {
     // Memtable compaction (will succeed)
     dbfull()->TEST_CompactMemTable();
     ASSERT_EQ("bar", Get("foo"));
-    const int last = config::kMaxMemCompactLevel;
+    const int last = last_options_.max_mem_compact_level;
     ASSERT_EQ(NumTableFilesAtLevel(last), 1);  // foo=>bar is now in last level
 
     // Merging compaction (will fail)

@@ -8,14 +8,13 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "posix_bgrun.h"
 
 #include <stdio.h>
 
 namespace pdlfs {
 
-std::string FixedThreadPool::ToDebugString() {
+std::string PosixThreadPool::ToDebugString() {
   char tmp[100];
   snprintf(tmp, sizeof(tmp), "Tpool: max_threads=%d", max_threads_);
   return tmp;
@@ -31,7 +30,7 @@ pthread_t Pthread(void* (*func)(void*), void* arg, void* attr) {
 }
 }  // namespace
 
-FixedThreadPool::~FixedThreadPool() {
+PosixThreadPool::~PosixThreadPool() {
   mu_.Lock();
   shutting_down_ = true;
   bg_cv_.SignalAll();
@@ -41,7 +40,7 @@ FixedThreadPool::~FixedThreadPool() {
   mu_.Unlock();
 }
 
-void FixedThreadPool::InitPool(void* attr) {
+void PosixThreadPool::InitPool(void* attr) {
   mu_.AssertHeld();
   while (num_pool_threads_ < max_threads_) {
     Pthread(BGWrapper, this, attr);
@@ -49,7 +48,7 @@ void FixedThreadPool::InitPool(void* attr) {
   }
 }
 
-void FixedThreadPool::Schedule(void (*function)(void*), void* arg) {
+void PosixThreadPool::Schedule(void (*function)(void*), void* arg) {
   MutexLock ml(&mu_);
   if (shutting_down_) return;
   InitPool(NULL);  // Start background threads if necessary
@@ -64,7 +63,7 @@ void FixedThreadPool::Schedule(void (*function)(void*), void* arg) {
   queue_.back().arg = arg;
 }
 
-void FixedThreadPool::BGThread() {
+void PosixThreadPool::BGThread() {
   void (*function)(void*) = NULL;
   void* arg;
 
@@ -93,18 +92,18 @@ void FixedThreadPool::BGThread() {
   }
 }
 
-void FixedThreadPool::Resume() {
+void PosixThreadPool::Resume() {
   MutexLock ml(&mu_);
   paused_ = false;
   bg_cv_.SignalAll();
 }
 
-void FixedThreadPool::Pause() {
+void PosixThreadPool::Pause() {
   MutexLock ml(&mu_);
   paused_ = true;
 }
 
-void FixedThreadPool::StartThread(void (*function)(void*), void* arg) {
+void PosixThreadPool::StartThread(void (*function)(void*), void* arg) {
   StartThreadState* state = new StartThreadState;
   state->user_function = function;
   state->arg = arg;
@@ -112,7 +111,7 @@ void FixedThreadPool::StartThread(void (*function)(void*), void* arg) {
 }
 
 ThreadPool* ThreadPool::NewFixed(int num_threads, bool eager_init, void* attr) {
-  return new FixedThreadPool(num_threads, eager_init, attr);
+  return new PosixThreadPool(num_threads, eager_init, attr);
 }
 
 }  // namespace pdlfs

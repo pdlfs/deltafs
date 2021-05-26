@@ -8,17 +8,20 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #pragma once
 
-#include "rados_common.h"
-#include "rados_conn.h"
+#include "rados_comm.h"
+
+#include "pdlfs-common/rados/rados_connmgr.h"
+
+#include "pdlfs-common/ofs.h"
+#include "pdlfs-common/port.h"
 
 namespace pdlfs {
 namespace rados {
 
-// Osd implementation using Rados api. Rados async I/O is used by default unless
-// explicitly disabled by the caller.
+// An osd implementation on top of rados. rados async I/O is utilized by default
+// unless explicitly disabled by the caller.
 class RadosOsd : public Osd {
  public:
   virtual ~RadosOsd();
@@ -33,14 +36,17 @@ class RadosOsd : public Osd {
   virtual Status Get(const char* name, std::string* data);
 
  private:
-  RadosOsd() {}
-  friend class RadosConn;
-  Status CreateIoCtx(rados_ioctx_t*);
-  port::Mutex* mutex_;
+  RadosOsd() {}  // Construction is done through RadosConnMgr
+  friend class RadosConnMgr;
+  Status CreateIoCtx(rados_ioctx_t* result);
+  // Constant after construction
   std::string pool_name_;
-  bool force_sync_;  // If async I/O should be disabled
+  bool force_syncio_;  // If async I/O is off
+  RadosConnMgr* connmgr_;
+  RadosConn* conn_;
+  // State beblow protected by *mutex_
+  port::Mutex mutex_;
   rados_ioctx_t ioctx_;
-  rados_t cluster_;
 };
 
 }  // namespace rados

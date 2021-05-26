@@ -8,7 +8,6 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "db_impl.h"
 
 #include "pdlfs-common/leveldb/db.h"
@@ -18,43 +17,35 @@
 #include "pdlfs-common/cache.h"
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/testharness.h"
-#include "pdlfs-common/testutil.h"
 
 #include <stdlib.h>
 
 namespace pdlfs {
 
 class BulkTest {
- protected:
-  typedef DBOptions Options;
-
  public:
-  std::vector<const Snapshot*> snapshots_;
-  std::string dbname_;
+  std::string dbloc_;
   std::string dbtmp_;
   Cache* empty_cache_;
-  Options options_;
-  Env* env_;
+  std::vector<const Snapshot*> snapshots_;
+  DBOptions options_;
   DB* db_;
 
   BulkTest() {
-    dbname_ = test::TmpDir() + "/bulk_test";
+    dbloc_ = test::TmpDir() + "/bulk_test";
+    DestroyDB(dbloc_, DBOptions());
+    dbtmp_ = dbloc_ + "/tmp";
+    DestroyDB(dbtmp_, DBOptions());
     empty_cache_ = NewLRUCache(0);
     options_.block_cache = empty_cache_;
-    DestroyDB(dbname_, options_);
     options_.create_if_missing = true;
     options_.compression = kNoCompression;
-    ASSERT_OK(DB::Open(options_, dbname_, &db_));
-    dbtmp_ = dbname_ + "/tmp";
-    DestroyDB(dbtmp_, options_);
-    env_ = options_.env;
+    ASSERT_OK(DB::Open(options_, dbloc_, &db_));
   }
 
   ~BulkTest() {
     ReleaseSnapshots();
     delete db_;
-    DestroyDB(dbtmp_, Options());
-    DestroyDB(dbname_, Options());
     delete empty_cache_;
   }
 
@@ -114,23 +105,24 @@ class BulkTest {
     return atoi(property.c_str());
   }
 
-  // Return number of files copies
-  int CopyLDBToTmp() {
+  // Return total number of files copied.
+  int CopyDbToTmp() {
+    Env* env = options_.env;
     std::vector<std::string> filenames;
-    ASSERT_OK(env_->GetChildren(dbname_.c_str(), &filenames));
-    env_->CreateDir(dbtmp_.c_str());
+    ASSERT_OK(env->GetChildren(dbloc_.c_str(), &filenames));
+    env->CreateDir(dbtmp_.c_str());
     uint64_t number;
     FileType type;
-    int files_replicated = 0;
+    int num = 0;
     for (size_t i = 0; i < filenames.size(); i++) {
       if (ParseFileName(filenames[i], &number, &type) && type == kTableFile) {
-        const std::string from = TableFileName(dbname_, number);
-        const std::string to = TableFileName(dbtmp_, number);
-        ASSERT_OK(env_->CopyFile(from.c_str(), to.c_str()));
-        files_replicated++;
+        std::string src = TableFileName(dbloc_, number);
+        std::string dst = TableFileName(dbtmp_, number);
+        ASSERT_OK(env->CopyFile(src.c_str(), dst.c_str()));
+        num++;
       }
     }
-    return files_replicated;
+    return num;
   }
 
   void BulkInsert(bool overlapping_keys = true, SequenceNumber seq = 0) {
@@ -140,13 +132,13 @@ class BulkTest {
     db_->AddL0Tables(opt, dbtmp_);
   }
 
-  void ReopenDB(bool destroy = false) {
+  void Reopen(bool destroy = false) {
     ReleaseSnapshots();
     delete db_;
     if (destroy) {
-      DestroyDB(dbname_, options_);
+      DestroyDB(dbloc_, options_);
     }
-    ASSERT_OK(DB::Open(options_, dbname_, &db_));
+    ASSERT_OK(DB::Open(options_, dbloc_, &db_));
   }
 };
 
@@ -154,8 +146,8 @@ TEST(BulkTest, NoOverlappingKeys) {
   Put("a", "v1");
   Put("p", "v1");
   Flush();
-  CopyLDBToTmp();
-  ReopenDB(true);
+  CopyDbToTmp();
+  Reopen(true);
   Put("b", "v1");
   Put("q", "v1");
   BulkInsert(false, 10);
@@ -171,12 +163,12 @@ TEST(BulkTest, NoOverlappingKeys) {
   ASSERT_EQ("v2", Get("b"));
   ASSERT_EQ("v2", Get("p"));
   ASSERT_EQ("v2", Get("q"));
-  ReopenDB();
+  Reopen();
   ASSERT_EQ("v2", Get("a"));
   ASSERT_EQ("v2", Get("b"));
   ASSERT_EQ("v2", Get("p"));
   ASSERT_EQ("v2", Get("q"));
-  ReopenDB();
+  Reopen();
   Compact();
   ASSERT_EQ("v2", Get("a"));
   ASSERT_EQ("v2", Get("b"));
@@ -189,7 +181,7 @@ TEST(BulkTest, OverlappingKeys) {
   Put("p", "v1");
   int s1 = DoSnapshot();
   Flush();
-  CopyLDBToTmp();
+  CopyDbToTmp();
   Put("a", "v2");
   Put("p", "v2");
   int s2 = DoSnapshot();
@@ -214,10 +206,10 @@ TEST(BulkTest, OverlappingKeys) {
   ASSERT_EQ("v3", Get("a", snapshots_[s4]));
   ASSERT_EQ("v3", Get("p", snapshots_[s4]));
 
-  ReopenDB();
+  Reopen();
   ASSERT_EQ("v3", Get("a"));
   ASSERT_EQ("v3", Get("p"));
-  ReopenDB();
+  Reopen();
   Compact();
   ASSERT_EQ("v3", Get("a"));
   ASSERT_EQ("v3", Get("p"));

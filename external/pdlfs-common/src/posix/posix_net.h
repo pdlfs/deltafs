@@ -8,18 +8,77 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #pragma once
 
-#include "pdlfs-common/status.h"
+#include "pdlfs-common/env.h"
 
 #include <net/if.h>
 #include <netinet/in.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
+#include <stdlib.h>
 #include <vector>
 
 namespace pdlfs {
+
+// A simple wrapper class over struct sockaddr_in.
+class PosixSocketAddr {
+ public:
+  PosixSocketAddr() { Reset(); }
+  void Reset();
+  // The returned uri may not be used for clients to connect to the address.
+  // While both the address and the port will be numeric, the address may be
+  // "0.0.0.0" and the port may be "0".
+  std::string GetUri() const;
+  Status ResolvUri(const std::string& uri);
+  int GetPort() const { return ntohs(addr_.sin_port); }
+  const struct sockaddr_in* rep() const { return &addr_; }
+  struct sockaddr_in* rep() {
+    return &addr_;
+  }
+
+ private:
+  void SetPort(const char* p) {
+    int port = -1;
+    if (p && p[0]) port = atoi(p);
+    if (port < 0) {
+      // Have the OS pick up a port for us
+      port = 0;
+    }
+    addr_.sin_port = htons(port);
+  }
+  // Translate a human-readable host name into a binary internet address to
+  // which we can bind or connect. Return OK on success, or a non-OK status on
+  // errors.
+  Status Resolv(const char* host, bool is_numeric);
+  struct sockaddr_in addr_;
+
+  // Copyable
+};
+
+// Posix server UDP socket.
+class PosixServerUDPSocket : public ServerUDPSocket {
+ public:
+  PosixServerUDPSocket();
+  virtual ~PosixServerUDPSocket();
+
+  virtual Status OpenAndBind(const std::string& uri);
+  virtual Status Recv(Slice* msg, char* scratch, size_t n);
+
+ private:
+  int fd_;
+};
+
+// Posix UDP.
+class PosixUDPSocket : public UDPSocket {
+ public:
+  PosixUDPSocket();
+  virtual ~PosixUDPSocket();
+
+  virtual Status Connect(const std::string& uri);
+  virtual Status Send(const Slice& msg);
+
+ private:
+  int fd_;
+};
 
 struct Ifr {
   // Interface name (such as eth0)
@@ -38,21 +97,15 @@ class PosixIf {
     ifconf_.ifc_len = 0;
   }
 
-  ~PosixIf() {
-    if (fd_ != -1) {
-      close(fd_);
-    }
-  }
-
+  ~PosixIf();
   Status IfConf(std::vector<Ifr>* results);
-
   Status Open();
 
  private:
-  struct ifreq ifr_[64];  // If record buffer
+  struct ifreq ifr_[64];  // Record buffer; statically allocated
   struct ifconf ifconf_;
   // No copying allowed
-  void operator=(const PosixIf&);
+  void operator=(const PosixIf& other);
   PosixIf(const PosixIf&);
 
   int fd_;

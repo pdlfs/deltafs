@@ -8,6 +8,12 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
+
+/*
+ * Copyright (c) 2011 The LevelDB Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found at https://github.com/google/leveldb.
+ */
 #pragma once
 
 #include "pdlfs-common/env.h"
@@ -20,9 +26,9 @@ namespace pdlfs {
 
 // A simple thread pool implementation with a fixed max pool size.
 // Once created, threads keep running until pool destruction.
-class FixedThreadPool : public ThreadPool {
+class PosixThreadPool : public ThreadPool {
  public:
-  FixedThreadPool(int max_threads, bool eager_init = false, void* attr = NULL)
+  PosixThreadPool(int max_threads, bool eager_init = false, void* attr = NULL)
       : bg_cv_(&mu_),
         num_pool_threads_(0),
         max_threads_(max_threads),
@@ -35,7 +41,7 @@ class FixedThreadPool : public ThreadPool {
     }
   }
 
-  virtual ~FixedThreadPool();
+  virtual ~PosixThreadPool();
   virtual void Schedule(void (*function)(void*), void* arg);
   virtual std::string ToDebugString();
   virtual void Resume();
@@ -49,7 +55,7 @@ class FixedThreadPool : public ThreadPool {
   void BGThread();
 
   static void* BGWrapper(void* arg) {
-    reinterpret_cast<FixedThreadPool*>(arg)->BGThread();
+    reinterpret_cast<PosixThreadPool*>(arg)->BGThread();
     return NULL;
   }
 

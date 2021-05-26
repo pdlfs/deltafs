@@ -16,11 +16,10 @@
  */
 #pragma once
 
+#include "pdlfs-common/coding.h"
 #include "pdlfs-common/leveldb/comparator.h"
 #include "pdlfs-common/leveldb/filter_policy.h"
 #include "pdlfs-common/leveldb/types.h"
-
-#include "pdlfs-common/coding.h"
 #include "pdlfs-common/slice.h"
 #include "pdlfs-common/strutil.h"
 
@@ -29,13 +28,6 @@ namespace pdlfs {
 // options.
 namespace config {
 static const int kNumLevels = 7;
-
-// Maximum level to which a new compacted memtable is pushed if it does not
-// create overlap. We try to push to level 2 to avoid the relatively expensive
-// level 0=>1 compactions and to avoid some expensive manifest file operations.
-// We do not push all the way to the largest level since that can generate a lot
-// of wasted disk space if the same key space is being repeatedly overwritten.
-static const int kMaxMemCompactLevel = 2;
 
 // Approximate gap in bytes between samples of data read during iteration.
 static const int kReadBytesPeriod = 1048576;

@@ -8,19 +8,19 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #include "rados_osd.h"
 
 namespace pdlfs {
 namespace rados {
 
 RadosOsd::~RadosOsd() {
-  rados_aio_flush(ioctx_);  // Wait until all async IO operations to finish
+  rados_aio_flush(ioctx_);  // Wait for all async IO ops to finish
   rados_ioctx_destroy(ioctx_);
+  connmgr_->Release(conn_);
 }
 
 Status RadosOsd::CreateIoCtx(rados_ioctx_t* result) {
-  int r = rados_ioctx_create(cluster_, pool_name_.c_str(), result);
+  int r = rados_ioctx_create(conn_->cluster, pool_name_.c_str(), result);
   if (r != 0) {
     return RadosError("rados_ioctx_create", r);
   } else {
@@ -88,8 +88,8 @@ Status RadosOsd::NewWritableObj(const char* name, WritableFile** r) {
   rados_ioctx_t ioctx;
   Status s = CreateIoCtx(&ioctx);
   if (s.ok()) {
-    if (!force_sync_) {
-      *r = new RadosAsyncWritableFile(name, mutex_, ioctx);
+    if (!force_syncio_) {
+      *r = new RadosAsyncWritableFile(name, &mutex_, ioctx);
     } else {
       *r = new RadosWritableFile(name, ioctx);
     }
@@ -117,8 +117,8 @@ Status RadosOsd::Copy(const char* src, const char* dst) {
     s = CreateIoCtx(&ioctx);
     if (s.ok()) {
       WritableFile* target;
-      if (!force_sync_) {
-        target = new RadosAsyncWritableFile(dst, mutex_, ioctx);
+      if (!force_syncio_) {
+        target = new RadosAsyncWritableFile(dst, &mutex_, ioctx);
       } else {
         target = new RadosWritableFile(dst, ioctx);
       }

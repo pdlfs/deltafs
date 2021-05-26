@@ -16,19 +16,15 @@
  */
 #include "pdlfs-common/env.h"
 
-#include "pdlfs-common/env_files.h"
-#include "pdlfs-common/env_lazy.h"
-#include "pdlfs-common/pdlfs_config.h"
-#include "pdlfs-common/port.h"
+#include "pdlfs-common/port.h"  // Also includes pdlfs_config.h
 
 #include <stdio.h>
 
 #if defined(PDLFS_RADOS)
-#include "pdlfs-common/rados/rados_ld.h"
+#include "pdlfs-common/rados/rados_connmgr.h"
 #endif
 
 #if defined(PDLFS_PLATFORM_POSIX)
-#include "posix/posix_env.h"
 #include "posix/posix_logger.h"
 #endif
 
@@ -54,6 +50,10 @@ Logger::~Logger() {}
 
 FileLock::~FileLock() {}
 
+ServerUDPSocket::~ServerUDPSocket() {}
+
+UDPSocket::~UDPSocket() {}
+
 ThreadPool::~ThreadPool() {}
 
 EnvWrapper::~EnvWrapper() {}
@@ -63,31 +63,17 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
   if (name == NULL) name = "";
   if (conf == NULL) conf = "";
   Slice env_name(name), env_conf(conf);
-#if VERBOSE >= 1
-  const char* env_name_str = env_name.c_str();
-  if (env_name.empty()) {
-    env_name_str = "~";
-  }
-  const char* env_conf_str = env_conf.c_str();
-  if (env_conf.empty()) {
-    env_conf_str = "~";
-  }
-  // Verbose(__LOG_ARGS__, 1, "env.name -> %s", env_name_str);
-  // Verbose(__LOG_ARGS__, 1, "env.conf -> %s", env_conf_str);
-#endif
-// RADOS
 #if defined(PDLFS_RADOS)
   if (env_name == "rados") {
-    return (Env*)PDLFS_Load_rados_env(env_conf.c_str());
+    return NULL;  // XXX: impl this
   }
 #endif
   if (env_name == "unbufferedio") {
     *is_system = true;
     return Env::GetUnBufferedIoEnv();
   }
-  if (env_name.empty()) {
-    // Warn(__LOG_ARGS__, "Open env without specifying a name...");
-  }
+  if (env_name.empty())
+    fprintf(stderr, "Warning: open env without specifying a name...\n");
   if (env_name.empty() || env_name == "default") {
     *is_system = true;
     Env* env = Env::Default();
@@ -97,8 +83,9 @@ Env* Env::Open(const char* name, const char* conf, bool* is_system) {
   }
 }
 
-static Status DoWriteStringToFile(Env* env, const Slice& data,
-                                  const char* fname, bool should_sync) {
+namespace {
+Status DoWriteStringToFile(Env* env, const Slice& data, const char* fname,
+                           bool should_sync) {
   WritableFile* file;
   Status s = env->NewWritableFile(fname, &file);
   if (!s.ok()) {
@@ -117,6 +104,7 @@ static Status DoWriteStringToFile(Env* env, const Slice& data,
   }
   return s;
 }
+}  // namespace
 
 Status WriteStringToFile(Env* env, const Slice& data, const char* fname) {
   return DoWriteStringToFile(env, data, fname, false);
@@ -237,7 +225,7 @@ void Log0v(Logger* logger, const char* srcfile, int srcln, int loglvl,
 }
 
 Logger* Logger::Default() {
-#if defined(PDLFS_PLATFORM_POSIX) && defined(PDLFS_GLOG)
+#if defined(PDLFS_GLOG)
   static PosixGoogleLogger logger;
   return &logger;
 #elif defined(PDLFS_PLATFORM_POSIX)
