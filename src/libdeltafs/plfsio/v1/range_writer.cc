@@ -176,57 +176,53 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
   MutexLock ml(&mu_);
   Status s = Status::OK();
 
+  assert(n_active_ == 3);
+
   /* Strictly, should lock before updating, but this is only for measuring
    * "pollution" - who cares if it's a couple of counters off */
-  membuf_prev2_->UpdateExpectedRange(membuf_prev_->GetExpectedRange());
-  membuf_prev_->UpdateExpectedRange(membuf_cur_->GetExpectedRange());
-  membuf_cur_->UpdateExpectedRange(rmin, rmax);
+
+  /* WARN: i is unsigned, i >= 0 is infinite loop */
+  for (size_t i = n_active_ - 1; i >= 1; i--) {
+    BlockBuf* buf_cur = reinterpret_cast<BlockBuf*>(bufs_active_[i]);
+    BlockBuf* buf_prev = reinterpret_cast<BlockBuf*>(bufs_active_[i-1]);
+    buf_cur->UpdateExpectedRange(buf_prev->GetExpectedRange());
+  }
+
+  reinterpret_cast<BlockBuf*>(bufs_active_[0])->UpdateExpectedRange(rmin, rmax);
 
   uint32_t ignored_compac_seq;
-
-  s = Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_prev2_),
-                           &ignored_compac_seq, /* force */ true);
-  if (!s.ok()) return s;
-
-  s = Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_prev_),
-                           &ignored_compac_seq, /* force */ true);
-  if (!s.ok()) return s;
-
-  s = Prepare<RangeWriter>(reinterpret_cast<void**>(&membuf_cur_),
-                           &ignored_compac_seq, /* force */ true);
+  s = PrepareAll<RangeWriter>(&ignored_compac_seq, /* force */ true);
 
   return s;
 }
 
 RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
                          size_t buf_size, size_t n)
-    : MultiBuffering(&mu_, &bg_cv_),
+    : MultiBuffering(&mu_, &bg_cv_, n, 3),
       logger_(options.env),
       logging_enabled_(false),
       manifest_(dst),
-      membuf_cur_(NULL),
-      membuf_prev_(NULL),
-      membuf_prev2_(NULL),
       options_(options),
       dst_(dst),
       bg_cv_(&mu_),
       buf_threshold_(buf_size),
       buf_reserv_(8 + buf_size),
       offset_(0),
-      bbs_(NULL),
-      n_(n) {
-  if (n_ < 3) n_ = 3;
+      bbs_(NULL) {
+  if (n_total_ < n_active_) n_total_ = n_active_;
 
-  bbs_ = new BlockBuf*[n_];
-  for (size_t i = 0; i < n_; i++) {
+  bufs_active_ = new void*[n_active_];
+  bbs_ = new BlockBuf*[n_total_];
+
+  for (size_t i = 0; i < n_total_; i++) {
     bbs_[i] = new BlockBuf(options_);
     bbs_[i]->Reserve(buf_reserv_);
-    if (i > 2) bufs_.push_back(bbs_[i]);
+    if (i < n_active_) {
+      bufs_active_[i] = bbs_[i];
+    } else {
+      bufs_free_.push_back(bbs_[i]);
+    }
   }
-
-  membuf_cur_ = bbs_[0];
-  membuf_prev_ = bbs_[1];
-  membuf_prev2_ = bbs_[2];
 }
 
 RangeWriter::~RangeWriter() {
@@ -236,7 +232,9 @@ RangeWriter::~RangeWriter() {
   }
   mu_.Unlock();
 
-  for (size_t i = 0; i < n_; i++) {
+  delete[] bufs_active_;
+
+  for (size_t i = 0; i < n_total_; i++) {
     delete bbs_[i];
   }
   delete[] bbs_;
@@ -245,10 +243,18 @@ RangeWriter::~RangeWriter() {
 Status RangeWriter::Add(const Slice& k, const Slice& v) {
   MutexLock ml(&mu_);
   float key_val = DecodeFloat32(k.data());
-  BlockBuf** dest_buf =
-      membuf_cur_->Inside(key_val)
-          ? &membuf_cur_
-          : (membuf_prev_->Inside(key_val) ? &membuf_prev_ : &membuf_prev2_);
+  void** dest_buf = nullptr;
+  for (size_t i = 0; i < n_active_; i++) {
+    BlockBuf* cur_buf = reinterpret_cast<BlockBuf*>(bufs_active_[i]);
+    if (cur_buf->Inside(key_val)) {
+      dest_buf = &bufs_active_[i];
+    }
+  }
+
+  if (dest_buf == nullptr) {
+    dest_buf = &bufs_active_[n_active_ - 1];
+  }
+
   return __Add<RangeWriter>(reinterpret_cast<void**>(dest_buf), k, v, false);
 }
 
@@ -279,19 +285,11 @@ Status RangeWriter::EpochFlush() {
 
 Status RangeWriter::Sync() {
   MutexLock ml(&mu_);
-  bufs_active_.resize(3);
-  bufs_active_[0] = reinterpret_cast<void**>(&membuf_prev2_);
-  bufs_active_[1] = reinterpret_cast<void**>(&membuf_prev_);
-  bufs_active_[2] = reinterpret_cast<void**>(&membuf_cur_);
   return __Sync<RangeWriter>(false);
 }
 
 Status RangeWriter::Flush() {
   MutexLock ml(&mu_);
-  bufs_active_.resize(3);
-  bufs_active_[0] = reinterpret_cast<void**>(&membuf_prev2_);
-  bufs_active_[1] = reinterpret_cast<void**>(&membuf_prev_);
-  bufs_active_[2] = reinterpret_cast<void**>(&membuf_cur_);
   return __Flush<RangeWriter>(false);
 }
 

@@ -12,6 +12,7 @@
 #pragma once
 
 #include "ordered_builder.h"
+
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/mutexlock.h"
 #include "pdlfs-common/port.h"
@@ -26,7 +27,8 @@ namespace plfsio {
 
 class MultiBuffering {
  public:
-  MultiBuffering(port::Mutex* mu, port::CondVar* cv);
+  MultiBuffering(port::Mutex* mu, port::CondVar* cv, size_t n_total,
+                 size_t n_active);
 
   // Append data into the buffer specified by membuf. Return OK on success, or a
   // non-OK status on errors. REQUIRES: __Finish() has NOT been called.
@@ -88,9 +90,11 @@ class MultiBuffering {
   bool finished_;  // If Finish() has been called
   uint32_t num_bg_compactions_;
   Status bg_status_;
-  std::deque<void*> bufs_;
-  // Vector below must be initialized by the inheritor
-  std::vector<void**> bufs_active_;
+  size_t n_total_;
+  const size_t n_active_;
+  std::deque<void*> bufs_free_;
+  // Array below must be allocated by inheritor
+  void** bufs_active_;
 };
 
 #define __this static_cast<T*>(this)
@@ -205,8 +209,8 @@ Status MultiBuffering::PrepareAll(uint32_t* seq, bool force, bool nowait,
                                   const Slice& k, const Slice& v) {
   mu_->AssertHeld();
   Status s = Status::OK();
-  for (size_t i = 0; i < bufs_active_.size(); i++) {
-    s = Prepare<T>(bufs_active_[i], seq, force, nowait, k, v);
+  for (size_t i = 0; i < n_active_; i++) {
+    s = Prepare<T>(&bufs_active_[i], seq, force, nowait, k, v);
     if (!s.ok()) break;
   }
   return s;
@@ -227,12 +231,12 @@ Status MultiBuffering::Prepare(void** membuf, uint32_t* seq, bool force,
     } else if (!force && __this->HasRoom(*membuf, k, v)) {
       // There is room in current write buffer
       break;
-    } else if (!bufs_.empty()) {
+    } else if (!bufs_free_.empty()) {
       // Attempt to switch to a new write buffer
       force = false;
       TryScheduleCompaction<T>(seq, *membuf);
-      void* new_buf = bufs_.back();
-      bufs_.pop_back();
+      void* new_buf = bufs_free_.back();
+      bufs_free_.pop_back();
       __this->CopyBufState(*membuf, new_buf);
       *membuf = new_buf;
     } else if (!nowait) {
@@ -273,7 +277,7 @@ void MultiBuffering::DoCompaction(uint32_t seq, void* immbuf) {
   assert(bg_status_.ok());
   bg_status_ = status;
   __this->Clear(immbuf);
-  bufs_.push_back(immbuf);
+  bufs_free_.push_back(immbuf);
   assert(num_bg_compactions_ > 0);
   --num_bg_compactions_;
 

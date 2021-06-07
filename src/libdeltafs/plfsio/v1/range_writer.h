@@ -231,10 +231,6 @@ class RangeWriter : public MultiBuffering {
   typedef OrderedBlockBuilder<float> BlockBuf;
   PartitionManifestWriter manifest_;
 
-  BlockBuf* membuf_cur_;
-  BlockBuf* membuf_prev_;
-  BlockBuf* membuf_prev2_;
-
   typedef ArrayBlock Block;
   const DirOptions& options_;
   WritableFile* const dst_;
@@ -246,7 +242,6 @@ class RangeWriter : public MultiBuffering {
   uint64_t offset_;  // Current write offset
 
   BlockBuf** bbs_;  // Array of *ALL* blockbufs, mainly for garbage collection
-  size_t n_;        // size of bbs_ array
 
   friend class MultiBuffering;
   Status Compact(uint32_t seq, void* buf);
