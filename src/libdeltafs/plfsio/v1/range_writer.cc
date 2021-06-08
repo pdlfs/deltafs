@@ -182,16 +182,18 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
    * "pollution" - who cares if it's a couple of counters off */
 
   /* WARN: i is unsigned, i >= 0 is infinite loop */
-  for (size_t i = n_active_ - 1; i >= 2; i--) {
-    BlockBuf* buf_cur = reinterpret_cast<BlockBuf*>(bufs_active_[i]);
-    BlockBuf* buf_prev = reinterpret_cast<BlockBuf*>(bufs_active_[i-1]);
-    buf_cur->UpdateExpectedRange(buf_prev->GetExpectedRange());
+#define BUF(i) (reinterpret_cast<BlockBuf*>(bufs_active_[i]))
+  for (size_t i = n_active_ - 1; i >= 3; i--) {
+    BUF(i)->UpdateExpectedRange(BUF(i-1)->GetExpectedRange());
   }
 
-  float rhalf = (rmin + rmax) / 2;
+  Range r0 = BUF(0)->GetExpectedRange();
+  Range r1 = BUF(1)->GetExpectedRange();
+  BUF(2)->UpdateExpectedRange(r0.range_min, r1.range_max);
 
-  reinterpret_cast<BlockBuf*>(bufs_active_[0])->UpdateExpectedRange(rmin, rhalf);
-  reinterpret_cast<BlockBuf*>(bufs_active_[1])->UpdateExpectedRange(rhalf, rmax);
+  float rhalf = (rmin + rmax) / 2;
+  BUF(0)->UpdateExpectedRange(rmin, rhalf);
+  BUF(1)->UpdateExpectedRange(rhalf, rmax);
 
   uint32_t ignored_compac_seq;
   s = PrepareAll<RangeWriter>(&ignored_compac_seq, /* force */ true);
