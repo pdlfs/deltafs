@@ -176,19 +176,22 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
   MutexLock ml(&mu_);
   Status s = Status::OK();
 
-  assert(n_active_ == 3);
+  assert(n_active_ == 4);
 
   /* Strictly, should lock before updating, but this is only for measuring
    * "pollution" - who cares if it's a couple of counters off */
 
   /* WARN: i is unsigned, i >= 0 is infinite loop */
-  for (size_t i = n_active_ - 1; i >= 1; i--) {
+  for (size_t i = n_active_ - 1; i >= 2; i--) {
     BlockBuf* buf_cur = reinterpret_cast<BlockBuf*>(bufs_active_[i]);
     BlockBuf* buf_prev = reinterpret_cast<BlockBuf*>(bufs_active_[i-1]);
     buf_cur->UpdateExpectedRange(buf_prev->GetExpectedRange());
   }
 
-  reinterpret_cast<BlockBuf*>(bufs_active_[0])->UpdateExpectedRange(rmin, rmax);
+  float rhalf = (rmin + rmax) / 2;
+
+  reinterpret_cast<BlockBuf*>(bufs_active_[0])->UpdateExpectedRange(rmin, rhalf);
+  reinterpret_cast<BlockBuf*>(bufs_active_[1])->UpdateExpectedRange(rhalf, rmax);
 
   uint32_t ignored_compac_seq;
   s = PrepareAll<RangeWriter>(&ignored_compac_seq, /* force */ true);
@@ -198,7 +201,7 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
 
 RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
                          size_t buf_size, size_t n)
-    : MultiBuffering(&mu_, &bg_cv_, n, 3),
+    : MultiBuffering(&mu_, &bg_cv_, n, 4),
       logger_(options.env),
       logging_enabled_(false),
       manifest_(dst),
@@ -209,7 +212,7 @@ RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
       buf_reserv_(8 + buf_size),
       offset_(0),
       bbs_(NULL) {
-  if (n_total_ < n_active_) n_total_ = n_active_;
+  if (n_total_ < n_active_ + 1) n_total_ = n_active_ + 1;
 
   bufs_active_ = new void*[n_active_];
   bbs_ = new BlockBuf*[n_total_];
