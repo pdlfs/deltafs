@@ -189,6 +189,7 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
 
   Range r0 = BUF(0)->GetExpectedRange();
   Range r1 = BUF(1)->GetExpectedRange();
+
   BUF(2)->UpdateExpectedRange(r0.range_min, r1.range_max);
 
   float rhalf = (rmin + rmax) / 2;

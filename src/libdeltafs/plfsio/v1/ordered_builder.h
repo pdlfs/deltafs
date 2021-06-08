@@ -26,8 +26,12 @@ namespace plfsio {
 class PartitionManifestWriter;
 
 struct Range {
-  float range_min = FLT_MAX;
-  float range_max = FLT_MIN;
+  float range_min;
+  float range_max;
+
+  Range() : range_min(FLT_MAX), range_max(FLT_MAX) {}
+
+  Range(float rmin, float rmax) : range_min(rmin), range_max(rmax) {}
 
   Range& operator=(const Range& r) {
     range_min = r.range_min;
@@ -42,7 +46,9 @@ struct Range {
 
   bool Inside(float f) const { return (f >= range_min && f <= range_max); }
 
-  bool IsSet() const { return (range_min != FLT_MAX) and (range_max != FLT_MIN); }
+  bool IsSet() const {
+    return (range_min != FLT_MAX) and (range_max != FLT_MIN);
+  }
 
   bool Overlaps(float qr_min, float qr_max) const {
     if (qr_min > qr_max) return false;
@@ -124,14 +130,11 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
   void UpdateExpectedRange(Range range) {
     updcnt_++;
     expected_ = range;
+    assert(expected_.IsValid());
   }
 
   void UpdateExpectedRange(float rmin, float rmax) {
-    assert(rmin <= rmax);
-    updcnt_++;
-
-    expected_.range_min = rmin;
-    expected_.range_max = rmax;
+    UpdateExpectedRange(Range(rmin, rmax));
   }
 
  private:
