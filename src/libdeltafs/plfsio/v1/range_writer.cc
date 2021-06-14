@@ -174,37 +174,53 @@ size_t PartitionManifestWriter::Size() const { return items_.size(); }
 
 Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
   MutexLock ml(&mu_);
+
   Status s = Status::OK();
-
-  assert(n_active_ == 4);
-
-  /* Strictly, should lock before updating, but this is only for measuring
-   * "pollution" - who cares if it's a couple of counters off */
-
-  /* WARN: i is unsigned, i >= 0 is infinite loop */
-#define BUF(i) (reinterpret_cast<BlockBuf*>(bufs_active_[i]))
-  for (size_t i = n_active_ - 1; i >= 3; i--) {
-    BUF(i)->UpdateExpectedRange(BUF(i-1)->GetExpectedRange());
-  }
-
-  Range r0 = BUF(0)->GetExpectedRange();
-  Range r1 = BUF(1)->GetExpectedRange();
-
-  BUF(2)->UpdateExpectedRange(r0.range_min, r1.range_max);
-
-  float rhalf = (rmin + rmax) / 2;
-  BUF(0)->UpdateExpectedRange(rmin, rhalf);
-  BUF(1)->UpdateExpectedRange(rhalf, rmax);
 
   uint32_t ignored_compac_seq;
   s = PrepareAll<RangeWriter>(&ignored_compac_seq, /* force */ true);
+
+  if (!s.ok()) return s;
+
+#define NUM_ACTIVE 6
+#define NUM_SUBPART 4
+    /* Strictly, should lock before updating, but this is only for measuring
+     * "pollution" - who cares if it's a couple of counters off */
+
+    /* WARN: i is unsigned, i >= 0 is infinite loop */
+#define BUF(i) (reinterpret_cast<BlockBuf*>(bufs_active_[i]))
+  // for (size_t i = n_active_ - 1; i >= 5; i--) {
+  // BUF(i)->UpdateExpectedRange(BUF(i-1)->GetExpectedRange());
+  // }
+  //
+  BUF(5)->UpdateExpectedRange(BUF(4)->GetExpectedRange());
+  // BUF(1)->UpdateExpectedRange(BUF(0)->GetExpectedRange());
+  // BUF(0)->UpdateExpectedRange(rmin, rmax);
+
+  // // BUF(0)->UpdateExpectedRange(rmin, rmax);
+
+  Range r0 = BUF(0)->GetExpectedRange();
+  Range r1 = BUF(3)->GetExpectedRange();
+
+  // if (r0.IsValid() and r1.IsValid())
+  BUF(4)->UpdateExpectedRange(r0.range_min, r1.range_max);
+
+#define SUBPART(i) (rmin + (i)*rdel)
+  float rdel = (rmax - rmin) / 4;
+  BUF(0)->UpdateExpectedRange(rmin, SUBPART(1));
+  BUF(1)->UpdateExpectedRange(SUBPART(1), SUBPART(2));
+  BUF(2)->UpdateExpectedRange(SUBPART(2), SUBPART(3));
+  BUF(3)->UpdateExpectedRange(SUBPART(3), rmax);
+  // float rhalf = (rmin + rmax) / 2.0;
+  // BUF(0)->UpdateExpectedRange(rmin, rhalf);
+  // BUF(1)->UpdateExpectedRange(rhalf, rmax);
 
   return s;
 }
 
 RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
                          size_t buf_size, size_t n)
-    : MultiBuffering(&mu_, &bg_cv_, n, 4),
+    : MultiBuffering(&mu_, &bg_cv_, n, NUM_ACTIVE),
       logger_(options.env),
       logging_enabled_(false),
       manifest_(dst),
@@ -215,7 +231,8 @@ RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
       buf_reserv_(8 + buf_size),
       offset_(0),
       bbs_(NULL) {
-  if (n_total_ < n_active_ + 1) n_total_ = n_active_ + 1;
+  // XXX : tmp, fix relationship with n
+  n_total_ = n_active_ * 2;
 
   bufs_active_ = new void*[n_active_];
   bbs_ = new BlockBuf*[n_total_];
@@ -251,9 +268,9 @@ Status RangeWriter::Add(const Slice& k, const Slice& v) {
   float key_val = DecodeFloat32(k.data());
   void** dest_buf = nullptr;
   for (size_t i = 0; i < n_active_; i++) {
-    BlockBuf* cur_buf = reinterpret_cast<BlockBuf*>(bufs_active_[i]);
-    if (cur_buf->Inside(key_val)) {
+    if (BUF(i)->Inside(key_val)) {
       dest_buf = &bufs_active_[i];
+      break;
     }
   }
 

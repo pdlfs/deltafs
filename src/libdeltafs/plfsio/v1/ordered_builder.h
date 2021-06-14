@@ -29,7 +29,7 @@ struct Range {
   float range_min;
   float range_max;
 
-  Range() : range_min(FLT_MAX), range_max(FLT_MAX) {}
+  Range() : range_min(FLT_MAX), range_max(FLT_MIN) {}
 
   Range(float rmin, float rmax) : range_min(rmin), range_max(rmax) {}
 
@@ -88,7 +88,8 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
         bytes_written_(0),
         updcnt_(0),
         num_items_(0),
-        num_items_oob_(0) {
+        num_items_oob_(0),
+        rank_(options.rank) {
     // TODO: what is this used for again?
     cmp_ = NULL;
     assert(sizeof(KeyType) == key_size_);
@@ -131,6 +132,7 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
     updcnt_++;
     expected_ = range;
     assert(expected_.IsValid());
+    assert(num_items_ == 0);
   }
 
   void UpdateExpectedRange(float rmin, float rmax) {
@@ -153,6 +155,8 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
   uint32_t updcnt_;
   uint32_t num_items_ = 0;
   uint32_t num_items_oob_ = 0;
+
+  const int rank_;
 
   static bool KeyPtrComparator(const key_ptr& lhs, const key_ptr& rhs) {
     return lhs.first < rhs.first;

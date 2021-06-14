@@ -208,12 +208,52 @@ template <typename T>
 Status MultiBuffering::PrepareAll(uint32_t* seq, bool force, bool nowait,
                                   const Slice& k, const Slice& v) {
   mu_->AssertHeld();
-  Status s = Status::OK();
-  for (size_t i = 0; i < n_active_; i++) {
-    s = Prepare<T>(&bufs_active_[i], seq, force, nowait, k, v);
-    if (!s.ok()) break;
+
+  Status status = Status::OK();
+  void* to_be_compacted[n_active_];
+
+  while (true) {
+    if (!bg_status_.ok()) {
+      status = bg_status_;
+      break;
+    } else if (bufs_free_.size() == n_active_) {
+      break;
+    } else if (!nowait) {
+      bg_cv_->Wait();  // Wait for background compactions to finish
+    } else {
+      status = Status::TryAgain("");
+      break;
+    }
   }
-  return s;
+
+  if (!status.ok()) return status;
+  assert(bufs_free_.size() == n_active_);
+
+  for (size_t i = 0; i < n_active_; i++) {
+    void* cur_buf = bufs_active_[i];
+    void* new_buf = bufs_free_.back();
+    bufs_free_.pop_back();
+
+    __this->CopyBufState(cur_buf, new_buf);
+
+    /* swap curbuf and newbuf */
+    bufs_active_[i] = new_buf;
+    to_be_compacted[i] = cur_buf;
+  }
+
+  for (size_t i = 0; i < n_active_; i++) {
+    void* membuf = to_be_compacted[i];
+
+    if (!bg_status_.ok()) {
+      status = bg_status_;
+    } else {
+      TryScheduleCompaction<T>(seq, membuf);
+    }
+
+    if (!status.ok()) break;
+  }
+
+  return status;
 }
 
 // REQUIRES: mu_ has been LOCKed.
