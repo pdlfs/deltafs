@@ -178,43 +178,37 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
   Status s = Status::OK();
 
   uint32_t ignored_compac_seq;
+  /* PrepareAll atomically swaps all buffers, but:
+   * 1. Their compaction is going on in the background
+   * 2. This will block if available double buffers are less than
+   * what's needed to swap all
+   */
   s = PrepareAll<RangeWriter>(&ignored_compac_seq, /* force */ true);
 
   if (!s.ok()) return s;
 
 #define NUM_ACTIVE 6
 #define NUM_SUBPART 4
-    /* Strictly, should lock before updating, but this is only for measuring
-     * "pollution" - who cares if it's a couple of counters off */
 
-    /* WARN: i is unsigned, i >= 0 is infinite loop */
 #define BUF(i) (reinterpret_cast<BlockBuf*>(bufs_active_[i]))
-  // for (size_t i = n_active_ - 1; i >= 5; i--) {
-  // BUF(i)->UpdateExpectedRange(BUF(i-1)->GetExpectedRange());
-  // }
-  //
-  BUF(5)->UpdateExpectedRange(BUF(4)->GetExpectedRange());
-  // BUF(1)->UpdateExpectedRange(BUF(0)->GetExpectedRange());
-  // BUF(0)->UpdateExpectedRange(rmin, rmax);
 
-  // // BUF(0)->UpdateExpectedRange(rmin, rmax);
+  /* WARN: i is unsigned, i >= 0 is infinite loop */
+  for (size_t i = n_active_ - 1; i >= NUM_SUBPART + 1; i--) {
+    BUF(i)->UpdateExpectedRange(BUF(i - 1)->GetExpectedRange());
+  }
 
   Range r0 = BUF(0)->GetExpectedRange();
-  Range r1 = BUF(3)->GetExpectedRange();
+  Range r1 = BUF(NUM_SUBPART - 1)->GetExpectedRange();
 
-  // if (r0.IsValid() and r1.IsValid())
-  BUF(4)->UpdateExpectedRange(r0.range_min, r1.range_max);
+  BUF(NUM_SUBPART)->UpdateExpectedRange(r0.range_min, r1.range_max);
 
 #define SUBPART(i) (rmin + (i)*rdel)
   float rdel = (rmax - rmin) / 4;
-  BUF(0)->UpdateExpectedRange(rmin, SUBPART(1));
-  BUF(1)->UpdateExpectedRange(SUBPART(1), SUBPART(2));
-  BUF(2)->UpdateExpectedRange(SUBPART(2), SUBPART(3));
-  BUF(3)->UpdateExpectedRange(SUBPART(3), rmax);
-  // float rhalf = (rmin + rmax) / 2.0;
-  // BUF(0)->UpdateExpectedRange(rmin, rhalf);
-  // BUF(1)->UpdateExpectedRange(rhalf, rmax);
-
+  for (size_t i = 0; i < NUM_SUBPART; i++) {
+    float rx = SUBPART(i);
+    float ry = i < NUM_SUBPART ? SUBPART(i + 1) : rmax;
+    BUF(i)->UpdateExpectedRange(rx, ry);
+  }
   return s;
 }
 
@@ -231,7 +225,7 @@ RangeWriter::RangeWriter(const DirOptions& options, WritableFile* dst,
       buf_reserv_(8 + buf_size),
       offset_(0),
       bbs_(NULL) {
-  // XXX : tmp, fix relationship with n
+  // XXX : n is ignored for now, fixed subpartitioning
   n_total_ = n_active_ * 2;
 
   bufs_active_ = new void*[n_active_];
