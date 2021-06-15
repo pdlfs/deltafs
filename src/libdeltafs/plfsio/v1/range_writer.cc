@@ -187,8 +187,8 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
 
   if (!s.ok()) return s;
 
-#define NUM_ACTIVE 6
-#define NUM_SUBPART 4
+#define NUM_SUBPART 1
+#define NUM_ACTIVE NUM_SUBPART + 2
 
 #define BUF(i) (reinterpret_cast<BlockBuf*>(bufs_active_[i]))
 
@@ -203,7 +203,7 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
   BUF(NUM_SUBPART)->UpdateExpectedRange(r0.range_min, r1.range_max);
 
 #define SUBPART(i) (rmin + (i)*rdel)
-  float rdel = (rmax - rmin) / 4;
+  float rdel = (rmax - rmin) / NUM_SUBPART;
   for (size_t i = 0; i < NUM_SUBPART; i++) {
     float rx = SUBPART(i);
     float ry = i < NUM_SUBPART ? SUBPART(i + 1) : rmax;
