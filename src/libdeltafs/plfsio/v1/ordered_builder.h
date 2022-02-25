@@ -84,7 +84,6 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
       : AbstractBlockBuilder(BytewiseComparator()),
         value_size_(options.value_size),
         key_size_(options.key_size),
-        n_(0),
         bytes_written_(0),
         updcnt_(0),
         num_items_(0),
@@ -98,9 +97,6 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
   void Add(const Slice& key, const Slice& value);
 
   Slice Finish();
-
-  // Return the number of entries inserted.
-  size_t NumEntries() const { return n_; }
 
   // Return an estimate of the size of the block we are building.
   size_t CurrentSizeEstimate() const;
@@ -146,7 +142,6 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
   std::vector<key_ptr> keys_staging_;
   const size_t value_size_;
   const size_t key_size_;
-  size_t n_;
   size_t bytes_written_;
 
   /* Range properties */

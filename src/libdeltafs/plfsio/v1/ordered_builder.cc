@@ -87,7 +87,6 @@ void OrderedBlockBuilder<KeyType>::Reset() {
   keys_staging_.clear();
   buffer_staging_.clear();
   observed_.Reset();
-  n_ = 0;
   bytes_written_ = 0;
   num_items_ = 0;
   num_items_oob_ = 0;

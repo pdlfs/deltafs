@@ -21,75 +21,6 @@ namespace pdlfs {
 namespace plfsio {
 class PartitionManifestWriter;
 
-class Bucket {
- private:
-  Range expected_;
-  Range observed_;
-  uint32_t num_items_ = 0;
-  uint32_t num_items_oob_ = 0;
-
-  OrderedBlockBuilder<float>* buf_;
-
- public:
-  Bucket() : num_items_(0), num_items_oob_(0), buf_(NULL){};
-
-  Range GetExpectedRange() { return expected_; }
-
-  Range GetObservedRange() { return observed_; }
-
-  void UpdateExpectedRange(Range range) {
-    expected_ = range;
-    assert(expected_.IsValid());
-  }
-
-  void Add(const Slice& key, const Slice& value) {
-    float keyNum = DecodeFloat32(key.data());
-    observed_.Extend(keyNum);
-    num_items_++;
-    if (not expected_.Inside(keyNum)) {
-      num_items_oob_++;
-    }
-
-    buf_->Add(key, value);
-  }
-
-  Slice Finish() { return buf_->Finish(); }
-
-  size_t NumEntries() const { return buf_->NumEntries(); }
-
-  size_t CurrentSizeEstimate() const { return buf_->CurrentSizeEstimate(); }
-
-  void UpdateExpectedRange(float rmin, float rmax) {
-    expected_.range_min = rmin;
-    expected_.range_max = rmax;
-    assert(expected_.IsValid());
-  }
-
-  void Reset() {
-    observed_.Reset();
-    num_items_ = 0;
-    num_items_oob_ = 0;
-  }
-
-  bool empty() const { return buf_->empty(); }
-
-  bool Inside(float prop) { return expected_.Inside(prop); }
-
-  void GetWriteStats(uint32_t& num_items, uint32_t& num_oob) const {
-    num_items = num_items_;
-    num_oob = num_items_oob_;
-  }
-
-  OrderedBlockBuilder<float>* SwapBuf(OrderedBlockBuilder<float>* new_buf) {
-    OrderedBlockBuilder<float>* old_buf = buf_;
-    buf_ = new_buf;
-    old_buf->Reset();
-    return old_buf;
-  }
-
-  ~Bucket() = default;
-};
-
 typedef struct PartitionManifestItem {
   int epoch;
   int rank;
@@ -231,7 +162,6 @@ class RangeWriter : public MultiBuffering {
   typedef OrderedBlockBuilder<float> BlockBuf;
   PartitionManifestWriter manifest_;
 
-  typedef ArrayBlock Block;
   const DirOptions& options_;
   WritableFile* const dst_;
   port::Mutex mu_;
