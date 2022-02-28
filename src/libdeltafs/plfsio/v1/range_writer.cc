@@ -48,8 +48,8 @@ size_t PartitionManifestWriter::AddItem(uint64_t offset,
 
   items_.push_back(item);
 
-  range_min_ = std::min(range_min_, item.observed.range_min);
-  range_max_ = std::max(range_max_, item.observed.range_max);
+  range_min_ = std::min(range_min_, item.observed.rmin());
+  range_max_ = std::max(range_max_, item.observed.rmax());
 
   mass_total_ += part_count;
   mass_oob_ += part_oob;
@@ -64,10 +64,10 @@ std::string PartitionManifestWriter::FinishEpoch() {
     PartitionManifestItem& item = items_[i];
     PutFixed64(&contents, i);
     PutFixed64(&contents, item.offset);
-    PutFloat32(&contents, item.expected.range_min);
-    PutFloat32(&contents, item.expected.range_max);
-    PutFloat32(&contents, item.observed.range_min);
-    PutFloat32(&contents, item.observed.range_max);
+    PutFloat32(&contents, item.expected.rmin());
+    PutFloat32(&contents, item.expected.rmax());
+    PutFloat32(&contents, item.observed.rmin());
+    PutFloat32(&contents, item.observed.rmax());
     PutFixed32(&contents, item.updcnt);
     PutFixed32(&contents, item.part_item_count);
     PutFixed32(&contents, item.part_item_oob);
@@ -200,7 +200,7 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
   Range r0 = BUF(0)->GetExpectedRange();
   Range r1 = BUF(NUM_SUBPART - 1)->GetExpectedRange();
 
-  BUF(NUM_SUBPART)->UpdateExpectedRange(r0.range_min, r1.range_max);
+  BUF(NUM_SUBPART)->UpdateExpectedRange(r0.rmin(), r1.rmax());
 
 #define SUBPART(i) (rmin + (i)*rdel)
   float rdel = (rmax - rmin) / NUM_SUBPART;
@@ -348,7 +348,7 @@ Status RangeWriter::Compact(uint32_t const compac_seq, void* immbuf) {
   manifest_.AddItem(offset, bb);
 
   //    printf("Compacted: %p @ %u (%.3f to %.3f), %u-%u\n", immbuf, offset_,
-  //           buf_range.range_min, buf_range.range_max, num_items, num_oob);
+  //           buf_range.rmin(), buf_range.rmax(), num_items, num_oob);
 
   Status status;
   if (!block_contents.empty()) {

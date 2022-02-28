@@ -18,64 +18,12 @@
 #pragma once
 
 #include "builder.h"
+#include "range.h"
 
 #include <float.h>
 
 namespace pdlfs {
 namespace plfsio {
-class PartitionManifestWriter;
-
-struct Range {
-  float range_min;
-  float range_max;
-
-  Range() : range_min(FLT_MAX), range_max(FLT_MIN) {}
-
-  Range(float rmin, float rmax) : range_min(rmin), range_max(rmax) {}
-
-  Range& operator=(const Range& r) {
-    range_min = r.range_min;
-    range_max = r.range_max;
-    return *this;
-  }
-
-  void Reset() {
-    range_min = FLT_MAX;
-    range_max = FLT_MIN;
-  }
-
-  bool Inside(float f) const { return (f >= range_min && f <= range_max); }
-
-  bool IsSet() const {
-    return (range_min != FLT_MAX) and (range_max != FLT_MIN);
-  }
-
-  bool Overlaps(float qr_min, float qr_max) const {
-    if (qr_min > qr_max) return false;
-
-    bool qr_envelops =
-        (qr_min < range_min) and (qr_max > range_max) and IsSet();
-
-    return Inside(qr_min) or Inside(qr_max) or qr_envelops;
-  }
-
-  bool IsValid() const {
-    return ((range_min == FLT_MAX && range_max == FLT_MIN) or
-            (range_min < range_max));
-  }
-
-  void Extend(float f) {
-    range_min = std::min(range_min, f);
-    range_max = std::max(range_max, f);
-  }
-
-  void Set(float qr_min, float qr_max) {
-    if (qr_min > qr_max) return;
-
-    range_min = qr_min;
-    range_max = qr_max;
-  }
-};
 
 template <typename KeyType>
 class OrderedBlockBuilder : public AbstractBlockBuilder {
