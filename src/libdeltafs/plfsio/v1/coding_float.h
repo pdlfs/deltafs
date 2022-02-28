@@ -8,15 +8,18 @@
 
 namespace pdlfs {
 inline void EncodeFloat32(char* buf, float value) {
+  uint32_t val_uint;
   assert(sizeof(float) == sizeof(uint32_t));
-  uint32_t val_uint = *reinterpret_cast<uint32_t*>(&value);
+  memcpy(&val_uint, &value, sizeof(uint32_t));
   EncodeFixed32(buf, val_uint);
 }
 
 inline float DecodeFloat32(const char* ptr) {
+  float ret;
   assert(sizeof(float) == sizeof(uint32_t));
   uint32_t val_uint = DecodeFixed32(ptr);
-  return *reinterpret_cast<float*>(&val_uint);
+  memcpy(&ret, &val_uint, sizeof(uint32_t));
+  return ret;
 }
 
 inline void PutFloat32(std::string* dst, float value) {

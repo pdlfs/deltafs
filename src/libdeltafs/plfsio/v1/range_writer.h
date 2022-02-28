@@ -115,7 +115,7 @@ class RangeWriterPerfLogger {
 
     fprintf(stderr, "\nTime: %.2fms %.2fms %.2fms (TID: %p)\n",
             preprocess_time * 1e-3, wait_time * 1e-3, postprocess_time * 1e-3,
-            pthread_self());
+            (void*)pthread_self());
 
     compac_hist_.push_back(total_time);
   }

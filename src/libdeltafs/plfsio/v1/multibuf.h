@@ -210,7 +210,7 @@ Status MultiBuffering::PrepareAll(uint32_t* seq, bool force, bool nowait,
   mu_->AssertHeld();
 
   Status status = Status::OK();
-  void* to_be_compacted[n_active_];
+  std::vector<void *> to_be_compacted;
 
   while (true) {
     if (!bg_status_.ok()) {
@@ -238,7 +238,7 @@ Status MultiBuffering::PrepareAll(uint32_t* seq, bool force, bool nowait,
 
     /* swap curbuf and newbuf */
     bufs_active_[i] = new_buf;
-    to_be_compacted[i] = cur_buf;
+    to_be_compacted.push_back(cur_buf);
   }
 
   for (size_t i = 0; i < n_active_; i++) {

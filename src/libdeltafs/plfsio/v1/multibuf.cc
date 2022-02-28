@@ -22,9 +22,9 @@ MultiBuffering::MultiBuffering(port::Mutex* mu, port::CondVar* cv,
       num_compac_completed_(0),
       finished_(false),
       num_bg_compactions_(0),
-      bufs_active_(nullptr),
       n_total_(n_total),
-      n_active_(n_active) {}
+      n_active_(n_active),
+      bufs_active_(nullptr) {}
 
 // Wait until there is no outstanding compactions.
 // REQUIRES: __Finish() has NOT been called.

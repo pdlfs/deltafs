@@ -1813,14 +1813,14 @@ ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
   } else if (__fname[0] == 0 && __dir->io_engine != DELTAFS_PLFSDIR_RANGEDB) {
     s = BadArgs();
   } else {
-    char tmp[16];
-
 #ifdef PLFSIO_HASH_NO_HASH
     pdlfs::Slice k(__fname, __dir->io_options->key_size);
 #elif PLFSIO_HASH_USE_SPOOKY
+    char tmp[16];
     pdlfs::Spooky128(__fname, strlen(__fname), 0, 0, tmp);
     pdlfs::Slice k(tmp, __dir->io_options->key_size);
 #else
+    char tmp[16];
     pdlfs::murmur_x64_128(__fname, int(strlen(__fname)), 0, tmp);
     pdlfs::Slice k(tmp, __dir->io_options->key_size);
 #endif
