@@ -66,7 +66,7 @@ class PartitionManifestWriter {
 
  public:
   explicit PartitionManifestWriter(WritableFile* dst);
-  size_t AddItem(uint64_t offset, OrderedBlockBuilder<float>* sst);
+  size_t AddItem(uint64_t offset, OrderedBlockBuilder* sst);
   Status EpochFlush();
   Status Finish();
   int GetRange(float& range_min, float& range_max) const;
@@ -159,7 +159,7 @@ class RangeWriter : public MultiBuffering {
   RangeWriterPerfLogger logger_;
   bool logging_enabled_;
 
-  typedef OrderedBlockBuilder<float> BlockBuf;
+  typedef OrderedBlockBuilder BlockBuf;
   PartitionManifestWriter manifest_;
 
   const DirOptions& options_;

@@ -23,9 +23,8 @@
 
 namespace pdlfs {
 namespace plfsio {
-template <typename KeyType>
-void OrderedBlockBuilder<KeyType>::Add(const Slice& key, const Slice& value) {
-  KeyType keyNum = DecodeFloat32(key.data());
+void OrderedBlockBuilder::Add(const Slice& key, const Slice& value) {
+  float keyNum = DecodeFloat32(key.data());
   observed_.Extend(keyNum);
 
   keys_staging_.push_back(key_ptr(keyNum, num_items_));
@@ -38,8 +37,7 @@ void OrderedBlockBuilder<KeyType>::Add(const Slice& key, const Slice& value) {
   }
 }
 
-template <>
-Slice OrderedBlockBuilder<float>::Finish() {
+Slice OrderedBlockBuilder::Finish() {
   assert(!finished_);
   assert(sizeof(float) == 4u);
 
@@ -70,8 +68,7 @@ Slice OrderedBlockBuilder<float>::Finish() {
   return AbstractBlockBuilder::Finish(kNoCompression, false);
 }
 
-template <typename KeyType>
-size_t OrderedBlockBuilder<KeyType>::CurrentSizeEstimate() const {
+size_t OrderedBlockBuilder::CurrentSizeEstimate() const {
   size_t result = bytes_written_;
   if (!finished_) {
     return result + 8;
@@ -81,8 +78,7 @@ size_t OrderedBlockBuilder<KeyType>::CurrentSizeEstimate() const {
 }
 
 // Does not reset copyable state, in this case, member var expected_
-template <typename KeyType>
-void OrderedBlockBuilder<KeyType>::Reset() {
+void OrderedBlockBuilder::Reset() {
   AbstractBlockBuilder::Reset();
   keys_staging_.clear();
   buffer_staging_.clear();
@@ -92,7 +88,5 @@ void OrderedBlockBuilder<KeyType>::Reset() {
   num_items_oob_ = 0;
 }
 
-/* Make compiler happy */
-template class OrderedBlockBuilder<float>;
 }  // namespace plfsio
 }  // namespace pdlfs

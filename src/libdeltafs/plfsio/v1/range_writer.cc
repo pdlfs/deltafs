@@ -26,7 +26,7 @@ PartitionManifestWriter::PartitionManifestWriter(WritableFile* dst)
       off_prev_(0) {}
 
 size_t PartitionManifestWriter::AddItem(uint64_t offset,
-                                        OrderedBlockBuilder<float>* sst) {
+                                        OrderedBlockBuilder* sst) {
   assert(sst);
 
   uint32_t part_count = 0, part_oob = 0;

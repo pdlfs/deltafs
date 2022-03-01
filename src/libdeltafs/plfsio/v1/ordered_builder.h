@@ -25,7 +25,6 @@
 namespace pdlfs {
 namespace plfsio {
 
-template <typename KeyType>
 class OrderedBlockBuilder : public AbstractBlockBuilder {
  public:
   explicit OrderedBlockBuilder(const DirOptions& options)
@@ -39,7 +38,7 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
         rank_(options.rank) {
     // TODO: what is this used for again?
     cmp_ = NULL;
-    assert(sizeof(KeyType) == key_size_);
+    assert(sizeof(float) == key_size_);
   }
 
   void Add(const Slice& key, const Slice& value);
@@ -86,7 +85,7 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
  private:
   /* Writing properties */
   std::string buffer_staging_;
-  typedef std::pair<KeyType, size_t> key_ptr;
+  typedef std::pair<float, size_t> key_ptr;
   std::vector<key_ptr> keys_staging_;
   const size_t value_size_;
   const size_t key_size_;
