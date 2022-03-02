@@ -110,8 +110,8 @@ Status MultiBuffering::__Finish() {
 
   // Wait until !num_bg_compactions_
   WaitForAny();
-  if (bg_status_.ok()) {  // Sync and close
-    bg_status_ = __this->SyncBackend(true /* close */);
+  if (bg_status_.ok()) {
+    bg_status_ = __this->Close();
     finish_status = bg_status_;
     bg_status_ =
         Status::AssertionFailed("Already finished", finish_status.ToString());

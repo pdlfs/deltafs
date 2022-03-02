@@ -175,7 +175,7 @@ class RangeWriter : public MultiBuffering {
 
   friend class MultiBuffering;
   Status Compact(uint32_t seq, void* buf);
-  Status SyncBackend(bool close = false);
+  Status SyncBackend();
   Status Close();
   void ScheduleCompaction(uint32_t seq, void* buf);
   void Clear(void* buf) { static_cast<BlockBuf*>(buf)->Reset(); }

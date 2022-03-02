@@ -402,15 +402,11 @@ Status RangeWriter::Close() {
 
 // REQUIRES: no outstanding background compactions.
 // REQUIRES: mu_ has been LOCKed.
-Status RangeWriter::SyncBackend(bool close) {
+Status RangeWriter::SyncBackend() {
   assert(!num_bg_compactions_);
   mu_.AssertHeld();
   assert(dst_);
-  if (!close) {
-    return dst_->Sync();
-  } else {
-    return Close();
-  }
+  return dst_->Sync();
 }
 
 namespace {  // State for each compaction
