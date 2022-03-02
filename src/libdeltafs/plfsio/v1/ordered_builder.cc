@@ -16,17 +16,22 @@
  */
 
 #include "ordered_builder.h"
-
 #include "coding_float.h"
 
 #include <algorithm>
 
 namespace pdlfs {
 namespace plfsio {
+
+//
+// add key/value pair to staging area, updating our accounting
+//
 void OrderedBlockBuilder::Add(const Slice& key, const Slice& value) {
   float keyNum = DecodeFloat32(key.data());
+
   observed_.Extend(keyNum);
 
+  // we'll use saved value of num_items_ in Finish() to locate the value data
   keys_staging_.push_back(key_ptr(keyNum, num_items_));
   buffer_staging_.append(value.data(), value_size_);
 
@@ -37,20 +42,26 @@ void OrderedBlockBuilder::Add(const Slice& key, const Slice& value) {
   }
 }
 
+//
+// sort staged k/v data in keys_staging_ and buffer_staging_ into buffer_
+// and then pass to abstract builder to finish (optional prefix removal
+// and compression... currently not used).
+//
 Slice OrderedBlockBuilder::Finish() {
   assert(!finished_);
   assert(sizeof(float) == 4u);
 
+  // do an in-place sort of keys_staging_ by float key
   std::sort(keys_staging_.begin(), keys_staging_.end(),
             OrderedBlockBuilder::KeyPtrComparator);
-  const char* rawbuf_staging = buffer_staging_.c_str();
 
-  assert(buffer_.size() == 0u);
-
+  // buffer_ should be empty (haven't used it yet and buf_start_ is always
+  // zero for us).  resize to target.
   size_t buf_offset = buffer_.size();
-
+  assert(buf_offset == 0u);
   buffer_.resize(buf_offset + num_items_ * (key_size_ + value_size_));
 
+  // put sorted keys in buffer
   size_t num_keys = keys_staging_.size();
   for (size_t i = 0; i < num_keys; i++) {
     float key = keys_staging_[i].first;
@@ -58,28 +69,25 @@ Slice OrderedBlockBuilder::Finish() {
     buf_offset += key_size_;
   }
 
+  // use sorted list of keys to append sorted values to buffer_
+  const char* rawbuf_staging = buffer_staging_.c_str();
   for (size_t i = 0; i < num_keys; i++) {
-    size_t key_offset = keys_staging_[i].second;
-    memcpy(&buffer_[buf_offset], rawbuf_staging + key_offset * value_size_,
+    size_t val_offset = keys_staging_[i].second;
+    memcpy(&buffer_[buf_offset], rawbuf_staging + val_offset * value_size_,
            value_size_);
     buf_offset += value_size_;
   }
 
+  // abstract builder will set finished_  (currently not compressing)
   return AbstractBlockBuilder::Finish(kNoCompression, false);
 }
 
-size_t OrderedBlockBuilder::CurrentSizeEstimate() const {
-  size_t result = bytes_written_;
-  if (!finished_) {
-    return result + 8;
-  } else {
-    return result;
-  }
-}
-
-// Does not reset copyable state, in this case, member var expected_
+//
+// reset buffering for reuse, but don't clear fields used by
+// CopyFrom()  (i.e. expected_ and updcnt_ ).
+//
 void OrderedBlockBuilder::Reset() {
-  AbstractBlockBuilder::Reset();
+  AbstractBlockBuilder::Reset();     // clears buffer_ and finished_
   keys_staging_.clear();
   buffer_staging_.clear();
   observed_.Reset();
