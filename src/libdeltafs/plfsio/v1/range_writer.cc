@@ -183,7 +183,7 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
    * 2. This will block if available double buffers are less than
    * what's needed to swap all
    */
-  s = PrepareAll<RangeWriter>(&ignored_compac_seq, /* force */ true);
+  s = PrepareAll<RangeWriter>(&ignored_compac_seq);
 
   if (!s.ok()) return s;
 
@@ -302,7 +302,7 @@ Status RangeWriter::EpochFlush() {
 
 Status RangeWriter::Sync() {
   MutexLock ml(&mu_);
-  return __Sync<RangeWriter>(false);
+  return __Sync<RangeWriter>();
 }
 
 Status RangeWriter::Flush() {

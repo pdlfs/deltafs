@@ -44,14 +44,12 @@ class MultiBuffering {
   template <typename T>
   Status __Flush(bool synchronous);
 
-  // Sync data to storage. By default, only data that is already scheduled
-  // for compaction is sync'ed. Data that is in the write buffer and not yet
-  // scheduled for compaction is not sync'ed, unless do_flush is set to true.
-  // Will wait until all outstanding compactions are done before performing
-  // the sync. Return OK on success, or a non-OK status on errors.
+  // Sync data to storage.  Will wait until all outstanding compactions
+  // are done before performing the sync.  Return OK on success, or a
+  // non-OK status on errors.
   // REQUIRES: __Finish() has NOT been called.
   template <typename T>
-  Status __Sync(bool do_flush);
+  Status __Sync();
 
   // Wait until there is no outstanding compactions.
   // REQUIRES: __Finish() has NOT been called.
@@ -69,9 +67,7 @@ class MultiBuffering {
   port::CondVar* bg_cv_;
 
   template <typename T>
-  Status PrepareAll(uint32_t* compac_seq, bool force = true,
-                    bool nowait = false, const Slice& k = Slice(),
-                    const Slice& v = Slice());
+  Status PrepareAll(uint32_t* compac_seq, bool nowait = false);
 
   template <typename T>
   Status Prepare(void** membuf, uint32_t* compac_seq, bool force = true,
@@ -133,14 +129,14 @@ Status MultiBuffering::__Finish() {
 // REQUIRES: __Finish() has NOT been called.
 // REQUIRES: mu_ has been LOCKed.
 template <typename T>
-Status MultiBuffering::__Sync(bool flush) {
+Status MultiBuffering::__Sync() {
   mu_->AssertHeld();
   uint32_t my_compac_seq = 0;
   Status status;
   if (finished_)  // __Finish() has already been called
     status = bg_status_;
   else {
-    status = PrepareAll<T>(&my_compac_seq, flush);
+    status = PrepareAll<T>(&my_compac_seq);
   }
 
   if (!status.ok()) {
@@ -205,8 +201,7 @@ Status MultiBuffering::__Add(void** membuf, const Slice& k, const Slice& v,
 }
 // REQUIRES: mu_ has been LOCKed.
 template <typename T>
-Status MultiBuffering::PrepareAll(uint32_t* seq, bool force, bool nowait,
-                                  const Slice& k, const Slice& v) {
+Status MultiBuffering::PrepareAll(uint32_t* seq, bool nowait) {
   mu_->AssertHeld();
 
   Status status = Status::OK();
@@ -321,12 +316,6 @@ void MultiBuffering::DoCompaction(uint32_t seq, void* immbuf) {
   assert(num_bg_compactions_ > 0);
   --num_bg_compactions_;
 
-#if 0
-  // Compaction done. New buffer space available.
-  // Try scheduling another.
-  uint32_t ignored_compac_seq;
-  Prepare<T>(&ignored_compac_seq, false /* !force */);
-#endif
   bg_cv_->SignalAll();
 }
 
