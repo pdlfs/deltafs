@@ -14,7 +14,6 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found at https://github.com/google/leveldb.
  */
-
 #include "ordered_builder.h"
 #include "coding_float.h"
 
@@ -24,9 +23,13 @@ namespace pdlfs {
 namespace plfsio {
 
 //
-// add key/value pair to staging area, updating our accounting
+// add key/value pair to staging area, updating our accounting.
+// caller should have already done error checking, but we'll assert
+// in non-NDEBUG builds to be safe...
 //
 void OrderedBlockBuilder::Add(const Slice& key, const Slice& value) {
+  assert(!finished_);
+  assert(key.size() == key_size_ && value.size() == value_size_);
   float keyNum = DecodeFloat32(key.data());
 
   observed_.Extend(keyNum);

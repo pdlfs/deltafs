@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <assert.h>
 #include "builder.h"
 #include "range.h"
 
@@ -24,20 +25,17 @@ namespace pdlfs {
 namespace plfsio {
 
 //
-// the ordered block builder allows us to insert key/value pairs
-// into a block.  keys must be floats.  all values should have
-// the same size.  we stage added k/v data separately in keys_staging_
-// and buffer_staging_ (the latter for the values).  at Finish()
-// time we sort the data by keys and copy the sorted keys and
-// then the sorted values out into the AbstractBlockBuilder's buffer_
-// for processing (e.g. saving to storage via compaction).  we
-// track our key Range as k/v data is inserted.  this includes
-// k/v adds that are outside of our expected Range (i.e. out of
-// bounds or oob).   we expect higher-level code store its
-// k/v data in a set of ordered building blocks, tracking how
-// full they are.  when an ordered building block is full
-// (or needs to be flushed), the higher level code will Finish()
-// the block and use a compaction to write the data to storage.
+// ordered building blocks allow us to insert key/value pairs in a block.
+// keys must be a float, and all values should have the same size.
+// k/v data is staged separately in keys_staging_ and buffer_staging_
+// (for the values).  at Finish() time we sort data by key and copy
+// the sorted keys and then sorted values into AbstractBlockBuilder's buffer_
+// for processing (e.g. saving to storage via compaction).  we track our
+// key Range as data is inserted, including out of expected bounds (oob)
+// inserts.  we expect higher-level code to provide locking.  higher-level
+// code should also track how large we are, and if we are full (or
+// there is a flush operation) it should Finish() our block and use
+// a compaction to write data our data to backing store.
 //
 class OrderedBlockBuilder : public AbstractBlockBuilder {
  public:
@@ -94,10 +92,10 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
 
   // install new expected_ range in our (currently) empty block.
   void UpdateExpectedRange(Range range) {
+    assert(range.IsValid());
+    assert(num_items_ == 0);
     updcnt_++;
     expected_ = range;
-    assert(expected_.IsValid());
-    assert(num_items_ == 0);
   }
 
   void UpdateExpectedRange(float rmin, float rmax) {

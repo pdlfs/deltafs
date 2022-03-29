@@ -55,6 +55,7 @@ class Range {
             (rmin_ < rmax_));
   }
 
+  // set the range.  no change made if new range is invalid.
   void Set(float qr_min, float qr_max) {
     if (qr_min > qr_max) return;        // not valid
     rmin_ = qr_min;
