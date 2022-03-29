@@ -1,204 +1,174 @@
+/*
+ * Copyright (c) 2020 Carnegie Mellon University,
+ * Copyright (c) 2020 Triad National Security, LLC, as operator of
+ *     Los Alamos National Laboratory.
+ *
+ * All rights reserved.
+ *
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. See the AUTHORS file for names of contributors.
+ */
+
 //
 // Created by Ankush J on 9/2/20.
 //
-
 #pragma once
 
-//#include "builder.h"
-#include "coding_float.h"
-#include "multibuf.h"
-#include "ordered_builder.h"
+#include <deque>
 
-#include <algorithm>
-#include <float.h>
-#include <numeric>
-#include <stdint.h>
-#include <stdio.h>
-#include <string>
-#include <vector>
+#include "types.h"
+#include "compaction_mgr.h"
+#include "ordered_builder.h"
 
 namespace pdlfs {
 namespace plfsio {
+
 class PartitionManifestWriter;
+class RangeWriterPerfLogger;
 
-typedef struct PartitionManifestItem {
-  int epoch;
-  int rank;
-  uint64_t offset;
-  Range expected;
-  Range observed;
-  uint32_t updcnt;
-  uint32_t part_item_count;
-  uint32_t part_item_oob;
-
-  bool Overlaps(float point) const {
-    return expected.Inside(point);
-  }
-
-  bool Overlaps(float range_begin, float range_end) const {
-    return expected.Overlaps(range_begin, range_end);
-  }
-} PartitionManifestItem;
-
-typedef struct PartitionManifestMatch {
-  std::vector<PartitionManifestItem> items;
-  uint64_t mass_total = 0;
-  uint64_t mass_oob = 0;
-} PartitionManifestMatch;
-
-class PartitionManifestWriter {
- private:
-  std::vector<PartitionManifestItem> items_;
-  float range_min_;
-  float range_max_;
-
-  uint64_t mass_total_;
-  uint64_t mass_oob_;
-
-  WritableFile* const dst_;
-  bool finished_;
-  std::string indexes_;
-  uint32_t num_ep_written_;
-  // Offset of the previous manifest entry, relative to the Metadata region
-  uint64_t off_prev_;
-
-  std::string FinishEpoch();
-
+//
+// a range writer manages a set of ordered blocks (OrderedBlockBuilder).
+// this includes handling ranges/bounds, creating manifests,
+// managing compaction, and writing it all to backing store.
+// in the event of an async error (e.g. disk full, I/O error on writing)
+// the compaction manager will store the error in its bg_status_
+// and we'll return that to the caller.
+//
+class RangeWriter {
  public:
-  explicit PartitionManifestWriter(WritableFile* dst);
-  size_t AddItem(uint64_t offset, OrderedBlockBuilder* sst);
-  Status EpochFlush();
-  Status Finish();
-  int GetRange(float& range_min, float& range_max) const;
-  int GetMass(uint64_t& mass_total, uint64_t mass_oob) const;
-  size_t Size() const;
-  int GetOverLappingEntries(float point, PartitionManifestMatch& match);
-  int GetOverLappingEntries(float range_begin, float range_end,
-                            PartitionManifestMatch& match);
-};
 
-class RangeWriterPerfLogger {
- private:
-  typedef struct {
-    uint64_t begin;
-    uint64_t pre;
-    uint64_t post;
-    uint64_t end;
-  } Elem;
-  Env* env_;
-  std::vector<uint32_t> compac_hist_;
-  std::map<uint32_t, Elem> compac_table_;
-
- private:
- public:
-  RangeWriterPerfLogger(Env* env) : env_(env){};
-  void RegisterCompacBegin(uint32_t seq) {
-    compac_table_[seq].begin = env_->NowMicros();
-  }
-
-  void RegisterCompacPreprocess(uint32_t seq) {
-    compac_table_[seq].pre = env_->NowMicros();
-  }
-
-  void RegisterCompacPostprocess(uint32_t seq) {
-    compac_table_[seq].post = env_->NowMicros();
-  }
-
-  void RegisterCompacEnd(uint32_t seq) {
-    Elem& e = compac_table_[seq];
-    e.end = env_->NowMicros();
-
-    uint64_t preprocess_time = e.pre - e.begin;
-    uint64_t wait_time = e.post - e.pre;
-    uint64_t postprocess_time = e.end - e.post;
-    uint64_t total_time = e.end - e.begin;
-
-    fprintf(stderr, "\nTime: %.2fms %.2fms %.2fms (TID: %p)\n",
-            preprocess_time * 1e-3, wait_time * 1e-3, postprocess_time * 1e-3,
-            (void*)pthread_self());
-
-    compac_hist_.push_back(total_time);
-  }
-
-  void Report() {
-    uint64_t max_time =
-        *std::max_element(compac_hist_.begin(), compac_hist_.end());
-    uint64_t min_time =
-        *std::min_element(compac_hist_.begin(), compac_hist_.end());
-    uint64_t sum_time =
-        std::accumulate(compac_hist_.begin(), compac_hist_.end(), 0ull);
-
-    fprintf(stderr, "Stats: %zu items, mean: %.2fms (range: %.2fms-%.2fms)\n",
-            compac_hist_.size(), sum_time * 1e-3 / compac_hist_.size(),
-            min_time * 1e-3, max_time * 1e-3);
-  }
-};
-
-class RangeWriter : public MultiBuffering {
- public:
-  RangeWriter(const DirOptions& options, WritableFile* dst, size_t buf_size,
-              size_t n);
-
-  Status Add(const Slice& k, const Slice& v);
-
-  Status Wait();
-
-  Status EpochFlush();
-
-  Status Flush();
-
-  Status Sync();
-
-  Status Finish();
-
+  //
+  // the dir options contain key size, value size, thread pool info, etc.
+  // manifests and data get written out to dst.   we evenly divide
+  // our assigned key range into nsubpart sub partition blocks (you
+  // can set nsubpart to 1 if subpartitions are not desired).   we also
+  // track our nprevious assigned key ranges (not subparitioned) with
+  // blocks and send added out of bounds data there.   we compact
+  // blocks if adding data would cause them to grow beyond the
+  // compact_threshold.   we also compact all active blocks
+  // (nsubpart+nprevious) for flushes regardless of how full they are.
+  // we will close dst at Finish() time.
+  //
+  RangeWriter(const DirOptions& options, WritableFile* dst,
+              int nsubpart, int nprevious, size_t compact_threshold);
   ~RangeWriter();
 
+  //
+  // add a key/value pair to a block (hopefully one of our active
+  // subpartition blocks, otherwise the data goes to a block associated
+  // with one of our previous ranges).   if adding data to the block
+  // would cause it to grow past the compaction threshold, then we
+  // schedule a compaction on that block and allocate a free block
+  // to replace it.  we must not be finished.  returns status.
+  //
+  Status Add(const Slice& k, const Slice& v);
+
+  //
+  // wait for all compaction I/O to finish
+  //
+  Status Wait() {
+    MutexLock ml(&mu_);          // dtor unlocks
+    return cmgr_.WaitForAll();
+  }
+
+  //
+  // start compacting all in memory block data to backing store.
+  // I/O may continue in the background.  we must not be finished.
+  //
+  Status Flush() {
+    MutexLock ml(&mu_);          // dtor unlocks
+    return StartAllCompactions();
+  }
+
+  //
+  // flush out current epoch.   this will compact all active blocks,
+  // wait for the compaction to finish, and update the manifest.
+  //
+  Status EpochFlush();
+
+  //
+  // compact all block data to backing store and wait for it to finsh.
+  // then sync the backend dst_.
+  //
+  Status Sync();
+
+  //
+  // this starts all compactions (causing all blocks in bactive_[]
+  // to be replaced with empty ones), then it retires the current
+  // expected range to the set of previous ranges (discarding the
+  // oldest previous range we currently have).   we set the
+  // current range to rmin and rmax with the requested number of
+  // subpartitions.
+  //
   Status UpdateBounds(const float rmin, const float rmax);
 
+  //
+  // we are finished adding data to the range writer.  flush
+  // out all data (waiting for it to finish), write the manifest,
+  // write the footer, sync backing file, and then close backing file.
+  // report logging (if enabled).  we will be marked finished
+  // after this and no more I/O will be possible (dst_ is closed!).
+  //
+  Status Finish();
+
  private:
-  RangeWriterPerfLogger logger_;
-  bool logging_enabled_;
+  const DirOptions& options_;              // config options we operate under
+  const int nsubpart_;                     // # of subpartitions to use
+  const int nprevious_;                    // # of prev blk ranges to keep
+  const int nactive_;                      // sum of the above
+  const int nstore_;                       // #allocated (>= to nactive_)
+  const size_t compact_threshold_;         // blk size that triggers compact
+  const size_t value_size_;                // from DirOptions
 
-  typedef OrderedBlockBuilder BlockBuf;
-  PartitionManifestWriter manifest_;
+  port::Mutex mu_;                         // protects fields below
+  port::CondVar bg_cv_;                    // tied to mu_
+  bool finished_;                          // are finished writing?
+  WritableFile* dst_;                      // backing file we output to
+  uint64_t dst_offset_;                    // current offset in dst
+  PartitionManifestWriter* manifest_;      // manifest mgt and writing
+  CompactionMgr cmgr_;                     // our compaction manager
+  RangeWriterPerfLogger* logger_;          // perf log, if not NULL
+  OrderedBlockBuilder** block_store_;      // all blocks, created w/new[]
+  std::deque<OrderedBlockBuilder*> bfree_; // free blocks
+  OrderedBlockBuilder** bactive_;          // currently active blocks, new[]
 
-  const DirOptions& options_;
-  WritableFile* const dst_;
-  port::Mutex mu_;
-  port::CondVar bg_cv_;
-  const size_t buf_threshold_;  // Threshold for write buffer flush
-  // Memory pre-reserved for each write buffer
-  size_t buf_reserv_;
-  uint64_t offset_;  // Current write offset
+  //
+  // start compactions on all active blocks.  lock should be held.
+  //
+  Status StartAllCompactions();
 
-  BlockBuf** bbs_;  // Array of *ALL* blockbufs, mainly for garbage collection
-
-  friend class MultiBuffering;
-  Status Compact(uint32_t seq, void* buf);
-  Status SyncBackend();
-  Status Close();
-  void ScheduleCompaction(uint32_t seq, void* buf);
-  void Clear(void* buf) { static_cast<BlockBuf*>(buf)->Reset(); }
-  void AddToBuffer(void** buf, const Slice& k, const Slice& v) {
-    static_cast<BlockBuf*>(*buf)->Add(k, v);
-  }
-  bool HasRoom(const void* buf, const Slice& k, const Slice& v) const {
-    return (static_cast<const BlockBuf*>(buf)->CurrentSizeEstimate() +
-                k.size() + v.size() <=
-            buf_threshold_);
-  }
-  bool IsEmpty(const void* buf) {
-    return static_cast<const BlockBuf*>(buf)->empty();
-  }
-
-  void CopyBufState(void* buf_prev, void* buf_next) {
+  //
+  // search through active blocks to find the one that the given key
+  // belongs to.  we order the bactive_[] array so that all nsubpart_
+  // blocks are first, followed by the nprevious_ block covering
+  // previous ranges (oldest last).  if we can't find a good match,
+  // we choose the oldest previous block.  lock should be held.
+  //
+  int FindBlock(float key) {
     mu_.AssertHeld();
-    BlockBuf* bb_prev = static_cast<BlockBuf*>(buf_prev);
-    BlockBuf* bb_next = static_cast<BlockBuf*>(buf_next);
-    bb_next->CopyFrom(bb_prev);
+    for (int lcv = 0 ; lcv < nactive_ ; lcv++) {
+      if (bactive_[lcv]->Inside(key))
+        return lcv;
+    }
+    return nactive_ - 1;   /* no match, choose oldest block we have */
   }
 
-  static void BGWork(void*);
+  //
+  // static method compaction callback for compaction threads.
+  // we simply redirect it to the owner's compact method...
+  //
+  static Status CompactCB(uint32_t cseq, void *item, void *owner) {
+    OrderedBlockBuilder* blk = reinterpret_cast<OrderedBlockBuilder*>(item);
+    RangeWriter* us = reinterpret_cast<RangeWriter*>(owner);
+    return us->Compact(cseq, blk);
+  }
+
+  //
+  // compact a block and return the status.  we serialize writes
+  // to backing store using the cmgr_ and cseq number.   lock not held.
+  //
+  Status Compact(uint32_t cseq, OrderedBlockBuilder* blk);
 };
+
 }  // namespace plfsio
 }  // namespace pdlfs

@@ -1389,7 +1389,8 @@ pdlfs::Status OpenAsRdb(deltafs_plfsdir_t* dir, const std::string& parent) {
     s = env->NewWritableFile(fname.c_str(), &dstfile);
     if (s.ok()) {
       dir->range_writer_ =
-          new pdlfs::plfsio::RangeWriter(*dir->io_options, dstfile, bufsz, n);
+          new pdlfs::plfsio::RangeWriter(*dir->io_options, dstfile,
+                                         1 /*nsubpart*/, 2 /*nprev*/, bufsz);
       dir->range_dst_ = dstfile;
     }
   } else {
