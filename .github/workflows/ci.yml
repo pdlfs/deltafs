@@ -128,7 +128,7 @@ jobs:
         id: cache-umbrella
         with:
           path: /tmp/cache
-          key: ${{ runner.os }}-${{ hashFiles('gh-tmp/deltafs-umbrella/CMakeLists.txt') }}-c1
+          key: ${{ runner.os }}-${{ hashFiles('gh-tmp/deltafs-umbrella/.git/refs/heads/master') }}-c1
 
       #
       # on a cache miss, build the specified umbrella packages.  we can
@@ -193,3 +193,61 @@ jobs:
       #
       - name: run tests
         run: date && cd b && ctest -VV --output-on-failure && date
+
+      #
+      # now let's repeat with an external (!INTREE) common library.
+      # first checkout and configure the common library...
+      #
+      - name: checkout and configure standalone pdlfs-common
+        run: |
+          mkdir -p /tmp/pdlfs-common/src && cd /tmp/pdlfs-common/src
+          git clone https://github.com/pdlfs/pdlfs-common
+          mkdir b
+          cd b
+          export CC=$CI_CC CXX=$CI_CXX
+          cmake -DCMAKE_INSTALL_PREFIX=/tmp/pdlfs-common \
+                -DCMAKE_PREFIX_PATH=/tmp/cache \
+                -DCMAKE_BUILD_TYPE="$CI_BUILDTYPE" \
+                -DPDLFS_COMMON_LIBNAME="deltafs-common" \
+                -DPDLFS_COMMON_DEFINES="DELTAFS" \
+                -DPDLFS_GFLAGS=ON \
+                -DPDLFS_GLOG=ON \
+                -DPDLFS_MERCURY_RPC=ON \
+                -DPDLFS_RADOS=ON \
+                -DPDLFS_SNAPPY=ON \
+                -DBUILD_SHARED_LIBS=ON \
+                -DBUILD_TESTS=OFF ../pdlfs-common
+          echo "cmake done"
+
+      #
+      # build and install standalone common library
+      #
+      - name: build and install standalone pdlfs-common
+        run: date && cd /tmp/pdlfs-common/src/b && make && make install && date
+
+      #
+      # config with external common library
+      #
+      - name: configure project w/external common lib
+        run: |
+          mkdir bx && cd bx
+          export CC=$CI_CC CXX=$CI_CXX
+          cmake -DCMAKE_INSTALL_PREFIX=/tmp/deltafs \
+                -DCMAKE_PREFIX_PATH='/tmp/cache;/tmp/pdlfs-common' \
+                -DCMAKE_BUILD_TYPE="$CI_BUILDTYPE" \
+                -DDELTAFS_COMMON_INTREE=OFF \
+                -DBUILD_SHARED_LIBS=ON \
+                -DBUILD_TESTS=ON ..
+          echo "cmake done"
+
+      #
+      # build project with external library
+      #
+      - name: build project w/external common lib
+        run: date && cd bx && make && date
+
+      #
+      # run tests with external library
+      #
+      - name: run tests w/external common lib
+        run: date && cd bx && ctest -VV --output-on-failure && date
