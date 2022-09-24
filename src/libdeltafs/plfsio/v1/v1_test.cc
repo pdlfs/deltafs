@@ -22,6 +22,7 @@
 #include "pdlfs-common/xxhash.h"
 
 #include <stdlib.h>
+#include <unistd.h>
 #ifdef PDLFS_PLATFORM_POSIX
 #ifdef PDLFS_OS_LINUX
 #include <sched.h>
