@@ -208,6 +208,7 @@ jobs:
           cmake -DCMAKE_INSTALL_PREFIX=/tmp/pdlfs-common \
                 -DCMAKE_PREFIX_PATH=/tmp/cache \
                 -DCMAKE_BUILD_TYPE="$CI_BUILDTYPE" \
+                -DPDLFS_DFS_COMMON=ON \
                 -DPDLFS_COMMON_LIBNAME="deltafs-common" \
                 -DPDLFS_COMMON_DEFINES="DELTAFS" \
                 -DPDLFS_GFLAGS=ON \
