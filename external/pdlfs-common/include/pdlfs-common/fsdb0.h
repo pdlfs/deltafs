@@ -12,6 +12,7 @@
 
 #include "pdlfs-common/fsdbbase.h"
 #include "pdlfs-common/coding.h"
+#include "pdlfs-common/status.h"
 
 #include <vector>
 

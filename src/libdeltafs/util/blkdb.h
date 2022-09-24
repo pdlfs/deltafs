@@ -15,6 +15,7 @@
 
 #include "pdlfs-common/env.h"
 #include "pdlfs-common/fio.h"
+#include "pdlfs-common/port.h"
 #include "pdlfs-common/status.h"
 
 namespace pdlfs {

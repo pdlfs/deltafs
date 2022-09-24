@@ -13,7 +13,7 @@
 #include "deltafs/deltafs_api.h"
 #include "util/logging.h"
 
-#include "pdlfs-common/fsdbx.h"
+#include "pdlfs-common/fsdb0.h"
 #include "pdlfs-common/fstypes.h"
 #include "pdlfs-common/hash.h"
 #include "pdlfs-common/rpc.h"

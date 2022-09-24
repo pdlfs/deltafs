@@ -11,6 +11,7 @@
 
 #include "pdlfs-common/fsdbbase.h"
 
+#include "pdlfs-common/coding.h"
 #include "pdlfs-common/port.h"
 #if defined(DELTAFS) || defined(INDEXFS)
 #include "pdlfs-common/gigaplus.h"
