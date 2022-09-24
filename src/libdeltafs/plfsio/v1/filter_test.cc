@@ -19,6 +19,7 @@
 #include "pdlfs-common/testutil.h"
 
 #include <stdlib.h>
+#include <unistd.h>
 #ifdef PDLFS_PLATFORM_POSIX
 #include <sys/resource.h>
 #include <sys/time.h>
