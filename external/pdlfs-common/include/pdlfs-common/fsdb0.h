@@ -10,67 +10,12 @@
  */
 #pragma once
 
-#include "pdlfs-common/fstypes.h"
+#include "pdlfs-common/fsdbbase.h"
+#include "pdlfs-common/coding.h"
 
-#include <string>
 #include <vector>
 
 namespace pdlfs {
-
-struct DirInfo;
-struct DirId {
-  DirId() {}  // Intentionally not initialized for performance.
-#if defined(DELTAFS_PROTO)
-  DirId(uint64_t dno, uint64_t ino) : dno(dno), ino(ino) {}
-#endif
-#if defined(DELTAFS)
-  DirId(uint64_t reg, uint64_t snap, uint64_t ino)
-      : reg(reg), snap(snap), ino(ino) {}
-#endif
-  explicit DirId(uint64_t ino);  // Direct initialization via inodes.
-  // Initialization via LookupStat or Stat.
-#if defined(DELTAFS_PROTO) || defined(DELTAFS) || \
-    defined(INDEXFS)  // Tablefs does not use LookupStat.
-  explicit DirId(const LookupStat& stat);
-#endif
-  explicit DirId(const Stat& stat);
-
-  // Three-way comparison.  Returns value:
-  //   <  0 iff "*this" <  "other",
-  //   == 0 iff "*this" == "other",
-  //   >  0 iff "*this" >  "other"
-  int compare(const DirId& other) const;
-  std::string DebugString() const;
-
-  // Deltafs requires extra fields.
-#if defined(DELTAFS_PROTO)
-  uint64_t dno;
-#endif
-#if defined(DELTAFS)
-  uint64_t reg;
-  uint64_t snap;
-#endif
-
-  uint64_t ino;
-};
-
-inline bool operator==(const DirId& x, const DirId& y) {
-#if defined(DELTAFS_PROTO)
-  if (x.dno != y.dno) {
-    return false;
-  }
-#endif
-#if defined(DELTAFS)
-  if (x.reg != y.reg) return false;
-  if (x.snap != y.snap) return false;
-#endif
-
-  return (x.ino == y.ino);
-}
-
-inline bool operator!=(const DirId& x, const DirId& y) {
-  return !(x == y);  // Reuse operator==
-}
 
 enum MXDBFormat {
   // Filename (last component of path) is in the value part of a KV pair.

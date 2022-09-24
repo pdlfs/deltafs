@@ -20,7 +20,7 @@ namespace pdlfs {
 namespace rados {
 
 RadosConnOptions::RadosConnOptions()
-    : client_mount_timeout(5), mon_op_timeout(5), osd_op_timeout(5) {}
+    : client_mount_timeout(5), mon_op_timeout(5), osd_op_timeout(30) {}
 
 RadosConnMgrOptions::RadosConnMgrOptions() : info_log(NULL) {}
 

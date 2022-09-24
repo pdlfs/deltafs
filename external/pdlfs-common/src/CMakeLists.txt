@@ -26,7 +26,7 @@
 # main directory sources and tests
 set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c/crc32c.cc
      crc32c/crc32c_sw.cc crc32c/crc32c_sse42.cc env.cc
-     env_files.cc fsdbx.cc fstypes.cc hash.cc histogram.cc
+     env_files.cc fsdbbase.cc fstypes.cc hash.cc histogram.cc
      log_reader.cc log_writer.cc murmur.cc osd.cc ofs.cc ofs_impl.cc
      port_posix.cc posix/posix_bgrun.cc posix/posix_filecopy.cc
      posix/posix_env.cc posix/posix_fastcopy.cc posix/posix_logger.cc
@@ -34,7 +34,7 @@ set (pdlfs-common-srcs arena.cc cache.cc coding.cc crc32c/crc32c.cc
      spooky.cc status.cc strutil.cc testharness.cc testutil.cc
      xxhash/xxhash.c xxhash.cc)
 set (pdlfs-common-tests arena_test.cc cache_test.cc coding_test.cc
-     crc32c/crc32c_test.cc env_test.cc fsdbx_test.cc fstypes_test.cc
+     crc32c/crc32c_test.cc env_test.cc fsdbbase_test.cc fstypes_test.cc
      hash_test.cc log_test.cc ofs_test.cc osd_test.cc random_test.cc
      strutil_test.cc)
 
@@ -57,12 +57,16 @@ set (pdlfs-leveldb-tests bloom_test.cc db/autocompact_test.cc
 
 # common dfs sources and tests
 if (PDLFS_DFS_COMMON)
-    set (pdlfs-dfs-srcs gigaplus.cc fio.cc posix/posix_fio.cc
-            posix/posix_net.cc posix/posix_rpc.cc
+    set (pdlfs-dfs-srcs gigaplus.cc fio.cc posix/posix_fio.cc)
+    set (pdlfs-dfs-tests gigaplus_test.cc fio_test.cc)
+endif ()
+
+# base rpc code and tests
+if (PDLFS_DFS_COMMON OR PDLFS_MERCURY_RPC OR PDLFS_MARGO_RPC)
+    set (pdlfs-rpc-srcs posix/posix_net.cc posix/posix_rpc.cc
             posix/posix_rpc_tcp.cc posix/posix_rpc_udp.cc
             rpc.cc)
-    set (pdlfs-dfs-tests gigaplus_test.cc fio_test.cc
-            rpc_test.cc)
+    set (pdlfs-rpc-tests rpc_test.cc)
 endif ()
 
 # ECT sources and tests
@@ -228,12 +232,12 @@ string(REGEX REPLACE "([^;]+)" "rados/\\1" pdlfs-rados-tests
 #
 # generate complete list of files and tests from the parts
 #
-set (pdlfs-all-srcs ${pdlfs-common-srcs} ${pdlfs-dfs-srcs}
-        ${pdlfs-leveldb-srcs} ${pdlfs-mercury-srcs} ${pdlfs-margo-srcs}
-        ${pdlfs-rados-srcs} ${pdlfs-ect-srcs})
-set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-dfs-tests}
-        ${pdlfs-leveldb-tests} ${pdlfs-mercury-tests} ${pdlfs-margo-tests}
-        ${pdlfs-rados-tests} ${pdlfs-ect-tests})
+set (pdlfs-all-srcs ${pdlfs-common-srcs} ${pdlfs-leveldb-srcs}
+        ${pdlfs-dfs-srcs} ${pdlfs-rpc-srcs} ${pdlfs-mercury-srcs}
+        ${pdlfs-margo-srcs} ${pdlfs-rados-srcs} ${pdlfs-ect-srcs})
+set (pdlfs-all-tests ${pdlfs-common-tests} ${pdlfs-leveldb-tests}
+        ${pdlfs-dfs-tests} ${pdlfs-rpc-tests} ${pdlfs-mercury-tests}
+        ${pdlfs-margo-tests} ${pdlfs-rados-tests} ${pdlfs-ect-tests})
 
 #
 # additional compiler flags to be applied for this directory

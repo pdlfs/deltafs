@@ -1,0 +1,194 @@
+#
+# ci.yml  github actions continuous integration for pdlfs-common
+# 22-May-2021  chuck@ece.cmu.edu
+#
+
+# workflow name.  user defined string that displays on repo's action page.
+name: CI
+
+# workflow trigger.  when to run?  'branches' limits scope to given branches.
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+# job(s) to run when workflow is triggered.
+jobs:
+
+  # first (and only) job for this workflow: buildtest
+  buildtest:
+
+    # create a build matrix for this job.   disable fail-fast so we
+    # do not fail the whole job if one branch of the matrix fails.
+    # you can use "include" to add branches to matrix and "exclude"
+    # to prune branches you do not want to build.
+    # XXX: putting lists in exclude doesn't work
+    #       e.g. exclude:
+    #              - compiler: [gcc-7, gcc-8]
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Debug, RelWithDebInfo]
+        compiler: [gcc-9, gcc-10, clang-10, clang-11]
+        os: [ubuntu-latest]
+        # can add include / exclude below to refine the matrix
+
+    # what os to run on (reference matrix above for this)
+    runs-on: ${{ matrix.os }}
+
+    # environment variables to provide to the job
+    env:
+      CI_BUILDTYPE: ${{ matrix.build_type }}
+      CI_COMPILER: ${{ matrix.compiler }}
+
+    # sequential set of steps (i.e. commands) for this job
+    steps:
+      #
+      # dump out our currently selected environment and add CI_COMPBASE,
+      # CI_CC, and CI_CXX to our environment using GITHUB_ENV.
+      #
+      - name: display selected environment config
+        run: |
+          echo "build=$CI_BUILDTYPE  compiler=$CI_COMPILER"
+          cicc=$CI_COMPILER
+          cicompbase=`echo $cicc | sed -e 's/-.*//'`
+          if [ "$cicompbase" = "gcc" ]; then
+            cicxx=`echo $cicc | sed -e 's/^gcc/g++/'`
+          elif [ "$cicompbase" = "clang" ]; then
+            cicxx=`echo $cicc | sed -e 's/^clang/clang++/'`
+          else
+            echo "compbase error $cicompbase - unknown compiler basename"
+          fi
+          echo "CI_COMPBASE=$cicompbase"  >> $GITHUB_ENV
+          echo "CI_CC=$cicc"              >> $GITHUB_ENV
+          echo "CI_CXX=$cicxx"            >> $GITHUB_ENV
+
+      #
+      # checkout our git tree
+      #
+      - name: github checkout source
+        uses: actions/checkout@v2
+
+      #
+      # set up environment using apt-get to install packages we need
+      # but don't build ourselves.   we need an MPI installed to
+      # configure deltafs-umbrella, but we don't really use it here.
+      #
+      # note: clang includes C++, but g++ is its own package.
+      # XXX: run did not like /bin/sh case statement (syntax err, quoting?)
+      #
+      - name: setup selected environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y $CI_COMPILER
+          if [ "$CI_COMPBASE" = "gcc" ]; then
+            sudo apt-get install -y $CI_CXX
+          fi
+          sudo apt-get install -y cmake automake
+          sudo apt-get install -y mpich libmpich-dev
+          sudo apt-get install -y libibverbs-dev libibverbs-dev
+          sudo apt-get install -y libpapi-dev libnuma-dev
+          sudo apt-get install -y librados-dev
+
+      #
+      # print out versions of some key programs (just for reference).
+      # also print out all CI_* env vars.
+      #
+      - name: version check
+        run: |
+          automake --version
+          cmake --version
+          git --version
+          printenv | egrep '^CI_'
+
+      #
+      # checkout an umbrella for packages we are going build (and cache)
+      # ourselves.
+      #
+      # XXX: we have to put umbrella in GITHUB_WORKSPACE because
+      # hashFiles() only works on files in that directory (I'd rather
+      # put it in /tmp).  we make a gh-tmp directory for this.
+      #
+      - name: umbrella checkout
+        run: |
+          mkdir gh-tmp
+          cd gh-tmp && git clone https://github.com/pdlfs/deltafs-umbrella
+
+      #
+      # attempt to restore built umbrella packages from cache to save time.
+      # to force update, just change the suffix on the "key" below.
+      # we build umbrella packages with the default system provided compiler.
+      # for the key we use:
+      #    - target OS
+      #    - hash of umbrella CMakeLists.txt (e.g. to rebuild on change)
+      #
+      - name: umbrella cache restore
+        uses: actions/cache@v2
+        id: cache-umbrella
+        with:
+          path: /tmp/cache
+          key: ${{ runner.os }}-${{ hashFiles('gh-tmp/deltafs-umbrella/CMakeLists.txt') }}-c1
+
+      #
+      # on a cache miss, build the specified umbrella packages.  we can
+      # use the bootstrap or the main umbrella to do it, as shown below.
+      #
+      - name: umbrella cache rebuild
+        if: steps.cache-umbrella.outputs.cache-hit != 'true'
+        run: |
+          echo rebuilding umbrella cache
+          cd gh-tmp/deltafs-umbrella
+          mkdir bootstrap/b
+          cd bootstrap/b
+          cmake -DCMAKE_INSTALL_PREFIX=/tmp/cache \
+             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+             -DBOOTSTRAP="gflags;glog;snappy" -DSNAPPY_TAG=1.1.8 ..
+          make
+          cd ../..
+          mkdir b
+          cd b
+          cmake -DCMAKE_INSTALL_PREFIX=/tmp/cache \
+              -DMERCURY_NA_INITIALLY_ON="bmi;sm" \
+              -DMERCURY_SELF_FORWARD=ON \
+              -DMERCURY_CHECKSUM=ON \
+              -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              ..
+          make mercury
+
+      #
+      # after umbrella cache restore or build, list libs in umbrella
+      # cache just for reference.
+      #
+      - name: umbrella cache lib list
+        run: ls -C /tmp/cache/lib/*.so
+
+      #
+      # now we have everything we need, so we can configure our project
+      #
+      - name: configure project
+        run: |
+          mkdir b && cd b
+          export CC=$CI_CC CXX=$CI_CXX
+          cmake -DCMAKE_INSTALL_PREFIX=/tmp/pdlfs-common \
+                -DCMAKE_PREFIX_PATH=/tmp/cache \
+                -DCMAKE_BUILD_TYPE="$CI_BUILDTYPE" \
+                -DPDLFS_MERCURY_RPC=ON \
+                -DPDLFS_RADOS=ON \
+                -DBUILD_SHARED_LIBS=ON \
+                -DBUILD_TESTS=ON ..
+          echo "cmake done"
+
+      #
+      # build project
+      #
+      - name: build project
+        run: date && cd b && make && date
+
+      #
+      # run tests
+      #
+      - name: run tests
+        run: date && cd b && ctest -VV --output-on-failure && date

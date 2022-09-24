@@ -19,7 +19,6 @@
 #include <assert.h>
 #include <stddef.h>
 #include <string.h>
-#include <unistd.h>
 #include <string>
 
 namespace pdlfs {

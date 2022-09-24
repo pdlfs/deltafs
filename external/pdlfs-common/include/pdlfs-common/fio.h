@@ -8,11 +8,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. See the AUTHORS file for names of contributors.
  */
-
 #pragma once
 
-#include "pdlfs-common/fsdbx.h"
-#include "pdlfs-common/fstypes.h"
+#include "pdlfs-common/fsdbbase.h"
+#include "pdlfs-common/status.h"
 
 namespace pdlfs {
 #define DELTAFS_FENTRY_BUFSIZE 200 /* Buffer size for fentry encoding */
@@ -27,10 +26,12 @@ struct Fentry {
   Slice EncodeTo(char* scratch) const;
   bool DecodeFrom(Slice* input);
 
-  DirId pid;          // Parent directory
-  std::string nhash;  // Name hash
-  int zserver;        // Zeroth server of the parent directory
   Stat stat;          // A snapshot of file stat
+  std::string nhash;  // Name hash
+  DirId pid;          // Parent directory
+#if defined(DELTAFS_PROTO) || defined(DELTAFS) || defined(INDEXFS)
+  int zserver;  // Zeroth server of the parent directory
+#endif
 };
 
 // Abstract service to access file data.
