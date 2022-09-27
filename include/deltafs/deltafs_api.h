@@ -113,6 +113,9 @@ typedef struct deltafs_plfsdir deltafs_plfsdir_t;
 #define DELTAFS_PLFSDIR_LEVELDB 3
 #define DELTAFS_PLFSDIR_LEVELDB_L0ONLY 4
 #define DELTAFS_PLFSDIR_LEVELDB_L0ONLY_BF 5
+/* Use partially-ordered backend for CARP range queries */
+#define DELTAFS_PLFSDIR_RANGEDB 6
+
 /* Returns NULL on errors. A heap-allocated plfsdir handle otherwise.
    The returned object should be deleted via deltafs_plfsdir_free_handle(). */
 deltafs_plfsdir_t* deltafs_plfsdir_create_handle(const char* __conf, int __mode,
@@ -147,6 +150,9 @@ int deltafs_plfsdir_filter_put(deltafs_plfsdir_t* __dir, const char* __key,
                                size_t __keylen, int __rank);
 int deltafs_plfsdir_filter_flush(deltafs_plfsdir_t* __dir);
 int deltafs_plfsdir_filter_finish(deltafs_plfsdir_t* __dir);
+/* Inform CARP backend of repartitioning */
+int deltafs_plfsdir_range_update(deltafs_plfsdir_t* __dir, float rmin,
+                                 float rmax);
 int deltafs_plfsdir_io_open(deltafs_plfsdir_t* __dir, const char* __name);
 ssize_t deltafs_plfsdir_io_append(deltafs_plfsdir_t* __dir, const void* __buf,
                                   size_t __sz);

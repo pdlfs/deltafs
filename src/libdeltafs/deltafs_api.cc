@@ -17,6 +17,7 @@
 #include "plfsio/v1/bufio.h"
 #include "plfsio/v1/cuckoo.h"
 #include "plfsio/v1/pdb.h"
+#include "plfsio/v1/range_writer.h"
 #include "plfsio/v1/types.h"
 #include "plfsio/v1/v1.h"
 #include "util/logging.h"
@@ -1089,6 +1090,8 @@ struct deltafs_plfsdir {
   pdlfs::DB* db;
   pdlfs::WritableFile* blk_dst_;
   BufferedBlockWriter* blk_writer_;
+  pdlfs::plfsio::RangeWriter* range_writer_;
+  pdlfs::WritableFile* range_dst_;
   pdlfs::RandomAccessFile* blk_src_;
   BufferedBlockReader* blk_reader_;
   pdlfs::WritableFile* cuckoo_dst_;
@@ -1360,6 +1363,37 @@ pdlfs::Status OpenAsPdb(deltafs_plfsdir_t* dir, const std::string& parent) {
     }
   } else {
     s = BadArgs();
+  }
+
+  return s;
+}
+
+std::string RdbName(const std::string& parent, int rank) {
+  char tmp[20];
+  snprintf(tmp, sizeof(tmp), "RDB-%08x.tbl", rank);
+  return parent + "/" + tmp;
+}
+
+pdlfs::Status OpenAsRdb(deltafs_plfsdir_t* dir, const std::string& parent) {
+  pdlfs::Status s = OpenDirEnv(dir);  // OpenDirEnv() always return OK
+  pdlfs::Env* const env = dir->io_options->env;
+  int r = dir->io_options->rank;
+  std::string fname = RdbName(parent, r);
+  const size_t n = 4;
+
+  if (dir->mode == O_WRONLY) {
+    const size_t bufsz = dir->io_options->total_memtable_budget / n;
+    dir->io_options->compaction_pool = dir->pool;
+    pdlfs::WritableFile* dstfile;
+    s = env->NewWritableFile(fname.c_str(), &dstfile);
+    if (s.ok()) {
+      dir->range_writer_ =
+          new pdlfs::plfsio::RangeWriter(*dir->io_options, dstfile,
+                                         1 /*nsubpart*/, 2 /*nprev*/, bufsz);
+      dir->range_dst_ = dstfile;
+    }
+  } else {
+    s = BadArgs();   /* !O_WRONLY current not supported */
   }
 
   return s;
@@ -1713,6 +1747,8 @@ int deltafs_plfsdir_open(deltafs_plfsdir_t* __dir, const char* __name) {
       s = OpenAsLevelDb(__dir, __name);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = OpenAsPdb(__dir, __name);
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
+      s = OpenAsRdb(__dir, __name);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_NOTHING) {
       s = OpenDirEnv(__dir);
     } else {
@@ -1750,6 +1786,8 @@ ssize_t deltafs_plfsdir_put(deltafs_plfsdir_t* __dir, const char* __key,
       s = __dir->writer->Add(k, v, __epoch);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->Add(k, v);
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
+      s = __dir->range_writer_->Add(k, v);
     } else {
       s = LevelDbPut(__dir, k, v);
     }
@@ -1770,6 +1808,9 @@ ssize_t deltafs_plfsdir_append(deltafs_plfsdir_t* __dir, const char* __fname,
     s = BadArgs();
   } else if (__dir->mode != O_WRONLY) {
     s = BadArgs();
+  } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
+    /* hashing __fname() does not make sense for RANGEDB, use put instead */
+    s = pdlfs::Status::NotSupported(pdlfs::Slice());
   } else if (!__fname) {
     s = BadArgs();
   } else if (__fname[0] == 0) {
@@ -1812,6 +1853,8 @@ int deltafs_plfsdir_epoch_flush(deltafs_plfsdir_t* __dir, int __epoch) {
       s = __dir->writer->EpochFlush(__epoch);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->EpochFlush();
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
+      s = __dir->range_writer_->EpochFlush();
     } else {
       s = LevelDbEpochFlush(__dir);
     }
@@ -1836,6 +1879,8 @@ int deltafs_plfsdir_flush(deltafs_plfsdir_t* __dir, int __epoch) {
       s = __dir->writer->Flush(__epoch);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->Flush();
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
+      s = __dir->range_writer_->Flush();
     } else {
       s = LevelDbFlush(__dir);
     }
@@ -1860,6 +1905,8 @@ int deltafs_plfsdir_wait(deltafs_plfsdir_t* __dir) {
       s = __dir->writer->Wait();
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->Wait();
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
+      s = __dir->range_writer_->Wait();
     } else {
       s = LevelDbWait(__dir);
     }
@@ -1884,6 +1931,8 @@ int deltafs_plfsdir_sync(deltafs_plfsdir_t* __dir) {
       s = __dir->writer->Sync();
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->Sync();
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
+      s = __dir->range_writer_->Sync();
     } else {
       s = LevelDbSync(__dir);
     }
@@ -1908,6 +1957,8 @@ int deltafs_plfsdir_finish(deltafs_plfsdir_t* __dir) {
       s = __dir->writer->Finish();
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_writer_->Finish();
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
+      s = __dir->range_writer_->Finish();
     } else {
       s = LevelDbFin(__dir);
     }
@@ -1998,6 +2049,22 @@ int deltafs_plfsdir_filter_finish(deltafs_plfsdir_t* __dir) {
     }
 
     f->Close();
+  }
+
+  if (!s.ok()) {
+    return DirError(__dir, s);
+  } else {
+    return 0;
+  }
+}
+
+int deltafs_plfsdir_range_update(deltafs_plfsdir_t* __dir, float rmin,
+                                 float rmax) {
+  pdlfs::Status s;
+  if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
+    s = __dir->range_writer_->UpdateBounds(rmin, rmax);
+  } else {
+    s = BadArgs();
   }
 
   if (!s.ok()) {
@@ -2223,6 +2290,8 @@ char* deltafs_plfsdir_get(deltafs_plfsdir_t* __dir, const char* __key,
       s = __dir->reader->Read(op, pdlfs::Slice(__key, __keylen), &dst);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_reader_->Get(pdlfs::Slice(__key, __keylen), &dst);
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
+      s = BadArgs(); // Read path not implemented
     } else {
       s = DbGet(__dir, pdlfs::Slice(__key, __keylen), &dst);
     }
@@ -2274,6 +2343,8 @@ void* deltafs_plfsdir_read(deltafs_plfsdir_t* __dir, const char* __fname,
       s = __dir->reader->Read(op, k, &dst);
     } else if (__dir->io_engine == DELTAFS_PLFSDIR_PLAINDB) {
       s = __dir->blk_reader_->Get(k, &dst);
+    } else if (__dir->io_engine == DELTAFS_PLFSDIR_RANGEDB) {
+      s = BadArgs(); // Read path not implemented
     } else {
       s = DbGet(__dir, k, &dst);
     }
