@@ -41,7 +41,6 @@ set (deltafs-plfsio-srcs plfsio/v1/v1.cc
         plfsio/v1/format.cc
         plfsio/v1/recov.cc
         plfsio/v1/io.cc
-        plfsio/v1/doublebuf.cc
         plfsio/v1/bufio.cc
         plfsio/v1/pdb.cc
         plfsio/v1/events.cc

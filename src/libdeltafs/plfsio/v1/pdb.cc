@@ -17,13 +17,15 @@ namespace plfsio {
 BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
                                          WritableFile* dst, size_t buf_size,
                                          size_t n)
-    : DoubleBuffering(&mu_, &bg_cv_),
-      options_(options),
+    : options_(options),
       dst_(dst),  // Not owned by us
       bg_cv_(&mu_),
       buf_threshold_(buf_size),
       buf_reserv_(8 + buf_size),
       offset_(0),
+      finished_(false),
+      cmgr_(&mu_, &bg_cv_, options.compaction_pool, options.allow_env_threads),
+      membuf_(NULL),
       bbs_(NULL),
       n_(n) {
   if (n_ < 2) {
@@ -45,9 +47,7 @@ BufferedBlockWriter::BufferedBlockWriter(const DirOptions& options,
 // Wait for all outstanding compactions to clear.
 BufferedBlockWriter::~BufferedBlockWriter() {
   mu_.Lock();
-  while (num_bg_compactions_) {
-    bg_cv_.Wait();
-  }
+  cmgr_.WaitForAll();
   mu_.Unlock();
   for (size_t i = 0; i < n_; i++) {
     delete bbs_[i];
@@ -59,7 +59,32 @@ BufferedBlockWriter::~BufferedBlockWriter() {
 // REQUIRES: Finish() has NOT been called.
 Status BufferedBlockWriter::Add(const Slice& k, const Slice& v) {
   MutexLock ml(&mu_);
-  return __Add<BufferedBlockWriter>(k, v, false);
+
+retry:
+  if (finished_)
+    return Status::AssertionFailed("invalid add on finished bufblk writer");
+  assert(membuf_);
+  if (membuf_->CurrentSizeEstimate() + k.size() + v.size() <= buf_threshold_) {
+    membuf_->Add(k, v);
+    return Status::OK();
+  }
+
+  //
+  // our block was full and needs to be compacted.   we can start
+  // a compaction if we have a free block to replace ours with.
+  // if not, we need to wait for some I/O to clear and try again.
+  //
+  if (bufs_.empty()) {
+    bg_cv_.Wait();           // drops lock while waiting, so state may change
+    goto retry;
+  }
+
+  BlockBuf* tocompact = membuf_;
+  membuf_ = bufs_.back();    // should be reset already
+  bufs_.pop_back();
+  membuf_->Add(k, v);
+  
+  return cmgr_.ScheduleCompaction(tocompact, false, this, CompactCB, NULL);
 }
 
 // Force an epoch flush.
@@ -68,48 +93,60 @@ Status BufferedBlockWriter::EpochFlush() {
   return Flush();  // TODO
 }
 
-// Force a compaction but do NOT wait for the compaction to clear.
-// REQUIRES: Finish() has NOT been called.
-Status BufferedBlockWriter::Flush() {
-  MutexLock ml(&mu_);
-  return __Flush<BufferedBlockWriter>(false);
-}
-
-// Sync data to storage. Data still buffered in memory is NOT sync'ed.
+// Sync data to storage. Data still buffered in memory is not sync'ed.
 // REQUIRES: Finish() has NOT been called.
 Status BufferedBlockWriter::Sync() {
-  MutexLock ml(&mu_);
-  return __Sync<BufferedBlockWriter>(false);
-}
+  MutexLock ml(&mu_);                    // dtor will unlock for us
+  Status status;
 
-// Wait until there is no outstanding compactions.
-// REQUIRES: Finish() has NOT been called.
-Status BufferedBlockWriter::Wait() {
-  MutexLock ml(&mu_);  // Wait until !has_bg_compaction_
-  return __Wait();
+  status = StartAllCompactions();
+  if (!status.ok()) return status;
+  status = cmgr_.WaitForAll();
+  if (!status.ok()) return status;
+
+  return dst_->Sync();                  // fsync data to backend
 }
 
 // Finalize the writer. Expected to be called ONLY once.
 Status BufferedBlockWriter::Finish() {
-  MutexLock ml(&mu_);
-  return __Finish<BufferedBlockWriter>();
+  MutexLock ml(&mu_);                    // dtor will unlock for us
+  Status status, rv;
+
+  if (finished_)
+    return Status::AssertionFailed("Finish: already finished");
+
+  status = StartAllCompactions();
+  if (!status.ok() && rv.ok()) rv = status;
+
+  status = cmgr_.WaitForAll();
+  if (!status.ok() && rv.ok()) rv = status;
+
+  status = Close();
+  if (!status.ok() && rv.ok()) rv = status;
+
+  finished_ = 1;  // stop us using dst_ since it is now closed
+  return rv;
 }
 
 // REQUIRES: mu_ has been LOCKed.
-Status BufferedBlockWriter::Compact(uint32_t const compac_seq, void* immbuf) {
-  mu_.AssertHeld();
-  assert(dst_);
-  BlockBuf* const bb = static_cast<BlockBuf*>(immbuf);
-  // Skip empty buffers
-  if (bb->empty() && compac_seq == num_compac_completed_ + 1)
-    return Status::OK();
-  mu_.Unlock();  // Unlock as compaction is expensive
+Status BufferedBlockWriter::Compact(uint32_t const cseq, BlockBuf* bb) {
+  Status status;
   Slice block_contents;
+  Slice filter_contents;
+  BloomBuilder bf(options_);  // Filter is built only when requested
+
+  assert(dst_);
+  mu_.AssertHeld();
+
+  // do a quick return if block is empty and we already have write token
+  if (bb->empty() && cmgr_.IsWriter(cseq)) {
+    goto done;
+  }
+
+  mu_.Unlock();  // Unlock as compaction is expensive
   if (!bb->empty()) {
     block_contents = bb->Finish(kNoCompression);
   }
-  BloomBuilder bf(options_);  // Filter is built only when requested
-  Slice filter_contents;
   if (!bb->empty() && options_.bf_bits_per_key != 0) {
     bf.Reset(bb->NumEntries());
     BlockContents bc;
@@ -125,17 +162,28 @@ Status BufferedBlockWriter::Compact(uint32_t const compac_seq, void* immbuf) {
     }
     filter_contents = bf.Finish();
   }
-  mu_.Lock();  // All writes are serialized through compac_seq
-  assert(num_compac_completed_ < compac_seq);
-  while (compac_seq != num_compac_completed_ + 1) {
-    bg_cv_.Wait();
+  mu_.Lock();  // All writes are serialized through cseq
+
+  if (finished_) {
+    status = Status::AssertionFailed("Compact on finished writer");
+    goto done;
   }
-  mu_.Unlock();
+
+  status = cmgr_.AquireWriteToken(cseq);  // may unlock and relock
+  if (!status.ok()) {
+    goto done;
+  }
+
+  if (finished_) {
+    status = Status::AssertionFailed("Writer finished when gaining token!");
+    goto done;
+  }
+
+  mu_.Unlock();                    // unlock during compaction I/O
   PutFixed64(&indexes_, bloomfilter_.size());
   if (!filter_contents.empty())
     bloomfilter_.append(filter_contents.data(), filter_contents.size());
   PutFixed64(&indexes_, offset_);
-  Status status;
   if (!block_contents.empty()) {
     status = dst_->Append(block_contents);
   }
@@ -143,7 +191,11 @@ Status BufferedBlockWriter::Compact(uint32_t const compac_seq, void* immbuf) {
     offset_ += block_contents.size();
     status = dst_->Flush();
   }
-  mu_.Lock();
+  mu_.Lock();                      // relock
+
+done:
+  bb->Reset();
+  bufs_.push_back(bb);
   return status;
 }
 
@@ -178,7 +230,6 @@ Status BufferedBlockWriter::DumpIndexesAndFilters() {
 // REQUIRES: no outstanding background compactions.
 // REQUIRES: mu_ has been LOCKed.
 Status BufferedBlockWriter::Close() {
-  assert(!num_bg_compactions_);
   mu_.AssertHeld();
   assert(dst_);
   Status status = DumpIndexesAndFilters();
@@ -199,54 +250,26 @@ Status BufferedBlockWriter::Close() {
   return status;
 }
 
-// REQUIRES: no outstanding background compactions.
-// REQUIRES: mu_ has been LOCKed.
-Status BufferedBlockWriter::SyncBackend(bool close) {
-  assert(!num_bg_compactions_);
-  mu_.AssertHeld();
-  assert(dst_);
-  if (!close) {
-    return dst_->Sync();
-  } else {
-    return Close();
-  }
-}
-
-namespace {  // State for each compaction
-struct State {
-  BufferedBlockWriter* writer;
-  uint32_t compac_seq;
-  void* immbuf;
-};
-}  // namespace
-
-// REQUIRES: mu_ has been LOCKed.
-void BufferedBlockWriter::ScheduleCompaction(uint32_t const compac_seq,
-                                             void* immbuf) {
+Status BufferedBlockWriter::StartAllCompactions() {
   mu_.AssertHeld();
 
-  assert(num_bg_compactions_);
+retry:
+  if (membuf_->empty())
+    return Status::OK();     // nothing to compact, so we are done!
 
-  State* s = new State;
-  s->compac_seq = compac_seq;
-  s->immbuf = immbuf;
-  s->writer = this;
-
-  if (options_.compaction_pool) {
-    options_.compaction_pool->Schedule(BufferedBlockWriter::BGWork, s);
-  } else if (options_.allow_env_threads) {
-    Env::Default()->Schedule(BufferedBlockWriter::BGWork, s);
-  } else {
-    DoCompaction<BufferedBlockWriter>(compac_seq, immbuf);
-    delete s;
+  //
+  // we can start compaction if we have a free block to replace ours with.
+  // if not, we need to wait for some I/O to clear and try again.
+  //
+  if (bufs_.empty()) {
+    bg_cv_.Wait();           // drops lock while waiting, so state may change
+    goto retry;
   }
-}
 
-void BufferedBlockWriter::BGWork(void* arg) {
-  State* const s = reinterpret_cast<State*>(arg);
-  MutexLock ml(&s->writer->mu_);
-  s->writer->DoCompaction<BufferedBlockWriter>(s->compac_seq, s->immbuf);
-  delete s;
+  BlockBuf* tocompact = membuf_;
+  membuf_ = bufs_.back();    // should already be reset
+  bufs_.pop_back();
+  return cmgr_.ScheduleCompaction(tocompact, false, this, CompactCB, NULL);
 }
 
 BufferedBlockReader::BufferedBlockReader(const DirOptions& options,
