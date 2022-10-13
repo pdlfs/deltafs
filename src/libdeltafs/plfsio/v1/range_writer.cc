@@ -35,10 +35,6 @@ class PartitionManifestWriter {
   //
   explicit PartitionManifestWriter(WritableFile* dst)
       : dst_(dst),
-        range_min_(FLT_MAX),
-        range_max_(FLT_MIN),
-        mass_total_(0),
-        mass_oob_(0),
         finished_(false),
         num_ep_written_(0) {}
 
@@ -48,29 +44,20 @@ class PartitionManifestWriter {
   //
   void AddItem(uint64_t offset, OrderedBlockBuilder* blk) {
     PartitionManifestItem item;
-    uint32_t part_count = 0, part_oob = 0;
 
     assert(!finished_ && blk != NULL);
 
-    // get number of k/v pairs added to the block
-    blk->GetNumItems(part_count, part_oob);
-    if (part_count == 0)     // empty block, no need to save metadata
+    item.obrange = blk->GetRangeInfo();     // copy range info from block
+    if (item.obrange.num_items() == 0)      // empty blk, no need to save md
       return;
 
-    // load in manifest data and append an item to items_
+    // load in rest of manifest data and append an item to items_
     item.offset = offset;
-    item.expected = blk->GetExpectedRange();
-    item.observed = blk->GetObservedRange();
     item.updcnt = blk->GetUpdateCount();
-    item.part_item_count = part_count;
-    item.part_item_oob = part_oob;
     items_.push_back(item);
 
-    // update overall stats
-    range_min_ = std::min(range_min_, item.observed.rmin());
-    range_max_ = std::max(range_max_, item.observed.rmax());
-    mass_total_ += part_count;
-    mass_oob_ += part_oob;
+    // update overall stats (XXX: just in memory, we don't save it anywhere)
+    manifest_obrange_.MergeRangeObservations(&item.obrange);
 
     return;
   }
@@ -87,22 +74,19 @@ class PartitionManifestWriter {
     for (size_t i = 0; i < items_.size(); i++) {
       PartitionManifestItem& item = items_[i];
       PutFixed64(&seritems, i);
-      PutFixed64(&seritems, item.offset);
-      PutFloat32(&seritems, item.expected.rmin());
-      PutFloat32(&seritems, item.expected.rmax());
-      PutFloat32(&seritems, item.observed.rmin());
-      PutFloat32(&seritems, item.observed.rmax());
+      PutFixed64(&seritems, item.offset);                // byte offset in dst
+      PutFloat32(&seritems, item.obrange.rmin());        // expected range min
+      PutFloat32(&seritems, item.obrange.rmax());        // expected range max
+      PutFloat32(&seritems, item.obrange.smallest());    // observed min key
+      PutFloat32(&seritems, item.obrange.largest());     // observed max key
       PutFixed32(&seritems, item.updcnt);
-      PutFixed32(&seritems, item.part_item_count);
-      PutFixed32(&seritems, item.part_item_oob);
+      PutFixed32(&seritems, item.obrange.num_items());   // observed items
+      PutFixed32(&seritems, item.obrange.num_items_oob());// observed oob items
     }
 
     // reset items_ and associated metadata
     items_.clear();
-    range_min_ = FLT_MAX;
-    range_max_ = FLT_MIN;
-    mass_total_ = 0;
-    mass_oob_ = 0;
+    manifest_obrange_.ClearObservations();
 
     // put in the header first, then the data (if any)
     PutFixed32(&indexes_, num_ep_written_);   // current epoch number
@@ -147,22 +131,6 @@ class PartitionManifestWriter {
   }
 
   //
-  // get current observed range of the manifest
-  //
-  void GetRange(float& range_min, float& range_max) const {
-    range_min = range_min_;
-    range_max = range_max_;
-  }
-
-  //
-  // get current mass values of the manifest
-  //
-  void GetMass(uint64_t& mass_total, uint64_t mass_oob) const {
-    mass_total = mass_total_;
-    mass_oob = mass_oob_;
-  }
-
-  //
   // get number of blocks in current epoch
   //
   size_t Size() const { return items_.size(); }
@@ -173,20 +141,14 @@ class PartitionManifestWriter {
   // to the manifest.
   //
   typedef struct {
+    ObservedRange obrange;      // observed range and range metadata
     uint64_t offset;            // offset of block in dst
-    Range expected;             // block's expected range
-    Range observed;             // block's observed range
     uint32_t updcnt;            // value of updcnt (expected range updates)
-    uint32_t part_item_count;   // total k/v pairs in block
-    uint32_t part_item_oob;     // subset of k/v pairs that were oob
   } PartitionManifestItem;
 
   WritableFile* const dst_;                   // cached copy from range writer
   std::vector<PartitionManifestItem> items_;  // blk metadata (in memory)
-  float range_min_;                           // observed min for manifest
-  float range_max_;                           // observed max for manifest
-  uint64_t mass_total_;                       // total cnt for manifest
-  uint64_t mass_oob_;                         // just oob for manifest
+  ObservedRange manifest_obrange_;            // to observe overall bounds
   std::string indexes_;                       // serialized manifest (so far)
   bool finished_;                             // manifest complete
   uint32_t num_ep_written_;                   // #epochs written
@@ -365,7 +327,7 @@ Status RangeWriter::Add(const Slice& k, const Slice& v) {
 
   newblk = bfree_.back();
   bfree_.pop_back();
-  newblk->CopyFrom(blk);     // copies range from old block
+  newblk->CopyFrom(blk);     // copies old blk range, clears new observed info
   bactive_[bidx] = newblk;   // install empty block we just got
   newblk->Add(k, v);         // now add the data, user's request is done
 
@@ -395,8 +357,8 @@ Status RangeWriter::StartAllCompactions() {
     OrderedBlockBuilder *blk = bactive_[lcv];
     OrderedBlockBuilder *newblk = bfree_.back();
     bfree_.pop_back();
-    newblk->CopyFrom(blk);     // copies range from old block
-    bactive_[lcv] = newblk;    // install empty block we just got
+    newblk->CopyFrom(blk);   // copies old blk range, clears new observed info
+    bactive_[lcv] = newblk;  // install empty block we just got
     to_be_compacted.push_back(blk);
   }
 
@@ -469,12 +431,14 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
 
   // shift previous ranges, discarding the oldest previous range
   for (int lcv = nactive_ - 1 ; lcv >= nsubpart_ + 1 ; lcv--) {
-    bactive_[lcv]->UpdateExpectedRange( bactive_[lcv-1]->GetExpectedRange() );
+    bactive_[lcv]->UpdateExpectedRange(
+        bactive_[lcv-1]->GetRangeInfo().rmin(),
+        bactive_[lcv-1]->GetRangeInfo().rmax() );
   }
 
   // the most recent previous range gets the current range over all subparts
-  oldmin = bactive_[0]->GetExpectedRange().rmin();
-  oldmax = bactive_[nsubpart_-1]->GetExpectedRange().rmax();
+  oldmin = bactive_[0]->GetRangeInfo().rmin();
+  oldmax = bactive_[nsubpart_-1]->GetRangeInfo().rmax();
   bactive_[nsubpart_]->UpdateExpectedRange(oldmin, oldmax);
 
   // now divide the new range up into subparts and install it

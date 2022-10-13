@@ -32,17 +32,12 @@ void OrderedBlockBuilder::Add(const Slice& key, const Slice& value) {
   assert(key.size() == key_size_ && value.size() == value_size_);
   float keyNum = DecodeFloat32(key.data());
 
-  observed_.Extend(keyNum);
-
-  // we'll use saved value of num_items_ in Finish() to locate the value data
-  keys_staging_.push_back(key_ptr(keyNum, num_items_));
+  // we'll use saved value of num_items in Finish() to locate the value data
+  keys_staging_.push_back(key_ptr(keyNum, obrange_.num_items()));
   buffer_staging_.append(value.data(), value_size_);
 
   bytes_written_ += key_size_ + value_size_;
-  num_items_++;
-  if (not expected_.Inside(keyNum)) {
-    num_items_oob_++;
-  }
+  obrange_.Observe(keyNum);   /* incr num_items(), maybe num_items_oob() */
 }
 
 //
@@ -62,7 +57,7 @@ Slice OrderedBlockBuilder::Finish() {
   // zero for us).  resize to target.
   size_t buf_offset = buffer_.size();
   assert(buf_offset == 0u);
-  buffer_.resize(buf_offset + num_items_ * (key_size_ + value_size_));
+  buffer_.resize(buf_offset + obrange_.num_items() * (key_size_+value_size_));
 
   // put sorted keys in buffer
   size_t num_keys = keys_staging_.size();
@@ -87,16 +82,16 @@ Slice OrderedBlockBuilder::Finish() {
 
 //
 // reset buffering for reuse, but don't clear fields used by
-// CopyFrom()  (i.e. expected_ and updcnt_ ).
+// CopyFrom()  (i.e. expected range and updcnt_ ).
 //
 void OrderedBlockBuilder::Reset() {
   AbstractBlockBuilder::Reset();     // clears buffer_ and finished_
   keys_staging_.clear();
   buffer_staging_.clear();
-  observed_.Reset();
   bytes_written_ = 0;
-  num_items_ = 0;
-  num_items_oob_ = 0;
+  // XXX to be safe?  likely re-cleared when new user calls obrange_.Set()
+  //     to set a new expected range
+  obrange_.ClearObservations();
 }
 
 }  // namespace plfsio
