@@ -45,6 +45,7 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
       : AbstractBlockBuilder(NULL),        // not using a low-level comparator
         key_size_(options.key_size),
         value_size_(options.value_size),
+        skip_sort_(options.skip_sort),
         rank_(options.rank),
         bytes_written_(0),
         updcnt_(0),
@@ -108,6 +109,7 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
   /* fixed at construction time */
   const size_t key_size_;          // must be sizeof(float)
   const size_t value_size_;        // from DirOptions
+  const bool skip_sort_;           // from Diroptions
   const int rank_;                 // from DirOptions
 
   /* Writing properties */

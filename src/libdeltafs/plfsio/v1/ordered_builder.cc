@@ -51,17 +51,19 @@ Slice OrderedBlockBuilder::Finish() {
   assert(!finished_);
   assert(sizeof(float) == 4u);
 
-  // do an in-place sort of keys_staging_ by float key
-  std::sort(keys_staging_.begin(), keys_staging_.end(),
-            OrderedBlockBuilder::KeyPtrComparator);
-
   // buffer_ should be empty (haven't used it yet and buf_start_ is always
   // zero for us).  resize to target.
   size_t buf_offset = buffer_.size();
   assert(buf_offset == 0u);
   buffer_.resize(buf_offset + num_items_ * (key_size_ + value_size_));
 
-  // put sorted keys in buffer
+  if (!skip_sort_) {
+    // do an in-place sort of keys_staging_ by float key
+    std::sort(keys_staging_.begin(), keys_staging_.end(),
+              OrderedBlockBuilder::KeyPtrComparator);
+  }
+
+  // put sorted keys in buffer; unchanged if keys not sorted
   size_t num_keys = keys_staging_.size();
   for (size_t i = 0; i < num_keys; i++) {
     float key = keys_staging_[i].first;
@@ -69,13 +71,23 @@ Slice OrderedBlockBuilder::Finish() {
     buf_offset += key_size_;
   }
 
-  // use sorted list of keys to append sorted values to buffer_
-  const char* rawbuf_staging = buffer_staging_.c_str();
-  for (size_t i = 0; i < num_keys; i++) {
-    size_t val_offset = keys_staging_[i].second;
-    memcpy(&buffer_[buf_offset], rawbuf_staging + val_offset * value_size_,
-           value_size_);
-    buf_offset += value_size_;
+  // copy valblk to buffer
+  const char* valblk = buffer_staging_.c_str();
+  size_t valblksz = num_keys * value_size_;
+  assert(valblksz == buffer_staging_.size());
+
+  if (skip_sort_) {
+    // if keyblk was not reordered, copy directly
+    memcpy(&buffer_[buf_offset], valblk, valblksz);
+    buf_offset += valblksz;
+  } else {
+    // if keyblk was reordered, use offsets to reorder valblk
+    for (size_t i = 0; i < num_keys; i++) {
+      size_t val_offset = keys_staging_[i].second;
+      memcpy(&buffer_[buf_offset], valblk + val_offset * value_size_,
+             value_size_);
+      buf_offset += value_size_;
+    }
   }
 
   // abstract builder will set finished_  (currently not compressing)
