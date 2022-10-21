@@ -54,6 +54,7 @@ set (deltafs-tests deltafs_api_test.cc
         plfsio/v1/filter_test.cc
         plfsio/v1/filterio_test.cc
         plfsio/v1/pdb_test.cc
+        plfsio/v1/range_test.cc
         plfsio/v1/rangewriter_test.cc
         plfsio/v1/v1_test.cc
         mds_api_test.cc

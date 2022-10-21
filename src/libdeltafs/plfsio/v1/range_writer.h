@@ -97,8 +97,8 @@ class RangeWriter {
   // to be replaced with empty ones), then it retires the current
   // expected range to the set of previous ranges (discarding the
   // oldest previous range we currently have).   we set the
-  // current range to rmin and rmax with the requested number of
-  // subpartitions.
+  // current range to rmin and rmax (inclusive and exclusive,
+  // respectively) with the requested number of subpartitions.
   //
   Status UpdateBounds(const float rmin, const float rmax);
 
@@ -142,7 +142,8 @@ class RangeWriter {
   // belongs to.  we order the bactive_[] array so that all nsubpart_
   // blocks are first, followed by the nprevious_ block covering
   // previous ranges (oldest last).  if we can't find a good match,
-  // we choose the oldest previous block.  lock should be held.
+  // we choose the oldest previous block and deal with it.
+  // lock should be held.
   //
   int FindBlock(float key) {
     mu_.AssertHeld();

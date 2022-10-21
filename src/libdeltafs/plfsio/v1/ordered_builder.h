@@ -31,7 +31,7 @@ namespace plfsio {
 // (for the values).  at Finish() time we sort data by key and copy
 // the sorted keys and then sorted values into AbstractBlockBuilder's buffer_
 // for processing (e.g. saving to storage via compaction).  we track our
-// key Range as data is inserted, including out of expected bounds (oob)
+// key range as data is inserted, including out of expected bounds (oob)
 // inserts.  we expect higher-level code to provide locking.  higher-level
 // code should also track how large we are, and if we are full (or
 // there is a flush operation) it should Finish() our block and use
@@ -45,9 +45,7 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
         value_size_(options.value_size),
         rank_(options.rank),
         bytes_written_(0),
-        updcnt_(0),
-        num_items_(0),
-        num_items_oob_(0) {
+        updcnt_(0) {
     assert(sizeof(float) == key_size_);    // all keys must be floats
   }
 
@@ -60,46 +58,35 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
   // return an estimate of the size of the block we are building
   size_t CurrentSizeEstimate() const { return bytes_written_; }
 
-  // clears buffered data; preserves expected_ and updcnt_
+  // clears buffered data; preserves our expected range and updcnt_
   void Reset();
 
   // true if no entries have been added since the last Reset()
   bool empty() const { return bytes_written_ == 0; }
 
-  // is "prop" in the expected_ range?
-  bool Inside(float prop) { return expected_.Inside(prop); }
+  // return copy of range info
+  ObservedRange GetRangeInfo() { return obrange_; }
 
-  Range GetExpectedRange() { return expected_; }
-
-  Range GetObservedRange() { return observed_; }
+  // is "prop" in the expected range?
+  bool Inside(float prop) { return obrange_.Inside(prop); }
 
   // number of times UpdateExpectedRange() was called
   uint32_t GetUpdateCount() const { return updcnt_; }
 
-  // # of k/v pair we are holding and # them that are out of expected_ range
-  void GetNumItems(uint32_t& num_items, uint32_t& num_oob) const {
-    num_items = num_items_;
-    num_oob = num_items_oob_;
-  }
-
-  // copy expected_ range and updcnt_ from other (our num_items_ should be 0).
+  // copy expected range and updcnt_ from other (our observations are cleared).
   // using during compaction when our empty block is replacing a full one
   // that is getting compacted.
   void CopyFrom(OrderedBlockBuilder* other) {
-    UpdateExpectedRange(other->GetExpectedRange());
+    obrange_.Set(other->obrange_.rmin(), other->obrange_.rmax());
     updcnt_ = other->updcnt_;
   }
 
-  // install new expected_ range in our (currently) empty block.
-  void UpdateExpectedRange(Range range) {
-    assert(range.IsValid());
-    assert(num_items_ == 0);
-    updcnt_++;
-    expected_ = range;
-  }
-
+  // install new expected range in our (currently) empty block.
   void UpdateExpectedRange(float rmin, float rmax) {
-    UpdateExpectedRange(Range(rmin, rmax));
+    assert(rmax >= rmin);
+    assert(obrange_.num_items() == 0);
+    updcnt_++;
+    obrange_.Set(rmin, rmax);
   }
 
  private:
@@ -114,12 +101,9 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
   std::string buffer_staging_;              // concat'd buf of current values
   size_t bytes_written_;                    // # key and value bytes added
 
-  /* Range properties */
-  Range expected_;                          // set by UpdateExpectedRange()
-  Range observed_;                          // range observed by Add()
+  /* range related properties */
+  ObservedRange obrange_;                   // our block's observed range
   uint32_t updcnt_;                         // #calls to UpdateExpectedRange()
-  uint32_t num_items_ = 0;                  // k/v pairs we've Add()'d
-  uint32_t num_items_oob_ = 0;              // added, not in expected_ range
 
 
   // comparator used by Finish() to sort our staged keys

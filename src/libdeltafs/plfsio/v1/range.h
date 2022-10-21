@@ -23,67 +23,109 @@ namespace pdlfs {
 namespace plfsio {
 
 //
-// range of floating point numbers defined by a min and max value (inclusive).
-// the default/reset range is an empty one (rmin=FLT_MAX, rmax=FLT_MIN).
+// range of floating point numbers.  the range is defined by a min and
+// max value (inclusive and exclusive, respectively).  the default/reset
+// range is an undefined one (where we set rmin=FLT_MAX, rmax=FLT_MIN).
+// note that a range with rmin==rmax is a zero-width range (nothing can
+// be inside it).  ranges are safe to copy.  owner must provide locking.
 //
 class Range {
  public:
   Range() : rmin_(FLT_MAX), rmax_(FLT_MIN) {}
-  Range(float rmin, float rmax) : rmin_(rmin), rmax_(rmax) {}
 
-  float rmin() { return rmin_; }
-  float rmax() { return rmax_; }
+  /* accessor functions */
+  float rmin()          const { return rmin_; }
+  float rmax()          const { return rmax_; }
 
-  Range& operator=(const Range& r) {   // copy assignment operator
-    rmin_ = r.rmin_;
-    rmax_ = r.rmax_;
-    return *this;
-  }
-
-  void Reset() {
+  void Reset() {                /* reset everything to clean state */
     rmin_ = FLT_MAX;
     rmax_ = FLT_MIN;
   }
 
-  bool IsSet() const {
+  bool IsSet() const {          /* is range set? */
     return (rmin_ != FLT_MAX) and (rmax_ != FLT_MIN);
   }
 
-  // valid if in reset state or rmin < rmax  (XXX: should be "rmin <= rmax" ?)
-  bool IsValid() const {
-    return ((rmin_ == FLT_MAX && rmax_ == FLT_MIN) or
-            (rmin_ < rmax_));
+  bool IsValid() const {        /* is range valid?  (i.e. reset or set) */
+    return !IsSet() || (rmin_ < rmax_);
   }
 
-  // set the range.  no change made if new range is invalid.
-  void Set(float qr_min, float qr_max) {
-    if (qr_min > qr_max) return;        // not valid
-    rmin_ = qr_min;
-    rmax_ = qr_max;
+  void Set(float rmin, float rmax) {      /* set a new range */
+    if (rmin > rmax) return;              /* XXX: invalid, shouldn't happen */
+    rmin_ = rmin;
+    rmax_ = rmax;
   }
 
-  // is "f" inside our range?  (inclusive)
-  bool Inside(float f) const { return (f >= rmin_ && f <= rmax_); }
-
-  bool Overlaps(float qr_min, float qr_max) const {
-    if (qr_min > qr_max) return false;  // params not valid
-
-    bool qr_envelops =
-        (qr_min < rmin_) and (qr_max > rmax_) and IsSet();
-
-    return Inside(qr_min) or Inside(qr_max) or qr_envelops;
+  void Extend(float emin, float emax) {  /* extend range if needed */
+    rmin_ = std::min(rmin_, emin);
+    rmax_ = std::max(rmax_, emax);
   }
 
-  // extend range to include 'f'.  if range is in the reset state, this
-  // will set both rmin and rmax to 'f'
-  void Extend(float f) {
-    rmin_ = std::min(rmin_, f);
-    rmax_ = std::max(rmax_, f);
+  /* is "f" inside our range? */
+  bool Inside(float f) const { return (f >= rmin_ && f < rmax_); }
+
+ private:
+  float rmin_;              /* start of range (inclusive) */
+  float rmax_;              /* end of range (exclusive) */
+};
+
+//
+// an observed range of floating point numbers is a range (see above)
+// in which we track metadata on the keys inserted into the range.
+// current metadata tracked: smallest key, largest key, number of
+// keys observed, and number of those keys that were out of bounds.
+// observed ranges are safe to copy.  owner must provide locking.
+//
+class ObservedRange : public Range {
+ public:
+  ObservedRange() : smallest_(FLT_MAX), largest_(FLT_MIN),
+                    num_items_(0), num_items_oob_(0) {}
+
+  /* accessor functions */
+  float smallest()         const { return smallest_; }
+  float largest()          const { return largest_; }
+  uint32_t num_items()     const { return num_items_; }
+  uint32_t num_items_oob() const { return num_items_oob_; }
+
+  void ClearObservations() {    /* clear observations, but keep range */
+    smallest_ = FLT_MAX;
+    largest_ = FLT_MIN;
+    num_items_ = num_items_oob_ = 0;
+  }
+
+  void Reset() {                /* reset everything to clean state */
+    this->ClearObservations();
+    Range::Reset();
+  }
+
+  /* track a new key being added to a range */
+  void Observe(float key) {
+    smallest_ = std::min(smallest_, key);
+    largest_ = std::max(largest_, key);
+    num_items_++;
+    if (!Range::Inside(key))
+      num_items_oob_++;
+  }
+
+  /* merge range data from another range into our range */
+  void MergeRangeObservations(ObservedRange *toadd) {
+    Range::Extend(toadd->rmin(), toadd->rmax());
+    smallest_ = std::min(smallest_, toadd->smallest_);
+    largest_ = std::max(largest_, toadd->largest_);
+    num_items_ += toadd->num_items_;
+    num_items_oob_ += toadd->num_items_oob_;
+  }
+
+  void Set(float rmin, float rmax) {  /* set a new range */
+    ClearObservations();          /* new range invalidates old observations */
+    Range::Set(rmin, rmax);
   }
 
  private:
-  float rmin_;
-  float rmax_;
+  float smallest_;          /* smallest key seen */
+  float largest_;           /* largest key seen */
+  uint32_t num_items_;      /* number of items added */
+  uint32_t num_items_oob_;  /* number of items added that were out of bounds */
 };
 
 }  // namespace plfsio
