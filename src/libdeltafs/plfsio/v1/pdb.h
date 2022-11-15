@@ -11,23 +11,23 @@
 
 #pragma once
 
+#include <deque>
+
 #include "builder.h"
-#include "doublebuf.h"
+#include "compaction_mgr.h"
 #include "filter.h"
 
 namespace pdlfs {
 namespace plfsio {
 
-// Shared options object from which we obtain the thread pool for background
-// compaction as well as other configurations.
-struct DirOptions;
-
+#if 0 // XXXCDC
 // Block type.
 class ArrayBlockBuilder;
+#endif
 
 // Directly write data as formatted data blocks.
 // Incoming key-value pairs are assumed to be fixed sized.
-class BufferedBlockWriter : public DoubleBuffering {
+class BufferedBlockWriter {
  public:
   BufferedBlockWriter(const DirOptions& options, WritableFile* dst,
                       size_t buf_size, size_t n);
@@ -35,12 +35,22 @@ class BufferedBlockWriter : public DoubleBuffering {
   // REQUIRES: Finish() has NOT been called.
   // Insert data into the writer.
   Status Add(const Slice& k, const Slice& v);
+
   // Wait until there is no outstanding compactions.
-  Status Wait();
+  Status Wait() {
+    MutexLock ml(&mu_);          // dtor unlocks
+    return cmgr_.WaitForAll();
+  }
+
   // Force an epoch flush.
   Status EpochFlush();
+
   // Force a compaction.
-  Status Flush();
+  Status Flush() {
+    MutexLock ml(&mu_);          // dtor unlocks
+    return StartAllCompactions();
+  }
+
   // Sync data to storage.
   Status Sync();
 
@@ -63,32 +73,38 @@ class BufferedBlockWriter : public DoubleBuffering {
   uint64_t offset_;  // Current write offset
   std::string bloomfilter_;
   std::string indexes_;
-
-  friend class DoubleBuffering;
-  Status Compact(uint32_t seq, void* buf);
-  Status SyncBackend(bool close = false);
-  Status DumpIndexesAndFilters();
-  Status Close();
-  void ScheduleCompaction(uint32_t seq, void* buf);
-  void Clear(void* buf) { static_cast<BlockBuf*>(buf)->Reset(); }
-  void AddToBuffer(void* buf, const Slice& k, const Slice& v) {
-    static_cast<BlockBuf*>(buf)->Add(k, v);
-  }
-  bool HasRoom(const void* buf, const Slice& k, const Slice& v) {
-    return (static_cast<const BlockBuf*>(buf)->CurrentSizeEstimate() +
-                k.size() + v.size() <=
-            buf_threshold_);
-  }
-  bool IsEmpty(const void* buf) {
-    return static_cast<const BlockBuf*>(buf)->empty();
-  }
-
-  static void BGWork(void*);
-
+  bool finished_;                          // are finished writing?
+  CompactionMgr cmgr_;                     // our compaction manager
+  std::deque<BlockBuf*> bufs_;             // free buffer(s)
+  BlockBuf* membuf_;                       // current active buffer
   BlockHandle bloomfilter_handle_;
   BlockHandle index_handle_;
   BlockBuf** bbs_;
   size_t n_;
+
+  //
+  // start compaction on active block.  lock should be held.
+  //
+  Status StartAllCompactions();
+
+  //
+  // static method compaction callback for compaction threads.
+  // we simply redirect it to the owner's compact method...
+  //
+  static Status CompactCB(uint32_t cseq, void *item, void *owner) {
+    BlockBuf* buf = reinterpret_cast<BlockBuf*>(item);
+    BufferedBlockWriter* us = reinterpret_cast<BufferedBlockWriter*>(owner);
+    return us->Compact(cseq, buf);
+  }
+
+  //
+  // compact a block and return the status.  we serialize writes
+  // to backing store using the cmgr_ and cseq number.   lock not held.
+  //
+  Status Compact(uint32_t cseq, BlockBuf* buf);
+
+  Status DumpIndexesAndFilters();
+  Status Close();
 };
 
 // Read data written by a BufferedBlockWriter.
