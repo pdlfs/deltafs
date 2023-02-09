@@ -442,6 +442,7 @@ Status RangeWriter::UpdateBounds(const float rmin, const float rmax) {
   bactive_[nsubpart_]->UpdateExpectedRange(oldmin, oldmax);
 
   // now divide the new range up into subparts and install it
+  assert(rmax >= rmin && rmin != FLT_MAX && rmax != FLT_MIN); /* valid & set */
   rdel = (rmax - rmin) / nsubpart_;
   for (int lcv = 0 ; lcv < nsubpart_ ; lcv++) {
     float newmin = rmin + (lcv*rdel);

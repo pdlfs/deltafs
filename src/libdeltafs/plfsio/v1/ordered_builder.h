@@ -83,10 +83,9 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
 
   // install new expected range in our (currently) empty block.
   void UpdateExpectedRange(float rmin, float rmax) {
-    assert(rmax >= rmin);
-    assert(obrange_.num_items() == 0);
+    assert(obrange_.num_items() == 0);   /* we should be empty */
     updcnt_++;
-    obrange_.Set(rmin, rmax);
+    obrange_.Set(rmin, rmax);   /* asserts valid */
   }
 
  private:

@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <assert.h>
 #include <float.h>
 
 namespace pdlfs {
@@ -47,11 +48,11 @@ class Range {
   }
 
   bool IsValid() const {        /* is range valid?  (i.e. reset or set) */
-    return !IsSet() || (rmin_ < rmax_);
+    return !IsSet() || (rmin_ <= rmax_);
   }
 
   void Set(float rmin, float rmax) {      /* set a new range */
-    if (rmin > rmax) return;              /* XXX: invalid, shouldn't happen */
+    assert(rmax >= rmin || (rmin == FLT_MAX && rmax == FLT_MIN)); /* valid? */
     rmin_ = rmin;
     rmax_ = rmax;
   }
