@@ -33,7 +33,9 @@ jobs:
       matrix:
         build_type: [Debug, RelWithDebInfo]
         compiler: [gcc-9, gcc-10, clang-10, clang-11]
-        os: [ubuntu-latest]
+        os: [ubuntu-20.04]
+        # XXX: latest == 22.04...  has issues with clang and mpich
+        # os: [ubuntu-latest]
         # can add include / exclude below to refine the matrix
 
     # what os to run on (reference matrix above for this)
