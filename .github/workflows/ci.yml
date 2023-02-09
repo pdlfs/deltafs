@@ -130,7 +130,7 @@ jobs:
         id: cache-umbrella
         with:
           path: /tmp/cache
-          key: ${{ runner.os }}-${{ hashFiles('gh-tmp/deltafs-umbrella/.git/refs/heads/master') }}-c1
+          key: ${{ runner.os }}-${{ hashFiles('gh-tmp/deltafs-umbrella/.git/refs/heads/master') }}-c2
 
       #
       # on a cache miss, build the specified umbrella packages.  we can
