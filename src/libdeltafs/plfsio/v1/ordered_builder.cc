@@ -15,6 +15,7 @@
  * found at https://github.com/google/leveldb.
  */
 #include "ordered_builder.h"
+
 #include "coding_float.h"
 
 #include <algorithm>
@@ -37,7 +38,7 @@ void OrderedBlockBuilder::Add(const Slice& key, const Slice& value) {
   buffer_staging_.append(value.data(), value_size_);
 
   bytes_written_ += key_size_ + value_size_;
-  obrange_.Observe(keyNum);   /* incr num_items(), maybe num_items_oob() */
+  obrange_.Observe(keyNum); /* incr num_items(), maybe num_items_oob() */
 }
 
 //
@@ -49,17 +50,19 @@ Slice OrderedBlockBuilder::Finish() {
   assert(!finished_);
   assert(sizeof(float) == 4u);
 
-  // do an in-place sort of keys_staging_ by float key
-  std::sort(keys_staging_.begin(), keys_staging_.end(),
-            OrderedBlockBuilder::KeyPtrComparator);
+  if (!skip_sort_) {
+    // do an in-place sort of keys_staging_ by float key
+    std::sort(keys_staging_.begin(), keys_staging_.end(),
+              OrderedBlockBuilder::KeyPtrComparator);
+  }
 
   // buffer_ should be empty (haven't used it yet and buf_start_ is always
   // zero for us).  resize to target.
   size_t buf_offset = buffer_.size();
   assert(buf_offset == 0u);
-  buffer_.resize(buf_offset + obrange_.num_items() * (key_size_+value_size_));
+  buffer_.resize(buf_offset + obrange_.num_items() * (key_size_ + value_size_));
 
-  // put sorted keys in buffer
+  // put keys in buffer - same regardless of whether they're sorted or not
   size_t num_keys = keys_staging_.size();
   for (size_t i = 0; i < num_keys; i++) {
     float key = keys_staging_[i].first;
@@ -69,11 +72,20 @@ Slice OrderedBlockBuilder::Finish() {
 
   // use sorted list of keys to append sorted values to buffer_
   const char* rawbuf_staging = buffer_staging_.c_str();
-  for (size_t i = 0; i < num_keys; i++) {
-    size_t val_offset = keys_staging_[i].second;
-    memcpy(&buffer_[buf_offset], rawbuf_staging + val_offset * value_size_,
-           value_size_);
-    buf_offset += value_size_;
+
+  if (skip_sort_) {
+    // if we're not sorting, we can just copy the values in order
+    size_t valblk_sz = value_size_ * num_keys;
+    memcpy(&buffer_[buf_offset], rawbuf_staging, valblk_sz);
+    buf_offset += valblk_sz;
+  } else {
+    // otherwise, we need to copy the values in the order of the sorted keys
+    for (size_t i = 0; i < num_keys; i++) {
+      size_t val_offset = keys_staging_[i].second;
+      memcpy(&buffer_[buf_offset], rawbuf_staging + val_offset * value_size_,
+             value_size_);
+      buf_offset += value_size_;
+    }
   }
 
   // abstract builder will set finished_  (currently not compressing)
@@ -85,7 +97,7 @@ Slice OrderedBlockBuilder::Finish() {
 // CopyFrom()  (i.e. expected range and updcnt_ ).
 //
 void OrderedBlockBuilder::Reset() {
-  AbstractBlockBuilder::Reset();     // clears buffer_ and finished_
+  AbstractBlockBuilder::Reset();  // clears buffer_ and finished_
   keys_staging_.clear();
   buffer_staging_.clear();
   bytes_written_ = 0;

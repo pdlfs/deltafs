@@ -44,6 +44,7 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
         key_size_(options.key_size),
         value_size_(options.value_size),
         rank_(options.rank),
+        skip_sort_(options.skip_sort),
         bytes_written_(0),
         updcnt_(0) {
     assert(sizeof(float) == key_size_);    // all keys must be floats
@@ -93,6 +94,7 @@ class OrderedBlockBuilder : public AbstractBlockBuilder {
   const size_t key_size_;          // must be sizeof(float)
   const size_t value_size_;        // from DirOptions
   const int rank_;                 // from DirOptions
+  const bool skip_sort_;           // from DirOptions (disable sort)
 
   /* Writing properties */
   typedef std::pair<float, size_t> key_ptr; // <key, val offset in staging buf>

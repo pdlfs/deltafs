@@ -103,9 +103,12 @@ class RangeWriterBench {
     thread_pool_ = single_threaded
                        ? nullptr
                        : ThreadPool::NewFixed(n_, true /* eager init */);
+    skip_sort_ = GetOption("SKIP_SORT", 0);
+
     options_.bf_bits_per_key = 0;
     options_.compaction_pool = thread_pool_;
     options_.cuckoo_frac = -1;
+    options_.skip_sort = skip_sort_ ? true : false;
   }
 
   ~RangeWriterBench() {  //
@@ -190,6 +193,7 @@ class RangeWriterBench {
   int mkeys_;
   size_t epoch_flshcnt_;
   size_t mid_epoch_flshcnt_;
+  int skip_sort_;
 };
 
 }  // namespace plfsio
